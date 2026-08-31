@@ -1,37 +1,23 @@
-const controls = [
-  {
-    id: "1-1-1",
-    title: "تحديد وتوثيق واعتماد استراتيجية الأمن السيبراني",
-    domain: "حوكمة الأمن السيبراني",
-    owner: "إدارة الأمن السيبراني",
-    implementation: "مطبق",
-    evidence: "مقبول",
-    verification: "تم التحقق",
-    dueDate: "2026-09-15",
-  },
-  {
-    id: "1-1-2",
-    title: "تنفيذ خطة عمل لتطبيق استراتيجية الأمن السيبراني",
-    domain: "حوكمة الأمن السيبراني",
-    owner: "إدارة الأمن السيبراني",
-    implementation: "قيد التنفيذ",
-    evidence: "بانتظار الرفع",
-    verification: "غير متحقق",
-    dueDate: "2026-09-20",
-  },
-  {
-    id: "1-2-1",
-    title: "إنشاء إدارة مستقلة للأمن السيبراني",
-    domain: "حوكمة الأمن السيبراني",
-    owner: "الموارد البشرية",
-    implementation: "مطبق",
-    evidence: "قيد المراجعة",
-    verification: "غير متحقق",
-    dueDate: "2026-09-10",
-  },
+import Link from "next/link";
+
+const menuItems = [
+  { name: "لوحة المتابعة", href: "/" },
+  { name: "الضوابط", href: "/controls" },
+  { name: "التكليفات", href: "#" },
+  { name: "الأدلة", href: "#" },
+  { name: "التقييم والتحقق", href: "#" },
+  { name: "التقارير", href: "#" },
+  { name: "الإعدادات", href: "#" },
 ];
 
-export default function ControlsPage() {
+const domainStatus = [
+  { name: "حوكمة الأمن السيبراني", value: "82%" },
+  { name: "تعزيز الأمن السيبراني", value: "64%" },
+  { name: "صمود الأمن السيبراني", value: "70%" },
+  { name: "الأطراف الخارجية والحوسبة السحابية", value: "55%" },
+];
+
+export default function Home() {
   return (
     <main
       dir="rtl"
@@ -39,209 +25,242 @@ export default function ControlsPage() {
         minHeight: "100vh",
         background: "#f5f7f9",
         fontFamily: "Arial, sans-serif",
-        padding: "32px",
+        color: "#0b1f33",
       }}
     >
-      <div
+      {/* Header */}
+      <header
         style={{
+          height: "86px",
+          background: "#0b1f33",
+          color: "white",
           display: "flex",
-          justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: "24px",
+          justifyContent: "space-between",
+          padding: "0 38px",
         }}
       >
         <div>
           <div
             style={{
-              fontSize: "13px",
-              color: "#0f6f67",
-              marginBottom: "8px",
+              fontSize: "24px",
+              fontWeight: "bold",
             }}
           >
-            NCA ECC 2-2024
+            Cyber Governance Platform
           </div>
 
-          <h1
+          <div
             style={{
-              margin: 0,
-              color: "#0b1f33",
-              fontSize: "30px",
+              fontSize: "13px",
+              opacity: 0.7,
+              marginTop: "5px",
             }}
           >
-            الضوابط
-          </h1>
-
-          <p
-            style={{
-              color: "#6b7785",
-              marginTop: "8px",
-            }}
-          >
-            إدارة ومتابعة حالة الضوابط والأدلة والتحقق
-          </p>
+            منصة حوكمة الأمن السيبراني
+          </div>
         </div>
 
-        <button
-          style={{
-            background: "#0f6f67",
-            color: "white",
-            border: 0,
-            borderRadius: "10px",
-            padding: "12px 18px",
-            fontWeight: "bold",
-          }}
-        >
-          + إضافة ضابط
-        </button>
-      </div>
+        <div style={{ fontSize: "14px" }}>
+          دورة التقييم: 2026
+        </div>
+      </header>
 
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: "14px",
-          marginBottom: "22px",
+          display: "flex",
+          minHeight: "calc(100vh - 86px)",
         }}
       >
-        <Kpi title="إجمالي الضوابط" value="108" />
-        <Kpi title="ملتزم" value="54" />
-        <Kpi title="قيد التنفيذ" value="37" />
-        <Kpi title="غير ملتزم" value="17" />
-      </div>
-
-      <div
-        style={{
-          background: "white",
-          border: "1px solid #e4e8ec",
-          borderRadius: "14px",
-          overflow: "hidden",
-        }}
-      >
-        <div
+        {/* Sidebar */}
+        <aside
           style={{
-            padding: "16px",
-            borderBottom: "1px solid #e8ecef",
-            display: "flex",
-            justifyContent: "space-between",
-            gap: "12px",
+            width: "260px",
+            background: "white",
+            borderLeft: "1px solid #e2e7eb",
+            padding: "28px 20px",
+            flexShrink: 0,
           }}
         >
-          <input
-            placeholder="ابحث برقم الضابط أو اسمه..."
-            style={{
-              flex: 1,
-              maxWidth: "420px",
-              padding: "11px 14px",
-              border: "1px solid #d9dee3",
-              borderRadius: "9px",
-            }}
-          />
+          {menuItems.map((item) => {
+            const active = item.href === "/";
 
-          <select
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                style={{
+                  display: "block",
+                  padding: "15px 18px",
+                  marginBottom: "7px",
+                  borderRadius: "10px",
+                  textDecoration: "none",
+                  fontSize: "15px",
+                  fontWeight: active ? "bold" : "normal",
+                  background: active ? "#e8f5f2" : "transparent",
+                  color: active ? "#0f6f67" : "#44515c",
+                }}
+              >
+                {item.name}
+              </Link>
+            );
+          })}
+        </aside>
+
+        {/* Main Content */}
+        <section
+          style={{
+            flex: 1,
+            padding: "40px",
+            minWidth: 0,
+          }}
+        >
+          <div style={{ marginBottom: "30px" }}>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: "34px",
+                color: "#0b1f33",
+              }}
+            >
+              لوحة المتابعة التشغيلية
+            </h1>
+
+            <p
+              style={{
+                marginTop: "10px",
+                color: "#7a8794",
+                fontSize: "15px",
+              }}
+            >
+              متابعة حالة الالتزام والضوابط والأدلة والمهام
+            </p>
+          </div>
+
+          {/* KPI Cards */}
+          <div
             style={{
-              padding: "11px 14px",
-              border: "1px solid #d9dee3",
-              borderRadius: "9px",
-              background: "white",
+              display: "grid",
+              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              gap: "18px",
+              marginBottom: "28px",
             }}
           >
-            <option>جميع الحالات</option>
-            <option>ملتزم</option>
-            <option>قيد التنفيذ</option>
-            <option>غير ملتزم</option>
-          </select>
-        </div>
+            <KpiCard title="نسبة الالتزام" value="68%" />
+            <KpiCard title="إجمالي الضوابط" value="108" />
+            <KpiCard title="بانتظار الأدلة" value="17" />
+            <KpiCard title="مهام متأخرة" value="6" />
+          </div>
 
-        <div style={{ overflowX: "auto" }}>
-          <table
+          {/* Dashboard Panels */}
+          <div
             style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              minWidth: "1000px",
+              display: "grid",
+              gridTemplateColumns: "2fr 1fr",
+              gap: "20px",
             }}
           >
-            <thead>
-              <tr style={{ background: "#f8fafb" }}>
-                <Th>رقم الضابط</Th>
-                <Th>الضابط</Th>
-                <Th>المجال</Th>
-                <Th>المالك</Th>
-                <Th>حالة التنفيذ</Th>
-                <Th>حالة الدليل</Th>
-                <Th>التحقق</Th>
-                <Th>تاريخ الاستحقاق</Th>
-                <Th>إجراء</Th>
-              </tr>
-            </thead>
+            {/* Compliance by Domain */}
+            <div
+              style={{
+                background: "white",
+                border: "1px solid #e2e7eb",
+                borderRadius: "14px",
+                padding: "28px",
+              }}
+            >
+              <h2
+                style={{
+                  marginTop: 0,
+                  marginBottom: "25px",
+                  fontSize: "21px",
+                }}
+              >
+                حالة الالتزام حسب المجال
+              </h2>
 
-            <tbody>
-              {controls.map((control) => (
-                <tr key={control.id}>
-                  <Td>
-                    <strong>{control.id}</strong>
-                  </Td>
-                  <Td>{control.title}</Td>
-                  <Td>{control.domain}</Td>
-                  <Td>{control.owner}</Td>
-                  <Td>
-                    <Badge
-                      text={control.implementation}
-                      color={
-                        control.implementation === "مطبق"
-                          ? "#0f6f67"
-                          : "#d97706"
-                      }
-                      bg={
-                        control.implementation === "مطبق"
-                          ? "#e8f5f2"
-                          : "#fff4e5"
-                      }
-                    />
-                  </Td>
-                  <Td>
-                    <Badge
-                      text={control.evidence}
-                      color={
-                        control.evidence === "مقبول"
-                          ? "#0f6f67"
-                          : control.evidence === "قيد المراجعة"
-                            ? "#2563eb"
-                            : "#d97706"
-                      }
-                      bg={
-                        control.evidence === "مقبول"
-                          ? "#e8f5f2"
-                          : control.evidence === "قيد المراجعة"
-                            ? "#eaf2ff"
-                            : "#fff4e5"
-                      }
-                    />
-                  </Td>
-                  <Td>{control.verification}</Td>
-                  <Td>{control.dueDate}</Td>
-                  <Td>
-                    <button
-                      style={{
-                        border: "1px solid #d9dee3",
-                        background: "white",
-                        borderRadius: "8px",
-                        padding: "8px 12px",
-                      }}
-                    >
-                      فتح
-                    </button>
-                  </Td>
-                </tr>
+              {domainStatus.map((domain) => (
+                <div
+                  key={domain.name}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "19px 0",
+                    borderBottom: "1px solid #edf0f2",
+                  }}
+                >
+                  <span style={{ fontSize: "15px" }}>
+                    {domain.name}
+                  </span>
+
+                  <strong
+                    style={{
+                      color: "#0f7d73",
+                      fontSize: "18px",
+                    }}
+                  >
+                    {domain.value}
+                  </strong>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            {/* Attention Panel */}
+            <div
+              style={{
+                background: "white",
+                border: "1px solid #e2e7eb",
+                borderRadius: "14px",
+                padding: "28px",
+              }}
+            >
+              <h2
+                style={{
+                  marginTop: 0,
+                  marginBottom: "25px",
+                  fontSize: "21px",
+                }}
+              >
+                تحتاج انتباهك
+              </h2>
+
+              <AlertItem icon="🔴" text="6 مهام متأخرة" />
+              <AlertItem icon="🟠" text="17 دليلاً بانتظار الرفع" />
+              <AlertItem icon="🔵" text="9 أدلة بانتظار المراجعة" />
+              <AlertItem icon="🟢" text="34 ضابطاً تم التحقق منها" />
+            </div>
+          </div>
+
+          {/* Quick Action */}
+          <div
+            style={{
+              marginTop: "24px",
+            }}
+          >
+            <Link
+              href="/controls"
+              style={{
+                display: "inline-block",
+                background: "#0f7d73",
+                color: "white",
+                textDecoration: "none",
+                padding: "13px 20px",
+                borderRadius: "9px",
+                fontWeight: "bold",
+                fontSize: "14px",
+              }}
+            >
+              عرض جميع الضوابط ←
+            </Link>
+          </div>
+        </section>
       </div>
     </main>
   );
 }
 
-function Kpi({
+function KpiCard({
   title,
   value,
 }: {
@@ -252,15 +271,17 @@ function Kpi({
     <div
       style={{
         background: "white",
-        border: "1px solid #e4e8ec",
-        borderRadius: "12px",
-        padding: "18px",
+        border: "1px solid #e2e7eb",
+        borderRadius: "14px",
+        padding: "24px",
+        minHeight: "82px",
       }}
     >
       <div
         style={{
-          color: "#6b7785",
+          color: "#7a8794",
           fontSize: "14px",
+          marginBottom: "10px",
         }}
       >
         {title}
@@ -268,10 +289,9 @@ function Kpi({
 
       <div
         style={{
-          marginTop: "8px",
-          fontSize: "28px",
+          color: "#0f7d73",
+          fontSize: "32px",
           fontWeight: "bold",
-          color: "#0f6f67",
         }}
       >
         {value}
@@ -280,69 +300,28 @@ function Kpi({
   );
 }
 
-function Badge({
+function AlertItem({
+  icon,
   text,
-  color,
-  bg,
 }: {
+  icon: string;
   text: string;
-  color: string;
-  bg: string;
 }) {
   return (
-    <span
+    <div
       style={{
-        display: "inline-block",
-        padding: "6px 10px",
-        borderRadius: "999px",
-        color,
-        background: bg,
-        fontSize: "12px",
-        fontWeight: "bold",
-        whiteSpace: "nowrap",
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        padding: "14px 0",
+        fontSize: "15px",
       }}
     >
-      {text}
-    </span>
-  );
-}
+      <span style={{ fontSize: "20px" }}>
+        {icon}
+      </span>
 
-function Th({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <th
-      style={{
-        padding: "14px",
-        textAlign: "right",
-        color: "#46515b",
-        fontSize: "13px",
-        borderBottom: "1px solid #e8ecef",
-      }}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <td
-      style={{
-        padding: "14px",
-        borderBottom: "1px solid #eef1f3",
-        color: "#26323d",
-        fontSize: "13px",
-        verticalAlign: "middle",
-      }}
-    >
-      {children}
-    </td>
+      <span>{text}</span>
+    </div>
   );
 }
