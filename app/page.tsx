@@ -1,4 +1,37 @@
-export default function Home() {
+const controls = [
+  {
+    id: "1-1-1",
+    title: "تحديد وتوثيق واعتماد استراتيجية الأمن السيبراني",
+    domain: "حوكمة الأمن السيبراني",
+    owner: "إدارة الأمن السيبراني",
+    implementation: "مطبق",
+    evidence: "مقبول",
+    verification: "تم التحقق",
+    dueDate: "2026-09-15",
+  },
+  {
+    id: "1-1-2",
+    title: "تنفيذ خطة عمل لتطبيق استراتيجية الأمن السيبراني",
+    domain: "حوكمة الأمن السيبراني",
+    owner: "إدارة الأمن السيبراني",
+    implementation: "قيد التنفيذ",
+    evidence: "بانتظار الرفع",
+    verification: "غير متحقق",
+    dueDate: "2026-09-20",
+  },
+  {
+    id: "1-2-1",
+    title: "إنشاء إدارة مستقلة للأمن السيبراني",
+    domain: "حوكمة الأمن السيبراني",
+    owner: "الموارد البشرية",
+    implementation: "مطبق",
+    evidence: "قيد المراجعة",
+    verification: "غير متحقق",
+    dueDate: "2026-09-10",
+  },
+];
+
+export default function ControlsPage() {
   return (
     <main
       dir="rtl"
@@ -6,148 +39,203 @@ export default function Home() {
         minHeight: "100vh",
         background: "#f5f7f9",
         fontFamily: "Arial, sans-serif",
+        padding: "32px",
       }}
     >
-      {/* Header */}
-      <header
+      <div
         style={{
-          height: "70px",
-          background: "#0b1f33",
-          color: "white",
           display: "flex",
-          alignItems: "center",
           justifyContent: "space-between",
-          padding: "0 32px",
+          alignItems: "center",
+          marginBottom: "24px",
         }}
       >
         <div>
-          <strong style={{ fontSize: "20px" }}>
-            Cyber Governance Platform
-          </strong>
-          <div style={{ fontSize: "12px", opacity: 0.7 }}>
-            منصة حوكمة الأمن السيبراني
+          <div
+            style={{
+              fontSize: "13px",
+              color: "#0f6f67",
+              marginBottom: "8px",
+            }}
+          >
+            NCA ECC 2-2024
           </div>
+
+          <h1
+            style={{
+              margin: 0,
+              color: "#0b1f33",
+              fontSize: "30px",
+            }}
+          >
+            الضوابط
+          </h1>
+
+          <p
+            style={{
+              color: "#6b7785",
+              marginTop: "8px",
+            }}
+          >
+            إدارة ومتابعة حالة الضوابط والأدلة والتحقق
+          </p>
         </div>
 
-        <div style={{ fontSize: "14px" }}>
-          دورة التقييم: 2026
-        </div>
-      </header>
-
-      <div style={{ display: "flex", minHeight: "calc(100vh - 70px)" }}>
-        {/* Sidebar */}
-        <aside
+        <button
           style={{
-            width: "230px",
-            background: "white",
-            padding: "24px 16px",
-            borderLeft: "1px solid #e3e7eb",
+            background: "#0f6f67",
+            color: "white",
+            border: 0,
+            borderRadius: "10px",
+            padding: "12px 18px",
+            fontWeight: "bold",
           }}
         >
-          <div
+          + إضافة ضابط
+        </button>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: "14px",
+          marginBottom: "22px",
+        }}
+      >
+        <Kpi title="إجمالي الضوابط" value="108" />
+        <Kpi title="ملتزم" value="54" />
+        <Kpi title="قيد التنفيذ" value="37" />
+        <Kpi title="غير ملتزم" value="17" />
+      </div>
+
+      <div
+        style={{
+          background: "white",
+          border: "1px solid #e4e8ec",
+          borderRadius: "14px",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            padding: "16px",
+            borderBottom: "1px solid #e8ecef",
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "12px",
+          }}
+        >
+          <input
+            placeholder="ابحث برقم الضابط أو اسمه..."
             style={{
-              background: "#e9f5f2",
-              color: "#0f6f67",
-              padding: "12px",
-              borderRadius: "8px",
-              marginBottom: "10px",
-              fontWeight: "bold",
+              flex: 1,
+              maxWidth: "420px",
+              padding: "11px 14px",
+              border: "1px solid #d9dee3",
+              borderRadius: "9px",
+            }}
+          />
+
+          <select
+            style={{
+              padding: "11px 14px",
+              border: "1px solid #d9dee3",
+              borderRadius: "9px",
+              background: "white",
             }}
           >
-            لوحة المتابعة
-          </div>
+            <option>جميع الحالات</option>
+            <option>ملتزم</option>
+            <option>قيد التنفيذ</option>
+            <option>غير ملتزم</option>
+          </select>
+        </div>
 
-          {[
-            "الضوابط",
-            "التكليفات",
-            "الأدلة",
-            "التقييم والتحقق",
-            "التقارير",
-            "الإعدادات",
-          ].map((item) => (
-            <div
-              key={item}
-              style={{
-                padding: "12px",
-                marginBottom: "5px",
-                color: "#44515c",
-              }}
-            >
-              {item}
-            </div>
-          ))}
-        </aside>
-
-        {/* Content */}
-        <section style={{ flex: 1, padding: "30px" }}>
-          <div style={{ marginBottom: "25px" }}>
-            <h1 style={{ margin: 0, color: "#0b1f33" }}>
-              لوحة المتابعة التشغيلية
-            </h1>
-
-            <p style={{ color: "#6b7785" }}>
-              متابعة حالة الالتزام والضوابط والأدلة والمهام
-            </p>
-          </div>
-
-          {/* KPI Cards */}
-          <div
+        <div style={{ overflowX: "auto" }}>
+          <table
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, minmax(150px, 1fr))",
-              gap: "16px",
-              marginBottom: "25px",
+              width: "100%",
+              borderCollapse: "collapse",
+              minWidth: "1000px",
             }}
           >
-            <Kpi title="نسبة الالتزام" value="68%" />
-            <Kpi title="إجمالي الضوابط" value="108" />
-            <Kpi title="بانتظار الأدلة" value="17" />
-            <Kpi title="مهام متأخرة" value="6" />
-          </div>
+            <thead>
+              <tr style={{ background: "#f8fafb" }}>
+                <Th>رقم الضابط</Th>
+                <Th>الضابط</Th>
+                <Th>المجال</Th>
+                <Th>المالك</Th>
+                <Th>حالة التنفيذ</Th>
+                <Th>حالة الدليل</Th>
+                <Th>التحقق</Th>
+                <Th>تاريخ الاستحقاق</Th>
+                <Th>إجراء</Th>
+              </tr>
+            </thead>
 
-          {/* Main Panels */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "2fr 1fr",
-              gap: "16px",
-            }}
-          >
-            <div style={panelStyle}>
-              <h3 style={{ color: "#0b1f33" }}>
-                حالة الالتزام حسب المجال
-              </h3>
-
-              <StatusRow
-                name="حوكمة الأمن السيبراني"
-                value="82%"
-              />
-              <StatusRow
-                name="تعزيز الأمن السيبراني"
-                value="64%"
-              />
-              <StatusRow
-                name="صمود الأمن السيبراني"
-                value="70%"
-              />
-              <StatusRow
-                name="الأطراف الخارجية والحوسبة السحابية"
-                value="55%"
-              />
-            </div>
-
-            <div style={panelStyle}>
-              <h3 style={{ color: "#0b1f33" }}>
-                تحتاج انتباهك
-              </h3>
-
-              <p>🔴 6 مهام متأخرة</p>
-              <p>🟠 17 دليلًا بانتظار الرفع</p>
-              <p>🔵 9 أدلة بانتظار المراجعة</p>
-              <p>🟢 34 ضابطًا تم التحقق منها</p>
-            </div>
-          </div>
-        </section>
+            <tbody>
+              {controls.map((control) => (
+                <tr key={control.id}>
+                  <Td>
+                    <strong>{control.id}</strong>
+                  </Td>
+                  <Td>{control.title}</Td>
+                  <Td>{control.domain}</Td>
+                  <Td>{control.owner}</Td>
+                  <Td>
+                    <Badge
+                      text={control.implementation}
+                      color={
+                        control.implementation === "مطبق"
+                          ? "#0f6f67"
+                          : "#d97706"
+                      }
+                      bg={
+                        control.implementation === "مطبق"
+                          ? "#e8f5f2"
+                          : "#fff4e5"
+                      }
+                    />
+                  </Td>
+                  <Td>
+                    <Badge
+                      text={control.evidence}
+                      color={
+                        control.evidence === "مقبول"
+                          ? "#0f6f67"
+                          : control.evidence === "قيد المراجعة"
+                            ? "#2563eb"
+                            : "#d97706"
+                      }
+                      bg={
+                        control.evidence === "مقبول"
+                          ? "#e8f5f2"
+                          : control.evidence === "قيد المراجعة"
+                            ? "#eaf2ff"
+                            : "#fff4e5"
+                      }
+                    />
+                  </Td>
+                  <Td>{control.verification}</Td>
+                  <Td>{control.dueDate}</Td>
+                  <Td>
+                    <button
+                      style={{
+                        border: "1px solid #d9dee3",
+                        background: "white",
+                        borderRadius: "8px",
+                        padding: "8px 12px",
+                      }}
+                    >
+                      فتح
+                    </button>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </main>
   );
@@ -161,7 +249,14 @@ function Kpi({
   value: string;
 }) {
   return (
-    <div style={panelStyle}>
+    <div
+      style={{
+        background: "white",
+        border: "1px solid #e4e8ec",
+        borderRadius: "12px",
+        padding: "18px",
+      }}
+    >
       <div
         style={{
           color: "#6b7785",
@@ -173,10 +268,10 @@ function Kpi({
 
       <div
         style={{
-          color: "#0f6f67",
-          fontSize: "30px",
-          fontWeight: "bold",
           marginTop: "8px",
+          fontSize: "28px",
+          fontWeight: "bold",
+          color: "#0f6f67",
         }}
       >
         {value}
@@ -185,35 +280,69 @@ function Kpi({
   );
 }
 
-function StatusRow({
-  name,
-  value,
+function Badge({
+  text,
+  color,
+  bg,
 }: {
-  name: string;
-  value: string;
+  text: string;
+  color: string;
+  bg: string;
 }) {
   return (
-    <div
+    <span
       style={{
-        display: "flex",
-        justifyContent: "space-between",
-        padding: "14px 0",
-        borderBottom: "1px solid #edf0f2",
+        display: "inline-block",
+        padding: "6px 10px",
+        borderRadius: "999px",
+        color,
+        background: bg,
+        fontSize: "12px",
+        fontWeight: "bold",
+        whiteSpace: "nowrap",
       }}
     >
-      <span>{name}</span>
-
-      <strong style={{ color: "#0f6f67" }}>
-        {value}
-      </strong>
-    </div>
+      {text}
+    </span>
   );
 }
 
-const panelStyle = {
-  background: "white",
-  border: "1px solid #e4e8ec",
-  borderRadius: "12px",
-  padding: "20px",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
-};
+function Th({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <th
+      style={{
+        padding: "14px",
+        textAlign: "right",
+        color: "#46515b",
+        fontSize: "13px",
+        borderBottom: "1px solid #e8ecef",
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <td
+      style={{
+        padding: "14px",
+        borderBottom: "1px solid #eef1f3",
+        color: "#26323d",
+        fontSize: "13px",
+        verticalAlign: "middle",
+      }}
+    >
+      {children}
+    </td>
+  );
+}
