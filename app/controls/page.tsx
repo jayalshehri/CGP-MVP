@@ -220,7 +220,7 @@ export default function ControlsPage() {
               overflow: "hidden",
             }}
           >
-            {/* Search / Filters */}
+            {/* Search and Filter */}
             <div
               style={{
                 padding: "18px",
@@ -260,6 +260,7 @@ export default function ControlsPage() {
               </select>
             </div>
 
+            {/* Table */}
             <div style={{ overflowX: "auto" }}>
               <table
                 style={{
@@ -332,20 +333,23 @@ export default function ControlsPage() {
 
                       <Td>{control.dueDate}</Td>
 
+                      {/* Open Control Details */}
                       <Td>
-                        <button
+                        <Link
+                          href={`/controls/${control.id}`}
                           style={{
+                            display: "inline-block",
                             border: "1px solid #d9dee3",
                             background: "white",
                             color: "#0b1f33",
                             borderRadius: "8px",
                             padding: "8px 13px",
-                            cursor: "pointer",
+                            textDecoration: "none",
                             fontWeight: "bold",
                           }}
                         >
                           فتح
-                        </button>
+                        </Link>
                       </Td>
                     </tr>
                   ))}
@@ -354,7 +358,7 @@ export default function ControlsPage() {
             </div>
           </div>
 
-          {/* Back */}
+          {/* Back to Dashboard */}
           <div style={{ marginTop: "22px" }}>
             <Link
               href="/"
