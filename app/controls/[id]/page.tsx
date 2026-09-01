@@ -1,15 +1,48 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
-type PageProps = {
-  params: Promise<{
-    id: string;
-  }>;
+type Control = {
+  id: number;
+  framework_id: number;
+  control_code: string;
+  title_ar: string;
+  description_ar: string | null;
+  domain_ar: string;
+  implementation_status: string;
+  evidence_status: string;
+  verification_status: string;
+  due_date: string | null;
+  last_review_date: string | null;
+  control_owner: string | null;
+  evidence_owner: string | null;
+  implementation_notes: string | null;
 };
 
 export default async function ControlDetailsPage({
   params,
-}: PageProps) {
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
+
+  const controlId = Number(id);
+
+  if (!Number.isInteger(controlId)) {
+    notFound();
+  }
+
+  const { data, error } = await supabase
+    .from("controls")
+    .select("*")
+    .eq("id", controlId)
+    .single();
+
+  if (error || !data) {
+    notFound();
+  }
+
+  const control = data as Control;
 
   return (
     <main
@@ -61,502 +94,433 @@ export default async function ControlDetailsPage({
 
       <div
         style={{
-          display: "flex",
-          minHeight: "calc(100vh - 86px)",
+          maxWidth: "1250px",
+          margin: "0 auto",
+          padding: "38px 30px 60px",
         }}
       >
-        {/* Sidebar */}
-        <aside
-          style={{
-            width: "260px",
-            background: "white",
-            borderLeft: "1px solid #e2e7eb",
-            padding: "28px 20px",
-            flexShrink: 0,
-          }}
-        >
-          <Link
-            href="/"
-            style={menuStyle}
-          >
-            لوحة المتابعة
-          </Link>
-
+        {/* Navigation */}
+        <div style={{ marginBottom: "25px" }}>
           <Link
             href="/controls"
             style={{
-              ...menuStyle,
-              background: "#e8f5f2",
-              color: "#0f6f67",
+              color: "#0f7d73",
+              textDecoration: "none",
               fontWeight: "bold",
             }}
           >
-            الضوابط
+            ← العودة إلى الضوابط
           </Link>
+        </div>
 
-          <div style={menuStyle}>التكليفات</div>
-          <div style={menuStyle}>الأدلة</div>
-          <div style={menuStyle}>التقييم والتحقق</div>
-          <div style={menuStyle}>التقارير</div>
-          <div style={menuStyle}>الإعدادات</div>
-        </aside>
-
-        {/* Main Content */}
-        <section
+        {/* Control Heading */}
+        <div
           style={{
-            flex: 1,
-            padding: "40px",
-            minWidth: 0,
+            background: "white",
+            border: "1px solid #e2e7eb",
+            borderRadius: "16px",
+            padding: "28px",
+            marginBottom: "22px",
           }}
         >
-          {/* Breadcrumb */}
-          <div
-            style={{
-              fontSize: "13px",
-              color: "#7a8794",
-              marginBottom: "14px",
-            }}
-          >
-            الضوابط / {id}
-          </div>
-
-          {/* Title */}
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "flex-start",
               gap: "20px",
-              marginBottom: "26px",
+              flexWrap: "wrap",
             }}
           >
-            <div>
+            <div style={{ flex: 1 }}>
               <div
                 style={{
                   color: "#0f7d73",
-                  fontSize: "13px",
+                  fontSize: "14px",
                   fontWeight: "bold",
                   marginBottom: "8px",
                 }}
               >
-                NCA ECC
+                {control.control_code}
               </div>
 
               <h1
                 style={{
                   margin: 0,
-                  fontSize: "32px",
+                  fontSize: "30px",
+                  lineHeight: 1.5,
                 }}
               >
-                {id}
+                {control.title_ar}
               </h1>
+
+              <div
+                style={{
+                  marginTop: "12px",
+                  color: "#687581",
+                }}
+              >
+                {control.domain_ar}
+              </div>
+            </div>
+
+            <Badge
+              text={implementationLabel(
+                control.implementation_status
+              )}
+              type={implementationBadgeType(
+                control.implementation_status
+              )}
+            />
+          </div>
+
+          {control.description_ar && (
+            <div
+              style={{
+                marginTop: "24px",
+                paddingTop: "22px",
+                borderTop: "1px solid #edf0f2",
+                color: "#4c5964",
+                lineHeight: 1.9,
+              }}
+            >
+              {control.description_ar}
+            </div>
+          )}
+        </div>
+
+        {/* Status Cards */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(210px, 1fr))",
+            gap: "16px",
+            marginBottom: "22px",
+          }}
+        >
+          <InfoCard
+            title="حالة التنفيذ"
+            content={
+              <Badge
+                text={implementationLabel(
+                  control.implementation_status
+                )}
+                type={implementationBadgeType(
+                  control.implementation_status
+                )}
+              />
+            }
+          />
+
+          <InfoCard
+            title="حالة الدليل"
+            content={
+              <Badge
+                text={evidenceLabel(control.evidence_status)}
+                type={evidenceBadgeType(
+                  control.evidence_status
+                )}
+              />
+            }
+          />
+
+          <InfoCard
+            title="حالة التحقق"
+            content={
+              <Badge
+                text={verificationLabel(
+                  control.verification_status
+                )}
+                type={verificationBadgeType(
+                  control.verification_status
+                )}
+              />
+            }
+          />
+
+          <InfoCard
+            title="تاريخ الاستحقاق"
+            content={control.due_date || "غير محدد"}
+          />
+        </div>
+
+        {/* Ownership */}
+        <div
+          style={{
+            background: "white",
+            border: "1px solid #e2e7eb",
+            borderRadius: "16px",
+            padding: "26px",
+            marginBottom: "22px",
+          }}
+        >
+          <h2
+            style={{
+              margin: "0 0 22px",
+              fontSize: "20px",
+            }}
+          >
+            المسؤوليات
+          </h2>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: "25px",
+            }}
+          >
+            <Field
+              label="مالك الضابط"
+              value={control.control_owner || "غير محدد"}
+            />
+
+            <Field
+              label="مسؤول الدليل"
+              value={control.evidence_owner || "غير محدد"}
+            />
+
+            <Field
+              label="آخر مراجعة"
+              value={
+                control.last_review_date || "لم تتم المراجعة"
+              }
+            />
+          </div>
+        </div>
+
+        {/* Implementation Notes */}
+        <div
+          style={{
+            background: "white",
+            border: "1px solid #e2e7eb",
+            borderRadius: "16px",
+            padding: "26px",
+            marginBottom: "22px",
+          }}
+        >
+          <h2
+            style={{
+              margin: "0 0 16px",
+              fontSize: "20px",
+            }}
+          >
+            ملاحظات التنفيذ
+          </h2>
+
+          <div
+            style={{
+              background: "#f8fafb",
+              borderRadius: "10px",
+              padding: "18px",
+              color: "#56636f",
+              lineHeight: 1.8,
+              minHeight: "65px",
+            }}
+          >
+            {control.implementation_notes ||
+              "لا توجد ملاحظات تنفيذ مسجلة حاليًا."}
+          </div>
+        </div>
+
+        {/* Evidence */}
+        <div
+          style={{
+            background: "white",
+            border: "1px solid #e2e7eb",
+            borderRadius: "16px",
+            padding: "26px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "15px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: "20px",
+                }}
+              >
+                الأدلة
+              </h2>
 
               <p
                 style={{
-                  marginTop: "10px",
-                  color: "#5f6b76",
-                  fontSize: "16px",
+                  margin: "8px 0 0",
+                  color: "#7a8794",
+                  fontSize: "14px",
                 }}
               >
-                تطوير استراتيجية الأمن السيبراني واعتمادها ومراجعتها بشكل دوري
+                سيتم ربط مستودع الأدلة بهذا الضابط في
+                المرحلة التالية.
               </p>
             </div>
 
-            <span
-              style={{
-                background: "#fff4e5",
-                color: "#b76500",
-                padding: "8px 12px",
-                borderRadius: "999px",
-                fontSize: "13px",
-                fontWeight: "bold",
-              }}
-            >
-              ملتزم جزئيًا
-            </span>
-          </div>
-
-          {/* Status Cards */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-              gap: "16px",
-              marginBottom: "22px",
-            }}
-          >
-            <StatusCard
-              title="حالة التنفيذ"
-              value="قيد التنفيذ"
-              color="#b76500"
-              background="#fff4e5"
-            />
-
-            <StatusCard
-              title="حالة الدليل"
-              value="قيد المراجعة"
-              color="#2563eb"
-              background="#eaf2ff"
-            />
-
-            <StatusCard
-              title="التحقق"
-              value="غير متحقق"
-              color="#5f6b76"
-              background="#eef1f3"
-            />
-
-            <StatusCard
-              title="تاريخ الاستحقاق"
-              value="2026-09-20"
-              color="#0f6f67"
-              background="#e8f5f2"
+            <Badge
+              text={evidenceLabel(control.evidence_status)}
+              type={evidenceBadgeType(
+                control.evidence_status
+              )}
             />
           </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "2fr 1fr",
-              gap: "20px",
-            }}
-          >
-            {/* Left Side */}
-            <div>
-              {/* Requirement */}
-              <div style={panelStyle}>
-                <h2 style={panelTitleStyle}>
-                  متطلب الضابط
-                </h2>
-
-                <p
-                  style={{
-                    color: "#44515c",
-                    lineHeight: 1.8,
-                    marginBottom: 0,
-                  }}
-                >
-                  يجب على الجهة تطوير وتوثيق واعتماد استراتيجية
-                  للأمن السيبراني، وربطها بأهداف الجهة ومتطلباتها
-                  التنظيمية، ومراجعتها وفق فترات دورية معتمدة.
-                </p>
-              </div>
-
-              {/* Implementation */}
-              <div
-                style={{
-                  ...panelStyle,
-                  marginTop: "18px",
-                }}
-              >
-                <h2 style={panelTitleStyle}>
-                  التطبيق
-                </h2>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "14px",
-                  }}
-                >
-                  <InfoBox
-                    title="مالك الضابط"
-                    value="إدارة الأمن السيبراني"
-                  />
-
-                  <InfoBox
-                    title="مسؤول الدليل"
-                    value="إدارة الحوكمة"
-                  />
-
-                  <InfoBox
-                    title="حالة التنفيذ"
-                    value="قيد التنفيذ"
-                  />
-
-                  <InfoBox
-                    title="آخر مراجعة"
-                    value="2026-08-25"
-                  />
-                </div>
-
-                <div
-                  style={{
-                    marginTop: "18px",
-                  }}
-                >
-                  <div
-                    style={{
-                      color: "#7a8794",
-                      fontSize: "13px",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    ملاحظات التطبيق
-                  </div>
-
-                  <div
-                    style={{
-                      border: "1px solid #e2e7eb",
-                      borderRadius: "10px",
-                      padding: "14px",
-                      background: "#fafbfc",
-                      color: "#44515c",
-                      lineHeight: 1.7,
-                    }}
-                  >
-                    تم إعداد المسودة الأولى للاستراتيجية، والعمل
-                    جارٍ على اعتمادها من صاحب الصلاحية.
-                  </div>
-                </div>
-              </div>
-
-              {/* Evidence */}
-              <div
-                style={{
-                  ...panelStyle,
-                  marginTop: "18px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: "12px",
-                    marginBottom: "18px",
-                  }}
-                >
-                  <h2
-                    style={{
-                      ...panelTitleStyle,
-                      marginBottom: 0,
-                    }}
-                  >
-                    الأدلة
-                  </h2>
-
-                  <button
-                    style={{
-                      background: "#0f7d73",
-                      color: "white",
-                      border: 0,
-                      padding: "10px 14px",
-                      borderRadius: "8px",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    + رفع دليل
-                  </button>
-                </div>
-
-                <EvidenceRow
-                  name="Cybersecurity_Strategy_v3.pdf"
-                  owner="إدارة الحوكمة"
-                  status="قيد المراجعة"
-                />
-
-                <EvidenceRow
-                  name="Approval_Memo.pdf"
-                  owner="مكتب الإدارة"
-                  status="مقبول"
-                />
-              </div>
-            </div>
-
-            {/* Right Side */}
-            <div>
-              {/* Assignment */}
-              <div style={panelStyle}>
-                <h2 style={panelTitleStyle}>
-                  التكليف
-                </h2>
-
-                <InfoBox
-                  title="Control Owner"
-                  value="Cybersecurity Governance"
-                />
-
-                <div style={{ height: "12px" }} />
-
-                <InfoBox
-                  title="Evidence Owner"
-                  value="IT Governance"
-                />
-
-                <div style={{ height: "12px" }} />
-
-                <InfoBox
-                  title="الأولوية"
-                  value="عالية"
-                />
-              </div>
-
-              {/* Workflow */}
-              <div
-                style={{
-                  ...panelStyle,
-                  marginTop: "18px",
-                }}
-              >
-                <h2 style={panelTitleStyle}>
-                  سير العمل
-                </h2>
-
-                <WorkflowStep
-                  number="1"
-                  title="تم إنشاء التكليف"
-                  active
-                />
-
-                <WorkflowStep
-                  number="2"
-                  title="تم رفع الدليل"
-                  active
-                />
-
-                <WorkflowStep
-                  number="3"
-                  title="قيد مراجعة الأمن السيبراني"
-                  active
-                />
-
-                <WorkflowStep
-                  number="4"
-                  title="التحقق والإغلاق"
-                />
-              </div>
-
-              {/* Audit */}
-              <div
-                style={{
-                  ...panelStyle,
-                  marginTop: "18px",
-                }}
-              >
-                <h2 style={panelTitleStyle}>
-                  سجل النشاط
-                </h2>
-
-                <AuditItem
-                  date="2026-08-30"
-                  text="تم رفع Cybersecurity_Strategy_v3.pdf"
-                />
-
-                <AuditItem
-                  date="2026-08-29"
-                  text="تم تعيين Evidence Owner"
-                />
-
-                <AuditItem
-                  date="2026-08-28"
-                  text="تم إنشاء التكليف"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              marginTop: "22px",
-            }}
-          >
-            <Link
-              href="/controls"
-              style={{
-                color: "#0f7d73",
-                fontWeight: "bold",
-                textDecoration: "none",
-              }}
-            >
-              ← العودة إلى الضوابط
-            </Link>
-          </div>
-        </section>
+        </div>
       </div>
     </main>
   );
 }
 
-function StatusCard({
+function implementationLabel(status: string) {
+  switch (status.toLowerCase()) {
+    case "implemented":
+      return "مطبق";
+    case "in_progress":
+      return "قيد التنفيذ";
+    case "not_applicable":
+      return "غير منطبق";
+    default:
+      return "لم يبدأ";
+  }
+}
+
+function evidenceLabel(status: string) {
+  switch (status.toLowerCase()) {
+    case "accepted":
+      return "مقبول";
+    case "pending_review":
+      return "قيد المراجعة";
+    case "rejected":
+      return "مرفوض";
+    default:
+      return "لم يرفع";
+  }
+}
+
+function verificationLabel(status: string) {
+  switch (status.toLowerCase()) {
+    case "verified":
+      return "تم التحقق";
+    case "under_review":
+      return "قيد التحقق";
+    case "failed":
+      return "لم يجتز";
+    default:
+      return "غير متحقق";
+  }
+}
+
+function implementationBadgeType(
+  status: string
+): "success" | "warning" | "info" | "neutral" {
+  switch (status.toLowerCase()) {
+    case "implemented":
+      return "success";
+    case "in_progress":
+      return "warning";
+    default:
+      return "neutral";
+  }
+}
+
+function evidenceBadgeType(
+  status: string
+): "success" | "warning" | "info" | "neutral" {
+  switch (status.toLowerCase()) {
+    case "accepted":
+      return "success";
+    case "pending_review":
+      return "info";
+    case "rejected":
+      return "warning";
+    default:
+      return "neutral";
+  }
+}
+
+function verificationBadgeType(
+  status: string
+): "success" | "warning" | "info" | "neutral" {
+  switch (status.toLowerCase()) {
+    case "verified":
+      return "success";
+    case "under_review":
+      return "info";
+    case "failed":
+      return "warning";
+    default:
+      return "neutral";
+  }
+}
+
+function InfoCard({
   title,
-  value,
-  color,
-  background,
+  content,
 }: {
   title: string;
-  value: string;
-  color: string;
-  background: string;
+  content: React.ReactNode;
 }) {
   return (
     <div
       style={{
         background: "white",
         border: "1px solid #e2e7eb",
-        borderRadius: "12px",
-        padding: "18px",
+        borderRadius: "14px",
+        padding: "20px",
       }}
     >
       <div
         style={{
           color: "#7a8794",
           fontSize: "13px",
-          marginBottom: "9px",
+          marginBottom: "12px",
         }}
       >
         {title}
       </div>
 
-      <span
+      <div
         style={{
-          display: "inline-block",
-          color,
-          background,
-          padding: "6px 10px",
-          borderRadius: "999px",
-          fontSize: "13px",
           fontWeight: "bold",
+          color: "#26323d",
         }}
       >
-        {value}
-      </span>
+        {content}
+      </div>
     </div>
   );
 }
 
-function InfoBox({
-  title,
+function Field({
+  label,
   value,
 }: {
-  title: string;
+  label: string;
   value: string;
 }) {
   return (
-    <div
-      style={{
-        border: "1px solid #e2e7eb",
-        borderRadius: "10px",
-        padding: "14px",
-        background: "#fafbfc",
-      }}
-    >
+    <div>
       <div
         style={{
           color: "#7a8794",
-          fontSize: "12px",
-          marginBottom: "6px",
+          fontSize: "13px",
+          marginBottom: "8px",
         }}
       >
-        {title}
+        {label}
       </div>
 
       <div
         style={{
-          color: "#26323d",
-          fontSize: "14px",
           fontWeight: "bold",
+          color: "#26323d",
         }}
       >
         {value}
@@ -565,159 +529,45 @@ function InfoBox({
   );
 }
 
-function EvidenceRow({
-  name,
-  owner,
-  status,
-}: {
-  name: string;
-  owner: string;
-  status: string;
-}) {
-  const accepted = status === "مقبول";
-
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "2fr 1fr auto",
-        gap: "12px",
-        alignItems: "center",
-        padding: "14px 0",
-        borderBottom: "1px solid #edf0f2",
-      }}
-    >
-      <strong style={{ fontSize: "14px" }}>
-        {name}
-      </strong>
-
-      <span
-        style={{
-          color: "#5f6b76",
-          fontSize: "13px",
-        }}
-      >
-        {owner}
-      </span>
-
-      <span
-        style={{
-          color: accepted ? "#0f6f67" : "#2563eb",
-          background: accepted ? "#e8f5f2" : "#eaf2ff",
-          borderRadius: "999px",
-          padding: "6px 10px",
-          fontSize: "12px",
-          fontWeight: "bold",
-        }}
-      >
-        {status}
-      </span>
-    </div>
-  );
-}
-
-function WorkflowStep({
-  number,
-  title,
-  active = false,
-}: {
-  number: string;
-  title: string;
-  active?: boolean;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "10px",
-        marginBottom: "14px",
-      }}
-    >
-      <div
-        style={{
-          width: "28px",
-          height: "28px",
-          borderRadius: "50%",
-          display: "grid",
-          placeItems: "center",
-          background: active ? "#0f7d73" : "#eef1f3",
-          color: active ? "white" : "#7a8794",
-          fontSize: "12px",
-          fontWeight: "bold",
-        }}
-      >
-        {number}
-      </div>
-
-      <div
-        style={{
-          fontSize: "13px",
-          color: active ? "#26323d" : "#7a8794",
-        }}
-      >
-        {title}
-      </div>
-    </div>
-  );
-}
-
-function AuditItem({
-  date,
+function Badge({
   text,
+  type,
 }: {
-  date: string;
   text: string;
+  type: "success" | "warning" | "info" | "neutral";
 }) {
+  const styles = {
+    success: {
+      color: "#0f6f67",
+      background: "#e8f5f2",
+    },
+    warning: {
+      color: "#b76500",
+      background: "#fff4e5",
+    },
+    info: {
+      color: "#2563eb",
+      background: "#eaf2ff",
+    },
+    neutral: {
+      color: "#5f6b76",
+      background: "#eef1f3",
+    },
+  };
+
   return (
-    <div
+    <span
       style={{
-        padding: "11px 0",
-        borderBottom: "1px solid #edf0f2",
+        display: "inline-block",
+        padding: "7px 11px",
+        borderRadius: "999px",
+        fontSize: "12px",
+        fontWeight: "bold",
+        whiteSpace: "nowrap",
+        ...styles[type],
       }}
     >
-      <div
-        style={{
-          fontSize: "12px",
-          color: "#7a8794",
-          marginBottom: "4px",
-        }}
-      >
-        {date}
-      </div>
-
-      <div
-        style={{
-          fontSize: "13px",
-          color: "#44515c",
-        }}
-      >
-        {text}
-      </div>
-    </div>
+      {text}
+    </span>
   );
 }
-
-const menuStyle = {
-  display: "block",
-  padding: "15px 18px",
-  marginBottom: "7px",
-  borderRadius: "10px",
-  textDecoration: "none",
-  fontSize: "15px",
-  color: "#44515c",
-};
-
-const panelStyle = {
-  background: "white",
-  border: "1px solid #e2e7eb",
-  borderRadius: "14px",
-  padding: "22px",
-};
-
-const panelTitleStyle = {
-  marginTop: 0,
-  marginBottom: "18px",
-  fontSize: "19px",
-  color: "#0b1f33",
-};

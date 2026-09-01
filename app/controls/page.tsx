@@ -1,37 +1,22 @@
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
-const controls = [
-  {
-    id: "1-1-1",
-    title: "تحديد وتوثيق واعتماد استراتيجية الأمن السيبراني",
-    domain: "حوكمة الأمن السيبراني",
-    owner: "إدارة الأمن السيبراني",
-    implementation: "مطبق",
-    evidence: "مقبول",
-    verification: "تم التحقق",
-    dueDate: "2026-09-15",
-  },
-  {
-    id: "1-1-2",
-    title: "تنفيذ خطة عمل لتطبيق استراتيجية الأمن السيبراني",
-    domain: "حوكمة الأمن السيبراني",
-    owner: "إدارة الأمن السيبراني",
-    implementation: "قيد التنفيذ",
-    evidence: "بانتظار الرفع",
-    verification: "غير متحقق",
-    dueDate: "2026-09-20",
-  },
-  {
-    id: "1-2-1",
-    title: "إنشاء إدارة مستقلة للأمن السيبراني",
-    domain: "حوكمة الأمن السيبراني",
-    owner: "الموارد البشرية",
-    implementation: "مطبق",
-    evidence: "قيد المراجعة",
-    verification: "غير متحقق",
-    dueDate: "2026-09-10",
-  },
-];
+type Control = {
+  id: number;
+  framework_id: number;
+  control_code: string;
+  title_ar: string;
+  description_ar: string | null;
+  domain_ar: string;
+  implementation_status: string;
+  evidence_status: string;
+  verification_status: string;
+  due_date: string | null;
+  last_review_date: string | null;
+  control_owner: string | null;
+  evidence_owner: string | null;
+  implementation_notes: string | null;
+};
 
 const menuItems = [
   { name: "لوحة المتابعة", href: "/" },
@@ -43,7 +28,46 @@ const menuItems = [
   { name: "الإعدادات", href: "#" },
 ];
 
-export default function ControlsPage() {
+export default async function ControlsPage() {
+  const { data, error } = await supabase
+    .from("controls")
+    .select("*")
+    .order("id", { ascending: true });
+
+  const controls: Control[] = data ?? [];
+
+  if (error) {
+    return (
+      <main
+        dir="rtl"
+        style={{
+          padding: "40px",
+          fontFamily: "Arial, sans-serif",
+        }}
+      >
+        <h1>تعذر تحميل الضوابط</h1>
+
+        <p style={{ color: "#b42318" }}>
+          {error.message}
+        </p>
+
+        <Link href="/">العودة إلى لوحة المتابعة</Link>
+      </main>
+    );
+  }
+
+  const implementedCount = controls.filter(
+    (control) => control.implementation_status === "implemented"
+  ).length;
+
+  const inProgressCount = controls.filter(
+    (control) => control.implementation_status === "in_progress"
+  ).length;
+
+  const notStartedCount = controls.filter(
+    (control) => control.implementation_status === "not_started"
+  ).length;
+
   return (
     <main
       dir="rtl"
@@ -133,7 +157,7 @@ export default function ControlsPage() {
           })}
         </aside>
 
-        {/* Content */}
+        {/* Main Content */}
         <section
           style={{
             flex: 1,
@@ -141,7 +165,7 @@ export default function ControlsPage() {
             minWidth: 0,
           }}
         >
-          {/* Page Heading */}
+          {/* Heading */}
           <div
             style={{
               display: "flex",
@@ -205,10 +229,25 @@ export default function ControlsPage() {
               marginBottom: "25px",
             }}
           >
-            <Kpi title="إجمالي الضوابط" value="108" />
-            <Kpi title="ملتزم" value="54" />
-            <Kpi title="قيد التنفيذ" value="37" />
-            <Kpi title="غير ملتزم" value="17" />
+            <Kpi
+              title="إجمالي الضوابط"
+              value={controls.length.toString()}
+            />
+
+            <Kpi
+              title="مطبق"
+              value={implementedCount.toString()}
+            />
+
+            <Kpi
+              title="قيد التنفيذ"
+              value={inProgressCount.toString()}
+            />
+
+            <Kpi
+              title="لم يبدأ"
+              value={notStartedCount.toString()}
+            />
           </div>
 
           {/* Controls Table */}
@@ -220,145 +259,134 @@ export default function ControlsPage() {
               overflow: "hidden",
             }}
           >
-            {/* Search and Filter */}
             <div
               style={{
                 padding: "18px",
                 borderBottom: "1px solid #e8ecef",
-                display: "flex",
-                justifyContent: "space-between",
-                gap: "14px",
               }}
             >
-              <input
-                type="text"
-                placeholder="ابحث برقم الضابط أو اسمه..."
+              <div
                 style={{
-                  width: "100%",
-                  maxWidth: "430px",
-                  padding: "12px 14px",
-                  border: "1px solid #d9dee3",
-                  borderRadius: "9px",
-                  outline: "none",
                   fontSize: "14px",
-                }}
-              />
-
-              <select
-                style={{
-                  padding: "11px 14px",
-                  border: "1px solid #d9dee3",
-                  borderRadius: "9px",
-                  background: "white",
-                  fontSize: "14px",
+                  color: "#5f6b76",
                 }}
               >
-                <option>جميع الحالات</option>
-                <option>ملتزم</option>
-                <option>قيد التنفيذ</option>
-                <option>غير ملتزم</option>
-              </select>
+                الضوابط المحملة من قاعدة بيانات Supabase
+              </div>
             </div>
 
-            {/* Table */}
-            <div style={{ overflowX: "auto" }}>
-              <table
+            {controls.length === 0 ? (
+              <div
                 style={{
-                  width: "100%",
-                  minWidth: "1050px",
-                  borderCollapse: "collapse",
+                  padding: "40px",
+                  textAlign: "center",
+                  color: "#7a8794",
                 }}
               >
-                <thead>
-                  <tr style={{ background: "#f8fafb" }}>
-                    <Th>رقم الضابط</Th>
-                    <Th>الضابط</Th>
-                    <Th>المجال</Th>
-                    <Th>المالك</Th>
-                    <Th>حالة التنفيذ</Th>
-                    <Th>حالة الدليل</Th>
-                    <Th>التحقق</Th>
-                    <Th>تاريخ الاستحقاق</Th>
-                    <Th>الإجراء</Th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {controls.map((control) => (
-                    <tr key={control.id}>
-                      <Td>
-                        <strong>{control.id}</strong>
-                      </Td>
-
-                      <Td>{control.title}</Td>
-
-                      <Td>{control.domain}</Td>
-
-                      <Td>{control.owner}</Td>
-
-                      <Td>
-                        <Badge
-                          text={control.implementation}
-                          type={
-                            control.implementation === "مطبق"
-                              ? "success"
-                              : "warning"
-                          }
-                        />
-                      </Td>
-
-                      <Td>
-                        <Badge
-                          text={control.evidence}
-                          type={
-                            control.evidence === "مقبول"
-                              ? "success"
-                              : control.evidence === "قيد المراجعة"
-                                ? "info"
-                                : "warning"
-                          }
-                        />
-                      </Td>
-
-                      <Td>
-                        <Badge
-                          text={control.verification}
-                          type={
-                            control.verification === "تم التحقق"
-                              ? "success"
-                              : "neutral"
-                          }
-                        />
-                      </Td>
-
-                      <Td>{control.dueDate}</Td>
-
-                      {/* Open Control Details */}
-                      <Td>
-                        <Link
-                          href={`/controls/${control.id}`}
-                          style={{
-                            display: "inline-block",
-                            border: "1px solid #d9dee3",
-                            background: "white",
-                            color: "#0b1f33",
-                            borderRadius: "8px",
-                            padding: "8px 13px",
-                            textDecoration: "none",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          فتح
-                        </Link>
-                      </Td>
+                لا توجد ضوابط حاليًا.
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  style={{
+                    width: "100%",
+                    minWidth: "1050px",
+                    borderCollapse: "collapse",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ background: "#f8fafb" }}>
+                      <Th>رقم الضابط</Th>
+                      <Th>الضابط</Th>
+                      <Th>المجال</Th>
+                      <Th>المالك</Th>
+                      <Th>حالة التنفيذ</Th>
+                      <Th>حالة الدليل</Th>
+                      <Th>التحقق</Th>
+                      <Th>تاريخ الاستحقاق</Th>
+                      <Th>الإجراء</Th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+
+                  <tbody>
+                    {controls.map((control) => (
+                      <tr key={control.id}>
+                        <Td>
+                          <strong>
+                            {control.control_code}
+                          </strong>
+                        </Td>
+
+                        <Td>{control.title_ar}</Td>
+
+                        <Td>{control.domain_ar}</Td>
+
+                        <Td>
+                          {control.control_owner || "غير محدد"}
+                        </Td>
+
+                        <Td>
+                          <Badge
+                            text={implementationLabel(
+                              control.implementation_status
+                            )}
+                            type={implementationBadgeType(
+                              control.implementation_status
+                            )}
+                          />
+                        </Td>
+
+                        <Td>
+                          <Badge
+                            text={evidenceLabel(
+                              control.evidence_status
+                            )}
+                            type={evidenceBadgeType(
+                              control.evidence_status
+                            )}
+                          />
+                        </Td>
+
+                        <Td>
+                          <Badge
+                            text={verificationLabel(
+                              control.verification_status
+                            )}
+                            type={verificationBadgeType(
+                              control.verification_status
+                            )}
+                          />
+                        </Td>
+
+                        <Td>
+                          {control.due_date || "غير محدد"}
+                        </Td>
+
+                        <Td>
+                          <Link
+                            href={`/controls/${control.id}`}
+                            style={{
+                              display: "inline-block",
+                              border: "1px solid #d9dee3",
+                              background: "white",
+                              color: "#0b1f33",
+                              borderRadius: "8px",
+                              padding: "8px 13px",
+                              textDecoration: "none",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            فتح
+                          </Link>
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
-          {/* Back to Dashboard */}
           <div style={{ marginTop: "22px" }}>
             <Link
               href="/"
@@ -375,6 +403,75 @@ export default function ControlsPage() {
       </div>
     </main>
   );
+}
+
+function implementationLabel(status: string) {
+  switch (status) {
+    case "implemented":
+      return "مطبق";
+    case "in_progress":
+      return "قيد التنفيذ";
+    case "not_applicable":
+      return "غير منطبق";
+    default:
+      return "لم يبدأ";
+  }
+}
+
+function evidenceLabel(status: string) {
+  switch (status) {
+    case "accepted":
+      return "مقبول";
+    case "pending_review":
+      return "قيد المراجعة";
+    case "rejected":
+      return "مرفوض";
+    default:
+      return "لم يرفع";
+  }
+}
+
+function verificationLabel(status: string) {
+  switch (status) {
+    case "verified":
+      return "تم التحقق";
+    case "under_review":
+      return "قيد التحقق";
+    case "failed":
+      return "لم يجتز";
+    default:
+      return "غير متحقق";
+  }
+}
+
+function implementationBadgeType(
+  status: string
+): "success" | "warning" | "info" | "neutral" {
+  if (status === "implemented") return "success";
+  if (status === "in_progress") return "warning";
+  if (status === "not_applicable") return "neutral";
+
+  return "neutral";
+}
+
+function evidenceBadgeType(
+  status: string
+): "success" | "warning" | "info" | "neutral" {
+  if (status === "accepted") return "success";
+  if (status === "pending_review") return "info";
+  if (status === "rejected") return "warning";
+
+  return "neutral";
+}
+
+function verificationBadgeType(
+  status: string
+): "success" | "warning" | "info" | "neutral" {
+  if (status === "verified") return "success";
+  if (status === "under_review") return "info";
+  if (status === "failed") return "warning";
+
+  return "neutral";
 }
 
 function Kpi({
