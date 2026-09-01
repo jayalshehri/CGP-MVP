@@ -433,20 +433,22 @@ export default async function ControlDetailsPage({
                 {evidence.length} دليل
               </span>
 
-              <button
-                type="button"
-                style={{
-                  border: 0,
-                  background: "#0f7d73",
-                  color: "white",
-                  padding: "10px 15px",
-                  borderRadius: "9px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
-                + رفع دليل
-              </button>
+              <Link
+  href={`/controls/${control.id}/evidence/new`}
+  style={{
+    display: "inline-block",
+    border: 0,
+    background: "#0f7d73",
+    color: "white",
+    padding: "10px 15px",
+    borderRadius: "9px",
+    fontWeight: "bold",
+    textDecoration: "none",
+    cursor: "pointer",
+  }}
+>
+  + رفع دليل
+</Link>
             </div>
           </div>
 
