@@ -20,7 +20,7 @@ const menuItems = [
   { name: "الأدلة", href: "#", roles: ["admin", "cybersecurity_team", "control_owner"] },
   { name: "التقييم والتحقق", href: "#", roles: ["admin", "cybersecurity_team"] },
   { name: "التقارير", href: "#", roles: ["admin", "cybersecurity_team"] },
-  { name: "الإعدادات", href: "#", roles: ["admin"] },
+  { name: "إدارة المستخدمين", href: "/users", roles: ["admin"] },
 ];
 
 const domainStatus = [
