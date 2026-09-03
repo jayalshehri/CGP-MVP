@@ -19,7 +19,8 @@ const menuItems = [
   { name: "مهامي / التكليفات", href: "/tasks", roles: ["admin", "cybersecurity_team", "control_owner"] },
   { name: "الأدلة", href: "/evidence", roles: ["admin", "cybersecurity_team", "control_owner"] },
   { name: "التقييم والتحقق", href: "/review", roles: ["admin", "cybersecurity_team"] },
-  { name: "التقارير", href: "#", roles: ["admin", "cybersecurity_team"] },
+  { name: "التقارير", href: "/reports", roles: ["admin", "cybersecurity_team"] },
+  { name: "اللوحة التنفيذية", href: "/executive", roles: ["admin", "cybersecurity_team"] },
   { name: "إدارة المستخدمين", href: "/users", roles: ["admin"] },
 ];
 
@@ -121,7 +122,13 @@ export default function Home() {
             <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:"14px",padding:"28px"}}><h2 style={{marginTop:0,marginBottom:"25px",fontSize:"21px"}}>حالة الالتزام حسب المجال</h2>{domainStatus.map((domain)=><div key={domain.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"19px 0",borderBottom:"1px solid #edf0f2"}}><span style={{fontSize:"15px"}}>{domain.name}</span><strong style={{color:"#0f7d73",fontSize:"18px"}}>{domain.value}</strong></div>)}</div>
             <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:"14px",padding:"28px"}}><h2 style={{marginTop:0,marginBottom:"25px",fontSize:"21px"}}>تحتاج انتباهك</h2><AlertItem icon="🔴" text="6 مهام متأخرة"/><AlertItem icon="🟠" text="17 دليلاً بانتظار الرفع"/><AlertItem icon="🔵" text="9 أدلة بانتظار المراجعة"/><AlertItem icon="🟢" text="34 ضابطاً تم التحقق منها"/></div>
           </div>
-          <div style={{marginTop:"24px",display:"flex",gap:12,flexWrap:"wrap"}}><Link href="/controls" style={{display:"inline-block",background:"#0f7d73",color:"white",textDecoration:"none",padding:"13px 20px",borderRadius:"9px",fontWeight:"bold",fontSize:"14px"}}>عرض جميع الضوابط ←</Link><Link href="/tasks" style={{display:"inline-block",background:"white",border:"1px solid #ccd6dc",color:"#0b1f33",textDecoration:"none",padding:"13px 20px",borderRadius:"9px",fontWeight:"bold",fontSize:"14px"}}>فتح مهامي / التكليفات</Link><Link href="/evidence" style={{display:"inline-block",background:"white",border:"1px solid #ccd6dc",color:"#0b1f33",textDecoration:"none",padding:"13px 20px",borderRadius:"9px",fontWeight:"bold",fontSize:"14px"}}>مركز الأدلة</Link></div>
+          <div style={{marginTop:"24px",display:"flex",gap:12,flexWrap:"wrap"}}>
+            <Link href="/controls" style={primaryLink}>عرض جميع الضوابط ←</Link>
+            <Link href="/tasks" style={secondaryLink}>فتح مهامي / التكليفات</Link>
+            <Link href="/evidence" style={secondaryLink}>مركز الأدلة</Link>
+            {userRole!=="control_owner"&&<Link href="/reports" style={secondaryLink}>التقارير</Link>}
+            {userRole!=="control_owner"&&<Link href="/executive" style={{...secondaryLink,borderColor:"#0f7d73",color:"#0f6f67"}}>اللوحة التنفيذية</Link>}
+          </div>
         </section>
       </div>
     </main>
@@ -130,3 +137,5 @@ export default function Home() {
 
 function KpiCard({title,value}:{title:string;value:string}) { return <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:"14px",padding:"24px",minHeight:"82px"}}><div style={{color:"#7a8794",fontSize:"14px",marginBottom:"10px"}}>{title}</div><div style={{color:"#0f7d73",fontSize:"32px",fontWeight:"bold"}}>{value}</div></div>; }
 function AlertItem({icon,text}:{icon:string;text:string}) { return <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"14px 0",fontSize:"15px"}}><span style={{fontSize:"20px"}}>{icon}</span><span>{text}</span></div>; }
+const primaryLink={display:"inline-block",background:"#0f7d73",color:"white",textDecoration:"none",padding:"13px 20px",borderRadius:"9px",fontWeight:"bold",fontSize:"14px"};
+const secondaryLink={display:"inline-block",background:"white",border:"1px solid #ccd6dc",color:"#0b1f33",textDecoration:"none",padding:"13px 20px",borderRadius:"9px",fontWeight:"bold",fontSize:"14px"};
