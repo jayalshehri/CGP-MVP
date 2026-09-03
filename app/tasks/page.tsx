@@ -65,8 +65,8 @@ export default function TasksPage(){
     return matchesSearch&&matchesFilter;
   }),[tasks,search,filter]);
 
-  const overdue=tasks.filter(t=>t.due_date&&new Date(t.due_date)<new Date()&&!['implemented','compliant'].includes((t.implementation_status||'').toLowerCase())).length;
-  const waitingEvidence=tasks.filter(t=>!['uploaded','accepted','approved','verified'].includes((t.evidence_status||'').toLowerCase())).length;
+  const overdue=tasks.filter(t=>t.due_date&&t.due_date<new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"})&&!['implemented','compliant'].includes((t.implementation_status||'').toLowerCase())).length;
+  const waitingEvidence=tasks.filter(t=>!['uploaded','pending_review','under_review','accepted','approved','verified'].includes((t.evidence_status||'').toLowerCase())).length;
   const completed=tasks.filter(t=>['implemented','compliant'].includes((t.implementation_status||'').toLowerCase())).length;
 
   if(loading)return <main dir="rtl" style={center}>جاري تحميل مهامك...</main>;
@@ -95,7 +95,7 @@ export default function TasksPage(){
         </div>
         <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,overflow:"hidden"}}>
           {filtered.length===0?<div style={{padding:45,textAlign:"center",color:"#7a8794"}}>لا توجد تكليفات مطابقة حاليًا.</div>:filtered.map(task=>{
-            const isOverdue=!!task.due_date&&new Date(task.due_date)<new Date()&&!['implemented','compliant'].includes((task.implementation_status||'').toLowerCase());
+            const isOverdue=!!task.due_date&&task.due_date<new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"})&&!['implemented','compliant'].includes((task.implementation_status||'').toLowerCase());
             return <div key={task.id} style={{padding:20,borderBottom:"1px solid #edf0f2",display:"grid",gridTemplateColumns:"1.6fr .8fr .8fr .8fr auto",gap:15,alignItems:"center"}}>
               <div><div style={{color:"#0f7d73",fontWeight:800,fontSize:13}}>{task.control_code}</div><div style={{fontWeight:800,marginTop:6}}>{task.title_ar}</div><div style={{fontSize:13,color:"#7a8794",marginTop:5}}>{task.domain_ar}{role!=="control_owner"&&task.control_owner?` · ${task.control_owner}`:""}</div></div>
               <Status label="التنفيذ" value={statusLabel(task.implementation_status)}/>

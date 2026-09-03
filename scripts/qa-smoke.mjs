@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const baseUrl = process.env.CGP_BASE_URL || 'https://cgp-mvp-grc13.vercel.app';
-const routes = ['/login', '/', '/controls', '/tasks', '/change-password'];
+const routes = ['/login', '/', '/controls', '/tasks', '/evidence', '/review', '/reports', '/executive', '/change-password'];
 let failed = false;
 
 console.log(`CGP smoke QA: ${baseUrl}`);
@@ -19,7 +19,7 @@ for (const route of routes) {
 }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const email = process.env.QA_EMAIL;
 const password = process.env.QA_PASSWORD;
 
@@ -51,24 +51,27 @@ if (supabaseUrl && anonKey && email && password) {
         .from('controls')
         .select('id,control_code,title_ar,control_owner_id', { count: 'exact' });
 
-      if (profile.role === 'control_owner') {
-        taskQuery = taskQuery.eq('control_owner_id', signIn.user.id);
-      }
+      // Deliberately unfiltered: this checks database RLS, not only UI filtering.
 
       const { data: tasks, error: taskError, count } = await taskQuery.limit(5);
       if (taskError) {
         console.log(`FAIL tasks query: ${taskError.message}`);
         failed = true;
+      } else if (profile.role === 'control_owner' && tasks.some(task => task.control_owner_id !== signIn.user.id)) {
+        console.log('FAIL owner scope: another owner control is visible'); failed = true;
       } else {
         console.log(`PASS tasks query: ${count ?? tasks?.length ?? 0} visible task(s)`);
       }
     }
 
+    const { data: stats, error: dashboardError } = await supabase.rpc('cgp_dashboard');
+    if (dashboardError || !stats) { console.log('FAIL live dashboard'); failed = true; }
+    else console.log(`PASS live dashboard: ${stats.total} controls`);
     await supabase.auth.signOut();
   }
 } else {
-  console.log('SKIP authenticated QA: set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, QA_EMAIL and QA_PASSWORD.');
+  console.log('SKIP authenticated QA: set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, QA_EMAIL and QA_PASSWORD.');
 }
 
 if (failed) process.exit(1);
-console.log('CGP smoke QA completed successfully.');
+console.log('HTTP smoke checks passed. See authenticated PASS/SKIP results above.');

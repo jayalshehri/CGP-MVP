@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
 export default function NewEvidencePage() {
@@ -19,13 +20,24 @@ export default function NewEvidencePage() {
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  const [ready,setReady]=useState(false);
+  useEffect(()=>{let active=true;(async()=>{try{
+    await requireProfile();
+    const {data,error}=await supabase.from("controls").select("id").eq("id",controlId).single();
+    if(error||!data)throw new Error("الضابط غير موجود أو ليس ضمن صلاحيتك.");
+    if(active)setReady(true);
+  }catch(e){if(active)setErrorMessage(e instanceof Error?e.message:"تعذر التحقق من الصلاحيات");
+    const {data}=await supabase.auth.getSession();if(!data.session)router.replace("/login");
+  }})();return()=>{active=false;};},[controlId,router]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!ready || uploading) return;
     setMessage("");
     setErrorMessage("");
 
-    if (!Number.isInteger(controlId)) {
+    if ((!Number.isSafeInteger(controlId) || controlId<=0)) {
       setErrorMessage("رقم الضابط غير صحيح.");
       return;
     }
@@ -40,7 +52,7 @@ export default function NewEvidencePage() {
       return;
     }
 
-    if (file.size > 20 * 1024 * 1024) {
+    if (file.size === 0 || file.size > 20 * 1024 * 1024) {
       setErrorMessage("حجم الملف يجب ألا يتجاوز 20 MB.");
       return;
     }
@@ -48,6 +60,7 @@ export default function NewEvidencePage() {
     setUploading(true);
 
     try {
+      await requireProfile();
       // Clean file name
       const safeFileName = file.name
         .replace(/\s+/g, "_")
@@ -55,7 +68,7 @@ export default function NewEvidencePage() {
 
       // Every control gets its own folder
       const storagePath =
-        `${controlId}/${Date.now()}-${safeFileName}`;
+        `${controlId}/${crypto.randomUUID()}-${safeFileName}`;
 
       // 1. Upload file to Supabase Storage
       const { error: uploadError } = await supabase.storage
@@ -101,10 +114,8 @@ export default function NewEvidencePage() {
 
       setMessage("تم رفع الدليل وربطه بالضابط بنجاح.");
 
-      setTimeout(() => {
-        router.push(`/controls/${controlId}`);
-        router.refresh();
-      }, 800);
+      router.push(`/controls/${controlId}`);
+      router.refresh();
     } catch (error) {
       const message =
         error instanceof Error
@@ -306,6 +317,7 @@ export default function NewEvidencePage() {
             </div>
 
             <input
+              aria-label="ملف الدليل"
               type="file"
               accept=".pdf,.doc,.docx,.xls,.xlsx,image/*"
               onChange={(e) => {
@@ -364,6 +376,8 @@ export default function NewEvidencePage() {
             </div>
           )}
 
+          <p style={{color:"#7a8794",fontSize:13}}>الإرسال الجديد يحل محل الدليل الحالي للمراجعة، مع الاحتفاظ بالإرسالات السابقة في السجل.</p>
+
           {/* Actions */}
           <div
             style={{
@@ -375,7 +389,7 @@ export default function NewEvidencePage() {
           >
             <button
               type="submit"
-              disabled={uploading}
+              disabled={uploading || !ready}
               style={{
                 border: 0,
                 background: uploading

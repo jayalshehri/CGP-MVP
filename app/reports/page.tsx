@@ -23,7 +23,7 @@ export default function ReportsPage(){
   if(!p||p.is_active===false||!["admin","cybersecurity_team"].includes(p.role)){router.replace("/");return;}
   const [{data:c,error:ce},{data:e,error:ee}]=await Promise.all([
    supabase.from("controls").select("id,control_code,title_ar,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner").order("id"),
-   supabase.from("evidence").select("id,status")
+   supabase.from("evidence").select("id,status").eq("is_current",true)
   ]);
   if(ce||ee){setError(ce?.message||ee?.message||"تعذر تحميل التقارير");setLoading(false);return;}
   setControls((c??[]) as Control[]); setEvidence((e??[]) as Evidence[]); setLoading(false);
@@ -31,13 +31,13 @@ export default function ReportsPage(){
  const stats=useMemo(()=>{
   const now=new Date(); const total=controls.length; const done=controls.filter(c=>good(c.implementation_status)).length;
   const verified=controls.filter(c=>good(c.verification_status)).length;
-  const overdue=controls.filter(c=>c.due_date&&new Date(c.due_date)<now&&!good(c.implementation_status)).length;
+  const overdue=controls.filter(c=>c.due_date&&c.due_date<now.toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"})&&!good(c.implementation_status)).length;
   const pendingEvidence=evidence.filter(e=>progress(e.status)).length;
   return {total,done,verified,overdue,pendingEvidence,compliance:total?Math.round(done/total*100):0};
  },[controls,evidence]);
  const domains=useMemo(()=>{
   const m=new Map<string,DomainRow>(); const now=new Date();
-  controls.forEach(c=>{const name=c.domain_ar||"غير مصنف";const r=m.get(name)||{name,total:0,done:0,verified:0,overdue:0};r.total++;if(good(c.implementation_status))r.done++;if(good(c.verification_status))r.verified++;if(c.due_date&&new Date(c.due_date)<now&&!good(c.implementation_status))r.overdue++;m.set(name,r)});
+  controls.forEach(c=>{const name=c.domain_ar||"غير مصنف";const r=m.get(name)||{name,total:0,done:0,verified:0,overdue:0};r.total++;if(good(c.implementation_status))r.done++;if(good(c.verification_status))r.verified++;if(c.due_date&&c.due_date<now.toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"})&&!good(c.implementation_status))r.overdue++;m.set(name,r)});
   return [...m.values()].sort((a,b)=>b.total-a.total);
  },[controls]);
  function exportCsv(){

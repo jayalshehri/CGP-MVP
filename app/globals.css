@@ -3,3 +3,16 @@ body {
   margin: 0;
   padding: 0;
 }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid #0f7d73;
+  outline-offset: 3px;
+}
+button:disabled { cursor: wait; opacity: .65; }
+@media (max-width: 760px) {
+  .cgp-sidebar { width: 160px !important; padding: 18px 8px !important; }
+  .cgp-content { padding: 22px 16px !important; }
+  header { padding: 18px !important; flex-wrap: wrap; }
+}
+@media (max-width: 520px) {
+  .cgp-sidebar { display: none; }
+}

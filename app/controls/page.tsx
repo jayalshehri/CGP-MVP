@@ -1,3 +1,7 @@
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { requireProfile, type UserRole } from "@/lib/auth";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -21,20 +25,30 @@ type Control = {
 const menuItems = [
   { name: "لوحة المتابعة", href: "/" },
   { name: "الضوابط", href: "/controls" },
-  { name: "التكليفات", href: "#" },
-  { name: "الأدلة", href: "#" },
-  { name: "التقييم والتحقق", href: "#" },
-  { name: "التقارير", href: "#" },
-  { name: "الإعدادات", href: "#" },
+  { name: "التكليفات", href: "/tasks" },
+  { name: "الأدلة", href: "/evidence" },
+  { name: "التقييم والتحقق", href: "/review" },
+  { name: "التقارير", href: "/reports" },
+  { name: "تغيير كلمة المرور", href: "/change-password" },
 ];
 
-export default async function ControlsPage() {
-  const { data, error } = await supabase
-    .from("controls")
-    .select("*")
-    .order("id", { ascending: true });
-
-  const controls: Control[] = data ?? [];
+export default function ControlsPage() {
+  const router = useRouter();
+  const [controls,setControls] = useState<Control[]>([]);
+  const [role,setRole] = useState<UserRole>("control_owner");
+  const [error,setError] = useState<Error|null>(null);
+  const [loading,setLoading] = useState(true);
+  useEffect(()=>{ let active=true; (async()=>{try {
+    const {user,profile}=await requireProfile();
+    if(!active)return; setRole(profile.role);
+    let query=supabase.from("controls").select("*").order("id");
+    if(profile.role==="control_owner")query=query.eq("control_owner_id",user.id);
+    const {data,error}=await query; if(error)throw error;
+    if(active)setControls(data??[]);
+  }catch(e){if(active)setError(new Error(e instanceof Error?e.message:"تعذر تحميل الضوابط"));
+    const {data}=await supabase.auth.getSession();if(!data.session)router.replace("/login");
+  }finally{if(active)setLoading(false);}})();return()=>{active=false;};},[router]);
+  if(loading)return <main dir="rtl" style={{padding:40}}>جاري تحميل الضوابط...</main>;
 
   if (error) {
     return (
@@ -132,7 +146,7 @@ export default async function ControlsPage() {
             flexShrink: 0,
           }}
         >
-          {menuItems.map((item) => {
+          {menuItems.filter(item=>role!=="control_owner"||!["/review","/reports"].includes(item.href)).map((item) => {
             const active = item.href === "/controls";
 
             return (

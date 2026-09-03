@@ -1,5 +1,6 @@
 "use client";
 
+import EvidenceDownload from "@/components/EvidenceDownload";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -92,7 +93,7 @@ export default function EvidencePage(){
             <div><div style={{color:"#0f7d73",fontWeight:800,fontSize:13}}>{row.control?.control_code||`Control ${row.control_id}`}</div><div style={{fontWeight:800,marginTop:6}}>{row.evidence_name||row.file_name||`دليل ${row.id}`}</div><div style={{fontSize:13,color:"#7a8794",marginTop:5}}>{row.control?.title_ar||""}</div></div>
             <div><div style={{fontSize:12,color:"#7a8794",marginBottom:5}}>تاريخ الرفع</div><strong>{row.uploaded_at?new Date(row.uploaded_at).toLocaleDateString("ar-SA"):"غير محدد"}</strong></div>
             <Status value={statusLabel(row.status||"")}/>
-            <div style={{display:"flex",gap:8}}><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link>{role!=="control_owner"&&<Link href="/review" style={primary}>مراجعة</Link>}</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link>{role!=="control_owner"&&<Link href="/review" style={primary}>مراجعة</Link>}</div>
           </div>)}
         </div>
       </section>
