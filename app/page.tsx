@@ -1,4 +1,9 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 const menuItems = [
   { name: "لوحة المتابعة", href: "/" },
@@ -18,6 +23,61 @@ const domainStatus = [
 ];
 
 export default function Home() {
+  const router = useRouter();
+  const [authReady, setAuthReady] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+
+      if (!data.session) {
+        router.replace("/login");
+        return;
+      }
+
+      setUserEmail(data.session.user.email ?? "");
+      setAuthReady(true);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.replace("/login");
+      }
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [router]);
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  }
+
+  if (!authReady) {
+    return (
+      <main
+        dir="rtl"
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          background: "#f5f7f9",
+          color: "#0b1f33",
+          fontFamily: "Arial, sans-serif",
+        }}
+      >
+        جاري تحميل منصة CGP...
+      </main>
+    );
+  }
+
   return (
     <main
       dir="rtl"
@@ -28,51 +88,55 @@ export default function Home() {
         color: "#0b1f33",
       }}
     >
-      {/* Header */}
       <header
         style={{
-          height: "86px",
+          minHeight: "86px",
           background: "#0b1f33",
           color: "white",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: "24px",
           padding: "0 38px",
         }}
       >
         <div>
-          <div
-            style={{
-              fontSize: "24px",
-              fontWeight: "bold",
-            }}
-          >
+          <div style={{ fontSize: "24px", fontWeight: "bold" }}>
             Cyber Governance Platform
           </div>
-
-          <div
-            style={{
-              fontSize: "13px",
-              opacity: 0.7,
-              marginTop: "5px",
-            }}
-          >
+          <div style={{ fontSize: "13px", opacity: 0.7, marginTop: "5px" }}>
             منصة حوكمة الأمن السيبراني
           </div>
         </div>
 
-        <div style={{ fontSize: "14px" }}>
-          دورة التقييم: 2026
+        <div style={{ display: "flex", alignItems: "center", gap: "18px" }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: "13px", opacity: 0.7 }}>دورة التقييم: 2026</div>
+            {userEmail ? (
+              <div style={{ fontSize: "12px", opacity: 0.55, marginTop: "4px" }}>
+                {userEmail}
+              </div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            style={{
+              border: "1px solid rgba(255,255,255,0.22)",
+              borderRadius: "9px",
+              background: "rgba(255,255,255,0.08)",
+              color: "white",
+              padding: "9px 13px",
+              cursor: "pointer",
+              fontSize: "13px",
+            }}
+          >
+            تسجيل الخروج
+          </button>
         </div>
       </header>
 
-      <div
-        style={{
-          display: "flex",
-          minHeight: "calc(100vh - 86px)",
-        }}
-      >
-        {/* Sidebar */}
+      <div style={{ display: "flex", minHeight: "calc(100vh - 86px)" }}>
         <aside
           style={{
             width: "260px",
@@ -84,7 +148,6 @@ export default function Home() {
         >
           {menuItems.map((item) => {
             const active = item.href === "/";
-
             return (
               <Link
                 key={item.name}
@@ -107,37 +170,16 @@ export default function Home() {
           })}
         </aside>
 
-        {/* Main Content */}
-        <section
-          style={{
-            flex: 1,
-            padding: "40px",
-            minWidth: 0,
-          }}
-        >
+        <section style={{ flex: 1, padding: "40px", minWidth: 0 }}>
           <div style={{ marginBottom: "30px" }}>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "34px",
-                color: "#0b1f33",
-              }}
-            >
+            <h1 style={{ margin: 0, fontSize: "34px", color: "#0b1f33" }}>
               لوحة المتابعة التشغيلية
             </h1>
-
-            <p
-              style={{
-                marginTop: "10px",
-                color: "#7a8794",
-                fontSize: "15px",
-              }}
-            >
+            <p style={{ marginTop: "10px", color: "#7a8794", fontSize: "15px" }}>
               متابعة حالة الالتزام والضوابط والأدلة والمهام
             </p>
           </div>
 
-          {/* KPI Cards */}
           <div
             style={{
               display: "grid",
@@ -152,7 +194,6 @@ export default function Home() {
             <KpiCard title="مهام متأخرة" value="6" />
           </div>
 
-          {/* Dashboard Panels */}
           <div
             style={{
               display: "grid",
@@ -160,7 +201,6 @@ export default function Home() {
               gap: "20px",
             }}
           >
-            {/* Compliance by Domain */}
             <div
               style={{
                 background: "white",
@@ -169,16 +209,9 @@ export default function Home() {
                 padding: "28px",
               }}
             >
-              <h2
-                style={{
-                  marginTop: 0,
-                  marginBottom: "25px",
-                  fontSize: "21px",
-                }}
-              >
+              <h2 style={{ marginTop: 0, marginBottom: "25px", fontSize: "21px" }}>
                 حالة الالتزام حسب المجال
               </h2>
-
               {domainStatus.map((domain) => (
                 <div
                   key={domain.name}
@@ -190,23 +223,14 @@ export default function Home() {
                     borderBottom: "1px solid #edf0f2",
                   }}
                 >
-                  <span style={{ fontSize: "15px" }}>
-                    {domain.name}
-                  </span>
-
-                  <strong
-                    style={{
-                      color: "#0f7d73",
-                      fontSize: "18px",
-                    }}
-                  >
+                  <span style={{ fontSize: "15px" }}>{domain.name}</span>
+                  <strong style={{ color: "#0f7d73", fontSize: "18px" }}>
                     {domain.value}
                   </strong>
                 </div>
               ))}
             </div>
 
-            {/* Attention Panel */}
             <div
               style={{
                 background: "white",
@@ -215,16 +239,9 @@ export default function Home() {
                 padding: "28px",
               }}
             >
-              <h2
-                style={{
-                  marginTop: 0,
-                  marginBottom: "25px",
-                  fontSize: "21px",
-                }}
-              >
+              <h2 style={{ marginTop: 0, marginBottom: "25px", fontSize: "21px" }}>
                 تحتاج انتباهك
               </h2>
-
               <AlertItem icon="🔴" text="6 مهام متأخرة" />
               <AlertItem icon="🟠" text="17 دليلاً بانتظار الرفع" />
               <AlertItem icon="🔵" text="9 أدلة بانتظار المراجعة" />
@@ -232,12 +249,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Quick Action */}
-          <div
-            style={{
-              marginTop: "24px",
-            }}
-          >
+          <div style={{ marginTop: "24px" }}>
             <Link
               href="/controls"
               style={{
@@ -260,13 +272,7 @@ export default function Home() {
   );
 }
 
-function KpiCard({
-  title,
-  value,
-}: {
-  title: string;
-  value: string;
-}) {
+function KpiCard({ title, value }: { title: string; value: string }) {
   return (
     <div
       style={{
@@ -277,36 +283,17 @@ function KpiCard({
         minHeight: "82px",
       }}
     >
-      <div
-        style={{
-          color: "#7a8794",
-          fontSize: "14px",
-          marginBottom: "10px",
-        }}
-      >
+      <div style={{ color: "#7a8794", fontSize: "14px", marginBottom: "10px" }}>
         {title}
       </div>
-
-      <div
-        style={{
-          color: "#0f7d73",
-          fontSize: "32px",
-          fontWeight: "bold",
-        }}
-      >
+      <div style={{ color: "#0f7d73", fontSize: "32px", fontWeight: "bold" }}>
         {value}
       </div>
     </div>
   );
 }
 
-function AlertItem({
-  icon,
-  text,
-}: {
-  icon: string;
-  text: string;
-}) {
+function AlertItem({ icon, text }: { icon: string; text: string }) {
   return (
     <div
       style={{
@@ -317,10 +304,7 @@ function AlertItem({
         fontSize: "15px",
       }}
     >
-      <span style={{ fontSize: "20px" }}>
-        {icon}
-      </span>
-
+      <span style={{ fontSize: "20px" }}>{icon}</span>
       <span>{text}</span>
     </div>
   );
