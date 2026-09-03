@@ -11,7 +11,7 @@ export default function EvidenceDownload({ path, name }: { path: string | null |
       const { data, error } = await supabase.storage.from('evidence-files').download(path!);
       if (error) throw error;
       const url = URL.createObjectURL(data);
-      const a = document.createElement('a'); a.href = url; a.download = name || 'evidence'; a.click();
+      const a = document.createElement('a'); a.href = url; a.download = name || 'evidence'; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch { setError('تعذر تنزيل الملف. حاول مرة أخرى.'); }
     finally { setBusy(false); }
