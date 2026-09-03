@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -27,7 +27,26 @@ export default function UsersPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [search, setSearch] = useState("");
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<UserRole>("control_owner");
+
+  async function loadProfiles() {
+    const { data, error: listError } = await supabase
+      .from("profiles")
+      .select("user_id,display_name,role,is_active,created_at,updated_at")
+      .order("created_at", { ascending: true });
+
+    if (listError) {
+      setError("تعذر تحميل المستخدمين.");
+      return;
+    }
+    setProfiles((data ?? []) as Profile[]);
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -52,18 +71,8 @@ export default function UsersPage() {
         return;
       }
 
-      const { data, error: listError } = await supabase
-        .from("profiles")
-        .select("user_id,display_name,role,is_active,created_at,updated_at")
-        .order("created_at", { ascending: true });
-
-      if (!mounted) return;
-      if (listError) {
-        setError("تعذر تحميل المستخدمين.");
-      } else {
-        setProfiles((data ?? []) as Profile[]);
-      }
-      setLoading(false);
+      await loadProfiles();
+      if (mounted) setLoading(false);
     }
 
     load();
@@ -86,6 +95,7 @@ export default function UsersPage() {
   async function updateProfile(userId: string, patch: Partial<Pick<Profile, "role" | "is_active">>) {
     setSavingId(userId);
     setError("");
+    setSuccess("");
 
     const { error: updateError } = await supabase
       .from("profiles")
@@ -102,6 +112,35 @@ export default function UsersPage() {
       current.map((profile) => (profile.user_id === userId ? { ...profile, ...patch } : profile))
     );
     setSavingId(null);
+  }
+
+  async function inviteUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    setInviteLoading(true);
+
+    const { error: invokeError } = await supabase.functions.invoke("admin-invite-user", {
+      body: {
+        email: inviteEmail.trim(),
+        full_name: inviteName.trim(),
+        role: inviteRole,
+      },
+    });
+
+    if (invokeError) {
+      setError("تعذر إرسال الدعوة. تأكد أن البريد غير مستخدم مسبقًا ثم حاول مرة أخرى.");
+      setInviteLoading(false);
+      return;
+    }
+
+    setSuccess(`تم إرسال دعوة إلى ${inviteEmail.trim()}.`);
+    setInviteName("");
+    setInviteEmail("");
+    setInviteRole("control_owner");
+    setShowInvite(false);
+    await loadProfiles();
+    setInviteLoading(false);
   }
 
   if (loading) {
@@ -128,17 +167,51 @@ export default function UsersPage() {
         <div style={{ display: "flex", alignItems: "end", justifyContent: "space-between", gap: 20, marginBottom: 24 }}>
           <div>
             <h1 style={{ margin: 0, fontSize: 32 }}>إدارة المستخدمين</h1>
-            <p style={{ margin: "8px 0 0", color: "#71808e" }}>تغيير دور المستخدم وتفعيل أو تعطيل الوصول إلى CGP.</p>
+            <p style={{ margin: "8px 0 0", color: "#71808e" }}>دعوة مستخدم جديد، تغيير الدور، وتفعيل أو تعطيل الوصول إلى CGP.</p>
           </div>
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="بحث بالاسم أو الدور"
-            style={{ width: 280, border: "1px solid #ccd6dc", borderRadius: 10, padding: "12px 14px", fontSize: 14, background: "white" }}
-          />
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="بحث بالاسم أو الدور"
+              style={{ width: 260, border: "1px solid #ccd6dc", borderRadius: 10, padding: "12px 14px", fontSize: 14, background: "white" }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowInvite((value) => !value)}
+              style={{ border: 0, borderRadius: 10, padding: "12px 16px", background: "#0f756d", color: "white", fontWeight: 800, cursor: "pointer" }}
+            >
+              + إضافة مستخدم
+            </button>
+          </div>
         </div>
 
+        {showInvite ? (
+          <form onSubmit={inviteUser} style={{ background: "white", border: "1px solid #dce5e8", borderRadius: 14, padding: 22, marginBottom: 20, display: "grid", gridTemplateColumns: "1.1fr 1.2fr 1fr auto", gap: 12, alignItems: "end" }}>
+            <label style={labelStyle}>
+              الاسم
+              <input required value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="اسم المستخدم" style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              البريد الإلكتروني
+              <input required type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="name@company.com" style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              الدور
+              <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as UserRole)} style={inputStyle}>
+                <option value="control_owner">مالك الضابط</option>
+                <option value="cybersecurity_team">فريق الأمن السيبراني</option>
+                <option value="admin">مدير النظام</option>
+              </select>
+            </label>
+            <button disabled={inviteLoading} type="submit" style={{ border: 0, borderRadius: 10, padding: "13px 18px", background: inviteLoading ? "#83a7a3" : "#0f756d", color: "white", fontWeight: 800, cursor: inviteLoading ? "not-allowed" : "pointer" }}>
+              {inviteLoading ? "جاري الإرسال..." : "إرسال الدعوة"}
+            </button>
+          </form>
+        ) : null}
+
         {error ? <div role="alert" style={{ marginBottom: 18, padding: "12px 14px", borderRadius: 10, background: "#fff2f0", color: "#9d2e24" }}>{error}</div> : null}
+        {success ? <div role="status" style={{ marginBottom: 18, padding: "12px 14px", borderRadius: 10, background: "#edf8f5", color: "#0f6f67" }}>{success}</div> : null}
 
         <div style={{ background: "white", border: "1px solid #e2e7eb", borderRadius: 14, overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -195,3 +268,5 @@ export default function UsersPage() {
 
 const th = { textAlign: "right" as const, padding: "15px 18px", fontSize: 13, color: "#65727d" };
 const td = { padding: "16px 18px", fontSize: 14, verticalAlign: "middle" as const };
+const labelStyle = { display: "grid", gap: 7, fontSize: 13, fontWeight: 700 };
+const inputStyle = { width: "100%", boxSizing: "border-box" as const, border: "1px solid #ccd6dc", borderRadius: 9, padding: "11px 12px", background: "white", fontSize: 14 };
