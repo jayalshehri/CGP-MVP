@@ -1,5 +1,6 @@
 "use client";
 
+import StatusBadge from "@/components/StatusBadge";
 import EvidenceDownload from "@/components/EvidenceDownload";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -60,36 +61,33 @@ export default function ReviewPage(){
   const history=rows.filter(r=>["accepted","rejected"].includes(r.status||""));
 
   return <main dir="rtl" style={{minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial",color:"#0b1f33"}}>
-    <header style={{minHeight:86,background:"#0b1f33",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 38px",gap:20}}>
-      <div><div style={{fontSize:24,fontWeight:800}}>Cyber Governance Platform</div><div style={{fontSize:13,opacity:.7,marginTop:5}}>التقييم والتحقق</div></div>
-      <Link href="/evidence" style={{color:"white",textDecoration:"none",border:"1px solid rgba(255,255,255,.25)",borderRadius:9,padding:"10px 14px"}}>مركز الأدلة</Link>
-    </header>
-    <section style={{maxWidth:1300,margin:"0 auto",padding:"38px 28px 60px"}}>
-      <div style={{marginBottom:26}}><div style={{color:"#0f7d73",fontWeight:800,fontSize:13,marginBottom:8}}>REVIEW & VERIFY</div><h1 style={{margin:0,fontSize:34}}>مراجعة الأدلة</h1><p style={{color:"#7a8794"}}>قبول أو رفض الأدلة المرسلة من ملاك الضوابط مع توثيق ملاحظات المراجع.</p></div>
-      {error&&<div style={{background:"#fff2f0",color:"#9d2e24",padding:14,borderRadius:10,marginBottom:16}}>{error}</div>}
-      {message&&<div style={{background:"#e8f5f2",color:"#0f6f67",padding:14,borderRadius:10,marginBottom:16}}>{message}</div>}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,marginBottom:22}}><Kpi label="بانتظار المراجعة" value={pending.length}/><Kpi label="مقبولة" value={history.filter(r=>r.status==="accepted").length}/><Kpi label="مرفوضة" value={history.filter(r=>r.status==="rejected").length}/></div>
+
+    <section className="cgp-page-body" style={{maxWidth:1300,margin:"0 auto",padding:"38px 28px 60px"}}>
+      <div style={{marginBottom:26}}><div style={{color:"#0f7d73",fontWeight:800,fontSize:13,marginBottom:8}}>REVIEW & VERIFY</div><h1 style={{margin:0,fontSize:34}}>مراجعة الأدلة</h1><p style={{color:"#586875"}}>قبول أو رفض الأدلة المرسلة من ملاك الضوابط مع توثيق ملاحظات المراجع.</p></div>
+      {error&&<div role="alert" style={{background:"#fff2f0",color:"#9d2e24",padding:14,borderRadius:10,marginBottom:16}}>{error}</div>}
+      {message&&<div role="status" style={{background:"#e8f5f2",color:"#0f6f67",padding:14,borderRadius:10,marginBottom:16}}>{message}</div>}
+      <div className="cgp-responsive-grid cgp-kpi-grid" style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,marginBottom:22}}><Kpi label="بانتظار المراجعة" value={pending.length}/><Kpi label="مقبولة" value={history.filter(r=>r.status==="accepted").length}/><Kpi label="مرفوضة" value={history.filter(r=>r.status==="rejected").length}/></div>
 
       <h2 style={{fontSize:21}}>قائمة المراجعة</h2>
       {pending.length===0?<div style={empty}>لا توجد أدلة بانتظار المراجعة.</div>:pending.map(row=><div key={row.id} style={card}>
-        <div style={{display:"grid",gridTemplateColumns:"1.4fr .8fr",gap:20,alignItems:"start"}}>
+        <div className="cgp-responsive-grid" style={{display:"grid",gridTemplateColumns:"1.4fr .8fr",gap:20,alignItems:"start"}}>
           <div><div style={{color:"#0f7d73",fontWeight:800,fontSize:13}}>{row.control?.control_code||`Control ${row.control_id}`}</div><h3 style={{margin:"7px 0 6px",fontSize:19}}>{row.evidence_name||row.file_name||`دليل ${row.id}`}</h3><div style={{color:"#687581",fontSize:13}}>{row.control?.title_ar||""}</div>{row.description&&<p style={{lineHeight:1.8,color:"#4f5d68"}}>{row.description}</p>}</div>
-          <div><div style={{fontSize:12,color:"#7a8794",marginBottom:5}}>تاريخ الرفع</div><strong>{row.uploaded_at?new Date(row.uploaded_at).toLocaleString("ar-SA"):"غير محدد"}</strong></div>
+          <div><div style={{fontSize:12,color:"#586875",marginBottom:5}}>تاريخ الرفع</div><strong>{row.uploaded_at?new Date(row.uploaded_at).toLocaleString("ar-SA"):"غير محدد"}</strong></div>
         </div>
-        <textarea value={notes[row.id]||""} onChange={e=>setNotes({...notes,[row.id]:e.target.value})} aria-label="ملاحظات المراجع" placeholder="ملاحظات المراجع (مطلوبة عند الرفض)" rows={3} style={{width:"100%",boxSizing:"border-box",marginTop:18,border:"1px solid #ccd6dc",borderRadius:10,padding:12,fontFamily:"Arial",resize:"vertical"}}/>
+        <label className="cgp-field-label" style={{marginTop:18}} htmlFor={`review-notes-${row.id}`}>ملاحظات المراجع — مطلوبة عند الرفض</label><textarea id={`review-notes-${row.id}`} value={notes[row.id]||""} onChange={e=>setNotes({...notes,[row.id]:e.target.value})} aria-label="ملاحظات المراجع" placeholder="ملاحظات المراجع (مطلوبة عند الرفض)" rows={3} style={{width:"100%",boxSizing:"border-box",marginTop:18,border:"1px solid #ccd6dc",borderRadius:10,padding:12,fontFamily:"Arial",resize:"vertical"}}/>
         <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap"}}><button disabled={savingId!==null} onClick={()=>decide(row,"accepted")} style={accept}>قبول الدليل</button><button disabled={savingId!==null} onClick={()=>decide(row,"rejected")} style={reject}>رفض الدليل</button><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link></div>
       </div>)}
 
       <h2 style={{fontSize:21,marginTop:32}}>سجل المراجعات</h2>
-      {history.length===0?<div style={empty}>لا توجد مراجعات مكتملة بعد.</div>:<div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,overflow:"hidden"}}>{history.map(row=><div key={row.id} style={{padding:18,borderBottom:"1px solid #edf0f2",display:"grid",gridTemplateColumns:"1.5fr .7fr .7fr",gap:15,alignItems:"center"}}><div><strong>{row.control?.control_code} · {row.evidence_name||row.file_name}</strong><div style={{fontSize:13,color:"#7a8794",marginTop:5}}>{row.control?.title_ar}</div></div><Status value={row.status==="accepted"?"مقبول":"مرفوض"}/><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link></div>)}</div>}
+      {history.length===0?<div style={empty}>لا توجد مراجعات مكتملة بعد.</div>:<div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,overflow:"hidden"}}>{history.map(row=><div className="cgp-responsive-grid" key={row.id} style={{padding:18,borderBottom:"1px solid #edf0f2",display:"grid",gridTemplateColumns:"1.5fr .7fr auto auto",gap:15,alignItems:"center"}}><div><strong>{row.control?.control_code} · {row.evidence_name||row.file_name}</strong><div style={{fontSize:13,color:"#586875",marginTop:5}}>{row.control?.title_ar}</div></div><StatusBadge status={row.status||""}/><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link></div>)}</div>}
     </section>
   </main>;
 }
 
-function Kpi({label,value}:{label:string;value:number}){return <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:20}}><div style={{fontSize:13,color:"#7a8794",marginBottom:8}}>{label}</div><div style={{fontSize:29,fontWeight:800,color:"#0f7d73"}}>{value}</div></div>}
-function Status({value}:{value:string}){return <span style={{display:"inline-block",background:"#e8f5f2",color:"#0f6f67",borderRadius:999,padding:"7px 10px",fontSize:12,fontWeight:800,width:"fit-content"}}>{value}</span>}
+function Kpi({label,value}:{label:string;value:number}){return <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:20}}><div style={{fontSize:13,color:"#586875",marginBottom:8}}>{label}</div><div style={{fontSize:29,fontWeight:800,color:"#0f7d73"}}>{value}</div></div>}
+
 const card={background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:22,marginBottom:16};
-const empty={background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:35,textAlign:"center" as const,color:"#7a8794"};
+const empty={background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:35,textAlign:"center" as const,color:"#586875"};
 const accept={border:0,background:"#0f7d73",color:"white",padding:"10px 15px",borderRadius:8,fontWeight:800,cursor:"pointer"};
 const reject={border:"1px solid #d14343",background:"white",color:"#b42318",padding:"10px 15px",borderRadius:8,fontWeight:800,cursor:"pointer"};
 const secondary={background:"#eef3f5",color:"#0b1f33",textDecoration:"none",padding:"10px 13px",borderRadius:8,fontWeight:800,fontSize:13};

@@ -84,8 +84,8 @@ export default function ActivatePage() {
       {error&&<div style={{background:"#fff2f0",color:"#9d2e24",padding:12,borderRadius:9,marginBottom:16,lineHeight:1.7}}>{error}</div>}
       {message&&<div style={{background:"#e8f5f2",color:"#0f6f67",padding:12,borderRadius:9,marginBottom:16}}>{message}</div>}
       <form onSubmit={submit}>
-        <label style={label}>كلمة المرور الجديدة</label><input disabled={!ready||saving} type="password" value={password} onChange={e=>setPassword(e.target.value)} style={input} autoComplete="new-password" />
-        <label style={{...label,marginTop:18}}>تأكيد كلمة المرور</label><input disabled={!ready||saving} type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} style={input} autoComplete="new-password" />
+        <label htmlFor="new-password" style={label}>كلمة المرور الجديدة</label><input disabled={!ready||saving} id="new-password" type="password" value={password} onChange={e=>setPassword(e.target.value)} style={input} autoComplete="new-password" />
+        <label htmlFor="confirm-password" style={{...label,marginTop:18}}>تأكيد كلمة المرور</label><input disabled={!ready||saving} id="confirm-password" type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} style={input} autoComplete="new-password" />
         <button disabled={!ready||saving} style={{width:"100%",marginTop:24,border:0,borderRadius:10,padding:13,background:ready?"#0f7d73":"#9aa7ad",color:"white",fontWeight:800,fontSize:15,cursor:ready?"pointer":"not-allowed"}}>{saving?"جاري الحفظ...":"تعيين كلمة المرور"}</button>
       </form>
       <button type="button" onClick={()=>router.push("/login")} style={{width:"100%",marginTop:12,border:0,background:"transparent",color:"#687581",cursor:"pointer"}}>العودة لتسجيل الدخول</button>

@@ -1,5 +1,6 @@
 "use client";
 
+import StatusBadge from "@/components/StatusBadge";
 import EvidenceDownload from "@/components/EvidenceDownload";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -12,12 +13,7 @@ type Evidence = { id:number; control_id:number; evidence_name:string|null; descr
 
 type EvidenceRow = Evidence & { control?:Control };
 
-const menu = [
-  {name:"لوحة المتابعة",href:"/"},
-  {name:"الضوابط",href:"/controls"},
-  {name:"مهامي / التكليفات",href:"/tasks"},
-  {name:"الأدلة",href:"/evidence"},
-];
+
 
 export default function EvidencePage(){
   const router=useRouter();
@@ -70,29 +66,26 @@ export default function EvidencePage(){
   const rejected=rows.filter(r=>r.status==="rejected").length;
 
   if(loading)return <main dir="rtl" style={center}>جاري تحميل مركز الأدلة...</main>;
+ if(error)return <main dir="rtl"><h1>تعذر تحميل البيانات</h1><p role="alert">{error}</p><button onClick={()=>window.location.reload()}>إعادة المحاولة</button></main>;
+
 
   return <main dir="rtl" style={{minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial, sans-serif",color:"#0b1f33"}}>
-    <header style={{minHeight:86,background:"#0b1f33",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 38px",gap:20}}>
-      <div><div style={{fontSize:24,fontWeight:800}}>Cyber Governance Platform</div><div style={{fontSize:13,opacity:.7,marginTop:5}}>مركز الأدلة</div></div>
-      {role!=="control_owner"&&<Link href="/review" style={{color:"white",textDecoration:"none",border:"1px solid rgba(255,255,255,.25)",borderRadius:9,padding:"10px 14px"}}>فتح المراجعة والتحقق</Link>}
-    </header>
-    <div style={{display:"flex",minHeight:"calc(100vh - 86px)"}}>
-      <aside style={{width:260,background:"white",borderLeft:"1px solid #e2e7eb",padding:"28px 20px",flexShrink:0}}>
-        {menu.map(item=><Link key={item.href} href={item.href} style={{display:"block",padding:"15px 18px",marginBottom:7,borderRadius:10,textDecoration:"none",fontSize:15,fontWeight:item.href==="/evidence"?800:400,background:item.href==="/evidence"?"#e8f5f2":"transparent",color:item.href==="/evidence"?"#0f6f67":"#44515c"}}>{item.name}</Link>)}
-      </aside>
+
+    <div className="cgp-page-body" style={{display:"flex",minHeight:"calc(100vh - 86px)"}}>
+
       <section style={{flex:1,padding:40,minWidth:0}}>
-        <div style={{marginBottom:26}}><div style={{color:"#0f7d73",fontWeight:800,fontSize:13,marginBottom:8}}>EVIDENCE</div><h1 style={{margin:0,fontSize:34}}>الأدلة</h1><p style={{color:"#7a8794"}}>متابعة الأدلة المرفوعة وحالة مراجعتها وربطها بالضوابط.</p></div>
+        <div style={{marginBottom:26}}><div style={{color:"#0f7d73",fontWeight:800,fontSize:13,marginBottom:8}}>EVIDENCE</div><h1 style={{margin:0,fontSize:34}}>الأدلة</h1><p style={{color:"#586875"}}>متابعة الأدلة المرفوعة وحالة مراجعتها وربطها بالضوابط.</p></div>
         {error&&<div style={{background:"#fff2f0",color:"#9d2e24",padding:14,borderRadius:10,marginBottom:18}}>{error}</div>}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:16,marginBottom:22}}><Kpi label="إجمالي الأدلة" value={rows.length}/><Kpi label="بانتظار المراجعة" value={pending}/><Kpi label="مقبولة" value={accepted}/><Kpi label="مرفوضة" value={rejected}/></div>
+        <div className="cgp-responsive-grid cgp-kpi-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:16,marginBottom:22}}><Kpi label="إجمالي الأدلة" value={rows.length}/><Kpi label="بانتظار المراجعة" value={pending}/><Kpi label="مقبولة" value={accepted}/><Kpi label="مرفوضة" value={rejected}/></div>
         <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:18,marginBottom:18,display:"flex",gap:12,flexWrap:"wrap"}}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ابحث باسم الدليل أو رقم الضابط" style={{flex:1,minWidth:260,border:"1px solid #ccd6dc",borderRadius:9,padding:"11px 13px",fontSize:14}}/>
-          <select value={status} onChange={e=>setStatus(e.target.value)} style={{border:"1px solid #ccd6dc",borderRadius:9,padding:"11px 13px",background:"white"}}><option value="all">كل الحالات</option><option value="pending_review">بانتظار المراجعة</option><option value="under_review">قيد المراجعة</option><option value="accepted">مقبول</option><option value="rejected">مرفوض</option></select>
+          <div className="cgp-filter-field"><label className="cgp-field-label" htmlFor="evidence-search">البحث في الأدلة</label><input id="evidence-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="ابحث باسم الدليل أو رقم الضابط" style={{flex:1,minWidth:260,border:"1px solid #ccd6dc",borderRadius:9,padding:"11px 13px",fontSize:14}}/>
+          </div><div className="cgp-filter-field"><label className="cgp-field-label" htmlFor="evidence-filter">حالة الدليل</label><select id="evidence-filter" value={status} onChange={e=>setStatus(e.target.value)} style={{border:"1px solid #ccd6dc",borderRadius:9,padding:"11px 13px",background:"white"}}><option value="all">كل الحالات</option><option value="pending_review">بانتظار المراجعة</option><option value="under_review">قيد المراجعة</option><option value="accepted">مقبول</option><option value="rejected">مرفوض</option></select></div>
         </div>
         <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,overflow:"hidden"}}>
-          {filtered.length===0?<div style={{padding:45,textAlign:"center",color:"#7a8794"}}>لا توجد أدلة مطابقة حاليًا.</div>:filtered.map(row=><div key={row.id} style={{padding:20,borderBottom:"1px solid #edf0f2",display:"grid",gridTemplateColumns:"1.6fr 1fr .8fr auto",gap:16,alignItems:"center"}}>
-            <div><div style={{color:"#0f7d73",fontWeight:800,fontSize:13}}>{row.control?.control_code||`Control ${row.control_id}`}</div><div style={{fontWeight:800,marginTop:6}}>{row.evidence_name||row.file_name||`دليل ${row.id}`}</div><div style={{fontSize:13,color:"#7a8794",marginTop:5}}>{row.control?.title_ar||""}</div></div>
-            <div><div style={{fontSize:12,color:"#7a8794",marginBottom:5}}>تاريخ الرفع</div><strong>{row.uploaded_at?new Date(row.uploaded_at).toLocaleDateString("ar-SA"):"غير محدد"}</strong></div>
-            <Status value={statusLabel(row.status||"")}/>
+          {filtered.length===0?<div style={{padding:45,textAlign:"center",color:"#586875"}}>لا توجد أدلة مطابقة حاليًا.</div>:filtered.map(row=><div className="cgp-responsive-grid" key={row.id} style={{padding:20,borderBottom:"1px solid #edf0f2",display:"grid",gridTemplateColumns:"1.6fr 1fr .8fr auto",gap:16,alignItems:"center"}}>
+            <div><div style={{color:"#0f7d73",fontWeight:800,fontSize:13}}>{row.control?.control_code||`Control ${row.control_id}`}</div><div style={{fontWeight:800,marginTop:6}}>{row.evidence_name||row.file_name||`دليل ${row.id}`}</div><div style={{fontSize:13,color:"#586875",marginTop:5}}>{row.control?.title_ar||""}</div></div>
+            <div><div style={{fontSize:12,color:"#586875",marginBottom:5}}>تاريخ الرفع</div><strong>{row.uploaded_at?new Date(row.uploaded_at).toLocaleDateString("ar-SA"):"غير محدد"}</strong></div>
+            <StatusBadge status={row.status||""}/>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link>{role!=="control_owner"&&<Link href="/review" style={primary}>مراجعة</Link>}</div>
           </div>)}
         </div>
@@ -101,9 +94,9 @@ export default function EvidencePage(){
   </main>;
 }
 
-function Kpi({label,value}:{label:string;value:number}){return <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:20}}><div style={{fontSize:13,color:"#7a8794",marginBottom:8}}>{label}</div><div style={{fontSize:29,fontWeight:800,color:"#0f7d73"}}>{value}</div></div>}
-function Status({value}:{value:string}){return <span style={{display:"inline-block",background:"#e8f5f2",color:"#0f6f67",borderRadius:999,padding:"7px 10px",fontSize:12,fontWeight:800}}>{value}</span>}
-function statusLabel(s:string){if(s==="accepted")return"مقبول";if(s==="rejected")return"مرفوض";if(s==="under_review")return"قيد المراجعة";if(s==="pending_review")return"بانتظار المراجعة";return s||"غير محدد"}
+function Kpi({label,value}:{label:string;value:number}){return <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:20}}><div style={{fontSize:13,color:"#586875",marginBottom:8}}>{label}</div><div style={{fontSize:29,fontWeight:800,color:"#0f7d73"}}>{value}</div></div>}
+
+
 const primary={background:"#0f7d73",color:"white",textDecoration:"none",padding:"9px 12px",borderRadius:8,fontWeight:800,fontSize:13};
 const secondary={background:"#eef3f5",color:"#0b1f33",textDecoration:"none",padding:"9px 12px",borderRadius:8,fontWeight:800,fontSize:13};
 const center={minHeight:"100vh",display:"grid",placeItems:"center",fontFamily:"Arial",background:"#f5f7f9",color:"#0b1f33"};

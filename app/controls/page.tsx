@@ -1,7 +1,8 @@
 "use client";
+import StatusBadge from "@/components/StatusBadge";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { requireProfile, type UserRole } from "@/lib/auth";
+import { requireProfile } from "@/lib/auth";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -22,25 +23,17 @@ type Control = {
   implementation_notes: string | null;
 };
 
-const menuItems = [
-  { name: "لوحة المتابعة", href: "/" },
-  { name: "الضوابط", href: "/controls" },
-  { name: "التكليفات", href: "/tasks" },
-  { name: "الأدلة", href: "/evidence" },
-  { name: "التقييم والتحقق", href: "/review" },
-  { name: "التقارير", href: "/reports" },
-  { name: "تغيير كلمة المرور", href: "/change-password" },
-];
+
 
 export default function ControlsPage() {
   const router = useRouter();
   const [controls,setControls] = useState<Control[]>([]);
-  const [role,setRole] = useState<UserRole>("control_owner");
+
   const [error,setError] = useState<Error|null>(null);
   const [loading,setLoading] = useState(true);
   useEffect(()=>{ let active=true; (async()=>{try {
     const {user,profile}=await requireProfile();
-    if(!active)return; setRole(profile.role);
+    if(!active)return;
     let query=supabase.from("controls").select("*").order("id");
     if(profile.role==="control_owner")query=query.eq("control_owner_id",user.id);
     const {data,error}=await query; if(error)throw error;
@@ -93,83 +86,16 @@ export default function ControlsPage() {
       }}
     >
       {/* Header */}
-      <header
-        style={{
-          height: "86px",
-          background: "#0b1f33",
-          color: "white",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 38px",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: "24px",
-              fontWeight: "bold",
-            }}
-          >
-            Cyber Governance Platform
-          </div>
 
-          <div
-            style={{
-              fontSize: "13px",
-              opacity: 0.7,
-              marginTop: "5px",
-            }}
-          >
-            منصة حوكمة الأمن السيبراني
-          </div>
-        </div>
 
-        <div style={{ fontSize: "14px" }}>
-          دورة التقييم: 2026
-        </div>
-      </header>
-
-      <div
+      <div className="cgp-page-body"
         style={{
           display: "flex",
           minHeight: "calc(100vh - 86px)",
         }}
       >
         {/* Sidebar */}
-        <aside
-          style={{
-            width: "260px",
-            background: "white",
-            borderLeft: "1px solid #e2e7eb",
-            padding: "28px 20px",
-            flexShrink: 0,
-          }}
-        >
-          {menuItems.filter(item=>role!=="control_owner"||!["/review","/reports"].includes(item.href)).map((item) => {
-            const active = item.href === "/controls";
 
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                style={{
-                  display: "block",
-                  padding: "15px 18px",
-                  marginBottom: "7px",
-                  borderRadius: "10px",
-                  textDecoration: "none",
-                  fontSize: "15px",
-                  fontWeight: active ? "bold" : "normal",
-                  background: active ? "#e8f5f2" : "transparent",
-                  color: active ? "#0f6f67" : "#44515c",
-                }}
-              >
-                {item.name}
-              </Link>
-            );
-          })}
-        </aside>
 
         {/* Main Content */}
         <section
@@ -213,7 +139,7 @@ export default function ControlsPage() {
               <p
                 style={{
                   marginTop: "10px",
-                  color: "#7a8794",
+                  color: "#586875",
                 }}
               >
                 إدارة ومتابعة حالة الضوابط والأدلة والتحقق
@@ -230,12 +156,12 @@ export default function ControlsPage() {
                 fontSize: "14px",
               }}
             >
-              إطار العمل: ECC
+              سجل الضوابط
             </div>
           </div>
 
           {/* KPI Cards */}
-          <div
+          <div className="cgp-responsive-grid cgp-kpi-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
@@ -285,7 +211,7 @@ export default function ControlsPage() {
                   color: "#5f6b76",
                 }}
               >
-                الضوابط المحملة من قاعدة بيانات Supabase
+                الضوابط ضمن نطاق صلاحياتك
               </div>
             </div>
 
@@ -294,7 +220,7 @@ export default function ControlsPage() {
                 style={{
                   padding: "40px",
                   textAlign: "center",
-                  color: "#7a8794",
+                  color: "#586875",
                 }}
               >
                 لا توجد ضوابط حاليًا.
@@ -340,36 +266,15 @@ export default function ControlsPage() {
                         </Td>
 
                         <Td>
-                          <Badge
-                            text={implementationLabel(
-                              control.implementation_status
-                            )}
-                            type={implementationBadgeType(
-                              control.implementation_status
-                            )}
-                          />
+                          <StatusBadge status={control.implementation_status}/>
                         </Td>
 
                         <Td>
-                          <Badge
-                            text={evidenceLabel(
-                              control.evidence_status
-                            )}
-                            type={evidenceBadgeType(
-                              control.evidence_status
-                            )}
-                          />
+                          <StatusBadge status={control.evidence_status}/>
                         </Td>
 
                         <Td>
-                          <Badge
-                            text={verificationLabel(
-                              control.verification_status
-                            )}
-                            type={verificationBadgeType(
-                              control.verification_status
-                            )}
-                          />
+                          <StatusBadge status={control.verification_status}/>
                         </Td>
 
                         <Td>
@@ -419,74 +324,17 @@ export default function ControlsPage() {
   );
 }
 
-function implementationLabel(status: string) {
-  switch (status) {
-    case "implemented":
-      return "مطبق";
-    case "in_progress":
-      return "قيد التنفيذ";
-    case "not_applicable":
-      return "غير منطبق";
-    default:
-      return "لم يبدأ";
-  }
-}
 
-function evidenceLabel(status: string) {
-  switch (status) {
-    case "accepted":
-      return "مقبول";
-    case "pending_review":
-      return "قيد المراجعة";
-    case "rejected":
-      return "مرفوض";
-    default:
-      return "لم يرفع";
-  }
-}
 
-function verificationLabel(status: string) {
-  switch (status) {
-    case "verified":
-      return "تم التحقق";
-    case "under_review":
-      return "قيد التحقق";
-    case "failed":
-      return "لم يجتز";
-    default:
-      return "غير متحقق";
-  }
-}
 
-function implementationBadgeType(
-  status: string
-): "success" | "warning" | "info" | "neutral" {
-  if (status === "implemented") return "success";
-  if (status === "in_progress") return "warning";
-  if (status === "not_applicable") return "neutral";
 
-  return "neutral";
-}
 
-function evidenceBadgeType(
-  status: string
-): "success" | "warning" | "info" | "neutral" {
-  if (status === "accepted") return "success";
-  if (status === "pending_review") return "info";
-  if (status === "rejected") return "warning";
 
-  return "neutral";
-}
 
-function verificationBadgeType(
-  status: string
-): "success" | "warning" | "info" | "neutral" {
-  if (status === "verified") return "success";
-  if (status === "under_review") return "info";
-  if (status === "failed") return "warning";
 
-  return "neutral";
-}
+
+
+
 
 function Kpi({
   title,
@@ -506,7 +354,7 @@ function Kpi({
     >
       <div
         style={{
-          color: "#7a8794",
+          color: "#586875",
           fontSize: "14px",
         }}
       >
@@ -527,48 +375,7 @@ function Kpi({
   );
 }
 
-function Badge({
-  text,
-  type,
-}: {
-  text: string;
-  type: "success" | "warning" | "info" | "neutral";
-}) {
-  const styles = {
-    success: {
-      color: "#0f6f67",
-      background: "#e8f5f2",
-    },
-    warning: {
-      color: "#b76500",
-      background: "#fff4e5",
-    },
-    info: {
-      color: "#2563eb",
-      background: "#eaf2ff",
-    },
-    neutral: {
-      color: "#5f6b76",
-      background: "#eef1f3",
-    },
-  };
 
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "6px 10px",
-        borderRadius: "999px",
-        fontSize: "12px",
-        fontWeight: "bold",
-        whiteSpace: "nowrap",
-        ...styles[type],
-      }}
-    >
-      {text}
-    </span>
-  );
-}
 
 function Th({
   children,

@@ -68,7 +68,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main dir="rtl" style={{minHeight:"100vh",display:"grid",gridTemplateColumns:"minmax(0, 1.05fr) minmax(420px, 0.95fr)",background:"#f4f7f8",color:"#0b1f33",fontFamily:"Arial, sans-serif"}}>
+    <main className="cgp-login" dir="rtl" style={{minHeight:"100vh",display:"grid",gridTemplateColumns:"minmax(0, 1.05fr) minmax(420px, 0.95fr)",background:"#f4f7f8",color:"#0b1f33",fontFamily:"Arial, sans-serif"}}>
       <section style={{padding:"72px",background:"linear-gradient(145deg, #071d30 0%, #0b3144 55%, #0f6f67 100%)",color:"white",display:"flex",flexDirection:"column",justifyContent:"space-between",minHeight:"100vh"}}>
         <div><div style={{fontSize:"30px",fontWeight:800}}>Cyber Governance Platform</div><div style={{marginTop:"9px",fontSize:"15px",opacity:.72}}>منصة حوكمة الأمن السيبراني</div></div>
         <div style={{maxWidth:"620px"}}><div style={{display:"inline-block",padding:"8px 12px",borderRadius:"999px",background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.15)",fontSize:"13px",marginBottom:"22px"}}>CGP · NCA Compliance Workspace</div><h1 style={{margin:0,fontSize:"46px",lineHeight:1.25}}>إدارة الالتزام السيبراني<br/>من مكان واحد</h1><p style={{margin:"22px 0 0",maxWidth:"560px",lineHeight:1.9,fontSize:"17px",opacity:.82}}>تابع الضوابط، التكليفات، الأدلة، التقييمات ودورات التحقق ضمن مساحة عمل موحدة وآمنة.</p></div>
@@ -82,9 +82,9 @@ export default function LoginPage() {
             <p style={{color:"#71808e",margin:"10px 0 30px",lineHeight:1.7}}>استخدم حساب CGP المصرح لك به للدخول إلى المنصة.</p>
             <form onSubmit={handleSubmit}>
               <label htmlFor="email" style={{display:"block",fontSize:"14px",fontWeight:700,marginBottom:"8px"}}>البريد الإلكتروني</label>
-              <input id="email" type="email" autoComplete="email" required value={email} onChange={(event)=>setEmail(event.target.value)} placeholder="name@company.com" style={{width:"100%",boxSizing:"border-box",border:"1px solid #ccd6dc",borderRadius:"10px",padding:"13px 14px",fontSize:"15px",outline:"none",marginBottom:"20px",background:"#fbfcfd"}}/>
+              <input dir="ltr" id="email" type="email" autoComplete="email" required value={email} onChange={(event)=>setEmail(event.target.value)} placeholder="name@company.com" style={{width:"100%",boxSizing:"border-box",border:"1px solid #ccd6dc",borderRadius:"10px",padding:"13px 14px",fontSize:"15px",marginBottom:"20px",background:"#fbfcfd"}}/>
               <label htmlFor="password" style={{display:"block",fontSize:"14px",fontWeight:700,marginBottom:"8px"}}>كلمة المرور</label>
-              <input id="password" type="password" autoComplete="current-password" required minLength={6} value={password} onChange={(event)=>setPassword(event.target.value)} placeholder="••••••••" style={{width:"100%",boxSizing:"border-box",border:"1px solid #ccd6dc",borderRadius:"10px",padding:"13px 14px",fontSize:"15px",outline:"none",background:"#fbfcfd"}}/>
+              <input id="password" type="password" autoComplete="current-password" required minLength={6} value={password} onChange={(event)=>setPassword(event.target.value)} placeholder="••••••••" style={{width:"100%",boxSizing:"border-box",border:"1px solid #ccd6dc",borderRadius:"10px",padding:"13px 14px",fontSize:"15px",background:"#fbfcfd"}}/>
               <button type="button" onClick={handleForgotPassword} disabled={resetLoading} style={{border:0,background:"transparent",color:"#0f756d",fontWeight:700,cursor:"pointer",padding:"12px 0 0",fontSize:"13px"}}>{resetLoading?"جاري إرسال الرابط...":"نسيت كلمة المرور؟"}</button>
               {error?<div role="alert" style={{marginTop:"16px",padding:"11px 13px",borderRadius:"9px",background:"#fff2f0",color:"#9d2e24",fontSize:"13px",lineHeight:1.6}}>{error}</div>:null}
               {success?<div style={{marginTop:"16px",padding:"11px 13px",borderRadius:"9px",background:"#edf8f5",color:"#0f6f67",fontSize:"13px",lineHeight:1.7}}>{success}</div>:null}

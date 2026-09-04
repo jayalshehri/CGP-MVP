@@ -139,44 +139,9 @@ export default function NewEvidencePage() {
       }}
     >
       {/* Header */}
-      <header
-        style={{
-          height: "86px",
-          background: "#0b1f33",
-          color: "white",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 38px",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: "24px",
-              fontWeight: "bold",
-            }}
-          >
-            Cyber Governance Platform
-          </div>
 
-          <div
-            style={{
-              fontSize: "13px",
-              opacity: 0.7,
-              marginTop: "5px",
-            }}
-          >
-            منصة حوكمة الأمن السيبراني
-          </div>
-        </div>
 
-        <div style={{ fontSize: "14px" }}>
-          دورة التقييم: 2026
-        </div>
-      </header>
-
-      <div
+      <div className="cgp-page-body"
         style={{
           maxWidth: "850px",
           margin: "0 auto",
@@ -208,7 +173,7 @@ export default function NewEvidencePage() {
               marginBottom: "8px",
             }}
           >
-            Control ID: {controlId}
+            الضابط رقم {controlId}
           </div>
 
           <h1
@@ -222,7 +187,7 @@ export default function NewEvidencePage() {
 
           <p
             style={{
-              color: "#7a8794",
+              color: "#586875",
               marginTop: "10px",
             }}
           >
@@ -240,10 +205,10 @@ export default function NewEvidencePage() {
           }}
         >
           {/* Evidence Name */}
-          <FieldLabel text="اسم الدليل *" />
+          <FieldLabel text="اسم الدليل *" htmlFor="evidence-name" />
 
           <input
-            type="text"
+            id="evidence-name" required type="text"
             value={evidenceName}
             onChange={(e) =>
               setEvidenceName(e.target.value)
@@ -255,9 +220,9 @@ export default function NewEvidencePage() {
           {/* Description */}
           <div style={{ height: "22px" }} />
 
-          <FieldLabel text="وصف الدليل" />
+          <FieldLabel text="وصف الدليل" htmlFor="evidence-description" />
 
-          <textarea
+          <textarea id="evidence-description"
             value={description}
             onChange={(e) =>
               setDescription(e.target.value)
@@ -274,9 +239,9 @@ export default function NewEvidencePage() {
           {/* File */}
           <div style={{ height: "22px" }} />
 
-          <FieldLabel text="الملف *" />
+          <FieldLabel text="الملف *" htmlFor="evidence-file" />
 
-          <label
+          <label className="cgp-file-choice"
             style={{
               display: "block",
               border: "2px dashed #cfd7dd",
@@ -309,7 +274,7 @@ export default function NewEvidencePage() {
 
             <div
               style={{
-                color: "#7a8794",
+                color: "#586875",
                 fontSize: "13px",
               }}
             >
@@ -318,7 +283,7 @@ export default function NewEvidencePage() {
 
             <input
               aria-label="ملف الدليل"
-              type="file"
+              id="evidence-file" type="file"
               accept=".pdf,.doc,.docx,.xls,.xlsx,image/*"
               onChange={(e) => {
                 const selected =
@@ -327,9 +292,7 @@ export default function NewEvidencePage() {
                 setFile(selected);
                 setErrorMessage("");
               }}
-              style={{
-                display: "none",
-              }}
+              className="cgp-file-input"
             />
           </label>
 
@@ -376,7 +339,7 @@ export default function NewEvidencePage() {
             </div>
           )}
 
-          <p style={{color:"#7a8794",fontSize:13}}>الإرسال الجديد يحل محل الدليل الحالي للمراجعة، مع الاحتفاظ بالإرسالات السابقة في السجل.</p>
+          <p style={{color:"#586875",fontSize:13}}>الإرسال الجديد يحل محل الدليل الحالي للمراجعة، مع الاحتفاظ بالإرسالات السابقة في السجل.</p>
 
           {/* Actions */}
           <div
@@ -432,11 +395,13 @@ export default function NewEvidencePage() {
 
 function FieldLabel({
   text,
+  htmlFor,
 }: {
   text: string;
+  htmlFor: string;
 }) {
   return (
-    <div
+    <label htmlFor={htmlFor}
       style={{
         fontSize: "14px",
         fontWeight: "bold",
@@ -445,7 +410,7 @@ function FieldLabel({
       }}
     >
       {text}
-    </div>
+    </label>
   );
 }
 
