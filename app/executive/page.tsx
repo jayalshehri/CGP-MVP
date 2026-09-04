@@ -1,40 +1,87 @@
 "use client";
 
-
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-type Control={id:number;domain_ar:string;implementation_status:string;evidence_status:string;verification_status:string;due_date:string|null};
-type Evidence={status:string|null};
-const good=(v:string|null|undefined)=>["implemented","compliant","accepted","approved","verified","uploaded"].includes((v||"").toLowerCase());
-const progress=(v:string|null|undefined)=>["in_progress","pending_review","under_review"].includes((v||"").toLowerCase());
+type Control = { id: number; domain_ar: string; implementation_status: string; evidence_status: string; verification_status: string; due_date: string | null };
+const implemented = (value: string) => ["implemented", "compliant"].includes(value);
+const verified = (value: string) => ["verified", "approved"].includes(value);
+const percent = (part: number, total: number) => total ? Math.round(part / total * 100) : 0;
 
-export default function ExecutivePage(){
- const router=useRouter(); const [loading,setLoading]=useState(true); const [controls,setControls]=useState<Control[]>([]); const [evidence,setEvidence]=useState<Evidence[]>([]); const [error,setError]=useState("");
- useEffect(()=>{(async()=>{const {data:s}=await supabase.auth.getSession();if(!s.session){router.replace("/login");return;}const {data:p}=await supabase.from("profiles").select("role,is_active").eq("user_id",s.session.user.id).maybeSingle();if(!p||p.is_active===false||!["admin","cybersecurity_team"].includes(p.role)){router.replace("/");return;}const [{data:c,error:ce},{data:e,error:ee}]=await Promise.all([supabase.from("controls").select("id,domain_ar,implementation_status,evidence_status,verification_status,due_date"),supabase.from("evidence").select("status")]);if(ce||ee){setError(ce?.message||ee?.message||"تعذر تحميل اللوحة التنفيذية");setLoading(false);return;}setControls((c??[]) as Control[]);setEvidence((e??[]) as Evidence[]);setLoading(false)})()},[router]);
- const metrics=useMemo(()=>{const now=new Date();const total=controls.length;const compliant=controls.filter(c=>good(c.implementation_status)).length;const verified=controls.filter(c=>good(c.verification_status)).length;const overdue=controls.filter(c=>c.due_date&&c.due_date<now.toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"})&&!good(c.implementation_status)).length;const pendingEvidence=evidence.filter(e=>progress(e.status)).length;const compliance=total?Math.round(compliant/total*100):0;const verification=total?Math.round(verified/total*100):0;return{total,compliant,verified,overdue,pendingEvidence,compliance,verification}},[controls,evidence]);
- const domains=useMemo(()=>{const m=new Map<string,{name:string,total:number,done:number,overdue:number}>();const now=new Date();controls.forEach(c=>{const n=c.domain_ar||"غير مصنف";const r=m.get(n)||{name:n,total:0,done:0,overdue:0};r.total++;if(good(c.implementation_status))r.done++;if(c.due_date&&c.due_date<now.toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"})&&!good(c.implementation_status))r.overdue++;m.set(n,r)});return [...m.values()].sort((a,b)=>(b.done/b.total)-(a.done/a.total))},[controls]);
- if(loading)return <main dir="rtl" style={center}>جاري تحميل اللوحة التنفيذية...</main>;
- if(error)return <main dir="rtl"><h1>تعذر تحميل البيانات</h1><p role="alert">{error}</p><button onClick={()=>window.location.reload()}>إعادة المحاولة</button></main>;
+export default function ExecutivePage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [controls, setControls] = useState<Control[]>([]);
+  const [pending, setPending] = useState(0);
+  const [error, setError] = useState("");
+  const [updated, setUpdated] = useState<Date | null>(null);
+  const [revision, setRevision] = useState(0);
+  const [sort, setSort] = useState("priority");
 
- const riskLevel=metrics.overdue>10?"مرتفع":metrics.overdue>0?"متوسط":"منخفض";
- return <main dir="rtl" style={page}>
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        if (!session.session) { router.replace("/login"); return; }
+        const { data: profile } = await supabase.from("profiles").select("role,is_active").eq("user_id", session.session.user.id).maybeSingle();
+        if (!profile?.is_active || !["admin", "cybersecurity_team"].includes(profile.role)) { router.replace("/"); return; }
+        const [controlResult, evidenceResult] = await Promise.all([
+          supabase.from("controls").select("id,domain_ar,implementation_status,evidence_status,verification_status,due_date"),
+          supabase.from("evidence").select("id", { count: "exact", head: true }).eq("is_current", true).in("status", ["pending_review", "under_review"]),
+        ]);
+        if (controlResult.error || evidenceResult.error) throw new Error("تعذر تحديث البيانات. حاول مرة أخرى.");
+        if (active) { setControls(controlResult.data ?? []); setPending(evidenceResult.count ?? 0); setUpdated(new Date()); setError(""); }
+      } catch { if (active) setError("تعذر تحميل الملخص التنفيذي. تحقق من الاتصال وأعد المحاولة."); }
+      finally { if (active) setLoading(false); }
+    })();
+    return () => { active = false; };
+  }, [router, revision]);
 
-  <section className="cgp-page-body" style={{maxWidth:1380,margin:"0 auto",padding:"38px 30px 60px"}}>
-   <div style={{display:"flex",justifyContent:"space-between",gap:24,flexWrap:"wrap",alignItems:"flex-end",marginBottom:28}}><div><div style={eyebrow}>EXECUTIVE VIEW · NCA ECC</div><h1 style={h1}>لوحة الحوكمة التنفيذية</h1><button className="cgp-print-action" onClick={()=>window.print()} style={{marginTop:12,padding:"10px 16px",border:"1px solid #ccd6dc",borderRadius:8,background:"white",color:"#0b1f33"}}>طباعة التقرير</button><p style={muted}>نظرة قيادية مختصرة على مستوى الالتزام والمخاطر والتقدم في دورة التقييم 2026.</p></div><div style={{background:riskLevel==="مرتفع"?"#fff0ee":riskLevel==="متوسط"?"#fff7e6":"#eaf7f1",color:riskLevel==="مرتفع"?"#a43b2d":riskLevel==="متوسط"?"#8a5a00":"#176b50",padding:"12px 18px",borderRadius:12,fontWeight:800}}>مستوى الانتباه: {riskLevel}</div></div>
-   {error&&<div style={errorBox}>{error}</div>}
-   <div className="cgp-responsive-grid" style={heroGrid}>
-    <div style={heroCard}><div style={{fontSize:14,opacity:.72}}>مستوى الالتزام العام</div><div style={{fontSize:64,fontWeight:900,margin:"14px 0 6px"}}>{metrics.compliance}%</div><div style={{opacity:.78}}>{metrics.compliant} من {metrics.total} ضابط</div><div style={{height:10,background:"rgba(255,255,255,.18)",borderRadius:99,marginTop:22,overflow:"hidden"}}><div style={{height:"100%",width:`${metrics.compliance}%`,background:"white"}}/></div></div>
-    <div className="cgp-responsive-grid cgp-kpi-grid" style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:16}}><Metric label="نسبة التحقق" value={`${metrics.verification}%`} note={`${metrics.verified} ضابط تم التحقق منها`}/><Metric label="ضوابط متأخرة" value={metrics.overdue} note="تحتاج متابعة فورية" danger={metrics.overdue>0}/><Metric label="أدلة بانتظار المراجعة" value={metrics.pendingEvidence} note="ضمن مسار المراجعة"/><Metric label="إجمالي الضوابط" value={metrics.total} note="نطاق دورة التقييم الحالية"/></div>
-   </div>
-   <div className="cgp-responsive-grid" style={{display:"grid",gridTemplateColumns:"1.55fr .85fr",gap:20,alignItems:"start"}}>
-    <div style={card}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}><h2 style={sectionTitle}>التقدم حسب المجال</h2><span style={{fontSize:12,color:"#586875"}}>بيانات مباشرة من CGP</span></div>{domains.length===0?<div style={empty}>لا توجد بيانات بعد</div>:domains.map(d=>{const pct=d.total?Math.round(d.done/d.total*100):0;return <div key={d.name} style={{padding:"16px 0",borderBottom:"1px solid #edf0f2"}}><div style={{display:"flex",justifyContent:"space-between",gap:15,marginBottom:9}}><div><strong>{d.name}</strong><div style={{fontSize:12,color:"#586875",marginTop:4}}>{d.done}/{d.total} مكتمل · {d.overdue} متأخر</div></div><strong style={{color:"#0f7d73",fontSize:18}}>{pct}%</strong></div><div style={{height:9,background:"#edf1f3",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:pct>=80?"#0f7d73":pct>=50?"#b88319":"#b64a3b"}}/></div></div>})}</div>
-    <div style={{display:"grid",gap:20}}><div style={card}><h2 style={sectionTitle}>ملخص الإدارة</h2><Insight title="الأولوية الأولى" text={metrics.overdue?`إغلاق ${metrics.overdue} ضابط متأخر قبل توسيع نطاق التحقق.`:"لا توجد ضوابط متأخرة حاليًا."}/><Insight title="الأدلة" text={metrics.pendingEvidence?`${metrics.pendingEvidence} دليل بانتظار المراجعة والقرار.`:"لا يوجد تراكم في مراجعة الأدلة."}/><Insight title="التحقق" text={`تم التحقق من ${metrics.verification}% من نطاق الضوابط الحالي.`}/></div><div style={{...card,background:"#0b1f33",color:"white"}}><div style={{fontSize:13,opacity:.65}}>الهدف التشغيلي التالي</div><div style={{fontSize:21,fontWeight:800,marginTop:10}}>رفع الالتزام والتحقق بالتوازي</div><p style={{lineHeight:1.8,opacity:.78,marginBottom:0}}>إغلاق المتأخرات، مراجعة الأدلة المعلقة، ثم تحويل الضوابط المكتملة إلى حالة تحقق نهائية.</p></div></div>
-   </div>
-  </section>
- </main>
+  const summary = useMemo(() => {
+    const today = (updated ?? new Date()).toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+    const domains = new Map<string, { name: string; total: number; done: number; verified: number; overdue: number }>();
+    let done = 0, checked = 0, overdue = 0, inProgress = 0;
+    for (const c of controls) {
+      const complete = implemented(c.implementation_status);
+      const checkedControl = verified(c.verification_status);
+      const late = Boolean(c.due_date && c.due_date < today && !complete);
+      if (complete) done++;
+      else if (c.implementation_status === "in_progress") inProgress++;
+      if (checkedControl) checked++;
+      if (late) overdue++;
+      const name = c.domain_ar || "غير مصنف";
+      const domain = domains.get(name) ?? { name, total: 0, done: 0, verified: 0, overdue: 0 };
+      domain.total++; domain.done += Number(complete); domain.verified += Number(checkedControl); domain.overdue += Number(late);
+      domains.set(name, domain);
+    }
+    return { total: controls.length, done, checked, overdue, inProgress, remaining: controls.length - done - inProgress, domains: [...domains.values()] };
+  }, [controls, updated]);
+  const domains = [...summary.domains].sort((a, b) => sort === "name" ? a.name.localeCompare(b.name, "ar") : b.overdue - a.overdue || a.done / a.total - b.done / b.total);
+  const refresh = () => { setLoading(true); setRevision(value => value + 1); };
+  const compliance = percent(summary.done, summary.total);
+  const verification = percent(summary.checked, summary.total);
+
+  return <main dir="rtl" className="exec-page" aria-busy={loading}>
+    <header className="exec-heading">
+      <div><span className="exec-eyebrow">ملخص الإدارة</span><h1>اللوحة التنفيذية</h1><p>صورة واضحة للتنفيذ والتحقق، والأولويات التي تحتاج قرارًا.</p></div>
+      <div className="exec-tools cgp-print-action"><button onClick={refresh} disabled={loading}>{loading ? "جاري التحديث…" : "تحديث البيانات"}</button><button onClick={() => window.print()} disabled={!updated || loading || Boolean(error)}>طباعة الملخص</button></div>
+    </header>
+    <div className="exec-dateline"><span>جميع الضوابط ضمن صلاحياتك</span><span>{updated ? `آخر تحديث: ${updated.toLocaleString("ar-SA", { timeZone: "Asia/Riyadh", dateStyle: "medium", timeStyle: "short" })}` : "جاري جلب البيانات"}</span></div>
+    {error ? <section className="exec-panel exec-empty" role="alert"><h2>تعذر عرض البيانات</h2><p>{error}</p><button onClick={refresh}>إعادة المحاولة</button></section> : loading ? <section className="exec-panel exec-empty" role="status">جاري إعداد الملخص التنفيذي…</section> : summary.total === 0 ? <section className="exec-panel exec-empty"><h2>يبدأ الملخص بإضافة الضوابط</h2><p>ستظهر نسب التنفيذ والتحقق والأولويات عند توفر بيانات ضمن نطاقك.</p><Link href="/controls">فتح الضوابط ←</Link></section> : <>
+      <section className="exec-overview" aria-label="المؤشرات الرئيسية">
+        <div className="exec-spotlight"><span className="exec-eyebrow">نسبة التنفيذ</span><div className="exec-score">{compliance}<span>%</span></div><p><strong>{summary.done}</strong> من أصل <strong>{summary.total}</strong> ضابط مطبق</p><Meter value={compliance} label="نسبة التنفيذ"/><div className="exec-spotlight-footer">التنفيذ يعكس حالة الضابط؛ التحقق خطوة مستقلة لاعتماد النتيجة.</div></div>
+        <div className="exec-metrics"><Metric label="نسبة التحقق" value={`${verification}%`} note={`${summary.checked} من ${summary.total} ضابط تم التحقق منها`} href="/controls"/><Metric label="ضوابط متأخرة" value={summary.overdue} note={summary.overdue ? "تجاوزت موعدها ولم يكتمل تنفيذها" : "لا توجد متأخرات حاليًا"} href="/tasks?filter=overdue" tone={summary.overdue ? "danger" : "neutral"}/><Metric label="أدلة تنتظر القرار" value={pending} note="الإرسالات الحالية بانتظار المراجعة" href="/review" tone={pending ? "warning" : "neutral"}/></div>
+      </section>
+      <section className="exec-panel exec-priorities"><div><span className="exec-eyebrow">ما الذي يحتاج متابعة؟</span><h2>أولويات الإدارة</h2></div><div className="exec-priority-list"><Link href="/tasks?filter=overdue"><span className={`exec-count ${summary.overdue ? "exec-danger" : ""}`}>{summary.overdue}</span><span><strong>{summary.overdue ? "متابعة المتأخرات مع الملاك" : "المواعيد تحت المتابعة"}</strong><small>{summary.overdue ? "راجع التكليفات وحدد الخطوة التالية لكل ضابط." : "لا توجد ضوابط غير مكتملة تجاوزت موعدها."}</small></span><span aria-hidden="true">←</span></Link><Link href="/review"><span className={`exec-count ${pending ? "exec-warning" : ""}`}>{pending}</span><span><strong>{pending ? "اتخاذ قرار بشأن الأدلة" : "قائمة المراجعة خالية"}</strong><small>{pending ? "افتح الأدلة المعلقة للقبول أو الإرجاع مع الملاحظات." : "لا توجد إرسالات حالية تنتظر المراجعة."}</small></span><span aria-hidden="true">←</span></Link></div></section>
+      <div className="exec-detail-grid">
+        <section className="exec-panel"><div className="exec-section-heading"><div><h2>التقدم حسب المجال</h2><p>مقارنة التنفيذ بالتحقق داخل كل مجال.</p></div><label className="exec-sort">ترتيب المجالات<select value={sort} onChange={event => setSort(event.target.value)}><option value="priority">المتأخرات ثم الأقل تنفيذًا</option><option value="name">اسم المجال</option></select></label></div><div className="exec-legend"><span><i className="exec-dot teal"/>التنفيذ</span><span><i className="exec-dot blue"/>التحقق</span></div><div>{domains.map(domain => <article key={domain.name} className="exec-domain"><div className="exec-domain-title"><h3>{domain.name}</h3><span>{domain.total} ضابط</span>{domain.overdue > 0 && <span className="exec-late">{domain.overdue} متأخر</span>}</div><div className="exec-bar-row"><span>التنفيذ</span><Meter value={percent(domain.done, domain.total)} label={`تنفيذ ${domain.name}`}/><b>{percent(domain.done, domain.total)}%</b></div><div className="exec-bar-row"><span>التحقق</span><Meter value={percent(domain.verified, domain.total)} label={`تحقق ${domain.name}`} blue/><b>{percent(domain.verified, domain.total)}%</b></div></article>)}</div></section>
+        <section className="exec-panel exec-distribution"><h2>توزيع حالة التنفيذ</h2><p>من أصل {summary.total} ضابط في النطاق الحالي</p><div className="exec-stack" aria-hidden="true"><span style={{flex:summary.done,background:"#0f756d"}}/><span style={{flex:summary.inProgress,background:"#bb8424"}}/><span style={{flex:summary.remaining,background:"#bac6ce"}}/></div>{[{label:"مطبق",count:summary.done,color:"teal"},{label:"قيد التنفيذ",count:summary.inProgress,color:"amber"},{label:"حالات أخرى / لم يبدأ",count:summary.remaining,color:"gray"}].map(item => <div className="exec-distribution-row" key={item.label}><span><i className={`exec-dot ${item.color}`}/>{item.label}</span><strong>{item.count}</strong></div>)}<Link className="exec-text-link" href="/controls">استعراض الضوابط ←</Link><div className="exec-definition"><h3>كيف تُقرأ الأرقام؟</h3><p>النسب محسوبة من جميع الضوابط الظاهرة لحسابك. المتأخرات تعتمد على موعد الاستحقاق بتوقيت الرياض، والأدلة المعلقة تشمل الإرسال الحالي فقط.</p></div></section>
+      </div>
+    </>}
+  </main>;
 }
-function Metric({label,value,note,danger=false}:{label:string;value:string|number;note:string;danger?:boolean}){return <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:16,padding:22,minHeight:112}}><div style={{fontSize:13,color:"#586875"}}>{label}</div><div style={{fontSize:34,fontWeight:900,color:danger?"#b42318":"#0b1f33",margin:"9px 0 6px"}}>{value}</div><div style={{fontSize:12,color:"#586875"}}>{note}</div></div>}
-function Insight({title,text}:{title:string;text:string}){return <div style={{padding:"14px 0",borderBottom:"1px solid #edf0f2"}}><div style={{fontSize:12,color:"#0f7d73",fontWeight:800,marginBottom:6}}>{title}</div><div style={{lineHeight:1.7,fontSize:14}}>{text}</div></div>}
-const page={minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial, sans-serif",color:"#0b1f33"};const center={...page,display:"grid",placeItems:"center"};const eyebrow={color:"#0f7d73",fontWeight:900,fontSize:12,letterSpacing:.8,marginBottom:8};const h1={fontSize:36,margin:0};const muted={color:"#586875",maxWidth:700,lineHeight:1.7};const heroGrid={display:"grid",gridTemplateColumns:"1.1fr 1.3fr",gap:20,marginBottom:20};const heroCard={background:"linear-gradient(135deg,#0f7d73,#0a5e58)",color:"white",borderRadius:18,padding:30,minHeight:195};const card={background:"white",border:"1px solid #e2e7eb",borderRadius:16,padding:24};const sectionTitle={fontSize:20,margin:0};const errorBox={background:"#fff2f0",color:"#9d2e24",padding:14,borderRadius:10,marginBottom:18};const empty={textAlign:"center" as const,color:"#586875",padding:35};
+function Meter({value,label,blue=false}:{value:number;label:string;blue?:boolean}) { return <progress className={blue ? "exec-meter blue" : "exec-meter"} value={value} max={100} aria-label={label}>{value}%</progress>; }
+function Metric({label,value,note,href,tone="neutral"}:{label:string;value:string|number;note:string;href:string;tone?:string}) { return <Link className={`exec-metric exec-${tone}`} href={href}><span>{label}</span><strong>{value}</strong><small>{note}</small><span className="exec-metric-arrow" aria-hidden="true">←</span></Link>; }
