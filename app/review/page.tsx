@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { requireProfile } from "@/lib/auth";
 
 type Control = { id:number; control_code:string; title_ar:string; evidence_status:string };
 type Evidence = { file_path:string|null; is_current:boolean; id:number; control_id:number; evidence_name:string|null; file_name:string|null; description:string|null; status:string|null; uploaded_at:string|null; review_notes:string|null };
@@ -23,12 +24,13 @@ export default function ReviewPage(){
   const [savingId,setSavingId]=useState<number|null>(null);
 
   const load=useCallback(async()=>{
-    const {data:sessionData}=await supabase.auth.getSession();
-    const session=sessionData.session;
-    if(!session){router.replace("/login");return;}
-    const {data:profile}=await supabase.from("profiles").select("display_name,role,is_active").eq("user_id",session.user.id).maybeSingle();
-    if(!profile||profile.is_active===false||!["admin","cybersecurity_team"].includes(profile.role)){router.replace("/");return;}
-
+    try {
+      await requireProfile(["admin","cybersecurity_team"]);
+    } catch (authError) {
+      const message=authError instanceof Error?authError.message:"";
+      router.replace(message.includes("تسجيل الدخول")?"/login":"/");
+      return;
+    }
 
     const {data:evidenceData,error:evidenceError}=await supabase.from("evidence").select("id,control_id,evidence_name,file_name,description,status,uploaded_at,review_notes,file_path,is_current").in("status",["pending_review","under_review","accepted","rejected"]).order("uploaded_at",{ascending:false});
     if(evidenceError){setError("تعذر تحميل الأدلة: "+evidenceError.message);setLoading(false);return;}
