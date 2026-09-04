@@ -20,12 +20,13 @@ export default function NewEvidencePage() {
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  const [controlTitle,setControlTitle]=useState("");
   const [ready,setReady]=useState(false);
   useEffect(()=>{let active=true;(async()=>{try{
     await requireProfile();
-    const {data,error}=await supabase.from("controls").select("id").eq("id",controlId).single();
+    const {data,error}=await supabase.from("controls").select("id,control_code,title_ar").eq("id",controlId).single();
     if(error||!data)throw new Error("الضابط غير موجود أو ليس ضمن صلاحيتك.");
-    if(active)setReady(true);
+    if(active){setReady(true);setControlTitle(`${data.control_code} · ${data.title_ar}`);}
   }catch(e){if(active)setErrorMessage(e instanceof Error?e.message:"تعذر التحقق من الصلاحيات");
     const {data}=await supabase.auth.getSession();if(!data.session)router.replace("/login");
   }})();return()=>{active=false;};},[controlId,router]);
@@ -53,7 +54,7 @@ export default function NewEvidencePage() {
     }
 
     if (file.size === 0 || file.size > 20 * 1024 * 1024) {
-      setErrorMessage("حجم الملف يجب ألا يتجاوز 20 MB.");
+      setErrorMessage("اختر ملفًا غير فارغ بحجم لا يتجاوز 20 MB.");
       return;
     }
 
@@ -173,7 +174,7 @@ export default function NewEvidencePage() {
               marginBottom: "8px",
             }}
           >
-            الضابط رقم {controlId}
+            {controlTitle||`الضابط رقم ${controlId}`}
           </div>
 
           <h1
@@ -195,7 +196,7 @@ export default function NewEvidencePage() {
           </p>
         </div>
 
-        <form
+        <form aria-busy={uploading}
           onSubmit={handleSubmit}
           style={{
             background: "white",
@@ -208,7 +209,7 @@ export default function NewEvidencePage() {
           <FieldLabel text="اسم الدليل *" htmlFor="evidence-name" />
 
           <input
-            id="evidence-name" required type="text"
+            disabled={uploading||!ready} id="evidence-name" required type="text"
             value={evidenceName}
             onChange={(e) =>
               setEvidenceName(e.target.value)
@@ -222,7 +223,7 @@ export default function NewEvidencePage() {
 
           <FieldLabel text="وصف الدليل" htmlFor="evidence-description" />
 
-          <textarea id="evidence-description"
+          <textarea disabled={uploading||!ready} id="evidence-description"
             value={description}
             onChange={(e) =>
               setDescription(e.target.value)
@@ -283,7 +284,7 @@ export default function NewEvidencePage() {
 
             <input
               aria-label="ملف الدليل"
-              id="evidence-file" type="file"
+              disabled={uploading||!ready} id="evidence-file" type="file"
               accept=".pdf,.doc,.docx,.xls,.xlsx,image/*"
               onChange={(e) => {
                 const selected =
@@ -311,7 +312,7 @@ export default function NewEvidencePage() {
 
           {/* Errors */}
           {errorMessage && (
-            <div
+            <div role="alert"
               style={{
                 marginTop: "20px",
                 background: "#fff1f0",
@@ -326,7 +327,7 @@ export default function NewEvidencePage() {
 
           {/* Success */}
           {message && (
-            <div
+            <div role="status"
               style={{
                 marginTop: "20px",
                 background: "#e8f5f2",
@@ -339,6 +340,7 @@ export default function NewEvidencePage() {
             </div>
           )}
 
+          {uploading&&<p role="status" className="workflow-form-hint">جاري إرسال الملف وتسجيله. انتظر حتى تظهر تفاصيل الضابط.</p>}
           <p style={{color:"#586875",fontSize:13}}>الإرسال الجديد يحل محل الدليل الحالي للمراجعة، مع الاحتفاظ بالإرسالات السابقة في السجل.</p>
 
           {/* Actions */}
@@ -347,6 +349,7 @@ export default function NewEvidencePage() {
               display: "flex",
               gap: "12px",
               justifyContent: "flex-start",
+              flexWrap: "wrap",
               marginTop: "28px",
             }}
           >
@@ -401,7 +404,7 @@ function FieldLabel({
   htmlFor: string;
 }) {
   return (
-    <label htmlFor={htmlFor}
+    <label className="cgp-field-label" htmlFor={htmlFor}
       style={{
         fontSize: "14px",
         fontWeight: "bold",
