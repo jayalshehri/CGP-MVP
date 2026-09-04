@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkflowHeading, WorkflowMetric as Kpi, ResultSummary } from "@/components/WorkflowUI";
 import StatusBadge from "@/components/StatusBadge";
 import EvidenceDownload from "@/components/EvidenceDownload";
 import Link from "next/link";
@@ -18,6 +19,7 @@ export default function ReviewPage(){
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
   const [notes,setNotes]=useState<Record<number,string>>({});
+  const [search,setSearch]=useState("");
   const [savingId,setSavingId]=useState<number|null>(null);
 
   const load=useCallback(async()=>{
@@ -58,33 +60,34 @@ export default function ReviewPage(){
 
   if(loading)return <main dir="rtl" style={center}>جاري تحميل المراجعة...</main>;
   const pending=rows.filter(r=>r.is_current&&["pending_review","under_review"].includes(r.status||""));
+  const matches=(row:Row)=>`${row.evidence_name||""} ${row.control?.control_code||""} ${row.control?.title_ar||""}`.toLowerCase().includes(search.trim().toLowerCase());
+  const visiblePending=pending.filter(matches);
   const history=rows.filter(r=>["accepted","rejected"].includes(r.status||""));
 
-  return <main dir="rtl" style={{minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial",color:"#0b1f33"}}>
+  return <main className="workflow-page" dir="rtl" style={{minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial",color:"#0b1f33"}}>
 
     <section className="cgp-page-body" style={{maxWidth:1300,margin:"0 auto",padding:"38px 28px 60px"}}>
-      <div style={{marginBottom:26}}><div style={{color:"#0f7d73",fontWeight:800,fontSize:13,marginBottom:8}}>REVIEW & VERIFY</div><h1 style={{margin:0,fontSize:34}}>مراجعة الأدلة</h1><p style={{color:"#586875"}}>قبول أو رفض الأدلة المرسلة من ملاك الضوابط مع توثيق ملاحظات المراجع.</p></div>
-      {error&&<div role="alert" style={{background:"#fff2f0",color:"#9d2e24",padding:14,borderRadius:10,marginBottom:16}}>{error}</div>}
+      <WorkflowHeading title="مراجعة الأدلة" description="افتح الدليل، راجع محتواه، ثم وثّق قرارك. سبب الرفض يساعد المالك على التصحيح."/>
+{error&&<div role="alert" style={{background:"#fff2f0",color:"#9d2e24",padding:14,borderRadius:10,marginBottom:16}}>{error}</div>}
       {message&&<div role="status" style={{background:"#e8f5f2",color:"#0f6f67",padding:14,borderRadius:10,marginBottom:16}}>{message}</div>}
-      <div className="cgp-responsive-grid cgp-kpi-grid" style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,marginBottom:22}}><Kpi label="بانتظار المراجعة" value={pending.length}/><Kpi label="مقبولة" value={history.filter(r=>r.status==="accepted").length}/><Kpi label="مرفوضة" value={history.filter(r=>r.status==="rejected").length}/></div>
+      <div className="cgp-responsive-grid cgp-kpi-grid" style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,marginBottom:22}}><Kpi label="بانتظار المراجعة" value={pending.length} tone={pending.length?"warning":"neutral"}/><Kpi label="مقبولة" value={history.filter(r=>r.status==="accepted").length} tone="success"/><Kpi label="مرفوضة" value={history.filter(r=>r.status==="rejected").length} tone={history.some(r=>r.status==="rejected")?"danger":"neutral"}/></div>
 
-      <h2 style={{fontSize:21}}>قائمة المراجعة</h2>
-      {pending.length===0?<div style={empty}>لا توجد أدلة بانتظار المراجعة.</div>:pending.map(row=><div key={row.id} style={card}>
+      <div className="workflow-filter"><label htmlFor="review-search" className="cgp-field-label">البحث في المراجعات</label><input id="review-search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="اسم الدليل أو رقم الضابط"/></div><ResultSummary count={visiblePending.length} total={pending.length} active={!!search} reset={()=>setSearch("")}/><h2 style={{fontSize:21}}>بانتظار القرار</h2>
+      {visiblePending.length===0?<div style={empty}>{pending.length?"لا توجد أدلة مطابقة للبحث.":"لا توجد أدلة بانتظار المراجعة."}</div>:visiblePending.map(row=><div key={row.id} style={card}>
         <div className="cgp-responsive-grid" style={{display:"grid",gridTemplateColumns:"1.4fr .8fr",gap:20,alignItems:"start"}}>
-          <div><div style={{color:"#0f7d73",fontWeight:800,fontSize:13}}>{row.control?.control_code||`Control ${row.control_id}`}</div><h3 style={{margin:"7px 0 6px",fontSize:19}}>{row.evidence_name||row.file_name||`دليل ${row.id}`}</h3><div style={{color:"#687581",fontSize:13}}>{row.control?.title_ar||""}</div>{row.description&&<p style={{lineHeight:1.8,color:"#4f5d68"}}>{row.description}</p>}</div>
+          <div><div style={{color:"#0f7d73",fontWeight:800,fontSize:13}}>{row.control?.control_code||`ضابط ${row.control_id}`}</div><h3 style={{margin:"7px 0 6px",fontSize:19}}>{row.evidence_name||row.file_name||`دليل ${row.id}`}</h3><div style={{color:"#687581",fontSize:13}}>{row.control?.title_ar||""}</div>{row.description&&<p style={{lineHeight:1.8,color:"#4f5d68"}}>{row.description}</p>}</div>
           <div><div style={{fontSize:12,color:"#586875",marginBottom:5}}>تاريخ الرفع</div><strong>{row.uploaded_at?new Date(row.uploaded_at).toLocaleString("ar-SA"):"غير محدد"}</strong></div>
         </div>
-        <label className="cgp-field-label" style={{marginTop:18}} htmlFor={`review-notes-${row.id}`}>ملاحظات المراجع — مطلوبة عند الرفض</label><textarea id={`review-notes-${row.id}`} value={notes[row.id]||""} onChange={e=>setNotes({...notes,[row.id]:e.target.value})} aria-label="ملاحظات المراجع" placeholder="ملاحظات المراجع (مطلوبة عند الرفض)" rows={3} style={{width:"100%",boxSizing:"border-box",marginTop:18,border:"1px solid #ccd6dc",borderRadius:10,padding:12,fontFamily:"Arial",resize:"vertical"}}/>
+        <label className="cgp-field-label" style={{marginTop:18}} htmlFor={`review-notes-${row.id}`}>ملاحظات المراجع — مطلوبة عند الرفض</label><textarea id={`review-notes-${row.id}`} value={notes[row.id]||""} onChange={e=>setNotes({...notes,[row.id]:e.target.value})} aria-label="ملاحظات المراجع" placeholder="ملاحظات المراجع (مطلوبة عند الرفض)" rows={3} style={{width:"100%",boxSizing:"border-box",marginTop:0,border:"1px solid #ccd6dc",borderRadius:10,padding:12,fontFamily:"inherit",resize:"vertical"}}/>
         <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap"}}><button disabled={savingId!==null} onClick={()=>decide(row,"accepted")} style={accept}>قبول الدليل</button><button disabled={savingId!==null} onClick={()=>decide(row,"rejected")} style={reject}>رفض الدليل</button><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link></div>
       </div>)}
 
       <h2 style={{fontSize:21,marginTop:32}}>سجل المراجعات</h2>
-      {history.length===0?<div style={empty}>لا توجد مراجعات مكتملة بعد.</div>:<div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,overflow:"hidden"}}>{history.map(row=><div className="cgp-responsive-grid" key={row.id} style={{padding:18,borderBottom:"1px solid #edf0f2",display:"grid",gridTemplateColumns:"1.5fr .7fr auto auto",gap:15,alignItems:"center"}}><div><strong>{row.control?.control_code} · {row.evidence_name||row.file_name}</strong><div style={{fontSize:13,color:"#586875",marginTop:5}}>{row.control?.title_ar}</div></div><StatusBadge status={row.status||""}/><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link></div>)}</div>}
+      {history.filter(matches).length===0?<div style={empty}>لا توجد مراجعات مكتملة بعد.</div>:<div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,overflow:"hidden"}}>{history.filter(matches).map(row=><div className="cgp-responsive-grid" key={row.id} style={{padding:18,borderBottom:"1px solid #edf0f2",display:"grid",gridTemplateColumns:"1.5fr .7fr auto auto",gap:15,alignItems:"center"}}><div><strong>{row.control?.control_code} · {row.evidence_name||row.file_name}</strong><div style={{fontSize:13,color:"#586875",marginTop:5}}>{row.control?.title_ar}</div>{row.review_notes&&<p className="workflow-review-note">ملاحظات المراجع: {row.review_notes}</p>}</div><StatusBadge status={row.status||""}/><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link></div>)}</div>}
     </section>
   </main>;
 }
 
-function Kpi({label,value}:{label:string;value:number}){return <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:20}}><div style={{fontSize:13,color:"#586875",marginBottom:8}}>{label}</div><div style={{fontSize:29,fontWeight:800,color:"#0f7d73"}}>{value}</div></div>}
 
 const card={background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:22,marginBottom:16};
 const empty={background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:35,textAlign:"center" as const,color:"#586875"};

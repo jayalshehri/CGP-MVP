@@ -1,0 +1,4 @@
+import type { ReactNode } from "react";
+export function WorkflowHeading({title,description,action}:{title:string;description:string;action?:ReactNode}) {return <header className="workflow-heading"><div><span>مساحة العمل</span><h1>{title}</h1><p>{description}</p></div>{action}</header>;}
+export function WorkflowMetric({label,value,tone="neutral"}:{label:string;value:string|number;tone?:"neutral"|"success"|"warning"|"danger"}) {return <div className={`workflow-metric workflow-${tone}`}><span>{label}</span><strong>{value}</strong></div>;}
+export function ResultSummary({count,total,reset,active}:{count:number;total:number;reset:()=>void;active:boolean}) {return <div className="workflow-results"><span role="status">عرض {count} من {total}</span>{active&&<button type="button" onClick={reset}>مسح التصفية</button>}</div>;}
