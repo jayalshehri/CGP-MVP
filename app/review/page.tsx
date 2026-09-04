@@ -66,7 +66,7 @@ export default function ReviewPage(){
   const visiblePending=pending.filter(matches);
   const history=rows.filter(r=>["accepted","rejected"].includes(r.status||""));
 
-  return <main className="workflow-page" dir="rtl" style={{minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial",color:"#0b1f33"}}>
+  return <main className="workflow-page" dir="rtl" style={{minHeight:"100vh",background:"#f5f7f9",color:"#0b1f33"}}>
 
     <section className="cgp-page-body" style={{maxWidth:1300,margin:"0 auto",padding:"38px 28px 60px"}}>
       <WorkflowHeading title="مراجعة الأدلة" description="افتح الدليل، راجع محتواه، ثم وثّق قرارك. سبب الرفض يساعد المالك على التصحيح."/>
@@ -75,13 +75,15 @@ export default function ReviewPage(){
       <div className="cgp-responsive-grid cgp-kpi-grid" style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,marginBottom:22}}><Kpi label="بانتظار المراجعة" value={pending.length} tone={pending.length?"warning":"neutral"}/><Kpi label="مقبولة" value={history.filter(r=>r.status==="accepted").length} tone="success"/><Kpi label="مرفوضة" value={history.filter(r=>r.status==="rejected").length} tone={history.some(r=>r.status==="rejected")?"danger":"neutral"}/></div>
 
       <div className="workflow-filter"><label htmlFor="review-search" className="cgp-field-label">البحث في المراجعات</label><input id="review-search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="اسم الدليل أو رقم الضابط"/></div><ResultSummary count={visiblePending.length} total={pending.length} active={!!search} reset={()=>setSearch("")}/><h2 style={{fontSize:21}}>بانتظار القرار</h2>
-      {visiblePending.length===0?<div style={empty}>{pending.length?"لا توجد أدلة مطابقة للبحث.":"لا توجد أدلة بانتظار المراجعة."}</div>:visiblePending.map(row=><div key={row.id} style={card}>
+      {visiblePending.length===0?<div style={empty}>{pending.length?"لا توجد أدلة مطابقة للبحث.":"لا توجد أدلة بانتظار المراجعة."}</div>:visiblePending.map(row=><div key={row.id} className="review-card" style={card}>
         <div className="cgp-responsive-grid" style={{display:"grid",gridTemplateColumns:"1.4fr .8fr",gap:20,alignItems:"start"}}>
           <div><div style={{color:"#0f7d73",fontWeight:800,fontSize:13}}>{row.control?.control_code||`ضابط ${row.control_id}`}</div><h3 style={{margin:"7px 0 6px",fontSize:19}}>{row.evidence_name||row.file_name||`دليل ${row.id}`}</h3><div style={{color:"#687581",fontSize:13}}>{row.control?.title_ar||""}</div>{row.description&&<p style={{lineHeight:1.8,color:"#4f5d68"}}>{row.description}</p>}</div>
-          <div><div style={{fontSize:12,color:"#586875",marginBottom:5}}>تاريخ الرفع</div><strong>{row.uploaded_at?new Date(row.uploaded_at).toLocaleString("ar-SA"):"غير محدد"}</strong></div>
+          <div className="review-meta"><div>تاريخ الرفع</div><strong>{row.uploaded_at?new Date(row.uploaded_at).toLocaleString("ar-SA"):"غير محدد"}</strong><Link href={`/controls/${row.control_id}`}>فتح تفاصيل الضابط ←</Link></div>
         </div>
+        <div className="review-file"><div><strong>افحص الملف قبل اتخاذ القرار</strong><span>{row.file_name||"ملف الدليل المرفوع"}</span></div><EvidenceDownload path={row.file_path} name={row.file_name}/></div>
         <label className="cgp-field-label" style={{marginTop:18}} htmlFor={`review-notes-${row.id}`}>ملاحظات المراجع — مطلوبة عند الرفض</label><textarea id={`review-notes-${row.id}`} value={notes[row.id]||""} onChange={e=>setNotes({...notes,[row.id]:e.target.value})} aria-label="ملاحظات المراجع" placeholder="ملاحظات المراجع (مطلوبة عند الرفض)" rows={3} style={{width:"100%",boxSizing:"border-box",marginTop:0,border:"1px solid #ccd6dc",borderRadius:10,padding:12,fontFamily:"inherit",resize:"vertical"}}/>
-        <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap"}}><button disabled={savingId!==null} onClick={()=>decide(row,"accepted")} style={accept}>قبول الدليل</button><button disabled={savingId!==null} onClick={()=>decide(row,"rejected")} style={reject}>رفض الدليل</button><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link></div>
+        <div className="review-decision"><div><strong>اعتماد الدليل</strong><span>يُحدّث الضابط إلى مطبق وتم التحقق.</span></div><button disabled={savingId!==null} onClick={()=>decide(row,"accepted")} style={accept}>قبول الدليل</button></div>
+        <div className="review-reject"><div><strong>إرجاع للتصحيح</strong><span>يتطلب سببًا واضحًا في الملاحظات أعلاه.</span></div><button disabled={savingId!==null} onClick={()=>decide(row,"rejected")} style={reject}>رفض وإرجاع الدليل</button></div>
       </div>)}
 
       <h2 style={{fontSize:21,marginTop:32}}>سجل المراجعات</h2>
