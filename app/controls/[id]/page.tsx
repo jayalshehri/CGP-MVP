@@ -4,39 +4,66 @@ import { useParams, useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import StatusBadge, { statusText } from "@/components/StatusBadge";
 import EvidenceDownload from "@/components/EvidenceDownload";
+import { controlPlan } from "@/lib/control-plan";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import "./detail.css";
 
 type Control = { id:number; control_code:string; title_ar:string; description_ar:string|null; domain_ar:string; implementation_status:string; evidence_status:string; verification_status:string; due_date:string|null; last_review_date:string|null; control_owner:string|null; evidence_owner:string|null; implementation_notes:string|null; };
-type Evidence = { is_current?:boolean; uploaded_at?:string|null; file_path?:string|null; review_notes?:string|null; id:number; evidence_name?:string|null; file_name?:string|null; description?:string|null; status?:string|null };
+type Evidence = { is_current?:boolean; uploaded_at?:string|null; file_path?:string|null; review_notes?:string|null; reviewed_at?:string|null; id:number; evidence_name?:string|null; file_name?:string|null; description?:string|null; status?:string|null };
+type Note = {id:number;body:string;created_at:string};
+const tabs=['نظرة عامة','خطة التنفيذ','الأدلة المطلوبة','السجل والمراجعات'];
+const date=(value:string)=>new Date(value).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'});
 
 export default function ControlDetailsPage() {
-  const {id}=useParams<{id:string}>(); const router=useRouter();
-  const [control,setControl]=useState<Control|null>(null); const [evidence,setEvidence]=useState<Evidence[]>([]);
-  const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [canAssign,setCanAssign]=useState(false);
-  useEffect(()=>{let active=true;(async()=>{try{
-    const {profile}=await requireProfile();if(!active)return;setCanAssign(profile.role!=="control_owner");
-    const controlId=Number(id);if(!Number.isSafeInteger(controlId)||controlId<=0)throw new Error("رقم الضابط غير صحيح.");
-    const [{data:c,error:ce},{data:e,error:ee}]=await Promise.all([
-      supabase.from("controls").select("*").eq("id",controlId).single(),
-      supabase.from("evidence").select("*").eq("control_id",controlId).order("uploaded_at",{ascending:false})]);
-    if(ce||!c)throw new Error("الضابط غير موجود أو ليس ضمن صلاحيتك.");if(ee)throw ee;
-    if(active){setControl(c);setEvidence(e??[]);}
-  }catch(e){if(active)setError(e instanceof Error?e.message:"تعذر التحميل");const {data}=await supabase.auth.getSession();if(!data.session)router.replace("/login");}
-  finally{if(active)setLoading(false);}})();return()=>{active=false;};},[id,router]);
-  if(loading)return <main dir="rtl" style={{padding:40}}>جاري تحميل الضابط...</main>;
-  if(error||!control)return <main dir="rtl" style={{padding:40}}><p role="alert">{error}</p><Link href="/controls">العودة إلى الضوابط</Link></main>;
-  return <main dir="rtl" style={{minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial",color:"#0b1f33"}}>
-
-    <div className="cgp-page-body" style={{maxWidth:1250,margin:"0 auto",padding:"38px 30px 60px"}}>
-      <div style={{marginBottom:25}}><Link href="/controls" style={{color:"#0f7d73",textDecoration:"none",fontWeight:800}}>← العودة إلى الضوابط</Link></div>
-      <section style={card}><div style={{display:"flex",justifyContent:"space-between",gap:20,alignItems:"flex-start",flexWrap:"wrap"}}><div style={{flex:1}}><div style={{color:"#0f7d73",fontWeight:800,marginBottom:8}}>{control.control_code}</div><h1 style={{margin:0,fontSize:30}}>{control.title_ar}</h1><div style={{marginTop:12,color:"#687581"}}>{control.domain_ar}</div></div><StatusBadge status={control.implementation_status}/></div>{control.description_ar&&<p style={{borderTop:"1px solid #edf0f2",paddingTop:20,lineHeight:1.9,color:"#4c5964"}}>{control.description_ar}</p>}</section>
-      <div className="cgp-responsive-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:16,marginBottom:22}}><Info title="حالة التنفيذ" value={statusText(control.implementation_status)}/><Info title="حالة الدليل" value={statusText(control.evidence_status)}/><Info title="حالة التحقق" value={statusText(control.verification_status)}/><Info title="تاريخ الاستحقاق" value={control.due_date||"غير محدد"}/></div>
-      <section style={card}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22,gap:12,flexWrap:"wrap"}}><h2 style={{margin:0,fontSize:20}}>المسؤوليات</h2>{canAssign&&<Link href={`/controls/${control.id}/assign`} style={{background:"#0f7d73",color:"white",textDecoration:"none",padding:"10px 15px",borderRadius:9,fontWeight:800,fontSize:14}}>تعيين / تعديل المالك</Link>}</div><div className="cgp-responsive-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:25}}><Info title="مالك الضابط" value={control.control_owner||"غير محدد"}/><Info title="مسؤول الدليل" value={control.evidence_owner||"غير محدد"}/><Info title="آخر مراجعة" value={control.last_review_date||"لم تتم المراجعة"}/></div></section>
-      <section style={card}><h2 style={{marginTop:0}}>ملاحظات التنفيذ</h2><div style={{background:"#f8fafb",borderRadius:10,padding:18,color:"#56636f"}}>{control.implementation_notes||"لا توجد ملاحظات تنفيذ مسجلة حاليًا."}</div></section>
-      <section style={card}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}><div><h2 style={{margin:0}}>الأدلة</h2><p style={{color:"#586875"}}>الإرسال الحالي والإصدارات السابقة مع نتائج المراجعة</p></div><Link href={`/controls/${control.id}/evidence/new`} style={{background:"#0f7d73",color:"white",textDecoration:"none",padding:"10px 15px",borderRadius:9,fontWeight:800}}>+ رفع دليل</Link></div>{evidence.length===0?<div style={{textAlign:"center",padding:35,background:"#f8fafb",borderRadius:12,color:"#586875"}}>لا توجد أدلة مرفوعة</div>:evidence.map(e=><article className="control-evidence-item" key={e.id}><div className="control-evidence-heading"><div><span className="workflow-version">{e.is_current?"الإرسال الحالي":"إصدار سابق"}</span><h3>{e.evidence_name||e.file_name||`دليل رقم ${e.id}`}</h3></div><StatusBadge status={e.status||""}/></div>{e.uploaded_at&&<p className="workflow-form-hint">رُفع في {new Date(e.uploaded_at).toLocaleString("ar-SA",{timeZone:"Asia/Riyadh"})}</p>}{e.description&&<p>{e.description}</p>}{e.review_notes&&<p className="workflow-review-note">ملاحظات المراجع: {e.review_notes}</p>}<EvidenceDownload path={e.file_path} name={e.file_name}/></article>)}</section>
-    </div>
-  </main>;
+ const {id}=useParams<{id:string}>(); const router=useRouter();
+ const [control,setControl]=useState<Control|null>(null),[evidence,setEvidence]=useState<Evidence[]>([]);
+ const [loading,setLoading]=useState(true),[error,setError]=useState(''),[canAssign,setCanAssign]=useState(false);
+ const [tab,setTab]=useState(0),[completed,setCompleted]=useState<Record<string,boolean>>({}),[notes,setNotes]=useState<Note[]>([]);
+ const [draft,setDraft]=useState(''),[saving,setSaving]=useState(false),[feedback,setFeedback]=useState('');
+ useEffect(()=>{let active=true;(async()=>{try{
+  const {profile}=await requireProfile();if(!active)return;setCanAssign(profile.role!=='control_owner');
+  const controlId=Number(id);if(!Number.isSafeInteger(controlId)||controlId<=0)throw new Error('رقم الضابط غير صحيح.');
+  const [c,e,w,n]=await Promise.all([
+   supabase.from('controls').select('*').eq('id',controlId).single(),
+   supabase.from('evidence').select('*').eq('control_id',controlId).order('uploaded_at',{ascending:false}),
+   supabase.from('control_work_items').select('item_key,completed').eq('control_id',controlId),
+   supabase.from('control_notes').select('id,body,created_at').eq('control_id',controlId).order('created_at',{ascending:false})]);
+  if(c.error||!c.data)throw new Error('الضابط غير موجود أو ليس ضمن صلاحيتك.');
+  if(e.error||w.error||n.error)throw new Error('تعذر تحميل تفاصيل التنفيذ. أعد تحميل الصفحة.');
+  if(active){setControl(c.data);setEvidence(e.data??[]);setCompleted(Object.fromEntries((w.data??[]).map(x=>[x.item_key,x.completed])));setNotes(n.data??[]);}
+ }catch(e){if(active)setError(e instanceof Error?e.message:'تعذر التحميل');const {data}=await supabase.auth.getSession();if(!data.session)router.replace('/login');}
+ finally{if(active)setLoading(false);}})();return()=>{active=false;};},[id,router]);
+ async function toggle(key:string){if(!control||saving)return;setSaving(true);setFeedback('');const next=!completed[key];
+  const {data,error}=await supabase.from('control_work_items').upsert({control_id:control.id,item_key:key,completed:next},{onConflict:'control_id,item_key'}).select('item_key,completed').single();
+  if(error||!data)setFeedback('تعذر حفظ الخطوة. حاول مرة أخرى.');else{setCompleted(previous=>({...previous,[key]:data.completed}));setFeedback('تم حفظ تقدم التنفيذ.');}setSaving(false);
+ }
+ async function addNote(){if(!control||!draft.trim()||saving)return;setSaving(true);setFeedback('');
+  const {data,error}=await supabase.from('control_notes').insert({control_id:control.id,body:draft.trim()}).select('id,body,created_at').single();
+  if(error||!data)setFeedback('تعذر حفظ الملاحظة. حاول مرة أخرى.');else{setNotes(previous=>[data,...previous]);setDraft('');setFeedback('تم حفظ الملاحظة.');}setSaving(false);
+ }
+ if(loading)return <main className="detail-page" role="status">جاري تحميل الضابط…</main>;
+ if(error||!control)return <main className="detail-page"><p role="alert">{error}</p><Link href="/controls">العودة إلى الضوابط</Link></main>;
+ const plan=controlPlan(control.control_code,control.description_ar||'');
+ const done=plan.steps.filter(s=>completed[s.key]).length,percent=Math.round(done/plan.steps.length*100);
+ const timeline=[...evidence.flatMap(e=>[
+  ...(e.uploaded_at?[{key:`upload-${e.id}`,time:e.uploaded_at,title:`رفع دليل: ${e.evidence_name||e.file_name}`,body:e.description}]:[]),
+  ...(e.reviewed_at?[{key:`review-${e.id}`,time:e.reviewed_at,title:`قرار المراجعة: ${statusText(e.status||'')}`,body:e.review_notes}]:[])
+ ]),...notes.map(n=>({key:`note-${n.id}`,time:n.created_at,title:'ملاحظة تنفيذ',body:n.body}))].sort((a,b)=>Date.parse(b.time)-Date.parse(a.time));
+ return <main className="detail-page" dir="rtl">
+  <Link className="detail-back" href="/controls">← العودة إلى الضوابط</Link>
+  <header className="detail-hero"><div><span className="detail-code">{control.control_code}</span><h1>{control.title_ar}</h1><p>{control.domain_ar} · المالك: {control.control_owner||'غير محدد'}</p></div><StatusBadge status={control.implementation_status}/></header>
+  <div className="detail-metrics"><section><small>تقدم خطة التنفيذ</small><strong>{percent}% · {done} من {plan.steps.length}</strong><progress max={plan.steps.length} value={done} aria-label="تقدم خطة التنفيذ"/></section><section><small>حالة الدليل</small><StatusBadge status={control.evidence_status}/></section><section><small>حالة التحقق</small><StatusBadge status={control.verification_status}/></section><section><small>موعد الاستحقاق</small><strong>{control.due_date||'غير محدد'}</strong></section></div>
+  <div className="detail-tabs" role="tablist" aria-label="تفاصيل الضابط">{tabs.map((label,index)=><button key={label} id={`detail-tab-${index}`} role="tab" aria-selected={tab===index} aria-controls={`detail-panel-${index}`} tabIndex={tab===index?0:-1} onClick={()=>setTab(index)} onKeyDown={event=>{let next=index;if(event.key==='ArrowLeft')next=(index+1)%tabs.length;else if(event.key==='ArrowRight')next=(index+tabs.length-1)%tabs.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;event.preventDefault();setTab(next);document.getElementById(`detail-tab-${next}`)?.focus();}}>{label}</button>)}</div>
+  <p role="status" className="detail-feedback">{feedback}</p>
+  <section id={`detail-panel-${tab}`} role="tabpanel" aria-labelledby={`detail-tab-${tab}`} className="detail-columns">
+   <div className="detail-content">
+   {tab===0&&<><section className="detail-card"><h2>المتطلب الرسمي</h2><p className="detail-official">{control.description_ar||'لا يوجد وصف مسجل.'}</p>{plan.requirements.length>0&&<><h3>المتطلبات الفرعية</h3>{plan.requirements.map(r=><p className="detail-requirement" key={r.key}><b dir="ltr">{r.key}</b> {r.text}</p>)}</>}<a className="detail-back" href="https://nca.gov.sa/ar/regulatory-documents/controls-list/ecc/" target="_blank" rel="noreferrer">مرجع الهيئة الوطنية للأمن السيبراني ↗</a></section><section className="detail-card"><h2>إرشادات التطبيق المقترحة</h2><p>خطة مساعدة لتنفيذ «{control.title_ar}» وتوثيق الأدلة التي تثبت استيفاء نص الضابط. تُراجع بحسب نطاق الجهة؛ وليست نصًا تنظيميًا إضافيًا.</p><button className="detail-button" onClick={()=>setTab(1)}>عرض خطوات التنفيذ ←</button></section></>}
+   {tab===1&&<section className="detail-card"><h2>قائمة إجراءات التنفيذ</h2><p className="detail-hint">حفظ الخطوات يساعد على المتابعة. اعتماد الدليل والتحقق يتمان عبر دورة المراجعة.</p>{plan.steps.map(step=><label className="detail-step" key={step.key}><input type="checkbox" checked={!!completed[step.key]} disabled={saving} onChange={()=>toggle(step.key)}/><span>{step.text}</span><small>{completed[step.key]?'مكتمل':'لم يكتمل'}</small></label>)}</section>}
+   {tab===2&&<><section className="detail-card"><h2>الأدلة المقترحة</h2><p className="detail-hint">أمثلة مساعدة؛ تُحدد كفايتها وفق نص الضابط ونطاق التطبيق.</p><ul>{plan.evidence.map(item=><li key={item}>{item}</li>)}</ul><Link className="detail-button" href={`/controls/${control.id}/evidence/new`}>+ رفع دليل</Link></section><section className="detail-card"><h2>الأدلة والإصدارات</h2>{!evidence.length&&<p>لا توجد أدلة مرفوعة بعد.</p>}{evidence.map(e=><article className="control-evidence-item" key={e.id}><small>{e.is_current?'الإرسال الحالي':'إصدار سابق'}</small><h3>{e.evidence_name||e.file_name}</h3><StatusBadge status={e.status||''}/>{e.uploaded_at&&<p>{date(e.uploaded_at)}</p>}{e.description&&<p>{e.description}</p>}{e.review_notes&&<p>ملاحظات المراجع: {e.review_notes}</p>}<EvidenceDownload path={e.file_path} name={e.file_name}/>{canAssign&&e.is_current&&['pending_review','under_review'].includes(e.status||'')&&<Link className="detail-button" href="/review">مراجعة الدليل</Link>}</article>)}</section></>}
+   {tab===3&&<section className="detail-card"><h2>سجل الأدلة والملاحظات</h2>{!timeline.length&&<p>لا توجد أنشطة مسجلة بعد.</p>}<ol className="detail-timeline">{timeline.map(item=><li key={item.key}><strong>{item.title}</strong><small>{date(item.time)}</small>{item.body&&<p>{item.body}</p>}</li>)}</ol></section>}
+   </div>
+   <aside><section className="detail-card"><h2>المسؤوليات</h2><dl><dt>مالك الضابط</dt><dd>{control.control_owner||'غير محدد'}</dd><dt>مسؤول الدليل</dt><dd>{control.evidence_owner||'غير محدد'}</dd><dt>حالة التنفيذ</dt><dd>{statusText(control.implementation_status)}</dd><dt>آخر مراجعة</dt><dd>{control.last_review_date||'لم تتم المراجعة'}</dd></dl>{canAssign&&<Link className="detail-button" href={`/controls/${control.id}/assign`}>تعديل المالك والاستحقاق</Link>}</section><section className="detail-card"><h2>ملاحظات التنفيذ</h2>{control.implementation_notes&&<p>{control.implementation_notes}</p>}<label htmlFor="control-note">إضافة ملاحظة</label><textarea id="control-note" rows={4} maxLength={4000} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="وثّق ما تم تنفيذه أو العوائق…"/><button className="detail-button" disabled={saving||!draft.trim()} onClick={addNote}>{saving?'جاري الحفظ…':'حفظ الملاحظة'}</button>{notes.length>0&&<p className="detail-hint">{notes.length} ملاحظة محفوظة في السجل.</p>}</section></aside>
+  </section>
+ </main>;
 }
-const card={background:"white",border:"1px solid #e2e7eb",borderRadius:16,padding:26,marginBottom:22};
-function Info({title,value}:{title:string;value:string}){return <div><div style={{fontSize:13,color:"#586875",marginBottom:8}}>{title}</div><div style={{fontWeight:800}}>{value}</div></div>}
