@@ -55,3 +55,20 @@
 @media(max-width:760px) { .exec-page { padding-top:0; }.exec-heading { gap:14px; }.exec-tools { width:auto; }.exec-metrics { grid-template-columns:1fr; }.exec-metric { display:grid; grid-template-columns:1fr auto; padding:18px; gap:8px 16px; }.exec-metric>strong { grid-column:2; grid-row:1/3; margin:0; font-size:32px; }.exec-metric-arrow { display:none; }.exec-panel { padding:20px; }.exec-priorities { padding:0; }.exec-score { font-size:46px; }.exec-spotlight { padding:20px; }.exec-spotlight-footer { display:block; }.exec-sort { width:100%; }.exec-heading h1 { font-size:27px; } }
 @media(prefers-reduced-motion:reduce) { .exec-metric,.exec-priority-list a { transition:none; } }
 @media print { .exec-spotlight { background:white; color:#102d42; box-shadow:none; }.exec-spotlight::after { display:none; }.exec-priority-list { grid-template-columns:repeat(3,1fr); }.exec-heading { padding-bottom:12px; }.exec-panel,.exec-metric { box-shadow:none; } }
+
+.exec-donut { position:relative; width:min(230px,100%); margin:22px auto 8px; aspect-ratio:1; }
+.exec-donut svg { width:100%; height:100%; overflow:visible; }
+.exec-donut svg a { cursor:pointer; }
+.exec-donut svg a:hover circle,.exec-donut svg a:focus-visible circle { stroke-width:27px; }
+.exec-donut-center { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; align-items:center; pointer-events:none; gap:5px; }
+.exec-donut-center strong { font-size:38px; line-height:1.2; font-variant-numeric:tabular-nums; letter-spacing:-1px; }
+.exec-donut-center span { font-size:11px; color:var(--cgp-muted); }
+.exec-distribution .exec-chart-hint { text-align:center; font-size:10px; margin:0 0 18px; }
+.exec-chart-row { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:13px 8px; border-bottom:1px solid #edf1f3; color:var(--cgp-ink); text-decoration:none; border-radius:6px; font-size:12px; }
+.exec-chart-row:hover { background:#f2f8f6; }
+.exec-chart-row>span { display:flex; align-items:center; gap:9px; }
+.exec-chart-row i { width:9px; height:9px; border-radius:3px; flex-shrink:0; }
+.exec-chart-row strong { font-size:16px; font-variant-numeric:tabular-nums; }
+.exec-chart-row small { min-width:30px; color:var(--cgp-muted); text-align:end; font-size:10px; }
+.exec-chart-row b { color:#16786e; }
+@media print { .exec-donut { width:180px; break-inside:avoid; }.exec-chart-row b,.exec-chart-hint { display:none; } }

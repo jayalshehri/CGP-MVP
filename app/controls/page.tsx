@@ -36,13 +36,14 @@ function ControlsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const assignment = searchParams.get("assignment") === "unassigned" ? "unassigned" : searchParams.get("assignment") === "assigned" ? "assigned" : "all";
-  const setAssignment = (value: string) => {
+  const setFilter = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (value === "all") params.delete("assignment"); else params.set("assignment", value);
+    if (value === "all") params.delete(key); else params.set(key, value);
     router.replace(`/controls${params.size ? `?${params}` : ""}`, { scroll: false });
   };
   const [search,setSearch]=useState("");
-  const [status,setStatus]=useState("all");
+  const rawStatus = searchParams.get("status") ?? "all";
+  const status = ["implemented", "in_progress", "not_started", "remaining"].includes(rawStatus) ? rawStatus : "all";
   const [controls,setControls] = useState<Control[]>([]);
 
   const [error,setError] = useState<Error|null>(null);
@@ -79,15 +80,15 @@ function ControlsContent() {
     );
   }
 
-  const filtered=controls.filter(control=>`${control.control_code} ${control.title_ar} ${control.domain_ar} ${control.control_owner||""}`.toLowerCase().includes(search.trim().toLowerCase())&&(status==="all"||control.implementation_status===status)&&(assignment==="all"||(assignment==="unassigned"?control.control_owner_id===null:control.control_owner_id!==null)));
+  const filtered=controls.filter(control=>`${control.control_code} ${control.title_ar} ${control.domain_ar} ${control.control_owner||""}`.toLowerCase().includes(search.trim().toLowerCase())&&(status==="all"||(status==="implemented"?["implemented","compliant"].includes(control.implementation_status):status==="remaining"?!["implemented","compliant","in_progress"].includes(control.implementation_status):control.implementation_status===status))&&(assignment==="all"||(assignment==="unassigned"?control.control_owner_id===null:control.control_owner_id!==null)));
   const searching=!!search.trim()||status!=="all"||assignment!=="all";
   const sorted=[...filtered].sort((a,b)=>a.control_code.localeCompare(b.control_code,"en",{numeric:true}));
   const domains=Map.groupBy(sorted,c=>`${c.framework_id}:${c.domain_ar||"غير مصنف"}`);
   return <main className="workflow-page" dir="rtl">
     <WorkflowHeading title="الضوابط" description="اختر المجال لاستعراض ضوابطه، أو ابحث للوصول مباشرة إلى أي ضابط."/>
     <div className="workflow-metrics"><WorkflowMetric label="إجمالي الضوابط" value={controls.length}/><WorkflowMetric label="مطبق" value={controls.filter(c=>c.implementation_status==="implemented").length} tone="success"/><WorkflowMetric label="قيد التنفيذ" value={controls.filter(c=>c.implementation_status==="in_progress").length} tone="warning"/><WorkflowMetric label="لم يبدأ" value={controls.filter(c=>c.implementation_status==="not_started").length}/></div>
-    <div className="workflow-filter workflow-filter-grid catalog-filters"><div><label htmlFor="control-search" className="cgp-field-label">البحث في الضوابط</label><input id="control-search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="رقم الضابط أو عنوانه أو المجال أو المالك"/></div><div><label htmlFor="control-status" className="cgp-field-label">حالة التنفيذ</label><select id="control-status" value={status} onChange={event=>setStatus(event.target.value)}><option value="all">كل الحالات</option><option value="implemented">مطبق</option><option value="in_progress">قيد التنفيذ</option><option value="not_started">لم يبدأ</option></select></div><div><label htmlFor="control-assignment" className="cgp-field-label">إسناد المالك</label><select id="control-assignment" value={assignment} onChange={event=>setAssignment(event.target.value)}><option value="all">جميع الضوابط</option><option value="unassigned">غير مسندة</option><option value="assigned">مسندة</option></select></div></div>
-    <ResultSummary count={filtered.length} total={controls.length} active={searching} reset={()=>{setSearch("");setStatus("all");setAssignment("all");}}/>
+    <div className="workflow-filter workflow-filter-grid catalog-filters"><div><label htmlFor="control-search" className="cgp-field-label">البحث في الضوابط</label><input id="control-search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="رقم الضابط أو عنوانه أو المجال أو المالك"/></div><div><label htmlFor="control-status" className="cgp-field-label">حالة التنفيذ</label><select id="control-status" value={status} onChange={event=>setFilter("status",event.target.value)}><option value="all">كل الحالات</option><option value="implemented">مطبق</option><option value="in_progress">قيد التنفيذ</option><option value="not_started">لم يبدأ</option><option value="remaining">حالات أخرى / لم يبدأ</option></select></div><div><label htmlFor="control-assignment" className="cgp-field-label">إسناد المالك</label><select id="control-assignment" value={assignment} onChange={event=>setFilter("assignment",event.target.value)}><option value="all">جميع الضوابط</option><option value="unassigned">غير مسندة</option><option value="assigned">مسندة</option></select></div></div>
+    <ResultSummary count={filtered.length} total={controls.length} active={searching} reset={()=>{setSearch("");const params=new URLSearchParams(searchParams.toString());params.delete("status");params.delete("assignment");router.replace(`/controls${params.size?`?${params}`:""}`,{scroll:false});}}/>
     {filtered.length===0?<div className="workflow-empty">{controls.length?"لا توجد ضوابط مطابقة. جرّب تغيير البحث أو مسح التصفية.":"لا توجد ضوابط ضمن نطاق صلاحياتك بعد."}</div>:<div className="catalog-domains" key={searching?`${search}:${status}:${assignment}`:"browse"}>{[...domains].map(([key,items])=>{
       const all=controls.filter(c=>`${c.framework_id}:${c.domain_ar||"غير مصنف"}`===key);
       const done=all.filter(c=>c.implementation_status==="implemented").length;
