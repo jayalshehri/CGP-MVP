@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import Link from "next/link";
+import "./catalog.css";
 import { supabase } from "@/lib/supabase";
 
 type Control = {
@@ -67,11 +68,24 @@ export default function ControlsPage() {
   }
 
   const filtered=controls.filter(control=>`${control.control_code} ${control.title_ar} ${control.domain_ar} ${control.control_owner||""}`.toLowerCase().includes(search.trim().toLowerCase())&&(status==="all"||control.implementation_status===status));
+  const searching=!!search.trim()||status!=="all";
+  const sorted=[...filtered].sort((a,b)=>a.control_code.localeCompare(b.control_code,"en",{numeric:true}));
+  const domains=Map.groupBy(sorted,c=>`${c.framework_id}:${c.domain_ar||"غير مصنف"}`);
   return <main className="workflow-page" dir="rtl">
-    <WorkflowHeading title="الضوابط" description="ابحث عن الضابط، راجع حالته، ثم افتح تفاصيل التنفيذ والأدلة."/>
+    <WorkflowHeading title="الضوابط" description="اختر المجال لاستعراض ضوابطه، أو ابحث للوصول مباشرة إلى أي ضابط."/>
     <div className="workflow-metrics"><WorkflowMetric label="إجمالي الضوابط" value={controls.length}/><WorkflowMetric label="مطبق" value={controls.filter(c=>c.implementation_status==="implemented").length} tone="success"/><WorkflowMetric label="قيد التنفيذ" value={controls.filter(c=>c.implementation_status==="in_progress").length} tone="warning"/><WorkflowMetric label="لم يبدأ" value={controls.filter(c=>c.implementation_status==="not_started").length}/></div>
     <div className="workflow-filter workflow-filter-grid"><div><label htmlFor="control-search" className="cgp-field-label">البحث في الضوابط</label><input id="control-search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="رقم الضابط أو عنوانه أو المجال أو المالك"/></div><div><label htmlFor="control-status" className="cgp-field-label">حالة التنفيذ</label><select id="control-status" value={status} onChange={event=>setStatus(event.target.value)}><option value="all">كل الحالات</option><option value="implemented">مطبق</option><option value="in_progress">قيد التنفيذ</option><option value="not_started">لم يبدأ</option></select></div></div>
     <ResultSummary count={filtered.length} total={controls.length} active={!!search||status!=="all"} reset={()=>{setSearch("");setStatus("all");}}/>
-    {filtered.length===0?<div className="workflow-empty">{controls.length?"لا توجد ضوابط مطابقة. جرّب تغيير البحث أو مسح التصفية.":"لا توجد ضوابط ضمن نطاق صلاحياتك بعد."}</div>:<div className="workflow-control-list">{filtered.map(control=><article className="workflow-control" key={control.id}><div className="workflow-control-title"><span>{control.control_code}</span><h2><Link href={`/controls/${control.id}`}>{control.title_ar}</Link></h2><p>{control.domain_ar||"غير مصنف"} · المالك: {control.control_owner||"غير محدد"}</p></div><div className="workflow-control-status"><div><small>التنفيذ</small><StatusBadge status={control.implementation_status}/></div><div><small>الدليل</small><StatusBadge status={control.evidence_status}/></div><div><small>التحقق</small><StatusBadge status={control.verification_status}/></div></div><div className="workflow-control-footer"><span>الاستحقاق: {control.due_date||"غير محدد"}</span><Link className="workflow-button" href={`/controls/${control.id}`}>تفاصيل الضابط ←</Link></div></article>)}</div>}
+    {filtered.length===0?<div className="workflow-empty">{controls.length?"لا توجد ضوابط مطابقة. جرّب تغيير البحث أو مسح التصفية.":"لا توجد ضوابط ضمن نطاق صلاحياتك بعد."}</div>:<div className="catalog-domains" key={searching?`${search}:${status}`:"browse"}>{[...domains].map(([key,items])=>{
+      const all=controls.filter(c=>`${c.framework_id}:${c.domain_ar||"غير مصنف"}`===key);
+      const done=all.filter(c=>c.implementation_status==="implemented").length;
+      const percent=Math.round(done/all.length*100);
+      const subdomains=Map.groupBy(items,c=>c.control_code.split("-").slice(0,2).join("-"));
+      return <details className="catalog-domain" key={key} open={searching?true:undefined}>
+        <summary><span className="catalog-chevron" aria-hidden="true">‹</span><span className="catalog-domain-name">{items[0].domain_ar||"غير مصنف"}<small>{searching?`${items.length} نتيجة من ${all.length} ضابط`:`${all.length} ضابط · ${subdomains.size} مجال فرعي`}</small></span><span className="catalog-progress"><strong>{percent}%</strong><small>نسبة التنفيذ</small><progress max={all.length} value={done} aria-label={`نسبة التنفيذ في ${items[0].domain_ar}`}/></span></summary>
+        <div className="catalog-sections">{[...subdomains].map(([code,rows])=><section key={code} className="catalog-subdomain"><h2><span dir="ltr">{code}</span> {rows[0].title_ar.replace(/\s*[-–]\s*\d+-\d+-\d+\s*$/,"")}</h2><ul>{rows.map(control=><li key={control.id}><Link className="catalog-row" href={`/controls/${control.id}`}><span className="catalog-code" dir="ltr">{control.control_code}</span><span className="catalog-title">{control.title_ar.replace(/\s*[-–]\s*\d+-\d+-\d+\s*$/,"")}</span><StatusBadge status={control.implementation_status}/><span aria-hidden="true">←</span><span className="catalog-sr">فتح تفاصيل الضابط</span></Link></li>)}</ul></section>)}</div>
+      </details>;
+    })}</div>}
+
   </main>;
 }
