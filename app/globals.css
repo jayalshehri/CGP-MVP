@@ -139,7 +139,7 @@ a { text-underline-offset:4px; }
 .exec-panel h2 { font-size:18px; margin:0; }
 .exec-priorities { display:grid; grid-template-columns:190px minmax(0,1fr); gap:28px; align-items:center; margin-bottom:20px; }
 .exec-priorities h2 { margin-top:6px; }
-.exec-priority-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+.exec-priority-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:24px; }
 .exec-priority-list a { display:flex; gap:12px; align-items:center; color:var(--cgp-ink); text-decoration:none; border-radius:8px; padding:8px; }
 .exec-priority-list a:hover { background:#f4f8f8; }
 .exec-count { display:grid; place-items:center; flex-shrink:0; min-width:42px; height:42px; padding:5px; border-radius:10px; background:#f0f4f5; font-size:21px; font-weight:700; }
