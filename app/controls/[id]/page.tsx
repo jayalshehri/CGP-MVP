@@ -14,6 +14,7 @@ type Evidence = { is_current?:boolean; uploaded_at?:string|null; file_path?:stri
 type Note = {id:number;body:string;created_at:string};
 const tabs=['نظرة عامة','خطة التنفيذ','الأدلة المطلوبة','السجل والمراجعات'];
 const date=(value:string)=>new Date(value).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'});
+const goodStatus=(value:string)=>['verified','approved','accepted','compliant'].includes(value);
 
 export default function ControlDetailsPage() {
  const {id}=useParams<{id:string}>(); const router=useRouter();
@@ -54,6 +55,7 @@ export default function ControlDetailsPage() {
  return <main className="detail-page" dir="rtl">
   <Link className="detail-back" href="/controls">← العودة إلى الضوابط</Link>
   <header className="detail-hero"><div><span className="detail-code">{control.control_code}</span><h1>{control.title_ar}</h1><p>{control.domain_ar} · المالك: {control.control_owner||'غير محدد'}</p></div><StatusBadge status={control.implementation_status}/></header>
+  <section className="detail-next"><div><span>الإجراء التالي</span><strong>{!control.control_owner?'تعيين مالك وموعد استحقاق للضابط':control.evidence_status==='not_uploaded'?'استكمال التنفيذ ورفع الدليل المطلوب':!goodStatus(control.verification_status)?'متابعة مراجعة الدليل والتحقق':'مراجعة الضابط دوريًا والمحافظة على الأدلة'}</strong></div>{!control.control_owner&&canAssign?<Link className="detail-button" href={`/controls/${control.id}/assign`}>تعيين الآن ←</Link>:control.evidence_status==='not_uploaded'?<Link className="detail-button" href={`/controls/${control.id}/evidence/new`}>رفع دليل ←</Link>:<button className="detail-button" onClick={()=>setTab(3)}>فتح السجل ←</button>}</section>
   <div className="detail-metrics"><section><small>تقدم خطة التنفيذ</small><strong>{percent}% · {done} من {plan.steps.length}</strong><progress max={plan.steps.length} value={done} aria-label="تقدم خطة التنفيذ"/></section><section><small>حالة الدليل</small><StatusBadge status={control.evidence_status}/></section><section><small>حالة التحقق</small><StatusBadge status={control.verification_status}/></section><section><small>موعد الاستحقاق</small><strong>{control.due_date||'غير محدد'}</strong></section></div>
   <div className="detail-tabs" role="tablist" aria-label="تفاصيل الضابط">{tabs.map((label,index)=><button key={label} id={`detail-tab-${index}`} role="tab" aria-selected={tab===index} aria-controls={`detail-panel-${index}`} tabIndex={tab===index?0:-1} onClick={()=>setTab(index)} onKeyDown={event=>{let next=index;if(event.key==='ArrowLeft')next=(index+1)%tabs.length;else if(event.key==='ArrowRight')next=(index+tabs.length-1)%tabs.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;event.preventDefault();setTab(next);document.getElementById(`detail-tab-${next}`)?.focus();}}>{label}</button>)}</div>
   <p role="status" className="detail-feedback">{feedback}</p>
