@@ -1,5 +1,5 @@
 const labels: Record<string, string> = {
-  implemented: "مطبق", compliant: "ممتثل", in_progress: "قيد التنفيذ", not_started: "لم يبدأ", not_implemented: "غير مطبق", not_applicable: "غير منطبق",
+  implemented: "مطبق كليًا", compliant: "مطبق كليًا", in_progress: "مطبق جزئيًا", not_started: "غير مطبق", not_implemented: "غير مطبق", not_applicable: "لا ينطبق",
   accepted: "مقبول", rejected: "مرفوض", pending_review: "بانتظار المراجعة", under_review: "قيد المراجعة", not_uploaded: "لم يرفع", uploaded: "مرفوع",
   verified: "تم التحقق", not_verified: "غير متحقق", failed: "لم يجتز", approved: "معتمد",
 };
