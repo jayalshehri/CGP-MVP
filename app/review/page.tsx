@@ -82,7 +82,7 @@ export default function ReviewPage(){
         </div>
         <div className="review-file"><div><strong>افحص الملف قبل اتخاذ القرار</strong><span>{row.file_name||"ملف الدليل المرفوع"}</span></div><EvidenceDownload path={row.file_path} name={row.file_name}/></div>
         <label className="cgp-field-label" style={{marginTop:18}} htmlFor={`review-notes-${row.id}`}>ملاحظات المراجع — مطلوبة عند الرفض</label><textarea id={`review-notes-${row.id}`} value={notes[row.id]||""} onChange={e=>setNotes({...notes,[row.id]:e.target.value})} aria-label="ملاحظات المراجع" placeholder="ملاحظات المراجع (مطلوبة عند الرفض)" rows={3} style={{width:"100%",boxSizing:"border-box",marginTop:0,border:"1px solid #ccd6dc",borderRadius:10,padding:12,fontFamily:"inherit",resize:"vertical"}}/>
-        <div className="review-decision"><div><strong>اعتماد الدليل</strong><span>يُحدّث الضابط إلى مطبق وتم التحقق.</span></div><button disabled={savingId!==null} onClick={()=>decide(row,"accepted")} style={accept}>قبول الدليل</button></div>
+        <div className="review-decision"><div><strong>اعتماد الدليل</strong><span>يُحدّث الضابط إلى مطبق كليًا وتم التحقق.</span></div><button disabled={savingId!==null} onClick={()=>decide(row,"accepted")} style={accept}>قبول الدليل</button></div>
         <div className="review-reject"><div><strong>إرجاع للتصحيح</strong><span>يتطلب سببًا واضحًا في الملاحظات أعلاه.</span></div><button disabled={savingId!==null} onClick={()=>decide(row,"rejected")} style={reject}>رفض وإرجاع الدليل</button></div>
       </div>)}
 
