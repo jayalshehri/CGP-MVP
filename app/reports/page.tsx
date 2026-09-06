@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { WorkflowHeading, WorkflowMetric } from "@/components/WorkflowUI";
 
 type Control={id:number;control_code:string;title_ar:string;domain_ar:string;implementation_status:string;evidence_status:string;verification_status:string;due_date:string|null;control_owner:string|null};
 type Evidence={id:number;status:string|null};
@@ -22,7 +23,7 @@ export default function ReportsPage(){
   const {data:p}=await supabase.from("profiles").select("role,is_active").eq("user_id",s.session.user.id).maybeSingle();
   if(!p||p.is_active===false||!["admin","cybersecurity_team"].includes(p.role)){router.replace("/");return;}
   const [{data:c,error:ce},{data:e,error:ee}]=await Promise.all([
-   supabase.from("controls").select("id,control_code,title_ar,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner").order("id"),
+   supabase.from("controls").select("id,control_code,title_ar,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner,frameworks!inner(code)").eq("frameworks.code","ECC").order("id"),
    supabase.from("evidence").select("id,status").eq("is_current",true)
   ]);
   if(ce||ee){setError(ce?.message||ee?.message||"تعذر تحميل التقارير");setLoading(false);return;}
@@ -47,21 +48,18 @@ export default function ReportsPage(){
  if(loading)return <main dir="rtl" style={center}>جاري تجهيز التقارير...</main>;
  if(error)return <main dir="rtl"><h1>تعذر تحميل البيانات</h1><p role="alert">{error}</p><button onClick={()=>window.location.reload()}>إعادة المحاولة</button></main>;
 
- return <main dir="rtl" style={page}>
-
-  <div className="cgp-page-body" style={{display:"flex",minHeight:"calc(100vh - 86px)"}}>
-  <section style={{flex:1,padding:40,minWidth:0}}>
-   <div style={{display:"flex",justifyContent:"space-between",gap:20,flexWrap:"wrap",marginBottom:26}}><div><div style={eyebrow}>REPORTING</div><h1 style={h1}>تقارير الالتزام</h1><p style={muted}>مؤشرات لحظية مستخرجة من بيانات الضوابط والأدلة في CGP.</p></div><button onClick={exportCsv} style={primary}>تصدير CSV</button></div>
+ return <main dir="rtl" className="workflow-page">
+  <section>
+   <WorkflowHeading title="تقارير الالتزام" description="مؤشرات لحظية مستخرجة من بيانات الضوابط والأدلة في CGP." action={<button onClick={exportCsv} className="workflow-button workflow-primary">تصدير CSV</button>}/>
    {error&&<div style={errorBox}>{error}</div>}
-   <div className="cgp-responsive-grid cgp-kpi-grid" style={kpiGrid}><Kpi label="نسبة الالتزام" value={`${stats.compliance}%`}/><Kpi label="الضوابط المكتملة" value={`${stats.done}/${stats.total}`}/><Kpi label="تم التحقق" value={stats.verified}/><Kpi label="متأخرة" value={stats.overdue} danger={stats.overdue>0}/><Kpi label="أدلة بانتظار المراجعة" value={stats.pendingEvidence}/></div>
+   <div className="workflow-metrics report-metrics"><WorkflowMetric label="نسبة الالتزام" value={`${stats.compliance}%`} tone="success"/><WorkflowMetric label="الضوابط المكتملة" value={`${stats.done}/${stats.total}`}/><WorkflowMetric label="تم التحقق" value={stats.verified}/><WorkflowMetric label="متأخرة" value={stats.overdue} tone={stats.overdue?"danger":"neutral"}/><WorkflowMetric label="أدلة بانتظار المراجعة" value={stats.pendingEvidence} tone="warning"/></div>
    <div style={card}><h2 style={sectionTitle}>الالتزام حسب المجال</h2>{domains.length===0?<Empty/>:<div style={{overflowX:"auto"}}><table style={table}><thead><tr><Th t="المجال"/><Th t="الضوابط"/><Th t="مكتمل"/><Th t="تم التحقق"/><Th t="متأخر"/><Th t="نسبة الالتزام"/></tr></thead><tbody>{domains.map(d=>{const pct=d.total?Math.round(d.done/d.total*100):0;return <tr key={d.name}><Td>{d.name}</Td><Td>{d.total}</Td><Td>{d.done}</Td><Td>{d.verified}</Td><Td>{d.overdue}</Td><Td><div style={{display:"flex",alignItems:"center",gap:10,minWidth:150}}><div style={{height:8,background:"#e8edef",borderRadius:99,flex:1,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:"#0f7d73"}}/></div><strong>{pct}%</strong></div></Td></tr>})}</tbody></table></div>}</div>
    <div className="cgp-responsive-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:18}}><Summary title="حالة التنفيذ" items={[["مكتمل",stats.done],["قيد العمل",controls.filter(c=>progress(c.implementation_status)).length],["غير مكتمل",controls.filter(c=>!good(c.implementation_status)&&!progress(c.implementation_status)).length]]}/><Summary title="حالة التحقق" items={[["تم التحقق",stats.verified],["بانتظار التحقق",Math.max(0,stats.total-stats.verified)],["متأخرة",stats.overdue]]}/></div>
-  </section></div>
+  </section>
  </main>
 }
-function Kpi({label,value,danger=false}:{label:string;value:string|number;danger?:boolean}){return <div style={kpi}><div style={{fontSize:13,color:"#586875",marginBottom:8}}>{label}</div><div style={{fontSize:30,fontWeight:800,color:danger?"#a3261a":"#0f7d73"}}>{value}</div></div>}
 function Summary({title,items}:{title:string;items:[string,number][]}){return <div style={card}><h2 style={sectionTitle}>{title}</h2>{items.map(([n,v])=><div key={n} style={{display:"flex",justifyContent:"space-between",padding:"13px 0",borderBottom:"1px solid #edf0f2"}}><span>{n}</span><strong>{v}</strong></div>)}</div>}
 function Th({t}:{t:string}){return <th style={{textAlign:"right",padding:"13px 12px",fontSize:12,color:"#687581",background:"#f8fafb"}}>{t}</th>}
 function Td({children}:{children:React.ReactNode}){return <td style={{padding:"14px 12px",borderTop:"1px solid #edf0f2",fontSize:14}}>{children}</td>}
 function Empty(){return <div style={{padding:35,textAlign:"center",color:"#586875"}}>لا توجد بيانات كافية بعد.</div>}
-const page={minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial, sans-serif",color:"#0b1f33"}; const center={...page,display:"grid",placeItems:"center"};     const eyebrow={color:"#0f7d73",fontWeight:800,fontSize:13,marginBottom:8}; const h1={margin:0,fontSize:34}; const muted={color:"#586875"}; const primary={border:0,background:"#0f7d73",color:"white",padding:"12px 18px",borderRadius:9,fontWeight:800,cursor:"pointer",height:44}; const errorBox={background:"#fff2f0",color:"#9d2e24",padding:14,borderRadius:10,marginBottom:18}; const kpiGrid={display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(175px,1fr))",gap:16,marginBottom:22}; const kpi={background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:20}; const card={background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:24,marginBottom:20}; const sectionTitle={margin:"0 0 18px",fontSize:20}; const table={width:"100%",borderCollapse:"collapse" as const};
+const page={minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial, sans-serif",color:"#0b1f33"}; const center={...page,display:"grid",placeItems:"center"}; const errorBox={background:"#fff2f0",color:"#9d2e24",padding:14,borderRadius:10,marginBottom:18}; const card={background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:24,marginBottom:20}; const sectionTitle={margin:"0 0 18px",fontSize:20}; const table={width:"100%",borderCollapse:"collapse" as const};
