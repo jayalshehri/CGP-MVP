@@ -9,7 +9,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import "./detail.css";
 
-type Control = { id:number; control_code:string; title_ar:string; description_ar:string|null; domain_ar:string; implementation_status:string; evidence_status:string; verification_status:string; due_date:string|null; last_review_date:string|null; control_owner:string|null; evidence_owner:string|null; implementation_notes:string|null; };
+type Control = { id:number; control_code:string; title_ar:string; description_ar:string|null; domain_ar:string; implementation_status:string; evidence_status:string; verification_status:string; due_date:string|null; last_review_date:string|null; control_owner:string|null; evidence_owner:string|null; implementation_notes:string|null; frameworks:{code:string}|null; };
 type Evidence = { is_current?:boolean; uploaded_at?:string|null; file_path?:string|null; review_notes?:string|null; reviewed_at?:string|null; id:number; evidence_name?:string|null; file_name?:string|null; description?:string|null; status?:string|null };
 type Note = {id:number;body:string;created_at:string};
 const tabs=['نظرة عامة','خطة التنفيذ','الأدلة المطلوبة','السجل والمراجعات'];
@@ -25,7 +25,7 @@ export default function ControlDetailsPage() {
   const {profile}=await requireProfile();if(!active)return;setCanAssign(profile.role!=='control_owner');
   const controlId=Number(id);if(!Number.isSafeInteger(controlId)||controlId<=0)throw new Error('رقم الضابط غير صحيح.');
   const [c,e,w,n]=await Promise.all([
-   supabase.from('controls').select('*').eq('id',controlId).single(),
+   supabase.from('controls').select('*,frameworks(code)').eq('id',controlId).single(),
    supabase.from('evidence').select('*').eq('control_id',controlId).order('uploaded_at',{ascending:false}),
    supabase.from('control_work_items').select('item_key,completed').eq('control_id',controlId),
    supabase.from('control_notes').select('id,body,created_at').eq('control_id',controlId).order('created_at',{ascending:false})]);
@@ -45,6 +45,7 @@ export default function ControlDetailsPage() {
  if(loading)return <main className="detail-page" role="status">جاري تحميل الضابط…</main>;
  if(error||!control)return <main className="detail-page"><p role="alert">{error}</p><Link href="/controls">العودة إلى الضوابط</Link></main>;
  const plan=controlPlan(control.control_code,control.description_ar||'');
+ const frameworkCode=(control.frameworks?.code||'ECC').toLowerCase();
  const done=plan.steps.filter(s=>completed[s.key]).length,percent=Math.round(done/plan.steps.length*100);
  const timeline=[...evidence.flatMap(e=>[
   ...(e.uploaded_at?[{key:`upload-${e.id}`,time:e.uploaded_at,title:`رفع دليل: ${e.evidence_name||e.file_name}`,body:e.description}]:[]),
@@ -58,7 +59,7 @@ export default function ControlDetailsPage() {
   <p role="status" className="detail-feedback">{feedback}</p>
   <section id={`detail-panel-${tab}`} role="tabpanel" aria-labelledby={`detail-tab-${tab}`} className="detail-columns">
    <div className="detail-content">
-   {tab===0&&<><section className="detail-card"><h2>المتطلب الرسمي</h2><p className="detail-official">{control.description_ar||'لا يوجد وصف مسجل.'}</p>{plan.requirements.length>0&&<><h3>المتطلبات الفرعية</h3>{plan.requirements.map(r=><p className="detail-requirement" key={r.key}><b dir="ltr">{r.key}</b> {r.text}</p>)}</>}<a className="detail-back" href="https://nca.gov.sa/ar/regulatory-documents/controls-list/ecc/" target="_blank" rel="noreferrer">مرجع الهيئة الوطنية للأمن السيبراني ↗</a></section><section className="detail-card"><h2>إرشادات التطبيق المقترحة</h2><p>خطة مساعدة لتنفيذ «{control.title_ar}» وتوثيق الأدلة التي تثبت استيفاء نص الضابط. تُراجع بحسب نطاق الجهة؛ وليست نصًا تنظيميًا إضافيًا.</p><button className="detail-button" onClick={()=>setTab(1)}>عرض خطوات التنفيذ ←</button></section></>}
+   {tab===0&&<><section className="detail-card"><h2>المتطلب الرسمي</h2><p className="detail-official">{control.description_ar||'لا يوجد وصف مسجل.'}</p>{plan.requirements.length>0&&<><h3>المتطلبات الفرعية</h3>{plan.requirements.map(r=><p className="detail-requirement" key={r.key}><b dir="ltr">{r.key}</b> {r.text}</p>)}</>}<a className="detail-back" href={`https://nca.gov.sa/ar/regulatory-documents/controls-list/${frameworkCode}/`} target="_blank" rel="noreferrer">مرجع الهيئة الوطنية للأمن السيبراني ↗</a></section><section className="detail-card"><h2>إرشادات التطبيق المقترحة</h2><p>خطة مساعدة لتنفيذ «{control.title_ar}» وتوثيق الأدلة التي تثبت استيفاء نص الضابط. تُراجع بحسب نطاق الجهة؛ وليست نصًا تنظيميًا إضافيًا.</p><button className="detail-button" onClick={()=>setTab(1)}>عرض خطوات التنفيذ ←</button></section></>}
    {tab===1&&<section className="detail-card"><h2>قائمة إجراءات التنفيذ</h2><p className="detail-hint">حفظ الخطوات يساعد على المتابعة. اعتماد الدليل والتحقق يتمان عبر دورة المراجعة.</p>{plan.steps.map(step=><label className="detail-step" key={step.key}><input type="checkbox" checked={!!completed[step.key]} disabled={saving} onChange={()=>toggle(step.key)}/><span>{step.text}</span><small>{completed[step.key]?'مكتمل':'لم يكتمل'}</small></label>)}</section>}
    {tab===2&&<><section className="detail-card"><h2>الأدلة المقترحة</h2><p className="detail-hint">أمثلة مساعدة؛ تُحدد كفايتها وفق نص الضابط ونطاق التطبيق.</p><ul>{plan.evidence.map(item=><li key={item}>{item}</li>)}</ul><Link className="detail-button" href={`/controls/${control.id}/evidence/new`}>+ رفع دليل</Link></section><section className="detail-card"><h2>الأدلة والإصدارات</h2>{!evidence.length&&<p>لا توجد أدلة مرفوعة بعد.</p>}{evidence.map(e=><article className="control-evidence-item" key={e.id}><small>{e.is_current?'الإرسال الحالي':'إصدار سابق'}</small><h3>{e.evidence_name||e.file_name}</h3><StatusBadge status={e.status||''}/>{e.uploaded_at&&<p>{date(e.uploaded_at)}</p>}{e.description&&<p>{e.description}</p>}{e.review_notes&&<p>ملاحظات المراجع: {e.review_notes}</p>}<EvidenceDownload path={e.file_path} name={e.file_name}/>{canAssign&&e.is_current&&['pending_review','under_review'].includes(e.status||'')&&<Link className="detail-button" href="/review">مراجعة الدليل</Link>}</article>)}</section></>}
    {tab===3&&<section className="detail-card"><h2>سجل الأدلة والملاحظات</h2>{!timeline.length&&<p>لا توجد أنشطة مسجلة بعد.</p>}<ol className="detail-timeline">{timeline.map(item=><li key={item.key}><strong>{item.title}</strong><small>{date(item.time)}</small>{item.body&&<p>{item.body}</p>}</li>)}</ol></section>}
