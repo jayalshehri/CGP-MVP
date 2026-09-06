@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import FeedbackWidget from "@/components/FeedbackWidget";
 
 const navigation = [
   { href: "/", label: "لوحة المتابعة", icon: "◫" },
@@ -15,6 +16,7 @@ const navigation = [
   { href: "/reports", label: "التقارير", icon: "▥", team: true },
   { href: "/executive", label: "اللوحة التنفيذية", icon: "◈", team: true },
   { href: "/users", label: "إدارة المستخدمين", icon: "♙", admin: true },
+  { href: "/feedback", label: "نتائج الاختبارات", icon: "✦", admin: true },
 ];
 const roleLabels: Record<UserRole, string> = { admin: "مدير النظام", cybersecurity_team: "فريق الأمن السيبراني", control_owner: "مالك الضابط" };
 
@@ -28,6 +30,7 @@ function NavIcon({ href }: { href: string }) {
     "/reports": "M4 3v18h17 M8 17v-5 M13 17V8 M18 17V5",
     "/executive": "M3 4h18v13H3z M8 21h8 M12 17v4 M7 13l4-4 3 2 3-4",
     "/users": "M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M2 21v-2a6 6 0 0 1 12 0v2 M16 4a4 4 0 0 1 0 8 M17 15a5 5 0 0 1 5 5v1",
+    "/feedback": "M20 11.5a8 8 0 0 1-8 8 8.8 8.8 0 0 1-3.4-.7L4 20l1.2-3.7A8 8 0 1 1 20 11.5z M8 11.5h.01 M12 11.5h.01 M16 11.5h.01",
   };
   return <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={paths[href]}/></svg>;
 }
@@ -78,6 +81,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
         <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname !== "/" && <><span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">الضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>
         {error && <p role="alert" className="cgp-shell-error">{error}</p>}
         <div id="cgp-content" tabIndex={-1} className="cgp-route">{children}</div>
+        <FeedbackWidget pagePath={pathname} visible={Boolean(account)} />
       </div>
     </div>
   </div>;
