@@ -12,6 +12,7 @@ type Framework={id:number;code:string;name_ar:string;version:string};
 
 type DomainRow={name:string;total:number;done:number;verified:number;overdue:number};
 type ChartItem={label:string;value:number;tone:string};
+type FrameworkRow={code:string;name:string;total:number;done:number;percent:number};
 
 const good=(v:string|null|undefined)=>["implemented","compliant","accepted","approved","verified","uploaded"].includes((v||"").toLowerCase());
 const progress=(v:string|null|undefined)=>["in_progress","pending_review","under_review"].includes((v||"").toLowerCase());
@@ -53,6 +54,7 @@ export default function ReportsPage(){
   {label:"غير مطبق",value:scopedControls.filter(c=>["not_started","not_implemented"].includes(c.implementation_status)).length,tone:"missing"},
   {label:"لا ينطبق",value:stats.notApplicable,tone:"na"},
  ],[scopedControls,stats.done,stats.notApplicable]);
+ const frameworkOverview=useMemo<FrameworkRow[]>(()=>frameworks.map(f=>{const rows=controls.filter(c=>c.framework_id===f.id);const applicable=rows.filter(c=>c.implementation_status!=="not_applicable");const done=applicable.filter(c=>good(c.implementation_status)).length;return {code:f.code,name:f.name_ar,total:rows.length,done,percent:applicable.length?Math.round(done/applicable.length*100):0}}),[controls,frameworks]);
  function openControls(status?:string,domain?:string){const params=new URLSearchParams({framework:selectedFramework});if(status)params.set("status",status);if(domain)params.set("domain",domain);router.push(`/controls?${params.toString()}`)}
  function exportCsv(){
   const rows=[["Control Code","Title","Domain","Implementation","Evidence","Verification","Due Date","Owner"],...scopedControls.map(c=>[c.control_code,c.title_ar,c.domain_ar,c.implementation_status,c.evidence_status,c.verification_status,c.due_date||"",c.control_owner||""])];
@@ -63,19 +65,24 @@ export default function ReportsPage(){
 
  return <main dir="rtl" className="workflow-page">
   <section>
-   <WorkflowHeading title="تقارير الالتزام" description="مؤشرات لحظية مستخرجة من بيانات الضوابط والأدلة في CGP." action={<button onClick={exportCsv} className="workflow-button workflow-primary">تصدير CSV</button>}/>
+   <WorkflowHeading title="تقارير الالتزام" description="مؤشرات لحظية مستخرجة من بيانات الضوابط والأدلة في CGP." action={<div className="report-actions"><button onClick={()=>window.print()} className="workflow-button">تصدير PDF</button><button onClick={exportCsv} className="workflow-button workflow-primary">تصدير CSV</button></div>}/>
    {error&&<div style={errorBox}>{error}</div>}
    <div className="workflow-tabs report-frameworks" role="group" aria-label="الإطار التنظيمي">{frameworks.map(f=><button aria-pressed={selectedFramework===f.code} key={f.id} onClick={()=>setSelectedFramework(f.code)}><b dir="ltr">{f.code}</b><span>{f.name_ar}</span></button>)}</div>
    <p className="dashboard-context">التقرير الحالي: <strong>{selected?.name_ar}</strong> · الإصدار {selected?.version} · {scopedControls.length} ضابط</p>
    <div className="workflow-metrics report-metrics"><WorkflowMetric label="نسبة الالتزام" value={`${stats.compliance}%`} tone="success"/><WorkflowMetric label="الضوابط المكتملة" value={`${stats.done}/${stats.total}`}/><WorkflowMetric label="تم التحقق" value={stats.verified}/><WorkflowMetric label="متأخرة" value={stats.overdue} tone={stats.overdue?"danger":"neutral"}/><WorkflowMetric label="أدلة بانتظار المراجعة" value={stats.pendingEvidence} tone="warning"/></div>
+   <FrameworkComparison rows={frameworkOverview} selected={selectedFramework} onSelect={setSelectedFramework}/>
    <div className="report-visual-grid">
     <DonutChart items={implementationChart} total={stats.total} onSelect={tone=>openControls(tone==="implemented"?"implemented":tone==="partial"?"in_progress":tone==="missing"?"not_started":"not_applicable")}/>
     <DomainChart domains={domains} onSelect={domain=>openControls(undefined,domain)}/>
    </div>
    <StatusBarChart items={[{label:"تم التحقق",value:stats.verified,tone:"implemented"},{label:"بانتظار التحقق",value:Math.max(0,stats.total-stats.verified),tone:"partial"},{label:"متأخرة",value:stats.overdue,tone:"missing"}]} total={stats.total} title="حالة التحقق والأولوية"/>
+   <AttentionMap domains={domains} onSelect={domain=>openControls(undefined,domain)}/>
    <details className="report-details"><summary>عرض البيانات التفصيلية</summary><div className="report-table-wrap">{domains.length===0?<Empty/>:<table style={table}><thead><tr><Th t="المجال"/><Th t="الضوابط"/><Th t="مكتمل"/><Th t="تم التحقق"/><Th t="متأخر"/><Th t="نسبة الالتزام"/></tr></thead><tbody>{domains.map(d=>{const pct=d.total?Math.round(d.done/d.total*100):0;return <tr key={d.name}><Td>{d.name}</Td><Td>{d.total}</Td><Td>{d.done}</Td><Td>{d.verified}</Td><Td>{d.overdue}</Td><Td><strong>{pct}%</strong></Td></tr>})}</tbody></table>}</div></details>
   </section>
  </main>
+}
+function FrameworkComparison({rows,selected,onSelect}:{rows:FrameworkRow[];selected:string;onSelect:(code:string)=>void}){
+ return <section className="report-chart" aria-labelledby="framework-comparison-title"><div className="report-chart-heading"><div><h2 id="framework-comparison-title">مقارنة الأطر التنظيمية</h2><p>مقارنة فورية لنسبة الالتزام؛ اضغط لتغيير التقرير</p></div></div><div className="report-framework-chart">{rows.map(row=><button type="button" key={row.code} className={selected===row.code?"active":""} onClick={()=>onSelect(row.code)} aria-label={`${row.name}: ${row.percent}%`}><span dir="ltr">{row.code}</span><div><i style={{height:`${Math.max(row.percent,3)}%`}}/><b>{row.percent}%</b></div><small>{row.done}/{row.total}</small></button>)}</div></section>
 }
 function DonutChart({items,total,onSelect}:{items:ChartItem[];total:number;onSelect:(tone:string)=>void}){
  const colors:Record<string,string>={implemented:"#0f7d73",partial:"#d39a32",missing:"#bd4b3f",na:"#9aa8b1"};
@@ -92,6 +99,9 @@ function StatusBarChart({items,total,title="توزيع حالة التنفيذ"}
   <div className="report-chart-heading"><div><h2 id="implementation-chart-title">{title}</h2><p>نظرة سريعة على حالة ضوابط الإطار المختار</p></div><strong>{total}<span> ضابط</span></strong></div>
   {total===0?<Empty/>:<div className="report-chart-bars">{items.map(item=>{const pct=Math.round(item.value/total*100);return <div className="report-chart-row" key={item.label}><div className="report-chart-label"><span>{item.label}</span><b>{item.value} <small>({pct}%)</small></b></div><div className="report-chart-track" role="img" aria-label={`${item.label}: ${item.value} من ${total}، ${pct}%`}><span className={`report-chart-fill ${item.tone}`} style={{width:`${pct}%`}}/></div></div>})}</div>}
  </section>
+}
+function AttentionMap({domains,onSelect}:{domains:DomainRow[];onSelect:(domain:string)=>void}){
+ return <section className="report-chart" aria-labelledby="attention-map-title"><div className="report-chart-heading"><div><h2 id="attention-map-title">خريطة أولوية المجالات</h2><p>كلما زادت الفجوة ظهر المجال بلون أقوى</p></div></div>{domains.length===0?<Empty/>:<div className="report-heatmap">{domains.map(d=>{const pct=d.total?Math.round(d.done/d.total*100):0;const severity=d.overdue>0||pct<34?"high":pct<67?"medium":"low";return <button type="button" className={severity} key={d.name} onClick={()=>onSelect(d.name)}><span>{d.name}</span><strong>{100-pct}% فجوة</strong><small>{d.overdue?`${d.overdue} متأخر`:`${d.total-d.done} غير مكتمل`}</small></button>})}</div>}</section>
 }
 function Th({t}:{t:string}){return <th style={{textAlign:"right",padding:"13px 12px",fontSize:12,color:"#687581",background:"#f8fafb"}}>{t}</th>}
 function Td({children}:{children:React.ReactNode}){return <td style={{padding:"14px 12px",borderTop:"1px solid #edf0f2",fontSize:14}}>{children}</td>}
