@@ -218,4 +218,13 @@ a { text-underline-offset:4px; }
 .assessment-pager { display:flex; align-items:center; justify-content:center; gap:14px; margin-top:18px; }.assessment-pager button { border:1px solid var(--cgp-line); border-radius:8px; padding:9px 14px; background:white; color:var(--cgp-teal); }.assessment-pager button:disabled { opacity:.4; }.assessment-pager span { color:var(--cgp-muted); font-size:11px; }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 .report-frameworks { flex-wrap:nowrap; overflow-x:auto; padding-bottom:8px; }.report-frameworks button { display:grid; gap:3px; min-width:120px; text-align:start; }.report-frameworks button b { font-size:13px; }.report-frameworks button span { font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.report-chart { background:white; border:1px solid var(--cgp-line); border-radius:14px; padding:24px; margin-bottom:20px; }
+.report-chart-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:22px; }
+.report-chart-heading h2 { margin:0 0 6px; font-size:20px; }.report-chart-heading p { margin:0; color:var(--cgp-muted); font-size:12px; }
+.report-chart-heading>strong { color:var(--cgp-ink); font-size:26px; font-variant-numeric:tabular-nums; }.report-chart-heading>strong span { color:var(--cgp-muted); font-size:11px; font-weight:500; }
+.report-chart-bars { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px 28px; }
+.report-chart-label { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:9px; font-size:12px; }.report-chart-label b { font-variant-numeric:tabular-nums; }.report-chart-label small { color:var(--cgp-muted); font-weight:500; }
+.report-chart-track { height:14px; border-radius:99px; overflow:hidden; background:#edf1f3; }.report-chart-fill { display:block; height:100%; min-width:0; border-radius:99px; }.report-chart-fill.implemented { background:#0f7d73; }.report-chart-fill.partial { background:#d39a32; }.report-chart-fill.missing { background:#bd4b3f; }.report-chart-fill.na { background:#9aa8b1; }
+@media(max-width:760px) { .report-chart { padding:20px; }.report-chart-bars { grid-template-columns:1fr; gap:18px; } }
+@media print { .report-chart-fill { print-color-adjust:exact; -webkit-print-color-adjust:exact; } }
 @media(max-width:900px) { .assessment-table-head { display:none; }.assessment-row { grid-template-columns:90px minmax(0,1fr); gap:10px; }.assessment-title { grid-column:2; }.assessment-quick-status { grid-column:1/-1; }.assessment-notes { grid-column:1/-1; }.assessment-notes .assessment-fields { grid-template-columns:1fr; } }

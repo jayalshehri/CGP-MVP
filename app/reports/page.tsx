@@ -11,6 +11,7 @@ type Evidence={id:number;control_id:number;status:string|null};
 type Framework={id:number;code:string;name_ar:string;version:string};
 
 type DomainRow={name:string;total:number;done:number;verified:number;overdue:number};
+type ChartItem={label:string;value:number;tone:string};
 
 const good=(v:string|null|undefined)=>["implemented","compliant","accepted","approved","verified","uploaded"].includes((v||"").toLowerCase());
 const progress=(v:string|null|undefined)=>["in_progress","pending_review","under_review"].includes((v||"").toLowerCase());
@@ -46,6 +47,12 @@ export default function ReportsPage(){
   scopedControls.forEach(c=>{const name=c.domain_ar||"غير مصنف";const r=m.get(name)||{name,total:0,done:0,verified:0,overdue:0};r.total++;if(good(c.implementation_status))r.done++;if(good(c.verification_status))r.verified++;if(c.due_date&&c.due_date<now.toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"})&&!good(c.implementation_status))r.overdue++;m.set(name,r)});
   return [...m.values()].sort((a,b)=>b.total-a.total);
  },[scopedControls]);
+ const implementationChart=useMemo<ChartItem[]>(()=>[
+  {label:"مطبق كليًا",value:stats.done,tone:"implemented"},
+  {label:"مطبق جزئيًا",value:scopedControls.filter(c=>["in_progress","partially_implemented"].includes(c.implementation_status)).length,tone:"partial"},
+  {label:"غير مطبق",value:scopedControls.filter(c=>["not_started","not_implemented"].includes(c.implementation_status)).length,tone:"missing"},
+  {label:"لا ينطبق",value:stats.notApplicable,tone:"na"},
+ ],[scopedControls,stats.done,stats.notApplicable]);
  function exportCsv(){
   const rows=[["Control Code","Title","Domain","Implementation","Evidence","Verification","Due Date","Owner"],...scopedControls.map(c=>[c.control_code,c.title_ar,c.domain_ar,c.implementation_status,c.evidence_status,c.verification_status,c.due_date||"",c.control_owner||""])];
   const csv=rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")).join("\n"); const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`CGP-${selectedFramework}-Report-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(a.href);
@@ -60,10 +67,17 @@ export default function ReportsPage(){
    <div className="workflow-tabs report-frameworks" role="group" aria-label="الإطار التنظيمي">{frameworks.map(f=><button aria-pressed={selectedFramework===f.code} key={f.id} onClick={()=>setSelectedFramework(f.code)}><b dir="ltr">{f.code}</b><span>{f.name_ar}</span></button>)}</div>
    <p className="dashboard-context">التقرير الحالي: <strong>{selected?.name_ar}</strong> · الإصدار {selected?.version} · {scopedControls.length} ضابط</p>
    <div className="workflow-metrics report-metrics"><WorkflowMetric label="نسبة الالتزام" value={`${stats.compliance}%`} tone="success"/><WorkflowMetric label="الضوابط المكتملة" value={`${stats.done}/${stats.total}`}/><WorkflowMetric label="تم التحقق" value={stats.verified}/><WorkflowMetric label="متأخرة" value={stats.overdue} tone={stats.overdue?"danger":"neutral"}/><WorkflowMetric label="أدلة بانتظار المراجعة" value={stats.pendingEvidence} tone="warning"/></div>
+   <StatusBarChart items={implementationChart} total={stats.total}/>
    <div style={card}><h2 style={sectionTitle}>الالتزام حسب المجال</h2>{domains.length===0?<Empty/>:<div style={{overflowX:"auto"}}><table style={table}><thead><tr><Th t="المجال"/><Th t="الضوابط"/><Th t="مكتمل"/><Th t="تم التحقق"/><Th t="متأخر"/><Th t="نسبة الالتزام"/></tr></thead><tbody>{domains.map(d=>{const pct=d.total?Math.round(d.done/d.total*100):0;return <tr key={d.name}><Td>{d.name}</Td><Td>{d.total}</Td><Td>{d.done}</Td><Td>{d.verified}</Td><Td>{d.overdue}</Td><Td><div style={{display:"flex",alignItems:"center",gap:10,minWidth:150}}><div style={{height:8,background:"#e8edef",borderRadius:99,flex:1,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:"#0f7d73"}}/></div><strong>{pct}%</strong></div></Td></tr>})}</tbody></table></div>}</div>
    <div className="cgp-responsive-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:18}}><Summary title="حالة التنفيذ" items={[["مطبق كليًا",stats.done],["مطبق جزئيًا",scopedControls.filter(c=>c.implementation_status==="in_progress").length],["غير مطبق",scopedControls.filter(c=>["not_started","not_implemented"].includes(c.implementation_status)).length],["لا ينطبق",stats.notApplicable]]}/><Summary title="حالة التحقق" items={[["تم التحقق",stats.verified],["بانتظار التحقق",Math.max(0,stats.total-stats.verified)],["متأخرة",stats.overdue]]}/></div>
   </section>
  </main>
+}
+function StatusBarChart({items,total}:{items:ChartItem[];total:number}){
+ return <section className="report-chart" aria-labelledby="implementation-chart-title">
+  <div className="report-chart-heading"><div><h2 id="implementation-chart-title">توزيع حالة التنفيذ</h2><p>نظرة سريعة على حالة ضوابط الإطار المختار</p></div><strong>{total}<span> ضابط</span></strong></div>
+  {total===0?<Empty/>:<div className="report-chart-bars">{items.map(item=>{const pct=Math.round(item.value/total*100);return <div className="report-chart-row" key={item.label}><div className="report-chart-label"><span>{item.label}</span><b>{item.value} <small>({pct}%)</small></b></div><div className="report-chart-track" role="img" aria-label={`${item.label}: ${item.value} من ${total}، ${pct}%`}><span className={`report-chart-fill ${item.tone}`} style={{width:`${pct}%`}}/></div></div>})}</div>}
+ </section>
 }
 function Summary({title,items}:{title:string;items:[string,number][]}){return <div style={card}><h2 style={sectionTitle}>{title}</h2>{items.map(([n,v])=><div key={n} style={{display:"flex",justifyContent:"space-between",padding:"13px 0",borderBottom:"1px solid #edf0f2"}}><span>{n}</span><strong>{v}</strong></div>)}</div>}
 function Th({t}:{t:string}){return <th style={{textAlign:"right",padding:"13px 12px",fontSize:12,color:"#687581",background:"#f8fafb"}}>{t}</th>}
