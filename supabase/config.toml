@@ -1,0 +1,7 @@
+project_id = "ahfindosbawqfvhbcplq"
+
+[functions.admin-invite-user]
+verify_jwt = true
+
+[functions.admin-resend-invite]
+verify_jwt = true
