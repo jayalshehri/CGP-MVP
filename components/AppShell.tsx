@@ -8,17 +8,17 @@ import { supabase } from "@/lib/supabase";
 import FeedbackWidget from "@/components/FeedbackWidget";
 
 const navigation = [
-  { href: "/", label: "لوحة المتابعة", icon: "◫" },
-  { href: "/controls", label: "الضوابط", icon: "▤" },
-  { href: "/tasks", label: "التكليفات", icon: "☑" },
-  { href: "/evidence", label: "الأدلة", icon: "▱" },
-  { href: "/review", label: "مراجعة الأدلة", icon: "✓", team: true },
-  { href: "/reports", label: "التقارير", icon: "▥", team: true },
-  { href: "/executive", label: "اللوحة التنفيذية", icon: "◈", team: true },
-  { href: "/third-parties", label: "مخاطر الأطراف الخارجية", icon: "◇", team: true },
-  { href: "/assessments", label: "تقييم CSCC", icon: "◎", team: true },
-  { href: "/users", label: "إدارة المستخدمين", icon: "♙", admin: true },
-  { href: "/feedback", label: "نتائج الاختبارات", icon: "✦", admin: true },
+  { href: "/", label: "لوحة المتابعة", group: "نظرة عامة" },
+  { href: "/executive", label: "اللوحة التنفيذية", group: "نظرة عامة", team: true },
+  { href: "/reports", label: "التقارير", group: "نظرة عامة", team: true },
+  { href: "/controls", label: "الضوابط", group: "الالتزام" },
+  { href: "/assessments", label: "تقييم CSCC", group: "الالتزام", team: true },
+  { href: "/third-parties", label: "مخاطر الأطراف الخارجية", group: "الالتزام", team: true },
+  { href: "/tasks", label: "التكليفات", group: "العمليات" },
+  { href: "/evidence", label: "الأدلة", group: "العمليات" },
+  { href: "/review", label: "مراجعة الأدلة", group: "العمليات", team: true },
+  { href: "/users", label: "إدارة المستخدمين", group: "الإدارة", admin: true },
+  { href: "/feedback", label: "نتائج الاختبارات", group: "الإدارة", admin: true },
 ];
 const roleLabels: Record<UserRole, string> = { admin: "مدير النظام", cybersecurity_team: "فريق الأمن السيبراني", control_owner: "مالك الضابط" };
 
@@ -49,6 +49,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const router = useRouter();
   const [account, setAccount] = useState<{ name: string; role: UserRole } | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
     let active = true;
@@ -65,21 +66,23 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "لوحة المتابعة");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const leaf = pathname.endsWith("/assign") ? "تكليف المالك" : pathname.endsWith("/evidence/new") ? "رفع دليل" : controlId ? "تفاصيل الضابط" : current;
-  const links = items.map(item => <Link key={item.href} href={item.href} className="cgp-nav-link" aria-current={(item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/")) ? "page" : undefined}><NavIcon href={item.href}/>{item.href === "/tasks" && account?.role === "control_owner" ? "مهامي" : item.label}</Link>);
+  const linkFor = (item:typeof navigation[number]) => <Link key={item.href} href={item.href} className="cgp-nav-link" title={navCollapsed?item.label:undefined} aria-current={(item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/")) ? "page" : undefined}><NavIcon href={item.href}/><span>{item.href === "/tasks" && account?.role === "control_owner" ? "مهامي" : item.label}</span></Link>;
+  const links = items.map(linkFor);
+  const groups = [...new Set(items.map(item=>item.group))];
   async function signOut() {
     setSigningOut(true); setError("");
     const { error } = await supabase.auth.signOut();
     if (error) { setError("تعذر تسجيل الخروج. حاول مرة أخرى."); setSigningOut(false); return; }
     router.replace("/login");
   }
-  return <div className="cgp-workspace" dir="rtl">
+  return <div className={`cgp-workspace ${navCollapsed?"cgp-nav-collapsed":""}`} dir="rtl">
     <a href="#cgp-content" className="cgp-skip">انتقل إلى المحتوى</a>
     <header className="cgp-topbar">
       <Link href="/" className="cgp-brand" aria-label="CGP — لوحة المتابعة"><span className="cgp-brand-mark">CGP</span><span>حوكمة الأمن السيبراني<small>Cyber Governance Platform</small></span></Link>
       <div className="cgp-account"><span>{account?.name || "مساحة العمل"}<small>{account ? roleLabels[account.role] : "جاري التحقق من الحساب"}</small></span><button type="button" onClick={signOut} disabled={signingOut} className="cgp-signout">{signingOut ? "جاري الخروج…" : "تسجيل الخروج"}</button></div>
     </header>
     <div className="cgp-workspace-grid">
-      <aside className="cgp-navigation"><p className="cgp-nav-caption">مساحة العمل</p><nav aria-label="التنقل الرئيسي">{links}</nav><Link href="/change-password" className="cgp-nav-link cgp-account-link" aria-current={pathname === "/change-password" ? "page" : undefined}>إعدادات كلمة المرور</Link><p className="cgp-scope">{account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الضوابط والأدلة ضمن صلاحيات حسابك."}</p></aside>
+      <aside className="cgp-navigation"><div className="cgp-nav-head"><p className="cgp-nav-caption">مساحة العمل</p><button type="button" onClick={()=>setNavCollapsed(v=>!v)} aria-label={navCollapsed?"توسيع القائمة":"طي القائمة"} aria-expanded={!navCollapsed}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 18l6-6-6-6"/></svg></button></div><nav aria-label="التنقل الرئيسي">{groups.map(group=><details className="cgp-nav-group" key={group} open><summary>{group}</summary>{items.filter(item=>item.group===group).map(linkFor)}</details>)}</nav><Link href="/change-password" className="cgp-nav-link cgp-account-link" aria-current={pathname === "/change-password" ? "page" : undefined}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-8H4v8a2 2 0 0 0 2 2zm1-10V8a5 5 0 0 1 10 0v3"/></svg><span>إعدادات كلمة المرور</span></Link><p className="cgp-scope">{account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الضوابط والأدلة ضمن صلاحيات حسابك."}</p></aside>
       <div className="cgp-page-column">
         <details key={pathname} className="cgp-mobile-navigation" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>القائمة <span>{current}</span></summary><nav aria-label="التنقل على الجوال">{links}<Link className="cgp-nav-link" href="/change-password">إعدادات كلمة المرور</Link></nav></details>
         <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname !== "/" && <><span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">الضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>
