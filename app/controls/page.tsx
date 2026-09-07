@@ -26,8 +26,10 @@ function ControlsContent(){
  const status=["all","implemented","in_progress","not_started","not_applicable"].includes(rawStatus)?rawStatus:"all";
  const rawAssignment=searchParams.get("assignment")??"all";
  const assignment=["all","assigned","unassigned"].includes(rawAssignment)?rawAssignment:"all";
- const [search,setSearch]=useState(""),[framework,setFramework]=useState("ECC");
- const [activeDomain,setActiveDomain]=useState(""),[scope,setScope]=useState("all"),[view,setView]=useState<ViewMode>("structure");
+ const requestedFramework=searchParams.get("framework")??"ECC";
+ const requestedDomain=searchParams.get("domain")??"";
+ const [search,setSearch]=useState(""),[framework,setFramework]=useState(requestedFramework);
+ const [activeDomain,setActiveDomain]=useState(requestedDomain),[scope,setScope]=useState("all"),[view,setView]=useState<ViewMode>("structure");
  const [controls,setControls]=useState<Control[]>([]),[frameworks,setFrameworks]=useState<Framework[]>([]);
  const [error,setError]=useState<Error|null>(null),[loading,setLoading]=useState(true);
  useEffect(()=>{let active=true;(async()=>{try{

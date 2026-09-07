@@ -53,6 +53,7 @@ export default function ReportsPage(){
   {label:"غير مطبق",value:scopedControls.filter(c=>["not_started","not_implemented"].includes(c.implementation_status)).length,tone:"missing"},
   {label:"لا ينطبق",value:stats.notApplicable,tone:"na"},
  ],[scopedControls,stats.done,stats.notApplicable]);
+ function openControls(status?:string,domain?:string){const params=new URLSearchParams({framework:selectedFramework});if(status)params.set("status",status);if(domain)params.set("domain",domain);router.push(`/controls?${params.toString()}`)}
  function exportCsv(){
   const rows=[["Control Code","Title","Domain","Implementation","Evidence","Verification","Due Date","Owner"],...scopedControls.map(c=>[c.control_code,c.title_ar,c.domain_ar,c.implementation_status,c.evidence_status,c.verification_status,c.due_date||"",c.control_owner||""])];
   const csv=rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")).join("\n"); const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`CGP-${selectedFramework}-Report-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(a.href);
@@ -68,22 +69,23 @@ export default function ReportsPage(){
    <p className="dashboard-context">التقرير الحالي: <strong>{selected?.name_ar}</strong> · الإصدار {selected?.version} · {scopedControls.length} ضابط</p>
    <div className="workflow-metrics report-metrics"><WorkflowMetric label="نسبة الالتزام" value={`${stats.compliance}%`} tone="success"/><WorkflowMetric label="الضوابط المكتملة" value={`${stats.done}/${stats.total}`}/><WorkflowMetric label="تم التحقق" value={stats.verified}/><WorkflowMetric label="متأخرة" value={stats.overdue} tone={stats.overdue?"danger":"neutral"}/><WorkflowMetric label="أدلة بانتظار المراجعة" value={stats.pendingEvidence} tone="warning"/></div>
    <div className="report-visual-grid">
-    <DonutChart items={implementationChart} total={stats.total}/>
-    <DomainChart domains={domains}/>
+    <DonutChart items={implementationChart} total={stats.total} onSelect={tone=>openControls(tone==="implemented"?"implemented":tone==="partial"?"in_progress":tone==="missing"?"not_started":"not_applicable")}/>
+    <DomainChart domains={domains} onSelect={domain=>openControls(undefined,domain)}/>
    </div>
    <StatusBarChart items={[{label:"تم التحقق",value:stats.verified,tone:"implemented"},{label:"بانتظار التحقق",value:Math.max(0,stats.total-stats.verified),tone:"partial"},{label:"متأخرة",value:stats.overdue,tone:"missing"}]} total={stats.total} title="حالة التحقق والأولوية"/>
    <details className="report-details"><summary>عرض البيانات التفصيلية</summary><div className="report-table-wrap">{domains.length===0?<Empty/>:<table style={table}><thead><tr><Th t="المجال"/><Th t="الضوابط"/><Th t="مكتمل"/><Th t="تم التحقق"/><Th t="متأخر"/><Th t="نسبة الالتزام"/></tr></thead><tbody>{domains.map(d=>{const pct=d.total?Math.round(d.done/d.total*100):0;return <tr key={d.name}><Td>{d.name}</Td><Td>{d.total}</Td><Td>{d.done}</Td><Td>{d.verified}</Td><Td>{d.overdue}</Td><Td><strong>{pct}%</strong></Td></tr>})}</tbody></table>}</div></details>
   </section>
  </main>
 }
-function DonutChart({items,total}:{items:ChartItem[];total:number}){
+function DonutChart({items,total,onSelect}:{items:ChartItem[];total:number;onSelect:(tone:string)=>void}){
  const colors:Record<string,string>={implemented:"#0f7d73",partial:"#d39a32",missing:"#bd4b3f",na:"#9aa8b1"};
  let cursor=0; const segments=items.map(item=>{const start=cursor;const end=cursor+(total?item.value/total*360:0);cursor=end;return `${colors[item.tone]} ${start}deg ${end}deg`});
  const background=total?`conic-gradient(${segments.join(",")})`:"#edf1f3";
- return <section className="report-chart report-donut-card" aria-labelledby="implementation-donut-title"><div className="report-chart-heading"><div><h2 id="implementation-donut-title">حالة التنفيذ</h2><p>توزيع جميع ضوابط الإطار</p></div></div><div className="report-donut-content"><div className="report-donut" style={{background}} role="img" aria-label={`نسبة الالتزام ${total?Math.round(items[0].value/Math.max(total-items[3].value,1)*100):0}%`}><div><strong>{total?Math.round(items[0].value/Math.max(total-items[3].value,1)*100):0}%</strong><span>نسبة الالتزام</span></div></div><div className="report-legend">{items.map(item=><div key={item.label}><i className={item.tone}/><span>{item.label}</span><strong>{item.value}</strong></div>)}</div></div></section>
+ return <section className="report-chart report-donut-card" aria-labelledby="implementation-donut-title"><div className="report-chart-heading"><div><h2 id="implementation-donut-title">حالة التنفيذ</h2><p>اضغط على أي حالة لفتح ضوابطها</p></div></div><div className="report-donut-content"><div className="report-donut" style={{background}} role="img" aria-label={`نسبة الالتزام ${total?Math.round(items[0].value/Math.max(total-items[3].value,1)*100):0}%`}><div><strong>{total?Math.round(items[0].value/Math.max(total-items[3].value,1)*100):0}%</strong><span>نسبة الالتزام</span></div></div><div className="report-legend">{items.map(item=><button type="button" key={item.label} onClick={()=>onSelect(item.tone)} title={`فتح ضوابط: ${item.label}`}><i className={item.tone}/><span>{item.label}</span><strong>{item.value}</strong><b aria-hidden="true">←</b></button>)}</div></div></section>
 }
-function DomainChart({domains}:{domains:DomainRow[]}){
- return <section className="report-chart" aria-labelledby="domain-chart-title"><div className="report-chart-heading"><div><h2 id="domain-chart-title">الالتزام حسب المجال</h2><p>مقارنة مستوى الإنجاز بين المجالات</p></div></div>{domains.length===0?<Empty/>:<div className="report-domain-chart">{domains.map(d=>{const pct=d.total?Math.round(d.done/d.total*100):0;return <div key={d.name}><div className="report-chart-label"><span>{d.name}</span><b>{pct}%</b></div><div className="report-chart-track" role="img" aria-label={`${d.name}: ${pct}%`}><span className="report-chart-fill implemented" style={{width:`${pct}%`}}/></div><small>{d.done} من {d.total} ضابط</small></div>})}</div>}</section>
+function DomainChart({domains,onSelect}:{domains:DomainRow[];onSelect:(domain:string)=>void}){
+ const priority=[...domains].sort((a,b)=>(a.total?a.done/a.total:0)-(b.total?b.done/b.total:0))[0];
+ return <section className="report-chart" aria-labelledby="domain-chart-title"><div className="report-chart-heading"><div><h2 id="domain-chart-title">الالتزام حسب المجال</h2><p>اضغط على المجال للانتقال إلى ضوابطه</p></div></div>{priority&&<button type="button" className="report-insight" onClick={()=>onSelect(priority.name)}><span>الأولوية المقترحة</span><strong>{priority.name}</strong><b>فتح الضوابط ←</b></button>}{domains.length===0?<Empty/>:<div className="report-domain-chart">{domains.map(d=>{const pct=d.total?Math.round(d.done/d.total*100):0;return <button type="button" onClick={()=>onSelect(d.name)} key={d.name} title={`فتح ضوابط ${d.name}`}><div className="report-chart-label"><span>{d.name}</span><b>{pct}%</b></div><div className="report-chart-track" role="img" aria-label={`${d.name}: ${pct}%`}><span className="report-chart-fill implemented" style={{width:`${pct}%`}}/></div><small>{d.done} من {d.total} ضابط</small></button>})}</div>}</section>
 }
 function StatusBarChart({items,total,title="توزيع حالة التنفيذ"}:{items:ChartItem[];total:number;title?:string}){
  return <section className="report-chart" aria-labelledby="implementation-chart-title">
