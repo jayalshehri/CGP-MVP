@@ -190,3 +190,19 @@ a { text-underline-offset:4px; }
 .review-meta { display:grid; gap:6px; color:var(--cgp-muted); font-size:13px; }.review-meta strong { color:var(--cgp-ink); }.review-meta a { color:var(--cgp-teal); font-weight:700; margin-top:8px; }
 .review-file,.review-decision,.review-reject { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; border-radius:12px; padding:16px; margin-top:18px; }.review-file { background:#f4f8f8; border:1px solid #dce8e7; }.review-decision { background:#f0f9f6; border:1px solid #cde7df; }.review-reject { background:#fff8f6; border:1px solid #f0d7d1; margin-top:10px; }.review-file strong,.review-decision strong,.review-reject strong { display:block; font-size:14px; }.review-file span,.review-decision span,.review-reject span { display:block; color:var(--cgp-muted); font-size:13px; margin-top:4px; }
 @media(max-width:760px) { .review-file>*,.review-decision>*,.review-reject>* { width:100%; }.review-file button,.review-decision button,.review-reject button { width:100%; }.exec-dateline { margin:14px 0; }.exec-spotlight-footer { display:none; } }
+
+/* CSCC assessment: guided flow from system to domain to control. */
+.assessment-steps { display:grid; grid-template-columns:repeat(4,1fr); gap:0; margin:0 0 22px; padding:0 14px; color:var(--cgp-muted); font-size:12px; }
+.assessment-steps span { position:relative; display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:3px solid #dce4e8; }
+.assessment-steps span.active { color:#0b635a; border-color:var(--cgp-teal); font-weight:700; }
+.assessment-steps b { display:grid; place-items:center; width:24px; height:24px; border-radius:50%; background:#e9eff1; }
+.assessment-steps .active b { background:#d9efea; }
+.assessment-domain-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-bottom:26px; }
+.assessment-domain-grid button { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; text-align:start; padding:18px; border:1px solid var(--cgp-line); border-radius:14px; background:white; color:var(--cgp-ink); cursor:pointer; }
+.assessment-domain-grid button.active { border-color:var(--cgp-teal); box-shadow:0 0 0 2px #13877d24; background:#f7fcfb; }
+.assessment-domain-grid strong,.assessment-domain-grid small { display:block; }.assessment-domain-grid small { color:var(--cgp-muted); margin-top:7px; }.assessment-domain-grid b { color:var(--cgp-teal); font-size:20px; }
+.assessment-domain-grid progress { grid-column:1/-1; width:100%; height:7px; accent-color:var(--cgp-teal); }
+.assessment-state { align-self:center; padding:6px 9px; border-radius:7px; font-size:11px; font-weight:700; background:#edf1f3; color:#53636d; white-space:nowrap; }
+.assessment-state.implemented { background:#def2ed; color:#0b635a; }.assessment-state.partially_implemented { background:#fff0d1; color:#7a4b08; }.assessment-state.not_implemented { background:#fff0ed; color:#9c2e22; }.assessment-state.not_applicable { background:#edf1f3; color:#53636d; }
+.assessment-fields { padding:18px; grid-template-columns:1fr 2fr; }.assessment-fields label { display:grid; gap:7px; font-size:12px; font-weight:700; }.assessment-fields textarea { min-height:92px; padding:11px 13px; border:1px solid #ccd6dc; border-radius:9px; resize:vertical; }
+@media(max-width:760px) { .assessment-steps { grid-template-columns:repeat(2,1fr); }.assessment-domain-grid { grid-template-columns:1fr; }.assessment-fields { grid-template-columns:1fr; }.assessment-control summary>span:first-child { min-width:0; }.assessment-state { white-space:normal; } }
