@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { WorkflowHeading, WorkflowMetric } from "@/components/WorkflowUI";
+import { EVIDENCE_PRESENT, frameworkOf, isApplicable, isImplemented, isVerified, percentage } from "@/lib/compliance";
 
 type UserRole = "admin" | "cybersecurity_team" | "control_owner";
 
@@ -14,6 +15,7 @@ type UserRole = "admin" | "cybersecurity_team" | "control_owner";
 
 
 type Dashboard = { total:number; compliance:number; waiting_evidence:number; overdue:number; pending_review:number; verified:number; domains:{name:string;total:number;done:number;percentage:number}[] };
+type DashboardControl = { id:number; domain_ar:string; implementation_status:string; evidence_status:string; verification_status:string; due_date:string|null; frameworks:unknown };
 
 export default function Home() {
   const router = useRouter();
@@ -43,9 +45,18 @@ export default function Home() {
         setUserRole(profile.role);
 
         setAuthReady(true);
-        const { data, error: queryError } = await supabase.rpc("cgp_dashboard");
-        if (queryError) throw queryError;
-        if (mounted) { setStats(data as Dashboard); setError(""); setUpdatedAt(new Date().toLocaleTimeString("ar-SA")); }
+        const [controlResult,evidenceResult] = await Promise.all([
+          supabase.from("controls").select("id,domain_ar,implementation_status,evidence_status,verification_status,due_date,frameworks!inner(code,name_ar)"),
+          supabase.from("evidence").select("id",{count:"exact",head:true}).eq("is_current",true).in("status",["pending_review","under_review"]),
+        ]);
+        if (controlResult.error || evidenceResult.error) throw controlResult.error || evidenceResult.error;
+        const controls=(controlResult.data??[]) as DashboardControl[];
+        const applicable=controls.filter(c=>isApplicable(c.implementation_status));
+        const today=new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"});
+        const domainMap=new Map<string,{name:string;total:number;done:number;percentage:number}>();
+        applicable.forEach(c=>{const f=frameworkOf(c.frameworks);const name=`${f.code} · ${c.domain_ar||"غير مصنف"}`;const row=domainMap.get(name)??{name,total:0,done:0,percentage:0};row.total++;if(isImplemented(c.implementation_status))row.done++;row.percentage=percentage(row.done,row.total);domainMap.set(name,row)});
+        const dashboard:Dashboard={total:applicable.length,compliance:percentage(applicable.filter(c=>isImplemented(c.implementation_status)).length,applicable.length),waiting_evidence:applicable.filter(c=>!EVIDENCE_PRESENT.has((c.evidence_status||"").toLowerCase())).length,overdue:applicable.filter(c=>Boolean(c.due_date&&c.due_date<today&&!isImplemented(c.implementation_status))).length,pending_review:evidenceResult.count??0,verified:applicable.filter(c=>isVerified(c.verification_status)).length,domains:[...domainMap.values()]};
+        if (mounted) { setStats(dashboard); setError(""); setUpdatedAt(new Date().toLocaleTimeString("ar-SA")); }
       } catch (e) {
         if (mounted) { setStats(null); setError(e instanceof Error ? e.message : "تعذر تحميل البيانات. حاول مرة أخرى."); setAuthReady(true); }
         const { data } = await supabase.auth.getSession();
