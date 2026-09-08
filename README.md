@@ -1,40 +1,76 @@
-<<<<<<< HEAD
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CGP — Cyber Governance Platform
 
-## Getting Started
+منصة عربية لإدارة ضوابط الأمن السيبراني، التكليفات، الأدلة، التقييمات، التقارير، ومخاطر الأطراف الخارجية.
 
-First, run the development server:
+## المتطلبات
+
+- Node.js 20 أو أحدث
+- npm 10 أو أحدث
+- مشروع Supabase مرتبط
+- مشروع Vercel مرتبط عند النشر
+
+## الإعداد المحلي
 
 ```bash
+npm ci
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+أضف قيم البيئة محليًا في `.env.local`. لا تحفظ القيم السرية في Git:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+افتح `http://localhost:3000` بعد بدء الخادم.
 
-## Learn More
+## التحقق قبل الدمج
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run lint
+npm run build -- --webpack
+npm run qa
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+يحتاج `npm run qa` إلى اتصال بالبيئة المستهدفة. اختبارات الأدوار والعمليات التي تغيّر البيانات يجب أن تعمل على مشروع QA معزول وبحسابات اختبار، وليس على بيانات الإنتاج.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Supabase
 
-## Deploy on Vercel
+- الهجرات المرتبة موجودة في `supabase/migrations`.
+- مصادر Edge Functions موجودة في `supabase/functions`.
+- ملف `supabase/sql/control_work_items.sql` محفوظ مؤقتًا للتاريخ؛ النسخة القابلة لإعادة التشغيل موجودة كـ migration.
+- لا تستخدم `db reset` أو `db push` على مشروع الإنتاج.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+ترتيب إعداد بيئة جديدة:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-=======
-Cyber Governance Platforum 
->>>>>>> b033b9006db26646e5c2b501cec5d3882b443810
+1. أنشئ مشروع Supabase منفصلًا للـQA.
+2. طبّق migrations بالترتيب على المشروع الجديد.
+3. انشر Edge Functions مع `verify_jwt=true`.
+4. أضف متغيرات البيئة إلى مشروع Vercel للـQA.
+5. شغّل اختبارات RLS للأدوار الثلاثة: مدير النظام، فريق الأمن السيبراني، ومالك الضابط.
+6. نفّذ رحلة كاملة: تعيين → تحديث عمل → رفع دليل → مراجعة → تقرير.
+
+> ملاحظة إصدار: لا يزال baseline التاريخي الأول لـECC وبعض سياسات الإنشاء القديمة بحاجة إلى تصدير موثق من المشروع الحالي قبل اعتبار إعادة البناء من الصفر مكتملة.
+
+## النشر
+
+الإنتاج الحالي يعمل على Vercel ويرتبط بـSupabase. يجب النشر من فرع مراجع، ثم فحص `/login` والمسارات المحمية ومراقبة Runtime Errors. لا تُخزن `SUPABASE_SERVICE_ROLE_KEY` في تطبيق الويب؛ تستخدم فقط داخل Edge Functions الموثوقة.
+
+## حدود الأمان الحالية
+
+- تعتمد حدود الوصول الأساسية على Supabase RLS.
+- ملفات الأدلة في bucket خاص ومقيدة بحسب الضابط.
+- يجب تفعيل حماية كلمات المرور المسرّبة وMFA للحسابات المميزة قبل الإطلاق المؤسسي.
+- يجب إضافة سجل تدقيق شامل قبل الإطلاق المؤسسي.
+
+## الاستعادة والحوادث
+
+عند حدوث مشكلة إنتاجية:
+
+1. أوقف التغييرات الإدارية والاعتمادات.
+2. راجع Vercel Runtime Errors وSupabase Logs دون كشف بيانات حساسة.
+3. سجّل وقت الحادث والنطاق والحسابات المتأثرة.
+4. استخدم rollback لنشر Vercel عند ثبوت أن الإصدار هو السبب.
+5. لا تنفذ استعادة قاعدة البيانات قبل التحقق من النسخة ونقطة الاستعادة والموافقة التشغيلية.

@@ -52,7 +52,7 @@ export default function LoginPage() {
     }
     setResetLoading(true);
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(targetEmail, {
-      redirectTo: "https://cgp-mvp-grc13.vercel.app/activate",
+      redirectTo: `${window.location.origin}/activate`,
     });
     if (resetError) {
       setError("تعذر إرسال رابط استعادة كلمة المرور. حاول مرة أخرى.");

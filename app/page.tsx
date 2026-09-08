@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { WorkflowHeading, WorkflowMetric } from "@/components/WorkflowUI";
+import { EVIDENCE_PRESENT, frameworkOf, isApplicable, isImplemented, isVerified, percentage } from "@/lib/compliance";
 
 type UserRole = "admin" | "cybersecurity_team" | "control_owner";
 
@@ -14,6 +15,7 @@ type UserRole = "admin" | "cybersecurity_team" | "control_owner";
 
 
 type Dashboard = { total:number; compliance:number; waiting_evidence:number; overdue:number; pending_review:number; verified:number; domains:{name:string;total:number;done:number;percentage:number}[] };
+type DashboardControl = { id:number; domain_ar:string; implementation_status:string; evidence_status:string; verification_status:string; due_date:string|null; frameworks:unknown };
 
 export default function Home() {
   const router = useRouter();
@@ -43,9 +45,18 @@ export default function Home() {
         setUserRole(profile.role);
 
         setAuthReady(true);
-        const { data, error: queryError } = await supabase.rpc("cgp_dashboard");
-        if (queryError) throw queryError;
-        if (mounted) { setStats(data as Dashboard); setError(""); setUpdatedAt(new Date().toLocaleTimeString("ar-SA")); }
+        const [controlResult,evidenceResult] = await Promise.all([
+          supabase.from("controls").select("id,domain_ar,implementation_status,evidence_status,verification_status,due_date,frameworks!inner(code,name_ar)"),
+          supabase.from("evidence").select("id",{count:"exact",head:true}).eq("is_current",true).in("status",["pending_review","under_review"]),
+        ]);
+        if (controlResult.error || evidenceResult.error) throw controlResult.error || evidenceResult.error;
+        const controls=(controlResult.data??[]) as DashboardControl[];
+        const applicable=controls.filter(c=>isApplicable(c.implementation_status));
+        const today=new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"});
+        const domainMap=new Map<string,{name:string;total:number;done:number;percentage:number}>();
+        applicable.forEach(c=>{const f=frameworkOf(c.frameworks);const name=`${f.code} · ${f.name_ar}`;const row=domainMap.get(name)??{name,total:0,done:0,percentage:0};row.total++;if(isImplemented(c.implementation_status))row.done++;row.percentage=percentage(row.done,row.total);domainMap.set(name,row)});
+        const dashboard:Dashboard={total:applicable.length,compliance:percentage(applicable.filter(c=>isImplemented(c.implementation_status)).length,applicable.length),waiting_evidence:applicable.filter(c=>!EVIDENCE_PRESENT.has((c.evidence_status||"").toLowerCase())).length,overdue:applicable.filter(c=>Boolean(c.due_date&&c.due_date<today&&!isImplemented(c.implementation_status))).length,pending_review:evidenceResult.count??0,verified:applicable.filter(c=>isVerified(c.verification_status)).length,domains:[...domainMap.values()]};
+        if (mounted) { setStats(dashboard); setError(""); setUpdatedAt(new Date().toLocaleTimeString("ar-SA")); }
       } catch (e) {
         if (mounted) { setStats(null); setError(e instanceof Error ? e.message : "تعذر تحميل البيانات. حاول مرة أخرى."); setAuthReady(true); }
         const { data } = await supabase.auth.getSession();
@@ -90,7 +101,7 @@ export default function Home() {
           {stats?.total===0&&<p>لا توجد ضوابط ضمن نطاق صلاحيتك حاليًا.</p>}
           <div className="workflow-metrics"><WorkflowMetric label="نسبة الالتزام" value={stats ? `${stats.compliance}%` : "—"} tone="success"/><WorkflowMetric label="إجمالي الضوابط" value={stats ? stats.total : "—"}/><WorkflowMetric label="بانتظار الأدلة" value={stats ? stats.waiting_evidence : "—"} tone="warning"/><WorkflowMetric label="مهام متأخرة" value={stats ? stats.overdue : "—"} tone={stats?.overdue?"danger":"neutral"}/></div>
           <div className="cgp-responsive-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:"20px"}}>
-            <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:"14px",padding:"28px"}}><h2 style={{marginTop:0,marginBottom:"25px",fontSize:"21px"}}>حالة الالتزام حسب المجال</h2>{stats?.domains.map(domain=><div key={domain.name} className="cgp-domain-row"><div><span>{domain.name}</span><strong>{domain.percentage}%</strong></div><progress max={100} value={domain.percentage} aria-label={`الالتزام في ${domain.name}`}/><p style={{fontSize:12,color:"#586875",marginBottom:0}}>{domain.done} من {domain.total} ضابط مكتمل</p></div>)}</div>
+            <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:"14px",padding:"28px"}}><h2 style={{marginTop:0,marginBottom:"25px",fontSize:"21px"}}>حالة الالتزام حسب الإطار</h2>{stats?.domains.map(domain=><div key={domain.name} className="cgp-domain-row"><div><span>{domain.name}</span><strong>{domain.percentage}%</strong></div><progress max={100} value={domain.percentage} aria-label={`الالتزام في ${domain.name}`}/><p style={{fontSize:12,color:"#586875",marginBottom:0}}>{domain.done} من {domain.total} ضابط مكتمل</p></div>)}</div>
             <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:"14px",padding:"28px"}}><h2 style={{marginTop:0,marginBottom:"25px",fontSize:"21px"}}>تحتاج انتباهك</h2>{stats&&<><AlertItem href="/tasks?filter=overdue" count={stats.overdue} text="مهام متأخرة" tone="danger"/><AlertItem href="/tasks?filter=evidence" count={stats.waiting_evidence} text="ضوابط تحتاج دليلًا" tone="warning"/><AlertItem href={userRole==="control_owner"?"/evidence":"/review"} count={stats.pending_review} text="أدلة بانتظار المراجعة" tone="info"/><p style={{fontSize:13,color:"#586875"}}>{stats.verified} ضوابط تم التحقق منها</p></>}</div>
           </div>
           <div style={{marginTop:"24px",display:"flex",gap:12,flexWrap:"wrap"}}>
