@@ -102,11 +102,9 @@ export default function Home() {
           <div className="workflow-metrics"><WorkflowMetric label="مهام متأخرة" value={stats ? stats.overdue : "—"} tone={stats?.overdue?"danger":"neutral"}/><WorkflowMetric label="تحتاج دليلًا" value={stats ? stats.waiting_evidence : "—"} tone={stats?.waiting_evidence?"warning":"neutral"}/><WorkflowMetric label="بانتظار قرار مراجعة" value={stats ? stats.pending_review : "—"} tone={stats?.pending_review?"warning":"neutral"}/><WorkflowMetric label="تم التحقق" value={stats ? stats.verified : "—"} tone="success"/></div>
           <section className="cgp-priority-card"><div><span className="cgp-card-eyebrow">القرار التالي</span><h2>تحتاج انتباهك</h2><p>ابدأ بالعناصر التي تؤثر في التنفيذ أو تنتظر قراراً.</p></div>{stats&&<div className="cgp-priority-actions"><AlertItem href="/tasks?filter=overdue" count={stats.overdue} text="مهام متأخرة" tone="danger"/><AlertItem href="/tasks?filter=evidence" count={stats.waiting_evidence} text="ضوابط تحتاج دليلًا" tone="warning"/><AlertItem href={userRole==="control_owner"?"/evidence":"/review"} count={stats.pending_review} text="أدلة بانتظار المراجعة" tone="info"/></div>}</section>
           <div style={{marginTop:"24px",display:"flex",gap:12,flexWrap:"wrap"}}>
-            <Link href="/controls" style={primaryLink}>عرض جميع الضوابط ←</Link>
-            <Link href="/tasks" style={secondaryLink}>فتح مهامي / التكليفات</Link>
-            <Link href="/evidence" style={secondaryLink}>مركز الأدلة</Link>
-            {userRole!=="control_owner"&&<Link href="/reports" style={secondaryLink}>التقارير</Link>}
-            {userRole!=="control_owner"&&<Link href="/executive" style={{...secondaryLink,borderColor:"#0f7d73",color:"#0f6f67"}}>اللوحة التنفيذية</Link>}
+            <Link href="/tasks" style={primaryLink}>فتح مهامي / التكليفات ←</Link>
+            <Link href="/controls" style={secondaryLink}>عرض جميع الضوابط</Link>
+            {userRole==="control_owner"&&<Link href="/evidence" style={secondaryLink}>مركز الأدلة</Link>}
           </div>
         </section>
       </div>
