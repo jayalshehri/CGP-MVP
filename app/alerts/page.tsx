@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { requireProfile } from "@/lib/auth";
 import { WorkflowHeading,WorkflowMetric } from "@/components/WorkflowUI";
+import "./alerts.css";
 type Control={id:number;control_code:string;title_ar:string;control_owner:string|null;due_date:string|null;evidence_status:string;implementation_status:string;frameworks:{code:string}|null};
 type Risk={id:number;risk_code:string;risk_description:string;residual_score:number;action_due_date:string|null;treatment_owner:string;};
 type Alert={type:"danger"|"warning"|"info";title:string;detail:string;href:string};
