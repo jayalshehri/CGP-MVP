@@ -21,12 +21,20 @@ export default function NewEvidencePage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const [controlTitle,setControlTitle]=useState("");
+  const [frameworkCode,setFrameworkCode]=useState("");
+  const [mappedControls,setMappedControls]=useState<Array<{control_id:number;framework_code:string;control_code:string;control_title:string}>>([]);
+  const [selectedTargets,setSelectedTargets]=useState<number[]>([]);
   const [ready,setReady]=useState(false);
   useEffect(()=>{let active=true;(async()=>{try{
     await requireProfile();
-    const {data,error}=await supabase.from("controls").select("id,control_code,title_ar").eq("id",controlId).single();
+    const {data,error}=await supabase.from("controls").select("id,control_code,title_ar,frameworks(code)").eq("id",controlId).single();
     if(error||!data)throw new Error("الضابط غير موجود أو ليس ضمن صلاحيتك.");
-    if(active){setReady(true);setControlTitle(`${data.control_code} · ${data.title_ar}`);}
+    const code=(data.frameworks as {code?:string}|null)?.code||"";
+    if(active){setReady(true);setControlTitle(`${data.control_code} · ${data.title_ar}`);setFrameworkCode(code);}
+    if(code==="ECC"){
+      const {data:mappings}=await supabase.rpc("ecc_control_mappings",{p_ecc_control_id:controlId});
+      if(active)setMappedControls((mappings??[]) as Array<{control_id:number;framework_code:string;control_code:string;control_title:string}>);
+    }
   }catch(e){if(active)setErrorMessage(e instanceof Error?e.message:"تعذر التحقق من الصلاحيات");
     const {data}=await supabase.auth.getSession();if(!data.session)router.replace("/login");
   }})();return()=>{active=false;};},[controlId,router]);
@@ -87,7 +95,7 @@ export default function NewEvidencePage() {
       }
 
       // 2. Save evidence metadata in database
-      const { error: insertError } = await supabase
+      const { data: insertedEvidence, error: insertError } = await supabase
         .from("evidence")
         .insert({
           control_id: controlId,
@@ -100,7 +108,7 @@ export default function NewEvidencePage() {
           status: "pending_review",
           uploaded_at: new Date().toISOString(),
           is_current: true,
-        });
+        }).select("id").single();
 
       if (insertError) {
         // If DB insert fails, remove uploaded file
@@ -113,7 +121,12 @@ export default function NewEvidencePage() {
         );
       }
 
-      setMessage("تم رفع الدليل وربطه بالضابط بنجاح.");
+      if (selectedTargets.length && insertedEvidence) {
+        const {error:linkError}=await supabase.from("evidence_control_links").insert(selectedTargets.map(targetId=>({evidence_id:insertedEvidence.id,control_id:targetId})));
+        if(linkError) throw new Error(`تم رفع الدليل، لكن تعذر ربطه بالضوابط المختارة: ${linkError.message}`);
+      }
+
+      setMessage(selectedTargets.length?"تم رفع الدليل وإرساله للمراجعة في الضوابط المختارة.":"تم رفع الدليل وربطه بالضابط بنجاح.");
 
       router.push(`/controls/${controlId}`);
       router.refresh();
@@ -236,6 +249,8 @@ export default function NewEvidencePage() {
               minHeight: "110px",
             }}
           />
+
+          {frameworkCode==="ECC"&&mappedControls.length>0&&<><div style={{height:"22px"}}/><fieldset disabled={uploading||!ready} style={{border:"1px solid #d9e5e4",borderRadius:12,padding:"16px 18px",background:"#f7fbfa"}}><legend style={{fontWeight:800,padding:"0 6px"}}>مشاركة الدليل مع ضوابط مرتبطة</legend><p style={{margin:"0 0 12px",color:"#586875",fontSize:13}}>يُرفع الملف مرة واحدة. كل ضابط مختار يمر بمراجعة مستقلة قبل انعكاس النتيجة عليه.</p>{mappedControls.map(item=><label key={item.control_id} style={{display:"flex",gap:10,alignItems:"start",padding:"8px 0",cursor:"pointer"}}><input type="checkbox" checked={selectedTargets.includes(item.control_id)} onChange={()=>setSelectedTargets(current=>current.includes(item.control_id)?current.filter(id=>id!==item.control_id):[...current,item.control_id])}/><span><strong dir="ltr">{item.framework_code} · {item.control_code}</strong><br/><small>{item.control_title}</small></span></label>)}</fieldset></>}
 
           {/* File */}
           <div style={{ height: "22px" }} />

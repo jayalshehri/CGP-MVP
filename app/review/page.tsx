@@ -12,11 +12,13 @@ import { requireProfile } from "@/lib/auth";
 type Control = { id:number; control_code:string; title_ar:string; evidence_status:string };
 type Evidence = { file_path:string|null; is_current:boolean; id:number; control_id:number; evidence_name:string|null; file_name:string|null; description:string|null; status:string|null; uploaded_at:string|null; review_notes:string|null };
 type Row = Evidence & { control?:Control };
+type SharedRow = {link_id:number;evidence_id:number;target_control_id:number;target_control_code:string;target_control_title:string;source_control_id:number;source_control_code:string;source_control_title:string;evidence_name:string|null;file_name:string|null;file_path:string|null;description:string|null;uploaded_at:string|null;status:string;review_notes:string|null};
 
 export default function ReviewPage(){
   const router=useRouter();
   const [loading,setLoading]=useState(true);
   const [rows,setRows]=useState<Row[]>([]);
+  const [sharedRows,setSharedRows]=useState<SharedRow[]>([]);
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
   const [notes,setNotes]=useState<Record<number,string>>({});
@@ -32,8 +34,9 @@ export default function ReviewPage(){
       return;
     }
 
-    const {data:evidenceData,error:evidenceError}=await supabase.from("evidence").select("id,control_id,evidence_name,file_name,description,status,uploaded_at,review_notes,file_path,is_current").in("status",["pending_review","under_review","accepted","rejected"]).order("uploaded_at",{ascending:false});
+    const [{data:evidenceData,error:evidenceError},{data:sharedData,error:sharedError}]=await Promise.all([supabase.from("evidence").select("id,control_id,evidence_name,file_name,description,status,uploaded_at,review_notes,file_path,is_current").in("status",["pending_review","under_review","accepted","rejected"]).order("uploaded_at",{ascending:false}),supabase.rpc("shared_evidence_review_queue")]);
     if(evidenceError){setError("تعذر تحميل الأدلة: "+evidenceError.message);setLoading(false);return;}
+    if(sharedError){setError("تعذر تحميل الأدلة المشتركة: "+sharedError.message);setLoading(false);return;}
     const evidence=(evidenceData??[]) as Evidence[];
     const ids=[...new Set(evidence.map(e=>e.control_id))];
     let controls:Control[]=[];
@@ -44,6 +47,7 @@ export default function ReviewPage(){
     const map=new Map(controls.map(c=>[c.id,c]));
     setRows(evidence.map(e=>({...e,control:map.get(e.control_id)})));
     setNotes(Object.fromEntries(evidence.map(e=>[e.id,e.review_notes||""])));
+    setSharedRows((sharedData??[]) as SharedRow[]);
     setLoading(false);
   },[router]);
 
@@ -59,11 +63,20 @@ export default function ReviewPage(){
     await load();
     setSavingId(null);
   }
+  async function decideShared(row:SharedRow,status:"accepted"|"rejected"){
+    setSavingId(-row.link_id);setError("");setMessage("");
+    if(status==="rejected"&&!notes[-row.link_id]?.trim()){setError("يرجى كتابة سبب الرفض.");setSavingId(null);return;}
+    const {error:reviewError}=await supabase.rpc("cgp_review_shared_evidence_link",{p_link_id:row.link_id,p_decision:status,p_notes:notes[-row.link_id]?.trim()||null});
+    if(reviewError){setError("تعذر حفظ مراجعة الدليل المشترك: "+reviewError.message);setSavingId(null);return;}
+    setMessage(status==="accepted"?"تم قبول الدليل للضابط المحدد فقط.":"تم رفض الدليل للضابط المحدد فقط.");
+    await load();setSavingId(null);
+  }
 
   if(loading)return <main dir="rtl" style={center}>جاري تحميل المراجعة...</main>;
   const pending=rows.filter(r=>r.is_current&&["pending_review","under_review"].includes(r.status||""));
   const matches=(row:Row)=>`${row.evidence_name||""} ${row.control?.control_code||""} ${row.control?.title_ar||""}`.toLowerCase().includes(search.trim().toLowerCase());
   const visiblePending=pending.filter(matches);
+  const sharedPending=sharedRows.filter(row=>["pending_review","under_review"].includes(row.status));
   const history=rows.filter(r=>["accepted","rejected"].includes(r.status||""));
 
   return <main className="workflow-page" dir="rtl" style={{minHeight:"100vh",background:"#f5f7f9",color:"#0b1f33"}}>
@@ -72,7 +85,7 @@ export default function ReviewPage(){
       <WorkflowHeading title="مراجعة الأدلة" description="افتح الدليل، راجع محتواه، ثم وثّق قرارك. سبب الرفض يساعد المالك على التصحيح."/>
 {error&&<div role="alert" style={{background:"#fff2f0",color:"#9d2e24",padding:14,borderRadius:10,marginBottom:16}}>{error}</div>}
       {message&&<div role="status" style={{background:"#e8f5f2",color:"#0f6f67",padding:14,borderRadius:10,marginBottom:16}}>{message}</div>}
-      <div className="cgp-responsive-grid cgp-kpi-grid" style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,marginBottom:22}}><Kpi label="بانتظار المراجعة" value={pending.length} tone={pending.length?"warning":"neutral"}/><Kpi label="مقبولة" value={history.filter(r=>r.status==="accepted").length} tone="success"/><Kpi label="مرفوضة" value={history.filter(r=>r.status==="rejected").length} tone={history.some(r=>r.status==="rejected")?"danger":"neutral"}/></div>
+      <div className="cgp-responsive-grid cgp-kpi-grid" style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,marginBottom:22}}><Kpi label="بانتظار المراجعة" value={pending.length+sharedPending.length} tone={pending.length+sharedPending.length?"warning":"neutral"}/><Kpi label="مقبولة" value={history.filter(r=>r.status==="accepted").length} tone="success"/><Kpi label="مرفوضة" value={history.filter(r=>r.status==="rejected").length} tone={history.some(r=>r.status==="rejected")?"danger":"neutral"}/></div>
 
       <div className="workflow-filter"><label htmlFor="review-search" className="cgp-field-label">البحث في المراجعات</label><input id="review-search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="اسم الدليل أو رقم الضابط"/></div><ResultSummary count={visiblePending.length} total={pending.length} active={!!search} reset={()=>setSearch("")}/><h2 style={{fontSize:21}}>بانتظار القرار</h2>
       {visiblePending.length===0?<div style={empty}>{pending.length?"لا توجد أدلة مطابقة للبحث.":"لا توجد أدلة بانتظار المراجعة."}</div>:visiblePending.map(row=><div key={row.id} className="review-card" style={card}>
@@ -85,6 +98,9 @@ export default function ReviewPage(){
         <div className="review-decision"><div><strong>اعتماد الدليل</strong><span>يُحدّث الضابط إلى مطبق كليًا وتم التحقق.</span></div><button disabled={savingId!==null} onClick={()=>decide(row,"accepted")} style={accept}>قبول الدليل</button></div>
         <div className="review-reject"><div><strong>إرجاع للتصحيح</strong><span>يتطلب سببًا واضحًا في الملاحظات أعلاه.</span></div><button disabled={savingId!==null} onClick={()=>decide(row,"rejected")} style={reject}>رفض وإرجاع الدليل</button></div>
       </div>)}
+
+      <h2 style={{fontSize:21,marginTop:32}}>الأدلة المشتركة بانتظار قرار</h2><p style={{color:"#586875"}}>الملف نفسه يمكن أن يخدم أكثر من ضابط، لكن هذا القرار يخص الضابط الهدف فقط.</p>
+      {sharedPending.length===0?<div style={empty}>لا توجد أدلة مشتركة بانتظار المراجعة.</div>:sharedPending.map(row=><div key={row.link_id} className="review-card" style={card}><div className="cgp-responsive-grid" style={{display:"grid",gridTemplateColumns:"1.4fr .8fr",gap:20,alignItems:"start"}}><div><div style={{color:"#0f7d73",fontWeight:800,fontSize:13}}>الدليل من <span dir="ltr">{row.source_control_code}</span> إلى <span dir="ltr">{row.target_control_code}</span></div><h3 style={{margin:"7px 0 6px",fontSize:19}}>{row.evidence_name||row.file_name}</h3><div style={{color:"#687581",fontSize:13}}>الضابط الهدف: {row.target_control_title}</div>{row.description&&<p style={{lineHeight:1.8,color:"#4f5d68"}}>{row.description}</p>}</div><div className="review-meta"><div>مصدر الدليل</div><strong>{row.source_control_title}</strong><Link href={`/controls/${row.target_control_id}`}>فتح الضابط الهدف ←</Link></div></div><div className="review-file"><div><strong>افحص الملف قبل اتخاذ القرار</strong><span>{row.file_name||"ملف الدليل المرفوع"}</span></div><EvidenceDownload path={row.file_path} name={row.file_name}/></div><label className="cgp-field-label" style={{marginTop:18}} htmlFor={`shared-review-notes-${row.link_id}`}>ملاحظات المراجع — مطلوبة عند الرفض</label><textarea id={`shared-review-notes-${row.link_id}`} value={notes[-row.link_id]||""} onChange={e=>setNotes({...notes,[-row.link_id]:e.target.value})} rows={3} style={{width:"100%",boxSizing:"border-box",border:"1px solid #ccd6dc",borderRadius:10,padding:12,fontFamily:"inherit",resize:"vertical"}}/><div className="review-decision"><div><strong>قبول للضابط الهدف</strong><span>لا يغير قرار أي ضابط آخر.</span></div><button disabled={savingId!==null} onClick={()=>decideShared(row,"accepted")} style={accept}>قبول الدليل</button></div><div className="review-reject"><div><strong>رفض للضابط الهدف</strong><span>يتطلب سببًا واضحًا.</span></div><button disabled={savingId!==null} onClick={()=>decideShared(row,"rejected")} style={reject}>رفض وإرجاع الدليل</button></div></div>)}
 
       <h2 style={{fontSize:21,marginTop:32}}>سجل المراجعات</h2>
       {history.filter(matches).length===0?<div style={empty}>لا توجد مراجعات مكتملة بعد.</div>:<div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,overflow:"hidden"}}>{history.filter(matches).map(row=><div className="cgp-responsive-grid" key={row.id} style={{padding:18,borderBottom:"1px solid #edf0f2",display:"grid",gridTemplateColumns:"1.5fr .7fr auto auto",gap:15,alignItems:"center"}}><div><strong>{row.control?.control_code} · {row.evidence_name||row.file_name}</strong><div style={{fontSize:13,color:"#586875",marginTop:5}}>{row.control?.title_ar}</div>{row.review_notes&&<p className="workflow-review-note">ملاحظات المراجع: {row.review_notes}</p>}</div><StatusBadge status={row.status||""}/><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link></div>)}</div>}
