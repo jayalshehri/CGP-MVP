@@ -82,7 +82,7 @@ export default function Home() {
 
 
   if (!authReady) {
-    return <main dir="rtl" style={{minHeight:"100vh",display:"grid",placeItems:"center",background:"#f5f7f9",color:"#0b1f33",fontFamily:"Arial, sans-serif"}}>جاري تحميل منصة CGP...</main>;
+    return <main dir="rtl" className="cgp-loading-screen" aria-busy="true" aria-label="جاري تحميل لوحة المتابعة"><span className="cgp-skeleton title"/><span className="cgp-skeleton" style={{width:"min(580px,90%)"}}/><div className="cgp-loading-metrics"><span className="cgp-skeleton metric"/><span className="cgp-skeleton metric"/><span className="cgp-skeleton metric"/><span className="cgp-skeleton metric"/></div></main>;
   }
 
 
