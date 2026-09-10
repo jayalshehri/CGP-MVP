@@ -12,9 +12,11 @@ import "./detail.css";
 type Control = { id:number; control_code:string; title_ar:string; description_ar:string|null; domain_ar:string; implementation_status:string; evidence_status:string; verification_status:string; due_date:string|null; last_review_date:string|null; control_owner:string|null; evidence_owner:string|null; implementation_notes:string|null; frameworks:{code:string}|null; };
 type Evidence = { is_current?:boolean; uploaded_at?:string|null; file_path?:string|null; review_notes?:string|null; reviewed_at?:string|null; id:number; evidence_name?:string|null; file_name?:string|null; description?:string|null; status?:string|null };
 type Note = {id:number;body:string;created_at:string};
+type AssessmentReflection = {source_framework:string;source_control_code:string;source_control_title:string;assessment_scope:string|null;compliance_status:string;notes:string|null;corrective_action:string|null;expected_compliance_date:string|null;updated_at:string|null};
 const tabs=['نظرة عامة','خطة التنفيذ','الأدلة المطلوبة','السجل والمراجعات'];
 const date=(value:string)=>new Date(value).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'});
 const goodStatus=(value:string)=>['verified','approved','accepted','compliant'].includes(value);
+const assessmentStatusText:Record<string,string>={implemented:'مطبق كليًا',partially_implemented:'مطبق جزئيًا',not_implemented:'غير مطبق',not_applicable:'لا ينطبق'};
 
 export default function ControlDetailsPage() {
  const {id}=useParams<{id:string}>(); const router=useRouter();
@@ -22,6 +24,7 @@ export default function ControlDetailsPage() {
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[canAssign,setCanAssign]=useState(false);
  const [tab,setTab]=useState(0),[completed,setCompleted]=useState<Record<string,boolean>>({}),[notes,setNotes]=useState<Note[]>([]);
  const [draft,setDraft]=useState(''),[saving,setSaving]=useState(false),[feedback,setFeedback]=useState('');
+ const [reflections,setReflections]=useState<AssessmentReflection[]>([]);
  useEffect(()=>{let active=true;(async()=>{try{
   const {profile}=await requireProfile();if(!active)return;setCanAssign(profile.role!=='control_owner');
   const controlId=Number(id);if(!Number.isSafeInteger(controlId)||controlId<=0)throw new Error('رقم الضابط غير صحيح.');
@@ -35,6 +38,7 @@ export default function ControlDetailsPage() {
   if(active){setControl(c.data);setEvidence(e.data??[]);setCompleted(Object.fromEntries((w.data??[]).map(x=>[x.item_key,x.completed])));setNotes(n.data??[]);}
  }catch(e){if(active)setError(e instanceof Error?e.message:'تعذر التحميل');const {data}=await supabase.auth.getSession();if(!data.session)router.replace('/login');}
  finally{if(active)setLoading(false);}})();return()=>{active=false;};},[id,router]);
+ useEffect(()=>{let active=true;if(!control||control.frameworks?.code!=='ECC'||!canAssign)return()=>{active=false;};void supabase.rpc('ecc_assessment_reflections',{p_ecc_control_id:control.id}).then(({data})=>{if(active)setReflections((data??[]) as AssessmentReflection[])});return()=>{active=false;};},[control,canAssign]);
  async function toggle(key:string){if(!control||saving)return;setSaving(true);setFeedback('');const next=!completed[key];
   const {data,error}=await supabase.from('control_work_items').upsert({control_id:control.id,item_key:key,completed:next},{onConflict:'control_id,item_key'}).select('item_key,completed').single();
   if(error||!data)setFeedback('تعذر حفظ الخطوة. حاول مرة أخرى.');else{setCompleted(previous=>({...previous,[key]:data.completed}));setFeedback('تم حفظ تقدم التنفيذ.');}setSaving(false);
@@ -57,6 +61,7 @@ export default function ControlDetailsPage() {
   <header className="detail-hero"><div><span className="detail-code">{control.control_code}</span><h1>{control.title_ar}</h1><p>{control.domain_ar} · المالك: {control.control_owner||'غير محدد'}</p></div><StatusBadge status={control.implementation_status}/></header>
   <section className="detail-next"><div><span>الإجراء التالي</span><strong>{!control.control_owner?'تعيين مالك وموعد استحقاق للضابط':control.evidence_status==='not_uploaded'?'استكمال التنفيذ ورفع الدليل المطلوب':!goodStatus(control.verification_status)?'متابعة مراجعة الدليل والتحقق':'مراجعة الضابط دوريًا والمحافظة على الأدلة'}</strong></div>{!control.control_owner&&canAssign?<Link className="detail-button" href={`/controls/${control.id}/assign`}>تعيين الآن ←</Link>:control.evidence_status==='not_uploaded'?<Link className="detail-button" href={`/controls/${control.id}/evidence/new`}>رفع دليل ←</Link>:<button className="detail-button" onClick={()=>setTab(3)}>فتح السجل ←</button>}</section>
   <div className="detail-metrics"><section><small>تقدم خطة التنفيذ</small><strong>{percent}% · {done} من {plan.steps.length}</strong><progress max={plan.steps.length} value={done} aria-label="تقدم خطة التنفيذ"/></section><section><small>حالة الدليل</small><StatusBadge status={control.evidence_status}/></section><section><small>حالة التحقق</small><StatusBadge status={control.verification_status}/></section><section><small>موعد الاستحقاق</small><strong>{control.due_date||'غير محدد'}</strong></section></div>
+  {control.frameworks?.code==='ECC'&&canAssign&&<section className="detail-card" aria-labelledby="assessment-reflections"><h2 id="assessment-reflections">نتائج أدوات القياس المرتبطة</h2><p className="detail-hint">تعرض هذه النتائج مراجع موثقة من أدوات NCA إلى هذا الضابط. وهي مؤشر متابعة ولا تستبدل اعتماد حالة ضابط ECC أو أدلته.</p>{!reflections.length?<p>لا توجد نتائج تقييم محفوظة مرتبطة بهذا الضابط حتى الآن.</p>:<div className="detail-timeline">{reflections.map((item,index)=><article key={`${item.source_framework}-${item.source_control_code}-${item.assessment_scope||index}`}><strong><span dir="ltr">{item.source_framework} · {item.source_control_code}</span> — {item.source_control_title}</strong><small>{item.assessment_scope?`نطاق CSCC: ${item.assessment_scope}`:`الحالة: ${assessmentStatusText[item.compliance_status]||'لم يُقيّم'}`}</small>{item.notes&&<p>الملاحظات: {item.notes}</p>}{item.corrective_action&&<p>إجراء التصحيح: {item.corrective_action}</p>}</article>)}</div>}</section>}
   <div className="detail-tabs" role="tablist" aria-label="تفاصيل الضابط">{tabs.map((label,index)=><button key={label} id={`detail-tab-${index}`} role="tab" aria-selected={tab===index} aria-controls={`detail-panel-${index}`} tabIndex={tab===index?0:-1} onClick={()=>setTab(index)} onKeyDown={event=>{let next=index;if(event.key==='ArrowLeft')next=(index+1)%tabs.length;else if(event.key==='ArrowRight')next=(index+tabs.length-1)%tabs.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;event.preventDefault();setTab(next);document.getElementById(`detail-tab-${next}`)?.focus();}}>{label}</button>)}</div>
   <p role="status" className="detail-feedback">{feedback}</p>
   <section id={`detail-panel-${tab}`} role="tabpanel" aria-labelledby={`detail-tab-${tab}`} className="detail-columns">
