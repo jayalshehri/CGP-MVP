@@ -24,6 +24,7 @@ const navigation = [
   { href: "/alerts", label: "مركز التنبيهات", group: "العمليات", team: true },
   { href: "/evidence", label: "الأدلة", group: "العمليات" },
   { href: "/review", label: "مراجعة الأدلة", group: "العمليات", team: true },
+  { href: "/audit", label: "سجل التدقيق", group: "العمليات", team: true },
   { href: "/users", label: "إدارة المستخدمين", group: "الإدارة", admin: true },
   { href: "/feedback", label: "نتائج الاختبارات", group: "الإدارة", admin: true },
 ];
@@ -37,6 +38,7 @@ function NavIcon({ href }: { href: string }) {
     "/alerts": "M12 3l9 16H3L12 3z M12 9v4 M12 17h.01",
     "/evidence": "M3 6h7l2 3h9v11H3z M3 6V4h7l2 2h7v3",
     "/review": "M12 3l8 3v6c0 4-4 7-8 9-4-2-8-5-8-9V6z M8 12l3 3 5-6",
+    "/audit": "M5 3h14v18H5z M8 7h8 M8 12h8 M8 17h5",
     "/reports": "M4 3v18h17 M8 17v-5 M13 17V8 M18 17V5",
     "/executive": "M3 4h18v13H3z M8 21h8 M12 17v4 M7 13l4-4 3 2 3-4",
     "/third-parties": "M12 3l8 4v5c0 5-3.4 8-8 10-4.6-2-8-5-8-10V7z M9 12l2 2 4-4",
