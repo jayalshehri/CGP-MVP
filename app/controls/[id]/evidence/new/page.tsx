@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { controlPlan } from "@/lib/control-plan";
 
 export default function NewEvidencePage() {
   const params = useParams<{ id: string }>();
@@ -13,6 +14,7 @@ export default function NewEvidencePage() {
   const controlId = Number(params.id);
 
   const [evidenceName, setEvidenceName] = useState("");
+  const [customEvidenceName, setCustomEvidenceName] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
@@ -21,6 +23,7 @@ export default function NewEvidencePage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const [controlTitle,setControlTitle]=useState("");
+  const [controlCode,setControlCode]=useState("");
   const [frameworkCode,setFrameworkCode]=useState("");
   const [mappedControls,setMappedControls]=useState<Array<{control_id:number;framework_code:string;control_code:string;control_title:string}>>([]);
   const [selectedTargets,setSelectedTargets]=useState<number[]>([]);
@@ -30,7 +33,7 @@ export default function NewEvidencePage() {
     const {data,error}=await supabase.from("controls").select("id,control_code,title_ar,frameworks(code)").eq("id",controlId).single();
     if(error||!data)throw new Error("الضابط غير موجود أو ليس ضمن صلاحيتك.");
     const code=(data.frameworks as {code?:string}|null)?.code||"";
-    if(active){setReady(true);setControlTitle(`${data.control_code} · ${data.title_ar}`);setFrameworkCode(code);}
+    if(active){setReady(true);setControlCode(data.control_code);setControlTitle(`${data.control_code} · ${data.title_ar}`);setFrameworkCode(code);}
     if(code==="ECC"){
       const {data:mappings}=await supabase.rpc("ecc_control_mappings",{p_ecc_control_id:controlId});
       if(active)setMappedControls((mappings??[]) as Array<{control_id:number;framework_code:string;control_code:string;control_title:string}>);
@@ -51,7 +54,8 @@ export default function NewEvidencePage() {
       return;
     }
 
-    if (!evidenceName.trim()) {
+    const finalEvidenceName=evidenceName==="__custom__"?customEvidenceName.trim():evidenceName.trim();
+    if (!finalEvidenceName) {
       setErrorMessage("يرجى إدخال اسم الدليل.");
       return;
     }
@@ -99,7 +103,7 @@ export default function NewEvidencePage() {
         .from("evidence")
         .insert({
           control_id: controlId,
-          evidence_name: evidenceName.trim(),
+          evidence_name: finalEvidenceName,
           description: description.trim() || null,
           file_name: file.name,
           file_path: storagePath,
@@ -221,15 +225,12 @@ export default function NewEvidencePage() {
           {/* Evidence Name */}
           <FieldLabel text="اسم الدليل *" htmlFor="evidence-name" />
 
-          <input
-            disabled={uploading||!ready} id="evidence-name" required type="text"
-            value={evidenceName}
-            onChange={(e) =>
-              setEvidenceName(e.target.value)
-            }
-            placeholder="مثال: استراتيجية الأمن السيبراني المعتمدة"
-            style={inputStyle}
-          />
+          <select disabled={uploading||!ready} id="evidence-name" required value={evidenceName} onChange={e=>{setEvidenceName(e.target.value);if(e.target.value!=="__custom__")setCustomEvidenceName("");}} style={inputStyle}>
+            <option value="">اختر نوع الدليل المقترح</option>
+            {controlCode&&controlPlan(controlCode,"").evidence.map(item=><option key={item} value={item}>{item}</option>)}
+            <option value="__custom__">اسم دليل مخصص…</option>
+          </select>
+          {evidenceName==="__custom__"&&<input disabled={uploading||!ready} required id="custom-evidence-name" type="text" value={customEvidenceName} onChange={e=>setCustomEvidenceName(e.target.value)} placeholder="اكتب اسم الدليل" style={{...inputStyle,marginTop:10}}/>}
 
           {/* Description */}
           <div style={{ height: "22px" }} />
