@@ -5,6 +5,8 @@ export default function EvidenceDownload({ path, name }: { path: string | null |
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   if (!path) return null;
+  const extension=(name||path).split('.').pop()?.toLowerCase()||'';
+  const previewable=['pdf','png','jpg','jpeg','gif','webp','svg'].includes(extension);
   async function download() {
     setBusy(true); setError('');
     try {
@@ -16,5 +18,14 @@ export default function EvidenceDownload({ path, name }: { path: string | null |
     } catch { setError('تعذر تنزيل الملف. حاول مرة أخرى.'); }
     finally { setBusy(false); }
   }
-  return <span><button type="button" disabled={busy} onClick={download} style={{background:'#eef3f5',color:'#0b1f33',border:0,borderRadius:8,padding:'10px 13px',cursor:'pointer'}}>{busy?'جاري التنزيل...':'تنزيل الدليل'}</button>{error&&<span role="alert">{error}</span>}</span>;
+  async function preview() {
+    setBusy(true); setError('');
+    try {
+      const { data, error } = await supabase.storage.from('evidence-files').createSignedUrl(path!, 300);
+      if (error || !data?.signedUrl) throw error || new Error('preview unavailable');
+      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+    } catch { setError('تعذر فتح المعاينة. يمكنك تنزيل الملف بدلًا من ذلك.'); }
+    finally { setBusy(false); }
+  }
+  return <span style={{display:'inline-flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>{previewable&&<button type="button" disabled={busy} onClick={preview} style={{background:'#e8f5f2',color:'#0f6f67',border:0,borderRadius:8,padding:'10px 13px',cursor:'pointer',fontWeight:700}}>{busy?'جاري الفتح...':'معاينة'}</button>}<button type="button" disabled={busy} onClick={download} style={{background:'#eef3f5',color:'#0b1f33',border:0,borderRadius:8,padding:'10px 13px',cursor:'pointer'}}>{busy?'جاري التنزيل...':'تنزيل الدليل'}</button>{error&&<span role="alert" style={{color:'#b42318',fontSize:13}}>{error}</span>}</span>;
 }
