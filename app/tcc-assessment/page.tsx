@@ -8,7 +8,7 @@ import { ResultSummary, WorkflowHeading, WorkflowMetric } from "@/components/Wor
 
 type Control={id:number;control_code:string;title_ar:string;description_ar:string|null;domain_ar:string;};
 type Result={id?:number;control_id:number;compliance_status:string;notes:string|null;corrective_action:string|null;expected_compliance_date:string|null;};
-const labels:Record<string,string>={implemented:"مطبق كليًا",partially_implemented:"مطبق جزئيًا",not_implemented:"غير مطبق",not_applicable:"لا ينطبق على الجهة"};
+const labels:Record<string,string>={implemented:"مطبق كليًا",partially_implemented:"مطبق جزئيًا",not_implemented:"غير مطبق",not_applicable:"لا ينطبق"};
 const domainNames=["حوكمة الأمن السيبراني","تعزيز الأمن السيبراني","الأمن السيبراني المتعلق بالأطراف الخارجية والحوسبة السحابية"];
 
 export default function TccAssessmentPage(){
