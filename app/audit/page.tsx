@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { requireProfile } from "@/lib/auth";
 import { WorkflowHeading,WorkflowMetric } from "@/components/WorkflowUI";
 
-type AuditEvent={id:number;risk_id:number;event_type:string;previous_status:string|null;new_status:string|null;created_at:string;cyber_risks:{risk_code:string}|null};
+type AuditEvent={id:number;risk_id:number;event_type:string;previous_status:string|null;new_status:string|null;created_at:string;cyber_risks:{risk_code:string}[]};
 const labels:Record<string,string>={created:"إنشاء خطر",updated:"تحديث الخطر",status_changed:"تغيير الحالة"};
 const status:Record<string,string>={open:"مفتوح",treatment_in_progress:"قيد المعالجة",accepted:"مقبول",closed:"مغلق"};
 
