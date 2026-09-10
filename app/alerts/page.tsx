@@ -1,0 +1,19 @@
+"use client";
+import { useEffect,useMemo,useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { requireProfile } from "@/lib/auth";
+import { WorkflowHeading,WorkflowMetric } from "@/components/WorkflowUI";
+import "./alerts.css";
+type Control={id:number;control_code:string;title_ar:string;control_owner:string|null;due_date:string|null;evidence_status:string;implementation_status:string;frameworks:{code:string}|null};
+type Risk={id:number;risk_code:string;risk_description:string;residual_score:number;action_due_date:string|null;treatment_owner:string;};
+type Alert={type:"danger"|"warning"|"info";title:string;detail:string;href:string};
+const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"});
+export default function AlertsPage(){
+ const router=useRouter(),[controls,setControls]=useState<Control[]>([]),[risks,setRisks]=useState<Risk[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState("");
+ useEffect(()=>{let live=true;(async()=>{try{await requireProfile(["admin","cybersecurity_team"]);const [c,r]=await Promise.all([supabase.from("controls").select("id,control_code,title_ar,control_owner,due_date,evidence_status,implementation_status,frameworks(code)"),supabase.from("cyber_risks").select("id,risk_code,risk_description,residual_score,action_due_date,treatment_owner")]);if(c.error)throw c.error;if(r.error)throw r.error;if(live){setControls((c.data??[]) as Control[]);setRisks((r.data??[]) as Risk[])}}catch(e){setError(e instanceof Error?e.message:"تعذر تحميل التنبيهات");router.replace("/")}finally{if(live)setLoading(false)}})();return()=>{live=false}},[router]);
+ const alerts=useMemo<Alert[]>(()=>{const now=today(),a:Alert[]=[];controls.filter(x=>!x.control_owner).forEach(x=>a.push({type:"warning",title:"ضابط بلا مالك",detail:`${x.frameworks?.code??""} · ${x.control_code} — ${x.title_ar}`,href:`/controls/${x.id}/assign`}));controls.filter(x=>!x.due_date).forEach(x=>a.push({type:"info",title:"استحقاق غير محدد",detail:`${x.frameworks?.code??""} · ${x.control_code} — ${x.title_ar}`,href:`/controls/${x.id}/assign`}));controls.filter(x=>x.due_date&&x.due_date<now&&x.implementation_status!=="implemented").forEach(x=>a.push({type:"danger",title:"ضابط متأخر",detail:`${x.frameworks?.code??""} · ${x.control_code} — استحقاق ${x.due_date}`,href:`/controls/${x.id}`}));risks.filter(x=>x.residual_score>=17).forEach(x=>a.push({type:"danger",title:"خطر متبقٍ حرج",detail:`${x.risk_code} — ${x.risk_description}`,href:"/risks"}));risks.filter(x=>x.action_due_date&&x.action_due_date<now&&x.residual_score>3).forEach(x=>a.push({type:"danger",title:"معالجة خطر متأخرة",detail:`${x.risk_code} — ${x.treatment_owner} · ${x.action_due_date}`,href:"/risks"}));return a},[controls,risks]);
+ if(loading)return <main className="workflow-page" dir="rtl">جاري تحميل مركز التنبيهات…</main>;
+ const danger=alerts.filter(x=>x.type==="danger").length,warning=alerts.filter(x=>x.type==="warning").length;
+ return <main className="workflow-page" dir="rtl"><WorkflowHeading title="مركز التنبيهات التشغيلية" description="تنبيهات قابلة للإجراء للمخاطر والضوابط والتكليفات، محسوبة مباشرة من بيانات المنصة الحالية."/>{error&&<p className="cgp-shell-error" role="alert">{error}</p>}<div className="workflow-metrics"><WorkflowMetric label="تنبيهات حرجة" value={danger} tone="danger"/><WorkflowMetric label="تحتاج تعيين مالك" value={warning} tone="warning"/><WorkflowMetric label="إجمالي التنبيهات" value={alerts.length}/></div><section className="alerts-list" aria-label="قائمة التنبيهات">{alerts.length===0?<div className="workflow-empty">لا توجد تنبيهات تشغيلية حالياً.</div>:alerts.map((a,i)=><a key={i} href={a.href} className={`alert-item ${a.type}`}><div><b>{a.title}</b><p>{a.detail}</p></div><span>فتح ←</span></a>)}</section></main>;
+}
