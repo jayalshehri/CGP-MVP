@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import FeedbackWidget from "@/components/FeedbackWidget";
@@ -29,6 +29,7 @@ const navigation = [
   { href: "/feedback", label: "نتائج الاختبارات", group: "الإدارة", admin: true },
 ];
 const roleLabels: Record<UserRole, string> = { admin: "مدير النظام", cybersecurity_team: "فريق الأمن السيبراني", control_owner: "مالك الضابط" };
+type SearchResult = { id:number; control_code:string; title_ar:string };
 
 function NavIcon({ href }: { href: string }) {
   const paths: Record<string, string> = {
@@ -67,6 +68,10 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const [signingOut, setSigningOut] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [error, setError] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [controlResults, setControlResults] = useState<SearchResult[]>([]);
   useEffect(() => {
     let active = true;
     requireProfile().then(({ user, profile }) => {
@@ -85,6 +90,30 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const linkFor = (item:typeof navigation[number]) => <Link key={item.href} href={item.href} className="cgp-nav-link" title={navCollapsed?item.label:undefined} aria-current={(item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/")) ? "page" : undefined}><NavIcon href={item.href}/><span>{item.href === "/tasks" && account?.role === "control_owner" ? "مهامي" : item.label}</span></Link>;
   const links = items.map(linkFor);
   const groups = [...new Set(items.map(item=>item.group))];
+  const navigationResults = useMemo(() => {
+    const normalized = searchQuery.trim().toLowerCase();
+    return normalized ? items.filter(item => item.label.toLowerCase().includes(normalized)).slice(0, 5) : [];
+  }, [items, searchQuery]);
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (query.length < 2) { setControlResults([]); setSearching(false); return; }
+    setSearching(true);
+    const timer = window.setTimeout(async () => {
+      const escaped = query.replace(/[,%()]/g, " ");
+      const { data } = await supabase.from("controls").select("id,control_code,title_ar").or(`control_code.ilike.%${escaped}%,title_ar.ilike.%${escaped}%`).order("control_code").limit(8);
+      setControlResults((data ?? []) as SearchResult[]);
+      setSearching(false);
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSearchOpen(true); }
+      if (event.key === "Escape") setSearchOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
   async function signOut() {
     setSigningOut(true); setError("");
     const { error } = await supabase.auth.signOut();
@@ -95,8 +124,20 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
     <a href="#cgp-content" className="cgp-skip">انتقل إلى المحتوى</a>
     <header className="cgp-topbar">
       <Link href="/" className="cgp-brand" aria-label="CGP — لوحة المتابعة"><span className="cgp-brand-mark">CGP</span><span>حوكمة الأمن السيبراني<small>Cyber Governance Platform</small></span></Link>
+      <button type="button" className="cgp-global-search" onClick={()=>setSearchOpen(true)} aria-haspopup="dialog"><span aria-hidden="true">⌕</span> بحث سريع <kbd>⌘ K</kbd></button>
       <div className="cgp-account"><span>{account?.name || "مساحة العمل"}<small>{account ? roleLabels[account.role] : "جاري التحقق من الحساب"}</small></span><button type="button" onClick={signOut} disabled={signingOut} className="cgp-signout">{signingOut ? "جاري الخروج…" : "تسجيل الخروج"}</button></div>
     </header>
+    {searchOpen && <div className="cgp-search-backdrop" role="presentation" onMouseDown={()=>setSearchOpen(false)}>
+      <section className="cgp-search-dialog" role="dialog" aria-modal="true" aria-labelledby="global-search-title" onMouseDown={event=>event.stopPropagation()}>
+        <div className="cgp-search-title"><h2 id="global-search-title">بحث سريع</h2><button type="button" onClick={()=>setSearchOpen(false)} aria-label="إغلاق البحث">×</button></div>
+        <label className="cgp-search-input"><span aria-hidden="true">⌕</span><input autoFocus value={searchQuery} onChange={event=>setSearchQuery(event.target.value)} placeholder="ابحث باسم الصفحة أو رقم الضابط أو اسمه" /></label>
+        {searching && <p className="cgp-search-hint" role="status">جاري البحث…</p>}
+        {!searching && searchQuery.trim().length < 2 && <p className="cgp-search-hint">اكتب حرفين على الأقل للبحث في الضوابط، أو اختر صفحة من القائمة.</p>}
+        {navigationResults.length > 0 && <div className="cgp-search-section"><h3>الصفحات</h3>{navigationResults.map(item=><Link key={item.href} href={item.href} onClick={()=>setSearchOpen(false)}><span>{item.label}</span><small>{item.group}</small></Link>)}</div>}
+        {controlResults.length > 0 && <div className="cgp-search-section"><h3>الضوابط</h3>{controlResults.map(item=><Link key={item.id} href={`/controls/${item.id}`} onClick={()=>setSearchOpen(false)}><b dir="ltr">{item.control_code}</b><span>{item.title_ar}</span></Link>)}</div>}
+        {!searching && searchQuery.trim().length >= 2 && !navigationResults.length && !controlResults.length && <p className="cgp-search-hint">لا توجد نتائج مطابقة ضمن صلاحياتك.</p>}
+      </section>
+    </div>}
     <div className="cgp-workspace-grid">
       <aside className="cgp-navigation"><div className="cgp-nav-head"><p className="cgp-nav-caption">مساحة العمل</p><button type="button" onClick={()=>setNavCollapsed(v=>!v)} aria-label={navCollapsed?"توسيع القائمة":"طي القائمة"} aria-expanded={!navCollapsed}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 18l6-6-6-6"/></svg></button></div><nav aria-label="التنقل الرئيسي">{groups.map(group=><details className="cgp-nav-group" key={group} open><summary>{group}</summary>{items.filter(item=>item.group===group).map(linkFor)}</details>)}</nav><Link href="/change-password" className="cgp-nav-link cgp-account-link" aria-current={pathname === "/change-password" ? "page" : undefined}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-8H4v8a2 2 0 0 0 2 2zm1-10V8a5 5 0 0 1 10 0v3"/></svg><span>إعدادات كلمة المرور</span></Link><p className="cgp-scope">{account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الضوابط والأدلة ضمن صلاحيات حسابك."}</p></aside>
       <div className="cgp-page-column">
