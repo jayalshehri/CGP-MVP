@@ -16,7 +16,6 @@ export default function ExecutivePage() {
   const [error, setError] = useState("");
   const [updated, setUpdated] = useState<Date | null>(null);
   const [revision, setRevision] = useState(0);
-  const [sort, setSort] = useState("priority");
   const [framework, setFramework] = useState("all");
 
   useEffect(() => {
@@ -54,7 +53,6 @@ export default function ExecutivePage() {
     const total=[...domains.values()].reduce((sum,d)=>sum+d.total,0);
     return { total, done, checked, overdue, inProgress, remaining: total - done - inProgress, domains: [...domains.values()] };
   }, [scopedControls, updated]);
-  const domains = [...summary.domains].sort((a, b) => sort === "name" ? a.name.localeCompare(b.name, "ar") : b.overdue - a.overdue || a.done / a.total - b.done / b.total);
   const refresh = () => { setLoading(true); setRevision(value => value + 1); };
   const compliance = percent(summary.done, summary.total); const verification = percent(summary.checked, summary.total);
   const pending = scopedControls.filter(c=>["pending_review","under_review"].includes((c.evidence_status||"").toLowerCase())).length;
