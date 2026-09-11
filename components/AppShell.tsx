@@ -15,6 +15,9 @@ const navigation = [
   { href: "/data-governance", label: "إدارة البيانات والحوكمة", group: "مساحات العمل", data: true },
   { href: "/data-governance/requests", label: "طلبات إدارة البيانات", group: "مساحات العمل", data: true },
   { href: "/data-governance/assets", label: "سجل أصول البيانات", group: "مساحات العمل", data: true },
+  { href: "/data-governance/quality", label: "جودة البيانات", group: "مساحات العمل", data: true },
+  { href: "/data-governance/privacy", label: "الخصوصية وسجل المعالجة", group: "مساحات العمل", data: true },
+  { href: "/data-governance/sharing", label: "مشاركة البيانات", group: "مساحات العمل", data: true },
   { href: "/assessments", label: "تقييم CSCC", group: "قياس الالتزام", team: true },
   { href: "/dcc-assessment", label: "تقييم DCC", group: "قياس الالتزام", team: true },
   { href: "/tcc-assessment", label: "تقييم TCC", group: "قياس الالتزام", team: true },
@@ -60,6 +63,9 @@ function NavIcon({ href }: { href: string }) {
     "/data-governance": "M4 5h16v14H4z M8 9h8 M8 13h5 M16 3v4 M8 3v4",
     "/data-governance/requests": "M5 4h14v17H5z M8 8h8 M8 12h8 M8 16h5",
     "/data-governance/assets": "M4 7h16v13H4z M7 7V4h10v3 M8 12h8 M8 16h5",
+    "/data-governance/quality": "M4 19V5 M4 19h16 M8 16v-4 M12 16V8 M16 16v-7",
+    "/data-governance/privacy": "M12 3l8 4v5c0 5-3.4 8-8 10-4.6-2-8-5-8-10V7z M9 12l2 2 4-4",
+    "/data-governance/sharing": "M4 5h16v14H4z M8 9h8 M8 13h5 M16 3v4 M8 3v4",
   };
   return <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={paths[href]}/></svg>;
 }
