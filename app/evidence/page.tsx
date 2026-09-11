@@ -91,7 +91,7 @@ export default function EvidencePage(){
         <ResultSummary count={filtered.length} total={scoped.length} active={!!search||status!=="all"||framework!=="all"} reset={()=>{setSearch("");setStatus("all");setFramework("all");}}/>
 <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,overflow:"hidden"}}>
           {filtered.length===0?<div style={{padding:45,textAlign:"center",color:"#586875"}}>لا توجد أدلة مطابقة حاليًا.</div>:filtered.map(row=><div className="workflow-row cgp-responsive-grid" key={row.id} style={{padding:20,borderBottom:"1px solid #edf0f2",display:"grid",gridTemplateColumns:"1.6fr 1fr .8fr auto",gap:16,alignItems:"center"}}>
-            <div><div style={{color:"#0f7d73",fontWeight:800,fontSize:13}}><span dir="ltr">{frameworkOf(row.control?.frameworks).code} · {row.control?.control_code||`ضابط ${row.control_id}`}</span></div><div style={{fontWeight:800,marginTop:6}}>{row.evidence_name||row.file_name||`دليل ${row.id}`}</div><div style={{fontSize:13,color:"#586875",marginTop:5}}>{row.control?.title_ar||""}</div></div>
+            <div><div style={{color:"var(--cgp-teal)",fontWeight:800,fontSize:13}}><span dir="ltr">{frameworkOf(row.control?.frameworks).code} · {row.control?.control_code||`ضابط ${row.control_id}`}</span></div><div style={{fontWeight:800,marginTop:6}}>{row.evidence_name||row.file_name||`دليل ${row.id}`}</div><div style={{fontSize:13,color:"#586875",marginTop:5}}>{row.control?.title_ar||""}</div></div>
             <div><div style={{fontSize:12,color:"#586875",marginBottom:5}}>تاريخ الرفع</div><strong>{row.uploaded_at?new Date(row.uploaded_at).toLocaleDateString("ar-SA"):"غير محدد"}</strong></div>
             <div><StatusBadge status={row.status||""}/>{!row.is_current&&<small className="workflow-version">إصدار سابق</small>}</div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link>{role!=="control_owner"&&row.is_current&&["pending_review","under_review"].includes(row.status||"")&&<Link href="/review" style={primary}>مراجعة</Link>}</div>
@@ -104,6 +104,6 @@ export default function EvidencePage(){
 
 
 
-const primary={background:"#0f7d73",color:"white",textDecoration:"none",padding:"9px 12px",borderRadius:8,fontWeight:800,fontSize:13};
+const primary={background:"var(--cgp-teal)",color:"white",textDecoration:"none",padding:"9px 12px",borderRadius:8,fontWeight:800,fontSize:13};
 const secondary={background:"#eef3f5",color:"#0b1f33",textDecoration:"none",padding:"9px 12px",borderRadius:8,fontWeight:800,fontSize:13};
 const center={minHeight:"100vh",display:"grid",placeItems:"center",fontFamily:"Arial",background:"#f5f7f9",color:"#0b1f33"};

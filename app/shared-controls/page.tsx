@@ -70,13 +70,13 @@ export default function SharedControlsPage() {
   </main>;
 }
 const pageStyle = { maxWidth: 1320, margin: "0 auto", padding: "36px 28px 60px" };
-const eyebrow = { color: "#0f766e", fontWeight: 800, margin: 0 };
+const eyebrow = { color: "var(--cgp-teal)", fontWeight: 800, margin: 0 };
 const intro = { maxWidth: 880, color: "#586875", lineHeight: 1.8 };
 const metricGrid = { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, margin: "18px 0" };
 const metric = { padding: 17, border: "1px solid #dbe8e7", borderRadius: 12, background: "#fff", display: "grid", gap: 7 };
 const toolbar = { display: "flex", gap: 12, justifyContent: "space-between", alignItems: "center", margin: "18px 0" };
 const searchInput = { width: "100%", padding: 12, border: "1px solid #ccd6dc", borderRadius: 9, fontFamily: "inherit" };
-const primary = { border: 0, borderRadius: 9, padding: "11px 14px", background: "#0f766e", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" as const };
+const primary = { border: 0, borderRadius: 9, padding: "11px 14px", background: "var(--cgp-teal)", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" as const };
 const formStyle = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 13, padding: 20, margin: "16px 0", border: "1px solid #bde0d8", borderRadius: 13, background: "#f8fdfc" };
 const label = { display: "grid", gap: 7, color: "#405668", fontWeight: 800, fontSize: 12 };
 const input = { padding: 10, border: "1px solid #cddbe2", borderRadius: 8, background: "#fff", fontFamily: "inherit" };

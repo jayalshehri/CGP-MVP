@@ -94,7 +94,7 @@ export default function WorkspaceSelectPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 22 }}>
           {available.map((workspace) => (
-            <button key={workspace.href} type="button" onClick={() => router.push(workspace.href)} style={{ cursor: "pointer", textAlign: "right", border: "1px solid #d9e3ea", borderTop: workspace.tone === "cyber" ? "5px solid #0d2948" : "5px solid #0f8d82", borderRadius: 20, padding: 30, minHeight: 310, background: "rgba(255,255,255,.93)", boxShadow: "0 12px 34px rgba(26, 54, 79, .08)", color: "#10263f" }}>
+            <button key={workspace.href} type="button" onClick={() => router.push(workspace.href)} style={{ cursor: "pointer", textAlign: "right", border: "1px solid #d9e3ea", borderTop: workspace.tone === "cyber" ? "5px solid #0d2948" : "5px solid var(--cgp-teal)", borderRadius: 20, padding: 30, minHeight: 310, background: "rgba(255,255,255,.93)", boxShadow: "0 12px 34px rgba(26, 54, 79, .08)", color: "#10263f" }}>
               <span style={{ display: "inline-grid", placeItems: "center", width: 52, height: 52, borderRadius: 14, background: workspace.tone === "cyber" ? "#e6edf6" : "#def7f2", color: workspace.tone === "cyber" ? "#0c3156" : "#087a72", fontSize: 26 }}>{workspace.tone === "cyber" ? "◈" : "◉"}</span>
               <p style={{ color: "#698095", margin: "22px 0 4px", fontSize: 13, fontWeight: 800 }}>{workspace.subtitle}</p>
               <h2 style={{ margin: "0 0 10px", fontSize: 27 }}>{workspace.title}</h2>

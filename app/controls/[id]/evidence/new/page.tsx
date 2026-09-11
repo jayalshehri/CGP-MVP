@@ -169,7 +169,7 @@ export default function NewEvidencePage() {
         <Link
           href={`/controls/${controlId}`}
           style={{
-            color: "#0f7d73",
+            color: "var(--cgp-teal)",
             textDecoration: "none",
             fontWeight: "bold",
           }}
@@ -185,7 +185,7 @@ export default function NewEvidencePage() {
         >
           <div
             style={{
-              color: "#0f7d73",
+              color: "var(--cgp-teal)",
               fontSize: "14px",
               fontWeight: "bold",
               marginBottom: "8px",
@@ -347,7 +347,7 @@ export default function NewEvidencePage() {
               style={{
                 marginTop: "20px",
                 background: "#e8f5f2",
-                color: "#0f6f67",
+                color: "var(--cgp-teal-dark)",
                 padding: "13px 15px",
                 borderRadius: "9px",
               }}
@@ -376,7 +376,7 @@ export default function NewEvidencePage() {
                 border: 0,
                 background: uploading
                   ? "#91aaa6"
-                  : "#0f7d73",
+                  : "var(--cgp-teal)",
                 color: "white",
                 padding: "13px 22px",
                 borderRadius: "9px",
