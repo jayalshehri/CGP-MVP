@@ -92,7 +92,7 @@ export default function DataGovernancePage() {
 
     <section className="dg-next">
       <div><span>الخطوة التالية</span><h2>إضافة ضوابط NDMO الفعلية وتعيين مسؤوليها.</h2><p>بعد اعتماد الهيكل سننشئ سجل أصول البيانات وطلبات المشاركة وسجل جودة البيانات.</p></div>
-      <Link href="/assets">فتح سجل الأصول التقنية</Link>
+      <Link href="/data-governance/requests">فتح طلبات إدارة البيانات</Link>
     </section>
   </main>;
 }
