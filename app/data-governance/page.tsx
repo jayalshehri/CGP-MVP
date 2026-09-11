@@ -35,8 +35,8 @@ export default function DataGovernancePage() {
   if (!ready) return <main className="dg-page"><p className="dg-loading">جاري فتح مساحة إدارة البيانات والحوكمة…</p></main>;
 
   return <main className="dg-page">
+    <div className="dg-eyebrow">مساحة عمل مستقلة</div>
     <WorkflowHeading
-      eyebrow="مساحة عمل مستقلة"
       title="إدارة البيانات والحوكمة"
       description="متابعة ضوابط وسياسات إدارة البيانات الوطنية، بعيداً عن سير عمل الأمن السيبراني."
     />
