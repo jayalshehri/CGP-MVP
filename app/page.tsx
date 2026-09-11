@@ -3,16 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { requireProfile } from "@/lib/auth";
+import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { WorkflowHeading, WorkflowMetric } from "@/components/WorkflowUI";
 import { EVIDENCE_PRESENT, frameworkOf, isApplicable, isImplemented, isVerified, percentage } from "@/lib/compliance";
-
-type UserRole = "admin" | "cybersecurity_team" | "control_owner";
-
-
-
-
 
 type Dashboard = { total:number; compliance:number; waiting_evidence:number; overdue:number; pending_review:number; verified:number; domains:{name:string;total:number;done:number;percentage:number}[] };
 type DashboardControl = { id:number; domain_ar:string; implementation_status:string; evidence_status:string; verification_status:string; due_date:string|null; frameworks:unknown };
