@@ -120,7 +120,8 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   }, [items, searchQuery]);
   useEffect(() => {
     const query = searchQuery.trim();
-    if (query.length < 2) { setControlResults([]); setSearching(false); return; }
+    // Cybersecurity controls have their own catalog. Keep search results within the current workspace.
+    if (workspace !== "cyber" || query.length < 2) { setControlResults([]); setSearching(false); return; }
     setSearching(true);
     const timer = window.setTimeout(async () => {
       const escaped = query.replace(/[,%()]/g, " ");
@@ -129,7 +130,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       setSearching(false);
     }, 220);
     return () => window.clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, workspace]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSearchOpen(true); }
@@ -159,9 +160,9 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
     {searchOpen && <div className="cgp-search-backdrop" role="presentation" onMouseDown={()=>setSearchOpen(false)}>
       <section className="cgp-search-dialog" role="dialog" aria-modal="true" aria-labelledby="global-search-title" onMouseDown={event=>event.stopPropagation()}>
         <div className="cgp-search-title"><h2 id="global-search-title">بحث سريع</h2><button type="button" onClick={()=>setSearchOpen(false)} aria-label="إغلاق البحث">×</button></div>
-        <label className="cgp-search-input"><span aria-hidden="true">⌕</span><input autoFocus value={searchQuery} onChange={event=>setSearchQuery(event.target.value)} placeholder="ابحث باسم الصفحة أو رقم الضابط أو اسمه" /></label>
+        <label className="cgp-search-input"><span aria-hidden="true">⌕</span><input autoFocus value={searchQuery} onChange={event=>setSearchQuery(event.target.value)} placeholder={workspace === "cyber" ? "ابحث باسم الصفحة أو رقم الضابط أو اسمه" : "ابحث باسم صفحة في مساحة العمل"} /></label>
         {searching && <p className="cgp-search-hint" role="status">جاري البحث…</p>}
-        {!searching && searchQuery.trim().length < 2 && <p className="cgp-search-hint">اكتب حرفين على الأقل للبحث في الضوابط، أو اختر صفحة من القائمة.</p>}
+        {!searching && searchQuery.trim().length < 2 && <p className="cgp-search-hint">{workspace === "cyber" ? "اكتب حرفين على الأقل للبحث في الضوابط، أو اختر صفحة من القائمة." : "اكتب اسم الصفحة للوصول السريع داخل مساحة العمل الحالية."}</p>}
         {navigationResults.length > 0 && <div className="cgp-search-section"><h3>الصفحات</h3>{navigationResults.map(item=><Link key={item.href} href={item.href} onClick={()=>setSearchOpen(false)}><span>{item.label}</span><small>{item.group}</small></Link>)}</div>}
         {controlResults.length > 0 && <div className="cgp-search-section"><h3>الضوابط</h3>{controlResults.map(item=><Link key={item.id} href={`/controls/${item.id}`} onClick={()=>setSearchOpen(false)}><b dir="ltr">{item.control_code}</b><span>{item.title_ar}</span></Link>)}</div>}
         {!searching && searchQuery.trim().length >= 2 && !navigationResults.length && !controlResults.length && <p className="cgp-search-hint">لا توجد نتائج مطابقة ضمن صلاحياتك.</p>}
