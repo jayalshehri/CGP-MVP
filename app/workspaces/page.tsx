@@ -20,10 +20,11 @@ export default function WorkspacesPreviewPage() {
 
   if (!role) return <main className="workspace-launcher"><p>جاري تحميل مساحات العمل…</p></main>;
 
-  const spaces:Workspace[] = [
+  const allSpaces:Workspace[] = [
     { href:"/", title:"الأمن السيبراني", english:"Cybersecurity Governance", description:"إدارة الضوابط والمخاطر والثغرات والأدلة والتقارير الأمنية.", roleLabel:"مساحة فريق الأمن السيبراني", tone:"cyber", metrics:[{label:"الضوابط",value:"108"},{label:"مهام مفتوحة",value:"0"},{label:"مخاطر حرجة",value:"0"}] },
     { href:"/data-governance", title:"إدارة البيانات والحوكمة", english:"Data Governance", description:"حوكمة البيانات الوطنية، الخصوصية، المشاركة، الجودة، والسياسات.", roleLabel:"مساحة فريق إدارة البيانات", tone:"data", metrics:[{label:"مجالات NDMO",value:"15"},{label:"سياسات",value:"7"},{label:"طلبات مفتوحة",value:"0"}] },
-  ].filter(space => role === "admin" || (role === "cybersecurity_team" && space.tone === "cyber") || (role === "data_governance_team" && space.tone === "data") || (role === "control_owner" && space.tone === "cyber"));
+  ];
+  const spaces = allSpaces.filter(space => role === "admin" || (role === "cybersecurity_team" && space.tone === "cyber") || (role === "data_governance_team" && space.tone === "data") || (role === "control_owner" && space.tone === "cyber"));
 
   return <main className="workspace-launcher" dir="rtl">
     <header className="launcher-top">
