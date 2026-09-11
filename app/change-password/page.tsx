@@ -52,11 +52,11 @@ export default function ChangePasswordPage() {
   }
 
   if (!ready) {
-    return <main dir="rtl" style={{minHeight:"100vh",display:"grid",placeItems:"center",background:"#f5f7f9",fontFamily:"Arial",color:"#0b1f33"}}>جاري التحقق من الجلسة...</main>;
+    return <main dir="rtl" style={{display:"grid",placeItems:"center",color:"var(--cgp-ink)"}}>جاري التحقق من الجلسة...</main>;
   }
 
   return (
-    <main dir="rtl" style={{minHeight:"100vh",display:"grid",placeItems:"center",background:"#f5f7f9",fontFamily:"Arial",color:"#0b1f33",padding:20}}>
+    <main dir="rtl" style={{display:"grid",placeItems:"center",color:"var(--cgp-ink)",padding:20}}>
       <section style={{width:"100%",maxWidth:460,background:"white",border:"1px solid #e2e7eb",borderRadius:18,padding:32,boxShadow:"0 14px 40px rgba(11,31,51,.08)"}}>
         <div style={{fontSize:23,fontWeight:800}}>Cyber Governance Platform</div>
         <div style={{color:"var(--cgp-teal)",fontWeight:800,marginTop:7}}>تغيير كلمة المرور</div>

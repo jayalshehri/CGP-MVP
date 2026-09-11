@@ -79,7 +79,7 @@ export default function ReviewPage(){
   const sharedPending=sharedRows.filter(row=>["pending_review","under_review"].includes(row.status));
   const history=rows.filter(r=>["accepted","rejected"].includes(r.status||""));
 
-  return <main className="workflow-page" dir="rtl" style={{minHeight:"100vh",background:"#f5f7f9",color:"#0b1f33"}}>
+  return <main className="workflow-page" dir="rtl" style={{color:"var(--cgp-ink)"}}>
 
     <section className="cgp-page-body" style={{maxWidth:1300,margin:"0 auto",padding:"38px 28px 60px"}}>
       <WorkflowHeading title="مراجعة الأدلة" description="افتح الدليل، راجع محتواه، ثم وثّق قرارك. سبب الرفض يساعد المالك على التصحيح."/>
@@ -114,4 +114,4 @@ const empty={background:"white",border:"1px solid #e2e7eb",borderRadius:14,paddi
 const accept={border:0,background:"var(--cgp-teal)",color:"white",padding:"10px 15px",borderRadius:8,fontWeight:800,cursor:"pointer"};
 const reject={border:"1px solid #d14343",background:"white",color:"#b42318",padding:"10px 15px",borderRadius:8,fontWeight:800,cursor:"pointer"};
 const secondary={background:"#eef3f5",color:"#0b1f33",textDecoration:"none",padding:"10px 13px",borderRadius:8,fontWeight:800,fontSize:13};
-const center={minHeight:"100vh",display:"grid",placeItems:"center",fontFamily:"Arial",background:"#f5f7f9",color:"#0b1f33"};
+const center={display:"grid",placeItems:"center",color:"var(--cgp-ink)"};

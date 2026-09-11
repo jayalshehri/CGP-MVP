@@ -63,9 +63,9 @@ export default function AssignControlPage() {
     router.refresh();
   }
 
-  if (loading) return <main dir="rtl" style={{minHeight:"100vh",display:"grid",placeItems:"center",fontFamily:"Arial",background:"#f5f7f9"}}>جاري تحميل التكليف...</main>;
+  if (loading) return <main dir="rtl" style={{display:"grid",placeItems:"center"}}>جاري تحميل التكليف...</main>;
 
-  return <main dir="rtl" style={{minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial",color:"#0b1f33"}}>
+  return <main dir="rtl" style={{color:"var(--cgp-ink)"}}>
 
     <section className="cgp-page-body" style={{maxWidth:760,margin:"0 auto",padding:"42px 24px"}}>
       <WorkflowHeading title="تكليف مالك الضابط" description="حدد المسؤول عن التنفيذ وموعد الاستحقاق؛ سيظهر الضابط ضمن مهامه."/>
