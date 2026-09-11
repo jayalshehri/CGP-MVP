@@ -12,7 +12,7 @@ const navigation = [
   { href: "/executive", label: "اللوحة التنفيذية", group: "نظرة عامة", team: true },
   { href: "/reports", label: "التقارير", group: "نظرة عامة", team: true },
   { href: "/controls", label: "الضوابط", group: "الالتزام" },
-  { href: "/data-governance", label: "إدارة البيانات والحوكمة", group: "مساحات العمل", team: true },
+  { href: "/data-governance", label: "إدارة البيانات والحوكمة", group: "مساحات العمل", data: true },
   { href: "/assessments", label: "تقييم CSCC", group: "قياس الالتزام", team: true },
   { href: "/dcc-assessment", label: "تقييم DCC", group: "قياس الالتزام", team: true },
   { href: "/tcc-assessment", label: "تقييم TCC", group: "قياس الالتزام", team: true },
@@ -30,7 +30,7 @@ const navigation = [
   { href: "/users", label: "إدارة المستخدمين", group: "الإدارة", admin: true },
   { href: "/feedback", label: "نتائج الاختبارات", group: "الإدارة", admin: true },
 ];
-const roleLabels: Record<UserRole, string> = { admin: "مدير النظام", cybersecurity_team: "فريق الأمن السيبراني", control_owner: "مالك الضابط" };
+const roleLabels: Record<UserRole, string> = { admin: "مدير النظام", cybersecurity_team: "فريق الأمن السيبراني", data_governance_team: "فريق إدارة البيانات", control_owner: "مالك الضابط" };
 type SearchResult = { id:number; control_code:string; title_ar:string };
 
 function NavIcon({ href }: { href: string }) {
@@ -87,7 +87,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
     return () => { active = false; data.subscription.unsubscribe(); };
   }, [pathname, router]);
 
-  const items = account ? navigation.filter(item => (!item.admin || account.role === "admin") && (!item.team || account.role !== "control_owner")) : [];
+  const items = account ? navigation.filter(item => (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin" || account.role === "data_governance_team")) : [];
   const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "لوحة المتابعة");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const leaf = pathname.endsWith("/assign") ? "تكليف المالك" : pathname.endsWith("/evidence/new") ? "رفع دليل" : controlId ? "تفاصيل الضابط" : current;
