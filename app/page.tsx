@@ -88,19 +88,19 @@ export default function Home() {
 
 
   return (
-    <main dir="rtl" style={{minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial, sans-serif",color:"#0b1f33"}}>
+    <main dir="rtl" className="cgp-ops-page">
 
 
       <div className="cgp-page-body" style={{display:"flex",minHeight:"calc(100vh - 86px)"}}>
 
 
-        <section className="cgp-content" style={{flex:1,padding:"40px",minWidth:0}}>
+        <section className="cgp-content cgp-ops-content">
           <WorkflowHeading title="لوحة المتابعة التشغيلية" description="قائمة العمل اليومية: المتأخرات، الأدلة الناقصة، والقرارات المطلوبة." action={<button type="button" disabled={refreshing} onClick={()=>setRefreshKey(k=>k+1)} className="workflow-button">{refreshing?"جاري التحديث...":"تحديث البيانات"}</button>}/>
           <div className="dashboard-context">{userRole==="control_owner"?"الضوابط المسندة إليك فقط":"جميع الضوابط"}{updatedAt&&` · آخر تحديث ${updatedAt}`}</div>
           {error&&<div role="alert" style={{background:"#fff2f0",color:"#b42318",padding:16,marginBottom:18,borderRadius:9}}>{error}</div>}
           {stats?.total===0&&<p>لا توجد ضوابط ضمن نطاق صلاحيتك حاليًا.</p>}
-          <div className="workflow-metrics"><WorkflowMetric label="مهام متأخرة" value={stats ? stats.overdue : "—"} tone={stats?.overdue?"danger":"neutral"}/><WorkflowMetric label="تحتاج دليلًا" value={stats ? stats.waiting_evidence : "—"} tone={stats?.waiting_evidence?"warning":"neutral"}/><WorkflowMetric label="بانتظار قرار مراجعة" value={stats ? stats.pending_review : "—"} tone={stats?.pending_review?"warning":"neutral"}/><WorkflowMetric label="تم التحقق" value={stats ? stats.verified : "—"} tone="success"/></div>
-          <section className="cgp-priority-card"><div><span className="cgp-card-eyebrow">القرار التالي</span><h2>تحتاج انتباهك</h2><p>ابدأ بالعناصر التي تؤثر في التنفيذ أو تنتظر قراراً.</p></div>{stats&&<div className="cgp-priority-actions"><AlertItem href="/tasks?filter=overdue" count={stats.overdue} text="مهام متأخرة" tone="danger"/><AlertItem href="/tasks?filter=evidence" count={stats.waiting_evidence} text="ضوابط تحتاج دليلًا" tone="warning"/><AlertItem href={userRole==="control_owner"?"/evidence":"/review"} count={stats.pending_review} text="أدلة بانتظار المراجعة" tone="info"/></div>}</section>
+          <div className="workflow-metrics cgp-ops-metrics"><WorkflowMetric label="مهام متأخرة" value={stats ? stats.overdue : "—"} tone={stats?.overdue?"danger":"neutral"}/><WorkflowMetric label="تحتاج دليلًا" value={stats ? stats.waiting_evidence : "—"} tone={stats?.waiting_evidence?"warning":"neutral"}/><WorkflowMetric label="بانتظار قرار مراجعة" value={stats ? stats.pending_review : "—"} tone={stats?.pending_review?"warning":"neutral"}/><WorkflowMetric label="تم التحقق" value={stats ? stats.verified : "—"} tone="success"/></div>
+          <section className="cgp-priority-card cgp-ops-priority"><div><span className="cgp-card-eyebrow">القرار التالي</span><h2>تحتاج انتباهك</h2><p>ابدأ بالعناصر التي تؤثر في التنفيذ أو تنتظر قراراً.</p></div>{stats&&<div className="cgp-priority-actions"><AlertItem href="/tasks?filter=overdue" count={stats.overdue} text="مهام متأخرة" tone="danger"/><AlertItem href="/tasks?filter=evidence" count={stats.waiting_evidence} text="ضوابط تحتاج دليلًا" tone="warning"/><AlertItem href={userRole==="control_owner"?"/evidence":"/review"} count={stats.pending_review} text="أدلة بانتظار المراجعة" tone="info"/></div>}</section>
           <div style={{marginTop:"24px",display:"flex",gap:12,flexWrap:"wrap"}}>
             <Link href="/tasks" style={primaryLink}>فتح مهامي / التكليفات ←</Link>
             <Link href="/controls" style={secondaryLink}>عرض جميع الضوابط</Link>
