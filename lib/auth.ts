@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export type UserRole = 'admin' | 'cybersecurity_team' | 'control_owner';
+export type UserRole = 'admin' | 'cybersecurity_team' | 'data_governance_team' | 'control_owner';
 
 export type AuthProfile = {
   role: UserRole;
@@ -8,7 +8,7 @@ export type AuthProfile = {
   display_name: string | null;
 };
 
-const validRoles: UserRole[] = ['admin', 'cybersecurity_team', 'control_owner'];
+const validRoles: UserRole[] = ['admin', 'cybersecurity_team', 'data_governance_team', 'control_owner'];
 
 export function hasRole(role: UserRole, allowedRoles?: readonly UserRole[]) {
   return !allowedRoles?.length || allowedRoles.includes(role);
