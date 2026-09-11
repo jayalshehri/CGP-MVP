@@ -19,7 +19,7 @@ export default function LoginPage() {
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       if (data.session) {
-        router.replace("/");
+        router.replace("/workspace");
         return;
       }
       setCheckingSession(false);
@@ -38,7 +38,7 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-    router.replace("/");
+    router.replace("/workspace");
     router.refresh();
   }
 
