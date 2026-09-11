@@ -78,7 +78,7 @@ function NavIcon({ href }: { href: string }) {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  if (["/login", "/activate"].includes(pathname)) return children;
+  if (["/login", "/activate", "/workspace"].includes(pathname)) return children;
   return <Workspace pathname={pathname}>{children}</Workspace>;
 }
 
@@ -148,7 +148,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   return <div className={`cgp-workspace ${navCollapsed?"cgp-nav-collapsed":""}`} dir="rtl">
     <a href="#cgp-content" className="cgp-skip">انتقل إلى المحتوى</a>
     <header className="cgp-topbar">
-      <Link href="/" className="cgp-brand" aria-label="CGP — لوحة المتابعة"><span className="cgp-brand-mark">CGP</span><span>منصة الحوكمة الرقمية<small>Digital Governance Platform</small></span></Link>
+      <Link href="/workspace" className="cgp-brand" aria-label="CGP — اختيار مساحة العمل"><span className="cgp-brand-mark">CGP</span><span>منصة الحوكمة الرقمية<small>Digital Governance Platform</small></span></Link>
       <nav className="cgp-workspace-switch" aria-label="تبديل مساحة العمل">
         <Link href="/" aria-current={workspace === "cyber" ? "page" : undefined}>الأمن السيبراني</Link>
         {account?.role !== "control_owner" && <Link href="/data-governance" aria-current={workspace === "data" ? "page" : undefined}>حوكمة البيانات</Link>}
