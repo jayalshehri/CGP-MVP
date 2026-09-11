@@ -13,6 +13,7 @@ const navigation = [
   { href: "/reports", label: "التقارير", group: "نظرة عامة", team: true },
   { href: "/controls", label: "الضوابط", group: "الالتزام" },
   { href: "/data-governance", label: "إدارة البيانات والحوكمة", group: "مساحات العمل", data: true },
+  { href: "/data-governance/requests", label: "طلبات إدارة البيانات", group: "مساحات العمل", data: true },
   { href: "/assessments", label: "تقييم CSCC", group: "قياس الالتزام", team: true },
   { href: "/dcc-assessment", label: "تقييم DCC", group: "قياس الالتزام", team: true },
   { href: "/tcc-assessment", label: "تقييم TCC", group: "قياس الالتزام", team: true },
@@ -56,6 +57,7 @@ function NavIcon({ href }: { href: string }) {
     "/users": "M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M2 21v-2a6 6 0 0 1 12 0v2 M16 4a4 4 0 0 1 0 8 M17 15a5 5 0 0 1 5 5v1",
     "/feedback": "M20 11.5a8 8 0 0 1-8 8 8.8 8.8 0 0 1-3.4-.7L4 20l1.2-3.7A8 8 0 1 1 20 11.5z M8 11.5h.01 M12 11.5h.01 M16 11.5h.01",
     "/data-governance": "M4 5h16v14H4z M8 9h8 M8 13h5 M16 3v4 M8 3v4",
+    "/data-governance/requests": "M5 4h14v17H5z M8 8h8 M8 12h8 M8 16h5",
   };
   return <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={paths[href]}/></svg>;
 }
