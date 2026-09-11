@@ -23,7 +23,7 @@ export default function DataGovernancePage() {
 
   useEffect(() => {
     let active = true;
-    requireProfile(["admin", "cybersecurity_team"])
+    requireProfile(["admin", "data_governance_team"])
       .then(() => active && setReady(true))
       .catch((error: Error) => {
         if (error.message.includes("تسجيل الدخول")) router.replace("/login");
