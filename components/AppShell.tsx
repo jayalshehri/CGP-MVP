@@ -87,7 +87,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
     return () => { active = false; data.subscription.unsubscribe(); };
   }, [pathname, router]);
 
-  const items = account ? navigation.filter(item => (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin" || account.role === "data_governance_team")) : [];
+  const items = account ? navigation.filter(item => account.role === "data_governance_team" ? Boolean(item.data) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];
   const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "لوحة المتابعة");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const leaf = pathname.endsWith("/assign") ? "تكليف المالك" : pathname.endsWith("/evidence/new") ? "رفع دليل" : controlId ? "تفاصيل الضابط" : current;
