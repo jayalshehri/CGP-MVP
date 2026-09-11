@@ -75,7 +75,7 @@ export default function EvidencePage(){
  if(error)return <main dir="rtl"><h1>تعذر تحميل البيانات</h1><p role="alert">{error}</p><button onClick={()=>window.location.reload()}>إعادة المحاولة</button></main>;
 
 
-  return <main className="workflow-page" dir="rtl" style={{minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial, sans-serif",color:"#0b1f33"}}>
+  return <main className="workflow-page" dir="rtl" style={{color:"var(--cgp-ink)"}}>
 
     <div className="cgp-page-body" style={{display:"flex",minHeight:"calc(100vh - 86px)"}}>
 
@@ -106,4 +106,4 @@ export default function EvidencePage(){
 
 const primary={background:"var(--cgp-teal)",color:"white",textDecoration:"none",padding:"9px 12px",borderRadius:8,fontWeight:800,fontSize:13};
 const secondary={background:"#eef3f5",color:"#0b1f33",textDecoration:"none",padding:"9px 12px",borderRadius:8,fontWeight:800,fontSize:13};
-const center={minHeight:"100vh",display:"grid",placeItems:"center",fontFamily:"Arial",background:"#f5f7f9",color:"#0b1f33"};
+const center={display:"grid",placeItems:"center",color:"var(--cgp-ink)"};

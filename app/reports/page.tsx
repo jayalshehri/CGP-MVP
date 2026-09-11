@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { WorkflowHeading, WorkflowMetric } from "@/components/WorkflowUI";
+import { requireProfile } from "@/lib/auth";
 
 type Control={id:number;framework_id:number;control_code:string;title_ar:string;domain_ar:string;implementation_status:string;evidence_status:string;verification_status:string;due_date:string|null;control_owner:string|null};
 type Evidence={id:number;control_id:number;status:string|null};
@@ -22,9 +23,13 @@ export default function ReportsPage(){
  const [loading,setLoading]=useState(true); const [error,setError]=useState("");
  const [controls,setControls]=useState<Control[]>([]); const [evidence,setEvidence]=useState<Evidence[]>([]); const [frameworks,setFrameworks]=useState<Framework[]>([]); const [selectedFramework,setSelectedFramework]=useState("ECC");
  useEffect(()=>{(async()=>{
-  const {data:s}=await supabase.auth.getSession(); if(!s.session){router.replace("/login");return;}
-  const {data:p}=await supabase.from("profiles").select("role,is_active").eq("user_id",s.session.user.id).maybeSingle();
-  if(!p||p.is_active===false||!["admin","cybersecurity_team"].includes(p.role)){router.replace("/");return;}
+  try {
+   await requireProfile(["admin","cybersecurity_team"]);
+  } catch (authError) {
+   const message=authError instanceof Error?authError.message:"";
+   router.replace(message.includes("تسجيل الدخول")?"/login":"/");
+   return;
+  }
   const [{data:c,error:ce},{data:e,error:ee},{data:f,error:fe}]=await Promise.all([
    supabase.from("controls").select("id,framework_id,control_code,title_ar,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner").order("id"),
    supabase.from("evidence").select("id,control_id,status").eq("is_current",true),
@@ -103,4 +108,4 @@ function AttentionMap({domains,onSelect}:{domains:DomainRow[];onSelect:(domain:s
 function Th({t}:{t:string}){return <th style={{textAlign:"right",padding:"13px 12px",fontSize:12,color:"#687581",background:"#f8fafb"}}>{t}</th>}
 function Td({children}:{children:React.ReactNode}){return <td style={{padding:"14px 12px",borderTop:"1px solid #edf0f2",fontSize:14}}>{children}</td>}
 function Empty(){return <div style={{padding:35,textAlign:"center",color:"#586875"}}>لا توجد بيانات كافية بعد.</div>}
-const page={minHeight:"100vh",background:"#f5f7f9",fontFamily:"Arial, sans-serif",color:"#0b1f33"}; const center={...page,display:"grid",placeItems:"center"}; const errorBox={background:"#fff2f0",color:"#9d2e24",padding:14,borderRadius:10,marginBottom:18}; const table={width:"100%",borderCollapse:"collapse" as const};
+const page={color:"var(--cgp-ink)"}; const center={...page,display:"grid",placeItems:"center"}; const errorBox={background:"#fff2f0",color:"#9d2e24",padding:14,borderRadius:10,marginBottom:18}; const table={width:"100%",borderCollapse:"collapse" as const};

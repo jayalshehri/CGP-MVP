@@ -1,10 +1,237 @@
 "use client";
-import { FormEvent,useEffect,useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import "../data-governance.css";
-type Asset={id:number;name_ar:string};type Request={id:number;request_code:string;requester_name:string;recipient_entity:string;sharing_purpose:string;legal_basis:string;status:string;data_assets:{name_ar:string}[]|null};const statuses:Record<string,string>={draft:"مسودة",submitted:"مقدم",steward_review:"مراجعة أمين البيانات",governance_review:"مراجعة الحوكمة",approved:"معتمد",rejected:"مرفوض",closed:"مغلق"};
-export default function SharingPage(){const r=useRouter();const [assets,setAssets]=useState<Asset[]>([]);const [rows,setRows]=useState<Request[]>([]);const [open,setOpen]=useState(false);const [saving,setSaving]=useState(false);const [error,setError]=useState("");const [form,setForm]=useState({asset_id:"",requester_name:"",recipient_entity:"",sharing_purpose:"",data_categories:"",legal_basis:"",sharing_method:""});
-async function load(){const [{data:a},{data:s,error}]=await Promise.all([supabase.from("data_assets").select("id,name_ar").order("name_ar"),supabase.from("data_sharing_requests").select("id,request_code,requester_name,recipient_entity,sharing_purpose,legal_basis,status,data_assets(name_ar)").order("created_at",{ascending:false})]);if(error)throw error;setAssets((a??[])as Asset[]);setRows((s??[])as Request[])}useEffect(()=>{requireProfile(["admin","data_governance_team"]).then(load).catch(()=>r.replace("/"));},[r]);async function submit(e:FormEvent){e.preventDefault();setSaving(true);setError("");const {error}=await supabase.from("data_sharing_requests").insert({...form,request_code:"DS-"+Date.now(),asset_id:form.asset_id?Number(form.asset_id):null});if(error){setError("تعذر حفظ طلب المشاركة. تأكد من الحقول المطلوبة.");setSaving(false);return}setOpen(false);setForm({asset_id:"",requester_name:"",recipient_entity:"",sharing_purpose:"",data_categories:"",legal_basis:"",sharing_method:""});await load();setSaving(false)}
-return <main className="dg-page" dir="rtl"><div className="workflow-heading"><div><span>المشاركة</span><h1>طلبات مشاركة البيانات</h1><p>سجل مستقل لطلب المشاركة ومراجعته واعتماده، مرتبط بأصل البيانات والمسوغ النظامي.</p></div><button className="workflow-button workflow-primary" onClick={()=>setOpen(v=>!v)}>+ طلب مشاركة</button></div>{open&&<form className="asset-form" onSubmit={submit}><div className="asset-fields"><label>مقدم الطلب<input required value={form.requester_name} onChange={e=>setForm({...form,requester_name:e.target.value})}/></label><label>الجهة المستفيدة<input required value={form.recipient_entity} onChange={e=>setForm({...form,recipient_entity:e.target.value})}/></label><label>أصل البيانات<select value={form.asset_id} onChange={e=>setForm({...form,asset_id:e.target.value})}><option value="">غير مرتبط بأصل</option>{assets.map(a=><option key={a.id} value={a.id}>{a.name_ar}</option>)}</select></label><label>المسوغ النظامي<input required value={form.legal_basis} onChange={e=>setForm({...form,legal_basis:e.target.value})}/></label><label className="wide">غرض المشاركة<textarea required rows={2} value={form.sharing_purpose} onChange={e=>setForm({...form,sharing_purpose:e.target.value})}/></label><label>فئات البيانات<input required value={form.data_categories} onChange={e=>setForm({...form,data_categories:e.target.value})}/></label><label>طريقة المشاركة<input value={form.sharing_method} onChange={e=>setForm({...form,sharing_method:e.target.value})}/></label></div>{error&&<p role="alert">{error}</p>}<footer><button disabled={saving} className="workflow-button workflow-primary">{saving?"جاري الحفظ…":"إرسال للمراجعة"}</button></footer></form>}<section className="assets-table-wrap"><table className="assets-table"><thead><tr><th>الطلب</th><th>الأصل</th><th>الجهة المستفيدة</th><th>المسوغ النظامي</th><th>الحالة</th></tr></thead><tbody>{rows.length?rows.map(x=><tr key={x.id}><td><strong>{x.requester_name}</strong><small>{x.request_code}</small></td><td>{x.data_assets?.[0]?.name_ar||"—"}</td><td>{x.recipient_entity}</td><td>{x.legal_basis}</td><td><span className="asset-class internal">{statuses[x.status]}</span></td></tr>):<tr><td colSpan={5}>لا توجد طلبات مشاركة مسجلة.</td></tr>}</tbody></table></section></main>}
+type Asset = { id: number; name_ar: string };
+type Request = {
+  id: number;
+  request_code: string;
+  requester_name: string;
+  recipient_entity: string;
+  sharing_purpose: string;
+  legal_basis: string;
+  status: string;
+  data_assets: { name_ar: string }[] | null;
+};
+const statuses: Record<string, string> = {
+  draft: "مسودة",
+  submitted: "مقدم",
+  steward_review: "مراجعة أمين البيانات",
+  governance_review: "مراجعة الحوكمة",
+  approved: "معتمد",
+  rejected: "مرفوض",
+  closed: "مغلق",
+};
+export default function SharingPage() {
+  const r = useRouter();
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [rows, setRows] = useState<Request[]>([]);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({
+    asset_id: "",
+    requester_name: "",
+    recipient_entity: "",
+    sharing_purpose: "",
+    data_categories: "",
+    legal_basis: "",
+    sharing_method: "",
+  });
+  async function load() {
+    const [{ data: a }, { data: s, error }] = await Promise.all([
+      supabase.from("data_assets").select("id,name_ar").order("name_ar"),
+      supabase
+        .from("data_sharing_requests")
+        .select(
+          "id,request_code,requester_name,recipient_entity,sharing_purpose,legal_basis,status,data_assets(name_ar)",
+        )
+        .order("created_at", { ascending: false }),
+    ]);
+    if (error) throw error;
+    setAssets((a ?? []) as Asset[]);
+    setRows((s ?? []) as Request[]);
+  }
+  useEffect(() => {
+    requireProfile(["admin", "data_governance_team"])
+      .then(load)
+      .catch(() => r.replace("/"));
+  }, [r]);
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    const { error } = await supabase
+      .from("data_sharing_requests")
+      .insert({
+        ...form,
+        request_code: "DS-" + Date.now(),
+        asset_id: form.asset_id ? Number(form.asset_id) : null,
+      });
+    if (error) {
+      setError("تعذر حفظ طلب المشاركة. تأكد من الحقول المطلوبة.");
+      setSaving(false);
+      return;
+    }
+    setOpen(false);
+    setForm({
+      asset_id: "",
+      requester_name: "",
+      recipient_entity: "",
+      sharing_purpose: "",
+      data_categories: "",
+      legal_basis: "",
+      sharing_method: "",
+    });
+    await load();
+    setSaving(false);
+  }
+  return (
+    <main className="dg-page" dir="rtl">
+      <div className="workflow-heading">
+        <div>
+          <span>المشاركة</span>
+          <h1>طلبات مشاركة البيانات</h1>
+          <p>
+            سجل مستقل لطلب المشاركة ومراجعته واعتماده، مرتبط بأصل البيانات
+            والمسوغ النظامي.
+          </p>
+        </div>
+        <button
+          className="workflow-button workflow-primary"
+          onClick={() => setOpen((v) => !v)}
+        >
+          + طلب مشاركة
+        </button>
+      </div>
+      {open && (
+        <form className="asset-form" onSubmit={submit}>
+          <div className="asset-fields">
+            <label>
+              مقدم الطلب
+              <input
+                required
+                value={form.requester_name}
+                onChange={(e) =>
+                  setForm({ ...form, requester_name: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              الجهة المستفيدة
+              <input
+                required
+                value={form.recipient_entity}
+                onChange={(e) =>
+                  setForm({ ...form, recipient_entity: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              أصل البيانات
+              <select
+                value={form.asset_id}
+                onChange={(e) => setForm({ ...form, asset_id: e.target.value })}
+              >
+                <option value="">غير مرتبط بأصل</option>
+                {assets.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name_ar}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              المسوغ النظامي
+              <input
+                required
+                value={form.legal_basis}
+                onChange={(e) =>
+                  setForm({ ...form, legal_basis: e.target.value })
+                }
+              />
+            </label>
+            <label className="wide">
+              غرض المشاركة
+              <textarea
+                required
+                rows={2}
+                value={form.sharing_purpose}
+                onChange={(e) =>
+                  setForm({ ...form, sharing_purpose: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              فئات البيانات
+              <input
+                required
+                value={form.data_categories}
+                onChange={(e) =>
+                  setForm({ ...form, data_categories: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              طريقة المشاركة
+              <input
+                value={form.sharing_method}
+                onChange={(e) =>
+                  setForm({ ...form, sharing_method: e.target.value })
+                }
+              />
+            </label>
+          </div>
+          {error && <p role="alert">{error}</p>}
+          <footer>
+            <button
+              disabled={saving}
+              className="workflow-button workflow-primary"
+            >
+              {saving ? "جاري الحفظ…" : "إرسال للمراجعة"}
+            </button>
+          </footer>
+        </form>
+      )}
+      <section className="assets-table-wrap">
+        <table className="assets-table">
+          <thead>
+            <tr>
+              <th>الطلب</th>
+              <th>الأصل</th>
+              <th>الجهة المستفيدة</th>
+              <th>المسوغ النظامي</th>
+              <th>الحالة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? (
+              rows.map((x) => (
+                <tr key={x.id}>
+                  <td>
+                    <strong>{x.requester_name}</strong>
+                    <small>{x.request_code}</small>
+                  </td>
+                  <td>{x.data_assets?.[0]?.name_ar || "—"}</td>
+                  <td>{x.recipient_entity}</td>
+                  <td>{x.legal_basis}</td>
+                  <td>
+                    <span className="asset-class internal">
+                      {statuses[x.status]}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={5}>لا توجد طلبات مشاركة مسجلة.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+    </main>
+  );
+}
