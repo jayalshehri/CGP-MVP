@@ -124,7 +124,9 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
     if (workspace !== "cyber" || query.length < 2) { setControlResults([]); setSearching(false); return; }
     setSearching(true);
     const timer = window.setTimeout(async () => {
-      const escaped = query.replace(/[,%()]/g, " ");
+      // Strip PostgREST filter separators (`,()`) and ILIKE wildcard characters (`%_`)
+      // so a raw search string can't widen the match beyond the typed text.
+      const escaped = query.replace(/[,%()_]/g, " ");
       const { data } = await supabase.from("controls").select("id,control_code,title_ar").or(`control_code.ilike.%${escaped}%,title_ar.ilike.%${escaped}%`).order("control_code").limit(8);
       setControlResults((data ?? []) as SearchResult[]);
       setSearching(false);

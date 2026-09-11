@@ -6,6 +6,7 @@ import { WorkflowHeading } from "@/components/WorkflowUI";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { requireProfile } from "@/lib/auth";
 
 type Owner = { user_id: string; display_name: string | null; role: string; is_active: boolean };
 type Control = { id: number; control_code: string; title_ar: string; control_owner_id: string | null; due_date: string | null };
@@ -23,12 +24,12 @@ export default function AssignControlPage() {
 
   useEffect(() => {
     async function load() {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const session = sessionData.session;
-      if (!session) return router.replace("/login");
-
-      const { data: me } = await supabase.from("profiles").select("role,is_active").eq("user_id", session.user.id).maybeSingle();
-      if (!me || me.is_active === false || !["admin", "cybersecurity_team"].includes(me.role)) return router.replace(`/controls/${params.id}`);
+      try {
+        await requireProfile(["admin", "cybersecurity_team"]);
+      } catch (authError) {
+        const message = authError instanceof Error ? authError.message : "";
+        return router.replace(message.includes("تسجيل الدخول") ? "/login" : `/controls/${params.id}`);
+      }
 
       const [{ data: controlData, error: controlError }, { data: ownerData, error: ownerError }] = await Promise.all([
         supabase.from("controls").select("id,control_code,title_ar,control_owner_id,due_date").eq("id", Number(params.id)).single(),
@@ -69,7 +70,7 @@ export default function AssignControlPage() {
     <section className="cgp-page-body" style={{maxWidth:760,margin:"0 auto",padding:"42px 24px"}}>
       <WorkflowHeading title="تكليف مالك الضابط" description="حدد المسؤول عن التنفيذ وموعد الاستحقاق؛ سيظهر الضابط ضمن مهامه."/>
       <form onSubmit={event=>{event.preventDefault();void save();}} style={{background:"white",border:"1px solid #e2e7eb",borderRadius:16,padding:30}}>
-        <div style={{color:"#0f7d73",fontWeight:800,marginBottom:8}}>{control?.control_code}</div>
+        <div style={{color:"var(--cgp-teal)",fontWeight:800,marginBottom:8}}>{control?.control_code}</div>
         <h2 style={{margin:"0 0 28px",fontSize:20}}>{control?.title_ar||"تعذر عرض الضابط"}</h2>
         {error && <div role="alert" style={{background:"#fff2f0",color:"#9d2e24",padding:12,borderRadius:9,marginBottom:18}}>{error}</div>}
         <label htmlFor="control-owner" style={label}>مالك الضابط</label>
@@ -80,7 +81,7 @@ export default function AssignControlPage() {
         {owners.length === 0 && <p style={{color:"#9a5700",fontSize:13}}>لا يوجد مالك ضابط نشط. أضف مستخدمًا من إدارة المستخدمين أولاً.</p>}
         <label htmlFor="due-date" style={{...label,marginTop:22}}>تاريخ الاستحقاق</label>
         <input disabled={saving||!control} id="due-date" type="date" value={dueDate} onChange={(e)=>setDueDate(e.target.value)} style={input}/>
-        <p className="workflow-form-hint">تاريخ الاستحقاق اختياري. تركه فارغًا يعني عدم تحديد موعد.</p><button type="submit" disabled={saving || owners.length===0 || !control} style={{marginTop:28,width:"100%",border:0,borderRadius:10,padding:"13px 18px",background:"#0f7d73",color:"white",fontWeight:800,fontSize:15,cursor:"pointer"}}>{saving?"جاري الحفظ...":"حفظ التكليف"}</button>
+        <p className="workflow-form-hint">تاريخ الاستحقاق اختياري. تركه فارغًا يعني عدم تحديد موعد.</p><button type="submit" disabled={saving || owners.length===0 || !control} style={{marginTop:28,width:"100%",border:0,borderRadius:10,padding:"13px 18px",background:"var(--cgp-teal)",color:"white",fontWeight:800,fontSize:15,cursor:"pointer"}}>{saving?"جاري الحفظ...":"حفظ التكليف"}</button>
         {!saving&&<Link className="workflow-button" style={{marginTop:12,width:"100%"}} href={`/controls/${params.id}`}>إلغاء والعودة للضابط</Link>}
       </form>
     </section>

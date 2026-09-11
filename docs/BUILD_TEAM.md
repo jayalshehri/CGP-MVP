@@ -6,7 +6,7 @@ Owns delivery sequencing, integration, Supabase data flow, GitHub changes, and V
 ## 2. UI/UX Designer
 For every new or changed page:
 - Keep Arabic RTL as the default UX.
-- Use the shared tokens in `lib/design.ts`.
+- Use the shared CSS custom properties defined on `:root` in `app/globals.css` (`--cgp-teal`, `--cgp-teal-dark`, `--cgp-line`, `--cgp-muted`, etc.) instead of hardcoding hex colors — this is the single source of truth for the palette.
 - Keep navigation, header, spacing, cards, buttons, status pills, and typography consistent.
 - Review desktop readability first, then responsive behavior.
 - Prefer simple governance workflows over visually complex screens.
