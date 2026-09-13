@@ -15,7 +15,13 @@ type ViewMode="structure"|"followup";
 const good=(value:string)=>["implemented","compliant"].includes(value);
 const cleanTitle=(value:string)=>value.replace(/\s*[-–]\s*[\d-]+\s*$/,"").trim();
 const domainNumber=(rows:Control[])=>rows[0]?.control_code.split("-")[0]||"—";
-const displayTitle=(control:Control,frameworkCode:string)=>frameworkCode==="ECC"?getEccOfficialTitle(control.control_code)||cleanTitle(control.title_ar):cleanTitle(control.title_ar);
+const displayTitle=(control:Control,frameworkCode:string)=>{
+ if(frameworkCode!=="ECC")return cleanTitle(control.title_ar);
+ // ECC descriptions are the official requirement wording imported with each control.
+ // Prefer a verified concise title where one exists; otherwise show the official text,
+ // rather than repeating the generic subdomain name across several controls.
+ return getEccOfficialTitle(control.control_code)||control.description_ar||cleanTitle(control.title_ar);
+};
 
 export default function ControlsPage(){
  return <Suspense fallback={<main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>}><ControlsContent/></Suspense>;
