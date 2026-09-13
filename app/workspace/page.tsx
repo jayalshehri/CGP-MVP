@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { dataGovernanceEnabled } from "@/lib/workspaces";
 
 const roleLabels: Record<UserRole, string> = {
   admin: "مدير النظام",
@@ -65,7 +66,13 @@ export default function WorkspaceSelectPage() {
     return () => { active = false; };
   }, [router]);
 
-  const available = role ? workspaces.filter((workspace) => workspace.permissions.includes(role)) : [];
+  const available = role
+    ? workspaces.filter(
+        (workspace) =>
+          workspace.permissions.includes(role) &&
+          (workspace.tone !== "data" || dataGovernanceEnabled),
+      )
+    : [];
 
   return (
     <main dir="rtl" style={{ minHeight: "100vh", padding: "clamp(24px, 5vw, 76px)", background: "radial-gradient(circle at 88% 6%, #d7fbf6 0, transparent 26%), radial-gradient(circle at 10% 100%, #e4edf7 0, transparent 30%), #f7fafc", color: "#10263f" }}>
@@ -87,7 +94,7 @@ export default function WorkspaceSelectPage() {
         <div style={{ padding: "clamp(42px, 8vw, 92px) 0 34px", maxWidth: 760 }}>
           <span style={{ color: "#087a72", fontWeight: 800, fontSize: 14 }}>اختر مساحة العمل</span>
           <h1 style={{ margin: "12px 0 16px", fontSize: "clamp(32px, 4vw, 52px)", lineHeight: 1.2, letterSpacing: "-1px" }}>ابدأ من المجال المناسب لعملك</h1>
-          <p style={{ margin: 0, color: "#5f7183", fontSize: 18, lineHeight: 1.8 }}>تفصل المنصة بين الحوكمة السيبرانية وحوكمة البيانات. ستظهر لك المعلومات والأدوات المصرح بها في المساحة التي تختارها فقط.</p>
+          <p style={{ margin: 0, color: "#5f7183", fontSize: 18, lineHeight: 1.8 }}>{dataGovernanceEnabled ? "تفصل المنصة بين الحوكمة السيبرانية وحوكمة البيانات. ستظهر لك المعلومات والأدوات المصرح بها في المساحة التي تختارها فقط." : "مساحة الأمن السيبراني هي مساحة العمل النشطة حاليًا. ستتاح حوكمة البيانات في إصدار مستقل بعد اكتمال إجراءاتها التشغيلية."}</p>
         </div>
 
         {error && <p role="alert" style={{ background: "#fff1f0", color: "#a42b21", borderRadius: 12, padding: 16 }}>{error}</p>}
@@ -105,7 +112,7 @@ export default function WorkspaceSelectPage() {
           ))}
         </div>
 
-        {role && available.length === 1 && <p style={{ marginTop: 24, color: "#60758a" }}>تظهر لك مساحة واحدة لأن صلاحية حسابك مقصورة عليها.</p>}
+        {role && available.length === 1 && <p style={{ marginTop: 24, color: "#60758a" }}>{dataGovernanceEnabled ? "تظهر لك مساحة واحدة لأن صلاحية حسابك مقصورة عليها." : "تظهر مساحة الأمن السيبراني فقط خلال مرحلة الإطلاق التشغيلي الحالية."}</p>}
       </section>
     </main>
   );

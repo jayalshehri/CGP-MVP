@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import FeedbackWidget from "@/components/FeedbackWidget";
+import { dataGovernanceEnabled } from "@/lib/workspaces";
 
 const navigation = [
   { href: "/", label: "لوحة المتابعة", group: "نظرة عامة" },
@@ -153,7 +154,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       <Link href="/workspace" className="cgp-brand" aria-label="CGP — اختيار مساحة العمل"><span className="cgp-brand-mark">CGP</span><span>منصة الحوكمة الرقمية<small>Digital Governance Platform</small></span></Link>
       <nav className="cgp-workspace-switch" aria-label="تبديل مساحة العمل">
         <Link href="/" aria-current={workspace === "cyber" ? "page" : undefined}>الأمن السيبراني</Link>
-        {account?.role !== "control_owner" && <Link href="/data-governance" aria-current={workspace === "data" ? "page" : undefined}>حوكمة البيانات</Link>}
+        {dataGovernanceEnabled && account?.role !== "control_owner" && <Link href="/data-governance" aria-current={workspace === "data" ? "page" : undefined}>حوكمة البيانات</Link>}
         {account?.role === "admin" && <Link href="/shared-controls" aria-current={workspace === "shared" ? "page" : undefined}>مركز المواءمة</Link>}
       </nav>
       <button type="button" className="cgp-global-search" onClick={()=>setSearchOpen(true)} aria-haspopup="dialog"><span aria-hidden="true">⌕</span> بحث سريع <kbd>⌘ K</kbd></button>
