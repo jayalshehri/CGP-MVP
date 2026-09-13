@@ -20,6 +20,9 @@ const displayTitle=(control:Control,frameworkCode:string)=>{
  // Show them in the catalog so controls in the same subdomain remain distinguishable.
  // ECC keeps its verified concise titles where they are available.
  if(frameworkCode==="ECC")return getEccOfficialTitle(control.control_code)||control.description_ar||cleanTitle(control.title_ar);
+ // CCC's currently imported details are English, while its approved Arabic titles
+ // are already stored in the catalog. Keep the Arabic-first interface consistent.
+ if(frameworkCode==="CCC")return cleanTitle(control.title_ar);
  return control.description_ar||cleanTitle(control.title_ar);
 };
 
