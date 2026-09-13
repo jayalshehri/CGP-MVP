@@ -16,11 +16,11 @@ const good=(value:string)=>["implemented","compliant"].includes(value);
 const cleanTitle=(value:string)=>value.replace(/\s*[-–]\s*[\d-]+\s*$/,"").trim();
 const domainNumber=(rows:Control[])=>rows[0]?.control_code.split("-")[0]||"—";
 const displayTitle=(control:Control,frameworkCode:string)=>{
- if(frameworkCode!=="ECC")return cleanTitle(control.title_ar);
- // ECC descriptions are the official requirement wording imported with each control.
- // Prefer a verified concise title where one exists; otherwise show the official text,
- // rather than repeating the generic subdomain name across several controls.
- return getEccOfficialTitle(control.control_code)||control.description_ar||cleanTitle(control.title_ar);
+ // Descriptions are the official requirement wording imported with each framework.
+ // Show them in the catalog so controls in the same subdomain remain distinguishable.
+ // ECC keeps its verified concise titles where they are available.
+ if(frameworkCode==="ECC")return getEccOfficialTitle(control.control_code)||control.description_ar||cleanTitle(control.title_ar);
+ return control.description_ar||cleanTitle(control.title_ar);
 };
 
 export default function ControlsPage(){
