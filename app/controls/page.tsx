@@ -15,14 +15,15 @@ type ViewMode="structure"|"followup";
 const good=(value:string)=>["implemented","compliant"].includes(value);
 const cleanTitle=(value:string)=>value.replace(/\s*[-–]\s*[\d-]+\s*$/,"").trim();
 const domainNumber=(rows:Control[])=>rows[0]?.control_code.split("-")[0]||"—";
+const hasArabic=(value:string|null)=>!!value&&/[\u0600-\u06ff]/.test(value);
 const displayTitle=(control:Control,frameworkCode:string)=>{
  // Descriptions are the official requirement wording imported with each framework.
  // Show them in the catalog so controls in the same subdomain remain distinguishable.
  // ECC keeps its verified concise titles where they are available.
  if(frameworkCode==="ECC")return getEccOfficialTitle(control.control_code)||control.description_ar||cleanTitle(control.title_ar);
- // CCC's currently imported details are English, while its approved Arabic titles
- // are already stored in the catalog. Keep the Arabic-first interface consistent.
- if(frameworkCode==="CCC")return cleanTitle(control.title_ar);
+ // CCC wording is introduced from the official Arabic source in verified batches.
+ // Until a row is verified, retain its approved Arabic catalog title rather than showing English.
+ if(frameworkCode==="CCC")return hasArabic(control.description_ar)?control.description_ar:cleanTitle(control.title_ar);
  return control.description_ar||cleanTitle(control.title_ar);
 };
 
