@@ -7,7 +7,7 @@ import { requireProfile } from "@/lib/auth";
 import Link from "next/link";
 import "./catalog.css";
 import { supabase } from "@/lib/supabase";
-import { getEccStrategyExample } from "@/lib/ecc-strategy-example";
+import { getEccOfficialTitle } from "@/lib/ecc-strategy-example";
 
 type Control={id:number;framework_id:number;control_code:string;title_ar:string;description_ar:string|null;domain_ar:string;implementation_status:string;evidence_status:string;verification_status:string;due_date:string|null;control_owner:string|null;control_owner_id:string|null};
 type Framework={id:number;code:string;name_ar:string;version:string};
@@ -15,7 +15,7 @@ type ViewMode="structure"|"followup";
 const good=(value:string)=>["implemented","compliant"].includes(value);
 const cleanTitle=(value:string)=>value.replace(/\s*[-–]\s*[\d-]+\s*$/,"").trim();
 const domainNumber=(rows:Control[])=>rows[0]?.control_code.split("-")[0]||"—";
-const displayTitle=(control:Control,frameworkCode:string)=>frameworkCode==="ECC"?getEccStrategyExample(control.control_code)?.title||cleanTitle(control.title_ar):cleanTitle(control.title_ar);
+const displayTitle=(control:Control,frameworkCode:string)=>frameworkCode==="ECC"?getEccOfficialTitle(control.control_code)||cleanTitle(control.title_ar):cleanTitle(control.title_ar);
 
 export default function ControlsPage(){
  return <Suspense fallback={<main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>}><ControlsContent/></Suspense>;

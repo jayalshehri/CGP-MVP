@@ -38,6 +38,19 @@ export function getEccStrategyExample(code: string) {
   return eccStrategyExample[code as EccStrategyCode];
 }
 
+const eccOfficialTitles: Record<string, string> = {
+  "1-1-1": "إعداد واعتماد استراتيجية الأمن السيبراني",
+  "1-1-2": "تنفيذ خطة عمل استراتيجية الأمن السيبراني",
+  "1-1-3": "المراجعة الدورية لاستراتيجية الأمن السيبراني",
+  "1-2-1": "إنشاء إدارة مستقلة للأمن السيبراني",
+  "1-2-2": "شغل وظائف الأمن السيبراني بكفاءات متفرغة",
+  "1-2-3": "إنشاء اللجنة الإشرافية للأمن السيبراني",
+};
+
+export function getEccOfficialTitle(code: string) {
+  return eccOfficialTitles[code];
+}
+
 export const eccOfficialControlsUrl =
   "https://cdn.nca.gov.sa/api/files/public/upload/072773cb-cdc0-439f-afaa-45fa42f17479_ECC-2-2024-AR-n.pdf";
 
