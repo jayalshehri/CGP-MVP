@@ -54,7 +54,7 @@ export default function ControlDetailsPage() {
  async function saveAuditSchedule(){if(!control||saving)return;setSaving(true);setFeedback(''); const {data,error}=await supabase.from('controls').update({audit_frequency:auditFrequency,next_audit_date:nextAuditDate||null,last_audit_date:lastAuditDate||null}).eq('id',control.id).select('audit_frequency,next_audit_date,last_audit_date').single(); if(error||!data)setFeedback('تعذر حفظ جدول التدقيق.'); else{setControl(previous=>previous?{...previous,...data}:previous);setFeedback('تم حفظ جدول التدقيق الدوري.');} setSaving(false);}
  if(loading)return <main className="detail-page" role="status">جاري تحميل الضابط…</main>;
  if(error||!control)return <main className="detail-page"><p role="alert">{error}</p><Link href="/controls">العودة إلى الضوابط</Link></main>;
- const plan=controlPlan(control.control_code,control.description_ar||'');
+ const plan=controlPlan(control.control_code,control.description_ar||'',control.frameworks?.code);
  const strategyExample=control.frameworks?.code==='ECC'?getEccStrategyExample(control.control_code):undefined;
  const isEcc=control.frameworks?.code==='ECC';
  const executionSteps=strategyExample

@@ -1,5 +1,7 @@
+import { eccDomainGuidance } from "@/lib/ecc-domain-guidance";
+
 // Suggested implementation aids; the original requirement remains authoritative.
-export function controlPlan(code: string, description: string) {
+export function controlPlan(code: string, description: string, frameworkCode?: string) {
   const normalize = (s: string) => s.replace(/[٠-٩]/g, c => String('٠١٢٣٤٥٦٧٨٩'.indexOf(c)));
   const tokens = [...description.matchAll(/[٠-٩0-9]+(?:\s*[-–]\s*[٠-٩0-9]+){3}/g)]
     .filter(m => normalize(m[0]).replace(/\s/g, '').startsWith(code + '-'));
@@ -18,9 +20,11 @@ export function controlPlan(code: string, description: string) {
     {key:'evidence', text:'توثيق ما نُفذ وإرفاق الأدلة التي تثبت استيفاء المتطلب.'},
     {key:'review', text:'مراجعة اكتمال التنفيذ ومعالجة الملاحظات قبل تقديم الدليل للاعتماد.'},
   ];
-  const evidence = code === '1-1-1' ? ['وثيقة إستراتيجية الأمن السيبراني المعتمدة والسارية.', 'خطاب أو محضر اعتماد صاحب الصلاحية.', 'خارطة طريق المبادرات والمسؤوليات ومؤشرات المتابعة.'] :
+  const domainGuidance = frameworkCode === 'ECC' ? eccDomainGuidance(code) : undefined;
+  const evidence = domainGuidance?.evidence ?? (code === '1-1-1' ? ['وثيقة إستراتيجية الأمن السيبراني المعتمدة والسارية.', 'خطاب أو محضر اعتماد صاحب الصلاحية.', 'خارطة طريق المبادرات والمسؤوليات ومؤشرات المتابعة.'] :
     /مراجعة|دوري/.test(description) ? ['سجل المراجعة موضحًا التاريخ والنطاق والنتائج.', 'سجل معالجة الملاحظات وإثبات إغلاقها.'] :
     /تحديد وتوثيق|اعتماد|سياس/.test(description) ? ['وثيقة تغطي متطلبات الضابط ونطاقه ومسؤولياته.', 'إثبات الاعتماد والتعميم عند اشتراطهما في المتطلب.'] :
-    ['سجلات أو تقارير أو إعدادات تثبت تنفيذ المتطلب في نطاقه.', 'نتائج التحقق من التنفيذ ومعالجة الملاحظات.'];
-  return {requirements, steps, evidence};
+    ['سجلات أو تقارير أو إعدادات تثبت تنفيذ المتطلب في نطاقه.', 'نتائج التحقق من التنفيذ ومعالجة الملاحظات.']);
+  const domainSteps = domainGuidance?.steps.map((text,index)=>({key:`${code}-domain-${index}`,text}));
+  return {requirements, steps: domainSteps ?? steps, evidence};
 }
