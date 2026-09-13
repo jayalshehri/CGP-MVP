@@ -10,7 +10,8 @@ const dataGovernanceEnabled =
 export function proxy(request: NextRequest) {
   if (
     !dataGovernanceEnabled &&
-    request.nextUrl.pathname.startsWith("/data-governance")
+    (request.nextUrl.pathname.startsWith("/data-governance") ||
+      request.nextUrl.pathname.startsWith("/shared-controls"))
   ) {
     return NextResponse.redirect(new URL("/workspace", request.url));
   }
@@ -19,5 +20,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/data-governance/:path*"],
+  matcher: ["/data-governance/:path*", "/shared-controls/:path*"],
 };

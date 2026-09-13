@@ -155,7 +155,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       <nav className="cgp-workspace-switch" aria-label="تبديل مساحة العمل">
         <Link href="/" aria-current={workspace === "cyber" ? "page" : undefined}>الأمن السيبراني</Link>
         {dataGovernanceEnabled && account?.role !== "control_owner" && <Link href="/data-governance" aria-current={workspace === "data" ? "page" : undefined}>حوكمة البيانات</Link>}
-        {account?.role === "admin" && <Link href="/shared-controls" aria-current={workspace === "shared" ? "page" : undefined}>مركز المواءمة</Link>}
+        {dataGovernanceEnabled && account?.role === "admin" && <Link href="/shared-controls" aria-current={workspace === "shared" ? "page" : undefined}>مركز المواءمة</Link>}
       </nav>
       <button type="button" className="cgp-global-search" onClick={()=>setSearchOpen(true)} aria-haspopup="dialog"><span aria-hidden="true">⌕</span> بحث سريع <kbd>⌘ K</kbd></button>
       <div className="cgp-account"><span>{account?.name || "مساحة العمل"}<small>{account ? roleLabels[account.role] : "جاري التحقق من الحساب"}</small></span><button type="button" onClick={signOut} disabled={signingOut} className="cgp-signout">{signingOut ? "جاري الخروج…" : "تسجيل الخروج"}</button></div>
