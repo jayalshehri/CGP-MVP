@@ -214,7 +214,7 @@ a { text-underline-offset:4px; }
 .assessment-subdomains button { flex:0 0 auto; display:flex; align-items:center; gap:10px; padding:10px 13px; border:1px solid var(--cgp-line); border-radius:9px; background:white; color:var(--cgp-ink); cursor:pointer; }
 .assessment-subdomains button[aria-selected="true"] { background:#e8f5f2; border-color:#86bdb4; color:#0b635a; }.assessment-subdomains span { color:var(--cgp-muted); font-size:11px; }
 .assessment-table { border:1px solid var(--cgp-line); border-radius:12px; overflow:hidden; background:white; }
-.assessment-table-head,.assessment-row { display:grid; grid-template-columns:110px minmax(260px,1fr) 190px 115px; gap:14px; align-items:center; padding:13px 16px; }
+.assessment-table-head,.assessment-row { display:grid; grid-template-columns:110px minmax(260px,1fr) 190px 115px 145px; gap:14px; align-items:center; padding:13px 16px; }
 .assessment-table-head { background:#f0f5f6; color:var(--cgp-muted); font-size:11px; font-weight:700; }
 .assessment-row { position:relative; min-height:66px; border-top:1px solid #e8edef; }.assessment-row:hover { background:#f9fcfb; }.assessment-row>b { color:var(--cgp-teal); font-size:12px; }.assessment-title { font-size:13px; line-height:1.7; }
 .assessment-quick-status select { width:100%; padding:9px; border:1px solid var(--cgp-line); border-radius:8px; color:var(--cgp-ink); background:#f5f7f8; }.assessment-quick-status select.implemented { background:#e6f5f1; border-color:#a9d7cc; }.assessment-quick-status select.partially_implemented { background:#fff5df; border-color:#ead09d; }.assessment-quick-status select.not_implemented { background:#fff1ee; border-color:#e7bbb2; }
@@ -307,6 +307,6 @@ body { font-feature-settings:"kern" 1,"liga" 1; }
 .cgp-workspace-switch{display:flex;align-items:center;gap:4px;margin-inline:auto}.cgp-workspace-switch a{padding:8px 10px;border-radius:8px;color:#cbd8e1;text-decoration:none;font-size:12px;font-weight:800;white-space:nowrap}.cgp-workspace-switch a:hover{background:#203b50;color:#fff}.cgp-workspace-switch a[aria-current="page"]{background:var(--cgp-teal);color:#fff}@media(max-width:1050px){.cgp-workspace-switch{display:none}}
 
 /* Assessment results remain an auditable record; this explicit action applies the selected result to the control workflow. */
-.assessment-sync-button { justify-self:start; margin-top:10px; border:1px solid #9acdc6; border-radius:8px; padding:7px 10px; background:#f3fbf9; color:#087d72; font:inherit; font-size:12px; font-weight:750; cursor:pointer; }
+.assessment-sync-button { justify-self:start; align-self:center; margin-top:0; border:1px solid #9acdc6; border-radius:8px; padding:7px 10px; background:#f3fbf9; color:#087d72; font:inherit; font-size:12px; font-weight:750; cursor:pointer; }
 .assessment-sync-button:hover:not(:disabled) { border-color:#087d72; background:#e2f5f1; }
 .assessment-sync-button:disabled { opacity:.55; cursor:not-allowed; }

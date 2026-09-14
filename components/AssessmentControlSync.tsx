@@ -45,7 +45,7 @@ export function AssessmentControlSync({ controlId, complianceStatus, expectedCom
 
   return (
     <button type="button" className="assessment-sync-button" disabled={syncing} onClick={() => void sync()}>
-      {syncing ? "جارٍ التحديث…" : "تحديث حالة الضابط"}
+      {syncing ? "جارٍ التحديث…" : "اعتماد في الضابط"}
     </button>
   );
 }
