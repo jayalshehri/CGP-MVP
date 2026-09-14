@@ -222,13 +222,6 @@ export default function NewEvidencePage() {
             padding: "28px",
           }}
         >
-          {/* Evidence reference */}
-          <FieldLabel text="اسم الدليل" htmlFor="evidence-name" />
-          <div id="evidence-name" role="note" tabIndex={0} title={controlRequirement} aria-label={`رقم الضابط ${controlCode}. اسم الضابط الفرعي: ${controlRequirement}`} style={{...inputStyle,background:"#f2f9f7",cursor:"help"}}>
-            <strong dir="ltr" style={{color:"var(--cgp-teal)",fontSize:16}}>{controlCode || "—"}</strong>
-          </div>
-          <p style={{margin:"8px 0 0",color:"#586875",fontSize:12}}>يُحفظ الدليل برقم الضابط، ويظل اسم الملف ووصفه محفوظين معه للمراجعة.</p>
-
           {/* Description */}
           <div style={{ height: "22px" }} />
 
@@ -322,6 +315,7 @@ export default function NewEvidencePage() {
               {(file.size / 1024 / 1024).toFixed(2)} MB
             </div>
           )}
+          <p style={{margin:"12px 0 0",color:"#586875",fontSize:12}}>سيُسجل الدليل تلقائياً تحت رقم الضابط <b dir="ltr">{controlCode}</b>.</p>
 
           {/* Errors */}
           {errorMessage && (
