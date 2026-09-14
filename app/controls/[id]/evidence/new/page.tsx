@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { controlPlan } from "@/lib/control-plan";
 
 export default function NewEvidencePage() {
   const params = useParams<{ id: string }>();
@@ -13,8 +12,6 @@ export default function NewEvidencePage() {
 
   const controlId = Number(params.id);
 
-  const [evidenceName, setEvidenceName] = useState("");
-  const [customEvidenceName, setCustomEvidenceName] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
@@ -54,9 +51,9 @@ export default function NewEvidencePage() {
       return;
     }
 
-    const finalEvidenceName=evidenceName==="__custom__"?customEvidenceName.trim():evidenceName.trim();
+    const finalEvidenceName = controlCode;
     if (!finalEvidenceName) {
-      setErrorMessage("يرجى إدخال اسم الدليل.");
+      setErrorMessage("تعذر تحديد رقم الضابط للدليل.");
       return;
     }
 
@@ -222,15 +219,13 @@ export default function NewEvidencePage() {
             padding: "28px",
           }}
         >
-          {/* Evidence Name */}
-          <FieldLabel text="اسم الدليل *" htmlFor="evidence-name" />
-
-          <select disabled={uploading||!ready} id="evidence-name" required value={evidenceName} onChange={e=>{setEvidenceName(e.target.value);if(e.target.value!=="__custom__")setCustomEvidenceName("");}} style={inputStyle}>
-            <option value="">اختر نوع الدليل المقترح</option>
-            {controlCode&&controlPlan(controlCode,"").evidence.map(item=><option key={item} value={item}>{item}</option>)}
-            <option value="__custom__">اسم دليل مخصص…</option>
-          </select>
-          {evidenceName==="__custom__"&&<input disabled={uploading||!ready} required id="custom-evidence-name" type="text" value={customEvidenceName} onChange={e=>setCustomEvidenceName(e.target.value)} placeholder="اكتب اسم الدليل" style={{...inputStyle,marginTop:10}}/>}
+          {/* Evidence reference */}
+          <FieldLabel text="مرجع الدليل" htmlFor="evidence-name" />
+          <div id="evidence-name" role="note" tabIndex={0} aria-label={`رقم الضابط ${controlCode}. اسم الضابط: ${controlTitle}`} title={controlTitle} style={{...inputStyle,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,cursor:"help",background:"#f2f9f7"}}>
+            <strong dir="ltr" style={{color:"var(--cgp-teal)",fontSize:16}}>{controlCode || "—"}</strong>
+            <span style={{color:"#586875",fontSize:13}}>مرر المؤشر لعرض اسم الضابط</span>
+          </div>
+          <p style={{margin:"8px 0 0",color:"#586875",fontSize:12}}>يُحفظ اسم الدليل برقم الضابط، ويظل اسم الملف ووصفه محفوظين معه للمراجعة.</p>
 
           {/* Description */}
           <div style={{ height: "22px" }} />
