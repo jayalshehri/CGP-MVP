@@ -154,7 +154,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   return <div className={`cgp-workspace ${navCollapsed?"cgp-nav-collapsed":""}`} dir="rtl">
     <a href="#cgp-content" className="cgp-skip">انتقل إلى المحتوى</a>
     <header className="cgp-topbar">
-      <Link href="/workspace" className="cgp-brand" aria-label="CGP — اختيار مساحة العمل"><span className="cgp-brand-mark">CGP</span><span>منصة الحوكمة الرقمية<small>Digital Governance Platform</small></span></Link>
+      <Link href="/" className="cgp-brand" aria-label="CGP — الصفحة الرئيسية"><span className="cgp-brand-mark">CGP</span><span>منصة الحوكمة الرقمية<small>Digital Governance Platform</small></span></Link>
       <nav className="cgp-workspace-switch" aria-label="تبديل مساحة العمل">
         <Link href="/" aria-current={workspace === "cyber" ? "page" : undefined}>الأمن السيبراني</Link>
         {dataGovernanceEnabled && account?.role !== "control_owner" && account?.role !== "nca_external_auditor" && <Link href="/data-governance" aria-current={workspace === "data" ? "page" : undefined}>حوكمة البيانات</Link>}

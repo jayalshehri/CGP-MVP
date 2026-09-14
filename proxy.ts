@@ -8,17 +8,21 @@ const dataGovernanceEnabled =
  * experience. The pages and their data remain intact for the later rollout.
  */
 export function proxy(request: NextRequest) {
+  if (request.nextUrl.pathname === "/workspace") {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
   if (
     !dataGovernanceEnabled &&
     (request.nextUrl.pathname.startsWith("/data-governance") ||
       request.nextUrl.pathname.startsWith("/shared-controls"))
   ) {
-    return NextResponse.redirect(new URL("/workspace", request.url));
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/data-governance/:path*", "/shared-controls/:path*"],
+  matcher: ["/workspace", "/data-governance/:path*", "/shared-controls/:path*"],
 };
