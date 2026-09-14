@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { getEccOfficialTitle } from "@/lib/ecc-strategy-example";
 
 export default function NewEvidencePage() {
   const params = useParams<{ id: string }>();
@@ -20,17 +21,18 @@ export default function NewEvidencePage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const [controlTitle,setControlTitle]=useState("");
-  const [controlCode,setControlCode]=useState("");
+  const [controlRequirement,setControlRequirement]=useState("");
   const [frameworkCode,setFrameworkCode]=useState("");
   const [mappedControls,setMappedControls]=useState<Array<{control_id:number;framework_code:string;control_code:string;control_title:string}>>([]);
   const [selectedTargets,setSelectedTargets]=useState<number[]>([]);
   const [ready,setReady]=useState(false);
   useEffect(()=>{let active=true;(async()=>{try{
     await requireProfile();
-    const {data,error}=await supabase.from("controls").select("id,control_code,title_ar,frameworks(code)").eq("id",controlId).single();
+    const {data,error}=await supabase.from("controls").select("id,control_code,title_ar,description_ar,frameworks(code)").eq("id",controlId).single();
     if(error||!data)throw new Error("الضابط غير موجود أو ليس ضمن صلاحيتك.");
     const code=(data.frameworks as {code?:string}|null)?.code||"";
-    if(active){setReady(true);setControlCode(data.control_code);setControlTitle(`${data.control_code} · ${data.title_ar}`);setFrameworkCode(code);}
+    const requirement = (code === "ECC" ? getEccOfficialTitle(data.control_code) : undefined) || data.description_ar || data.title_ar;
+    if(active){setReady(true);setControlRequirement(requirement);setControlTitle(`${data.control_code} · ${requirement}`);setFrameworkCode(code);}
     if(code==="ECC"){
       const {data:mappings}=await supabase.rpc("ecc_control_mappings",{p_ecc_control_id:controlId});
       if(active)setMappedControls((mappings??[]) as Array<{control_id:number;framework_code:string;control_code:string;control_title:string}>);
@@ -51,9 +53,9 @@ export default function NewEvidencePage() {
       return;
     }
 
-    const finalEvidenceName = controlCode;
+    const finalEvidenceName = controlRequirement.trim();
     if (!finalEvidenceName) {
-      setErrorMessage("تعذر تحديد رقم الضابط للدليل.");
+      setErrorMessage("تعذر تحديد اسم الضابط الفرعي للدليل.");
       return;
     }
 
@@ -220,12 +222,11 @@ export default function NewEvidencePage() {
           }}
         >
           {/* Evidence reference */}
-          <FieldLabel text="مرجع الدليل" htmlFor="evidence-name" />
-          <div id="evidence-name" role="note" tabIndex={0} aria-label={`رقم الضابط ${controlCode}. اسم الضابط: ${controlTitle}`} title={controlTitle} style={{...inputStyle,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,cursor:"help",background:"#f2f9f7"}}>
-            <strong dir="ltr" style={{color:"var(--cgp-teal)",fontSize:16}}>{controlCode || "—"}</strong>
-            <span style={{color:"#586875",fontSize:13}}>مرر المؤشر لعرض اسم الضابط</span>
+          <FieldLabel text="اسم الدليل" htmlFor="evidence-name" />
+          <div id="evidence-name" role="note" aria-label={`اسم الدليل: ${controlRequirement}`} style={{...inputStyle,background:"#f2f9f7"}}>
+            <strong style={{color:"var(--cgp-teal)",fontSize:15,lineHeight:1.7}}>{controlRequirement || "جاري تحميل اسم الضابط…"}</strong>
           </div>
-          <p style={{margin:"8px 0 0",color:"#586875",fontSize:12}}>يُحفظ اسم الدليل برقم الضابط، ويظل اسم الملف ووصفه محفوظين معه للمراجعة.</p>
+          <p style={{margin:"8px 0 0",color:"#586875",fontSize:12}}>يُحفظ الدليل باسم الضابط الفرعي، ويظل اسم الملف ووصفه محفوظين معه للمراجعة.</p>
 
           {/* Description */}
           <div style={{ height: "22px" }} />
