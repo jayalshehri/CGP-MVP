@@ -73,21 +73,13 @@ export default function Home() {
     };
   }, [router, refreshKey]);
 
-
-
   if (!authReady) {
     return <main dir="rtl" className="cgp-loading-screen" aria-busy="true" aria-label="جاري تحميل لوحة المتابعة"><span className="cgp-skeleton title"/><span className="cgp-skeleton" style={{width:"min(580px,90%)"}}/><div className="cgp-loading-metrics"><span className="cgp-skeleton metric"/><span className="cgp-skeleton metric"/><span className="cgp-skeleton metric"/><span className="cgp-skeleton metric"/></div></main>;
   }
 
-
-
   return (
     <main dir="rtl" className="cgp-ops-page">
-
-
       <div className="cgp-page-body" style={{display:"flex",minHeight:"calc(100vh - 86px)"}}>
-
-
         <section className="cgp-content cgp-ops-content">
           <WorkflowHeading title="لوحة المتابعة التشغيلية" description="قائمة العمل اليومية: المتأخرات، الأدلة الناقصة، والقرارات المطلوبة." action={<button type="button" disabled={refreshing} onClick={()=>setRefreshKey(k=>k+1)} className="workflow-button">{refreshing?"جاري التحديث...":"تحديث البيانات"}</button>}/>
           <div className="dashboard-context">{userRole==="control_owner"?"الضوابط المسندة إليك فقط":"جميع الضوابط"}{updatedAt&&` · آخر تحديث ${updatedAt}`}</div>
@@ -105,10 +97,10 @@ export default function Home() {
               <div className="cgp-framework-bars">{stats?.domains.length ? stats.domains.slice(0, 5).map(domain=><div key={domain.name}><div><b>{domain.name}</b><strong>{domain.percentage}%</strong></div><progress value={domain.percentage} max="100" aria-label={`نسبة الالتزام في ${domain.name}`}/><small>{domain.done} من {domain.total} ضابط مطبق</small></div>) : <p className="cgp-ops-empty">لا توجد بيانات كافية لعرض الأطر التنظيمية.</p>}</div>
             </article>
           </section>
-          <div style={{marginTop:"24px",display:"flex",gap:12,flexWrap:"wrap"}}>
-            <Link href="/tasks" style={primaryLink}>فتح مهامي / التكليفات ←</Link>
-            <Link href="/controls" style={secondaryLink}>عرض جميع الضوابط</Link>
-            {userRole==="control_owner"&&<Link href="/evidence" style={secondaryLink}>مركز الأدلة</Link>}
+          <div className="cgp-ops-actions">
+            <Link href="/tasks" className="primary">فتح مهامي / التكليفات ←</Link>
+            <Link href="/controls" className="secondary">عرض جميع الضوابط</Link>
+            {userRole==="control_owner"&&<Link href="/evidence" className="secondary">مركز الأدلة</Link>}
           </div>
         </section>
       </div>
@@ -117,5 +109,3 @@ export default function Home() {
 }
 
 function AlertItem({href,count,text,tone}:{href:string;count:number;text:string;tone:string}) { return <Link href={href} className="cgp-action-row"><span>{text}</span><span className={`cgp-status cgp-status-${count? tone:"neutral"}`}><span className="cgp-action-count">{count}</span><span aria-hidden="true">←</span></span></Link>; }
-const primaryLink={display:"inline-block",background:"var(--cgp-teal)",color:"white",textDecoration:"none",padding:"13px 20px",borderRadius:"9px",fontWeight:"bold",fontSize:"14px"};
-const secondaryLink={display:"inline-block",background:"white",border:"1px solid #ccd6dc",color:"#0b1f33",textDecoration:"none",padding:"13px 20px",borderRadius:"9px",fontWeight:"bold",fontSize:"14px"};
