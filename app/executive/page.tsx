@@ -57,9 +57,9 @@ export default function ExecutivePage() {
   const compliance = percent(summary.done, summary.total); const verification = percent(summary.checked, summary.total);
   const pending = scopedControls.filter(c=>["pending_review","under_review"].includes((c.evidence_status||"").toLowerCase())).length;
 
-  return <main dir="rtl" className="exec-page" aria-busy={loading}>
-    <header className="exec-heading">
-      <div><span className="exec-eyebrow">ملخص الإدارة</span><h1>اللوحة التنفيذية</h1><p>صورة واضحة للتنفيذ والتحقق، والأولويات التي تحتاج قرارًا.</p></div>
+  return <main dir="rtl" className="exec-page cgp-visual-exec" aria-busy={loading}>
+    <header className="exec-heading cgp-exec-hero">
+      <div><span className="exec-eyebrow">ملخص الإدارة · بيانات حية</span><h1>اللوحة التنفيذية</h1><p>صورة واضحة للتنفيذ والتحقق، والأولويات التي تحتاج قرارًا.</p></div>
       <div className="exec-tools cgp-print-action"><button onClick={refresh} disabled={loading} aria-label="تحديث بيانات اللوحة">↻ <span>{loading ? "جاري التحديث…" : "تحديث"}</span></button><details className="exec-more"><summary aria-label="إجراءات إضافية">•••</summary><button onClick={() => window.print()} disabled={!updated || loading || Boolean(error)}>طباعة الملخص</button></details></div>
     </header>
     <div className="exec-dateline"><label className="exec-sort">نطاق الإطار<select value={framework} onChange={event=>setFramework(event.target.value)}><option value="all">جميع الأطر</option>{frameworks.map(item=><option key={item.code} value={item.code}>{item.code} — {item.name_ar}</option>)}</select></label><span>{updated ? `آخر تحديث: ${updated.toLocaleString("ar-SA", { timeZone: "Asia/Riyadh", dateStyle: "medium", timeStyle: "short" })}` : "جاري جلب البيانات"}</span></div>

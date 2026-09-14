@@ -68,7 +68,7 @@ export default function ReportsPage(){
  if(loading)return <main dir="rtl" style={center}>جاري تجهيز التقارير...</main>;
  if(error)return <main dir="rtl"><h1>تعذر تحميل البيانات</h1><p role="alert">{error}</p><button onClick={()=>window.location.reload()}>إعادة المحاولة</button></main>;
 
- return <main dir="rtl" className="workflow-page">
+ return <main dir="rtl" className="workflow-page cgp-report-page">
   <section>
    <WorkflowHeading title="تقارير الالتزام" description="مؤشرات لحظية مستخرجة من بيانات الضوابط والأدلة في CGP." action={<div className="report-actions"><button onClick={()=>window.print()} className="workflow-button">تصدير PDF</button><button onClick={exportCsv} className="workflow-button workflow-primary">تصدير CSV</button></div>}/>
    {error&&<div style={errorBox}>{error}</div>}
