@@ -11,6 +11,7 @@ const roleLabels: Record<UserRole, string> = {
   cybersecurity_team: "فريق الأمن السيبراني",
   data_governance_team: "فريق إدارة البيانات",
   control_owner: "مالك ضابط",
+  nca_external_auditor: "مراجع خارجي — NCA",
 };
 
 type WorkspaceCard = {

@@ -12,7 +12,7 @@ const navigation = [
   { href: "/", label: "لوحة المتابعة", group: "" },
   { href: "/executive", label: "اللوحة التنفيذية", group: "", team: true },
   { href: "/reports", label: "التقارير", group: "", team: true },
-  { href: "/controls", label: "الضوابط", group: "الالتزام" },
+  { href: "/controls", label: "الضوابط", group: "الالتزام", auditor: true },
   { href: "/data-governance", label: "إدارة البيانات والحوكمة", group: "مساحات العمل", data: true },
   { href: "/data-governance/requests", label: "طلبات إدارة البيانات", group: "مساحات العمل", data: true },
   { href: "/data-governance/assets", label: "سجل أصول البيانات", group: "مساحات العمل", data: true },
@@ -36,11 +36,11 @@ const navigation = [
   { href: "/evidence", label: "الأدلة", group: "العمليات" },
   { href: "/review", label: "مراجعة الأدلة", group: "العمليات", team: true },
   { href: "/audit", label: "سجل التدقيق", group: "العمليات", team: true },
-  { href: "/audit-schedule", label: "جدول التدقيق الدوري", group: "العمليات", team: true },
+  { href: "/audit-schedule", label: "جدول التدقيق الدوري", group: "العمليات", team: true, auditor: true },
   { href: "/users", label: "إدارة المستخدمين", group: "الإدارة", admin: true },
   { href: "/feedback", label: "نتائج الاختبارات", group: "الإدارة", admin: true },
 ];
-const roleLabels: Record<UserRole, string> = { admin: "مدير النظام", cybersecurity_team: "فريق الأمن السيبراني", data_governance_team: "فريق إدارة البيانات", control_owner: "مالك الضابط" };
+const roleLabels: Record<UserRole, string> = { admin: "مدير النظام", cybersecurity_team: "مدير الامتثال والمراجعة", data_governance_team: "فريق إدارة البيانات", control_owner: "مالك الضابط", nca_external_auditor: "مراجع خارجي — NCA" };
 type SearchResult = { id:number; control_code:string; title_ar:string };
 
 function NavIcon({ href }: { href: string }) {
@@ -108,7 +108,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
 
   const workspace = pathname === "/shared-controls" ? "shared" : pathname.startsWith("/data-governance") ? "data" : "cyber";
   const workspaceLabel = workspace === "data" ? "حوكمة البيانات" : workspace === "shared" ? "مركز المواءمة" : "الأمن السيبراني";
-  const permittedItems = account ? navigation.filter(item => account.role === "data_governance_team" ? Boolean(item.data) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];
+  const permittedItems = account ? navigation.filter(item => account.role === "data_governance_team" ? Boolean(item.data) : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];
   const items = permittedItems.filter(item => workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls");
   const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "لوحة المتابعة");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
@@ -157,7 +157,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       <Link href="/workspace" className="cgp-brand" aria-label="CGP — اختيار مساحة العمل"><span className="cgp-brand-mark">CGP</span><span>منصة الحوكمة الرقمية<small>Digital Governance Platform</small></span></Link>
       <nav className="cgp-workspace-switch" aria-label="تبديل مساحة العمل">
         <Link href="/" aria-current={workspace === "cyber" ? "page" : undefined}>الأمن السيبراني</Link>
-        {dataGovernanceEnabled && account?.role !== "control_owner" && <Link href="/data-governance" aria-current={workspace === "data" ? "page" : undefined}>حوكمة البيانات</Link>}
+        {dataGovernanceEnabled && account?.role !== "control_owner" && account?.role !== "nca_external_auditor" && <Link href="/data-governance" aria-current={workspace === "data" ? "page" : undefined}>حوكمة البيانات</Link>}
         {dataGovernanceEnabled && account?.role === "admin" && <Link href="/shared-controls" aria-current={workspace === "shared" ? "page" : undefined}>مركز المواءمة</Link>}
       </nav>
       <button type="button" className="cgp-global-search" onClick={()=>setSearchOpen(true)} aria-haspopup="dialog"><span aria-hidden="true">⌕</span> بحث سريع <kbd>⌘ K</kbd></button>

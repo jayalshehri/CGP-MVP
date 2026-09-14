@@ -30,7 +30,7 @@ Deno.serve(async (req: Request) => {
     const fullName = String(body.full_name ?? "").trim();
     const role = String(body.role ?? "control_owner");
     if (!email || !email.includes("@")) return Response.json({ error: "Invalid email" }, { status: 400, headers: corsHeaders });
-    if (!["admin", "cybersecurity_team", "control_owner"].includes(role)) {
+    if (!["admin", "cybersecurity_team", "data_governance_team", "control_owner", "nca_external_auditor"].includes(role)) {
       return Response.json({ error: "Invalid role" }, { status: 400, headers: corsHeaders });
     }
     const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });

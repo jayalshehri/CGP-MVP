@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { frameworkOf } from "@/lib/compliance";
 
-type UserRole = "admin" | "cybersecurity_team" | "control_owner";
+type UserRole = "admin" | "cybersecurity_team" | "control_owner" | "nca_external_auditor";
 type Control = { id:number; control_code:string; title_ar:string; domain_ar:string; control_owner_id:string|null; frameworks:unknown };
 type Evidence = { is_current:boolean; id:number; control_id:number; evidence_name:string|null; description:string|null; file_name:string|null; file_path:string|null; status:string|null; uploaded_at:string|null; reviewed_at:string|null; review_notes:string|null };
 
@@ -94,7 +94,7 @@ export default function EvidencePage(){
             <div><div style={{color:"var(--cgp-teal)",fontWeight:800,fontSize:13}}><span dir="ltr">{frameworkOf(row.control?.frameworks).code} · {row.control?.control_code||`ضابط ${row.control_id}`}</span></div><div style={{fontWeight:800,marginTop:6}}>{row.evidence_name||row.file_name||`دليل ${row.id}`}</div><div style={{fontSize:13,color:"#586875",marginTop:5}}>{row.control?.title_ar||""}</div></div>
             <div><div style={{fontSize:12,color:"#586875",marginBottom:5}}>تاريخ الرفع</div><strong>{row.uploaded_at?new Date(row.uploaded_at).toLocaleDateString("ar-SA"):"غير محدد"}</strong></div>
             <div><StatusBadge status={row.status||""}/>{!row.is_current&&<small className="workflow-version">إصدار سابق</small>}</div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link>{role!=="control_owner"&&row.is_current&&["pending_review","under_review"].includes(row.status||"")&&<Link href="/review" style={primary}>مراجعة</Link>}</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link>{["admin","cybersecurity_team"].includes(role)&&row.is_current&&["pending_review","under_review"].includes(row.status||"")&&<Link href="/review" style={primary}>مراجعة</Link>}</div>
           </div>)}
         </div>
       </section>
