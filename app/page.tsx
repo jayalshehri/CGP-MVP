@@ -88,7 +88,7 @@ export default function Home() {
           {error&&<div role="alert" style={{background:"#fff2f0",color:"#b42318",padding:16,marginBottom:18,borderRadius:9}}>{error}</div>}
           {stats?.total===0&&<p>لا توجد ضوابط ضمن نطاق صلاحيتك حاليًا.</p>}
           <div className="workflow-metrics cgp-ops-metrics"><WorkflowMetric label="مهام متأخرة" value={stats ? stats.overdue : "—"} tone={stats?.overdue?"danger":"neutral"} icon={<MetricIcon name="clock"/>}/><WorkflowMetric label="تحتاج دليلًا" value={stats ? stats.waiting_evidence : "—"} tone={stats?.waiting_evidence?"warning":"neutral"} icon={<MetricIcon name="evidence"/>}/><WorkflowMetric label="بانتظار قرار مراجعة" value={stats ? stats.pending_review : "—"} tone={stats?.pending_review?"warning":"neutral"} icon={<MetricIcon name="review"/>}/><WorkflowMetric label="تم التحقق" value={stats ? stats.verified : "—"} tone="success" icon={<MetricIcon name="verified"/>}/></div>
-          <section className="cgp-priority-card cgp-ops-priority"><div><span className="cgp-card-eyebrow">القرار التالي</span><h2>تحتاج انتباهك</h2><p>ابدأ بالعناصر التي تؤثر في التنفيذ أو تنتظر قراراً.</p></div>{stats&&<div className="cgp-priority-actions"><AlertItem href="/tasks?filter=overdue" count={stats.overdue} text="مهام متأخرة" tone="danger"/><AlertItem href="/tasks?filter=evidence" count={stats.waiting_evidence} text="ضوابط تحتاج دليلًا" tone="warning"/><AlertItem href={userRole==="control_owner"?"/evidence":"/review"} count={stats.pending_review} text="أدلة بانتظار المراجعة" tone="info"/></div>}</section>
+          <section className="cgp-priority-card cgp-ops-priority"><div><span className="cgp-card-eyebrow">القرار التالي</span><h2>إجراء واحد واضح</h2><p>رتّبنا الأولوية حسب التأخير، ثم قرار المراجعة، ثم الأدلة الناقصة.</p></div>{stats&&<NextDecision stats={stats} role={userRole}/>}</section>
           <section className="cgp-ops-insight-grid" aria-label="ملخص الالتزام">
             <article className="cgp-ops-insight-card cgp-compliance-score">
               <div className="cgp-ops-insight-heading"><div><span>صورة الالتزام</span><h2>مؤشر الالتزام الحالي</h2></div><Link href="/reports">التقارير ←</Link></div>
@@ -110,6 +110,10 @@ export default function Home() {
   );
 }
 
-function AlertItem({href,count,text,tone}:{href:string;count:number;text:string;tone:string}) { return <Link href={href} className="cgp-action-row"><span>{text}</span><span className={`cgp-status cgp-status-${count? tone:"neutral"}`}><span className="cgp-action-count">{count}</span><span aria-hidden="true">←</span></span></Link>; }
+function NextDecision({stats,role}:{stats:Dashboard;role:UserRole}) {
+ const reviewAllowed=role!=="control_owner";
+ const decision=stats.overdue>0?{href:"/tasks?filter=overdue",count:stats.overdue,title:"عالج المهام المتأخرة",detail:"تجاوزت موعدها وتحتاج متابعة فورية.",tone:"danger"}:reviewAllowed&&stats.pending_review>0?{href:"/review",count:stats.pending_review,title:"اتخذ قرار مراجعة الأدلة",detail:"أدلة جاهزة تنتظر القبول أو الإرجاع.",tone:"info"}:stats.waiting_evidence>0?{href:"/tasks?filter=evidence",count:stats.waiting_evidence,title:"اطلب الأدلة الناقصة",detail:"ابدأ بالضوابط التي لم يرفع لها دليل بعد.",tone:"warning"}:{href:"/controls",count:stats.verified,title:"راجع نطاق الضوابط",detail:"لا توجد عناصر عاجلة ضمن نطاقك الآن.",tone:"success"};
+ return <Link href={decision.href} className={`cgp-next-decision ${decision.tone}`}><span className="cgp-next-decision-count">{decision.count}</span><span><strong>{decision.title}</strong><small>{decision.detail}</small></span><b>فتح الإجراء ←</b></Link>;
+}
 
 function MetricIcon({name}:{name:"clock"|"evidence"|"review"|"verified"}) { const paths={clock:"M12 7v5l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0",evidence:"M6 3h9l3 3v15H6z M9 11h6 M9 15h6",review:"M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z M9 12l2 2 4-4",verified:"M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z M9 12l2 2 4-4"}; return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]}/></svg>; }
