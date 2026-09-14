@@ -82,7 +82,6 @@ export default function ExecutivePage() {
           </div>
         </section>
       </section>
-      <section className="exec-panel exec-priorities"><div><span className="exec-eyebrow">ما الذي يحتاج متابعة؟</span><h2>أولويات الإدارة</h2></div><div className="exec-priority-list"><Link href="/tasks?filter=overdue"><span className={`exec-count ${summary.overdue ? "exec-danger" : ""}`}>{summary.overdue}</span><span><strong>{summary.overdue ? "متابعة المتأخرات مع الملاك" : "المواعيد تحت المتابعة"}</strong><small>{summary.overdue ? "راجع التكليفات وحدد الخطوة التالية لكل ضابط." : "لا توجد ضوابط غير مكتملة تجاوزت موعدها."}</small></span><span aria-hidden="true">←</span></Link><Link href="/review"><span className={`exec-count ${pending ? "exec-warning" : ""}`}>{pending}</span><span><strong>{pending ? "اتخاذ قرار بشأن الأدلة" : "قائمة المراجعة خالية"}</strong><small>{pending ? "افتح الأدلة المعلقة للقبول أو الإرجاع مع الملاحظات." : "لا توجد إرسالات حالية تنتظر المراجعة."}</small></span><span aria-hidden="true">←</span></Link></div></section>
       <section className="exec-panel exec-report-bridge"><div><span className="exec-eyebrow">التحليل والتقارير</span><h2>القرار هنا، والتحليل في التقارير</h2><p>استخدم هذه اللوحة لتحديد ما يحتاج تدخلاً. تعرض التقارير المقارنات حسب الإطار والمجال والرسوم التفصيلية.</p></div><Link className="exec-text-link" href="/reports">فتح تقارير الالتزام ←</Link></section>
     </>}
   </main>;
