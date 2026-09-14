@@ -22,6 +22,7 @@ export default function NewEvidencePage() {
 
   const [controlTitle,setControlTitle]=useState("");
   const [controlRequirement,setControlRequirement]=useState("");
+  const [controlCode,setControlCode]=useState("");
   const [frameworkCode,setFrameworkCode]=useState("");
   const [mappedControls,setMappedControls]=useState<Array<{control_id:number;framework_code:string;control_code:string;control_title:string}>>([]);
   const [selectedTargets,setSelectedTargets]=useState<number[]>([]);
@@ -32,7 +33,7 @@ export default function NewEvidencePage() {
     if(error||!data)throw new Error("الضابط غير موجود أو ليس ضمن صلاحيتك.");
     const code=(data.frameworks as {code?:string}|null)?.code||"";
     const requirement = (code === "ECC" ? getEccOfficialTitle(data.control_code) : undefined) || data.description_ar || data.title_ar;
-    if(active){setReady(true);setControlRequirement(requirement);setControlTitle(`${data.control_code} · ${requirement}`);setFrameworkCode(code);}
+    if(active){setReady(true);setControlCode(data.control_code);setControlRequirement(requirement);setControlTitle(`${data.control_code} · ${requirement}`);setFrameworkCode(code);}
     if(code==="ECC"){
       const {data:mappings}=await supabase.rpc("ecc_control_mappings",{p_ecc_control_id:controlId});
       if(active)setMappedControls((mappings??[]) as Array<{control_id:number;framework_code:string;control_code:string;control_title:string}>);
@@ -53,9 +54,9 @@ export default function NewEvidencePage() {
       return;
     }
 
-    const finalEvidenceName = controlRequirement.trim();
+    const finalEvidenceName = controlCode.trim();
     if (!finalEvidenceName) {
-      setErrorMessage("تعذر تحديد اسم الضابط الفرعي للدليل.");
+      setErrorMessage("تعذر تحديد رقم الضابط للدليل.");
       return;
     }
 
@@ -223,10 +224,10 @@ export default function NewEvidencePage() {
         >
           {/* Evidence reference */}
           <FieldLabel text="اسم الدليل" htmlFor="evidence-name" />
-          <div id="evidence-name" role="note" aria-label={`اسم الدليل: ${controlRequirement}`} style={{...inputStyle,background:"#f2f9f7"}}>
-            <strong style={{color:"var(--cgp-teal)",fontSize:15,lineHeight:1.7}}>{controlRequirement || "جاري تحميل اسم الضابط…"}</strong>
+          <div id="evidence-name" role="note" tabIndex={0} title={controlRequirement} aria-label={`رقم الضابط ${controlCode}. اسم الضابط الفرعي: ${controlRequirement}`} style={{...inputStyle,background:"#f2f9f7",cursor:"help"}}>
+            <strong dir="ltr" style={{color:"var(--cgp-teal)",fontSize:16}}>{controlCode || "—"}</strong>
           </div>
-          <p style={{margin:"8px 0 0",color:"#586875",fontSize:12}}>يُحفظ الدليل باسم الضابط الفرعي، ويظل اسم الملف ووصفه محفوظين معه للمراجعة.</p>
+          <p style={{margin:"8px 0 0",color:"#586875",fontSize:12}}>يُحفظ الدليل برقم الضابط، ويظل اسم الملف ووصفه محفوظين معه للمراجعة.</p>
 
           {/* Description */}
           <div style={{ height: "22px" }} />
