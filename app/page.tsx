@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { WorkflowHeading, WorkflowMetric } from "@/components/WorkflowUI";
+import { WorkflowMetric } from "@/components/WorkflowUI";
 import { EVIDENCE_PRESENT, frameworkOf, isApplicable, isImplemented, isVerified, percentage } from "@/lib/compliance";
 
 type Dashboard = { total:number; compliance:number; waiting_evidence:number; overdue:number; pending_review:number; verified:number; domains:{name:string;total:number;done:number;percentage:number}[] };
@@ -81,11 +81,13 @@ export default function Home() {
     <main dir="rtl" className="cgp-ops-page">
       <div className="cgp-page-body" style={{display:"flex",minHeight:"calc(100vh - 86px)"}}>
         <section className="cgp-content cgp-ops-content">
-          <WorkflowHeading title="لوحة المتابعة التشغيلية" description="قائمة العمل اليومية: المتأخرات، الأدلة الناقصة، والقرارات المطلوبة." action={<button type="button" disabled={refreshing} onClick={()=>setRefreshKey(k=>k+1)} className="workflow-button">{refreshing?"جاري التحديث...":"تحديث البيانات"}</button>}/>
-          <div className="dashboard-context">{userRole==="control_owner"?"الضوابط المسندة إليك فقط":"جميع الضوابط"}{updatedAt&&` · آخر تحديث ${updatedAt}`}</div>
+          <header className="cgp-dashboard-hero">
+            <div className="cgp-dashboard-hero-copy"><span className="cgp-dashboard-eyebrow"><i aria-hidden="true"/>متابعة تشغيلية مباشرة</span><h1>لوحة المتابعة التشغيلية</h1><p>رؤية يومية للقرارات المطلوبة، الأدلة الناقصة، وحالة الالتزام.</p><small>{userRole==="control_owner"?"الضوابط المسندة إليك فقط":"جميع الضوابط ضمن نطاقك"}{updatedAt&&` · آخر تحديث ${updatedAt}`}</small></div>
+            <div className="cgp-dashboard-hero-score"><span>نسبة الالتزام</span><strong>{stats ? `${stats.compliance}%` : "—"}</strong><progress value={stats?.compliance ?? 0} max="100" aria-label="نسبة الالتزام الحالية"/><button type="button" disabled={refreshing} onClick={()=>setRefreshKey(k=>k+1)}>{refreshing?"جاري التحديث...":"تحديث البيانات"}</button></div>
+          </header>
           {error&&<div role="alert" style={{background:"#fff2f0",color:"#b42318",padding:16,marginBottom:18,borderRadius:9}}>{error}</div>}
           {stats?.total===0&&<p>لا توجد ضوابط ضمن نطاق صلاحيتك حاليًا.</p>}
-          <div className="workflow-metrics cgp-ops-metrics"><WorkflowMetric label="مهام متأخرة" value={stats ? stats.overdue : "—"} tone={stats?.overdue?"danger":"neutral"}/><WorkflowMetric label="تحتاج دليلًا" value={stats ? stats.waiting_evidence : "—"} tone={stats?.waiting_evidence?"warning":"neutral"}/><WorkflowMetric label="بانتظار قرار مراجعة" value={stats ? stats.pending_review : "—"} tone={stats?.pending_review?"warning":"neutral"}/><WorkflowMetric label="تم التحقق" value={stats ? stats.verified : "—"} tone="success"/></div>
+          <div className="workflow-metrics cgp-ops-metrics"><WorkflowMetric label="مهام متأخرة" value={stats ? stats.overdue : "—"} tone={stats?.overdue?"danger":"neutral"} icon={<MetricIcon name="clock"/>}/><WorkflowMetric label="تحتاج دليلًا" value={stats ? stats.waiting_evidence : "—"} tone={stats?.waiting_evidence?"warning":"neutral"} icon={<MetricIcon name="evidence"/>}/><WorkflowMetric label="بانتظار قرار مراجعة" value={stats ? stats.pending_review : "—"} tone={stats?.pending_review?"warning":"neutral"} icon={<MetricIcon name="review"/>}/><WorkflowMetric label="تم التحقق" value={stats ? stats.verified : "—"} tone="success" icon={<MetricIcon name="verified"/>}/></div>
           <section className="cgp-priority-card cgp-ops-priority"><div><span className="cgp-card-eyebrow">القرار التالي</span><h2>تحتاج انتباهك</h2><p>ابدأ بالعناصر التي تؤثر في التنفيذ أو تنتظر قراراً.</p></div>{stats&&<div className="cgp-priority-actions"><AlertItem href="/tasks?filter=overdue" count={stats.overdue} text="مهام متأخرة" tone="danger"/><AlertItem href="/tasks?filter=evidence" count={stats.waiting_evidence} text="ضوابط تحتاج دليلًا" tone="warning"/><AlertItem href={userRole==="control_owner"?"/evidence":"/review"} count={stats.pending_review} text="أدلة بانتظار المراجعة" tone="info"/></div>}</section>
           <section className="cgp-ops-insight-grid" aria-label="ملخص الالتزام">
             <article className="cgp-ops-insight-card cgp-compliance-score">
@@ -109,3 +111,5 @@ export default function Home() {
 }
 
 function AlertItem({href,count,text,tone}:{href:string;count:number;text:string;tone:string}) { return <Link href={href} className="cgp-action-row"><span>{text}</span><span className={`cgp-status cgp-status-${count? tone:"neutral"}`}><span className="cgp-action-count">{count}</span><span aria-hidden="true">←</span></span></Link>; }
+
+function MetricIcon({name}:{name:"clock"|"evidence"|"review"|"verified"}) { const paths={clock:"M12 7v5l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0",evidence:"M6 3h9l3 3v15H6z M9 11h6 M9 15h6",review:"M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z M9 12l2 2 4-4",verified:"M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z M9 12l2 2 4-4"}; return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]}/></svg>; }
