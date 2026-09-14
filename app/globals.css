@@ -305,3 +305,8 @@ body { font-feature-settings:"kern" 1,"liga" 1; }
 
 /* Separate cyber and data workspaces; the shared catalog stays an admin-only bridge. */
 .cgp-workspace-switch{display:flex;align-items:center;gap:4px;margin-inline:auto}.cgp-workspace-switch a{padding:8px 10px;border-radius:8px;color:#cbd8e1;text-decoration:none;font-size:12px;font-weight:800;white-space:nowrap}.cgp-workspace-switch a:hover{background:#203b50;color:#fff}.cgp-workspace-switch a[aria-current="page"]{background:var(--cgp-teal);color:#fff}@media(max-width:1050px){.cgp-workspace-switch{display:none}}
+
+/* Assessment results remain an auditable record; this explicit action applies the selected result to the control workflow. */
+.assessment-sync-button { justify-self:start; margin-top:10px; border:1px solid #9acdc6; border-radius:8px; padding:7px 10px; background:#f3fbf9; color:#087d72; font:inherit; font-size:12px; font-weight:750; cursor:pointer; }
+.assessment-sync-button:hover:not(:disabled) { border-color:#087d72; background:#e2f5f1; }
+.assessment-sync-button:disabled { opacity:.55; cursor:not-allowed; }
