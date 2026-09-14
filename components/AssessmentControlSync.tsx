@@ -37,7 +37,7 @@ export function AssessmentControlSync({ controlId, complianceStatus, expectedCom
     if (!confirmed) return;
     setSyncing(true);
     const update: { implementation_status: string; due_date?: string | null } = { implementation_status: statusMap[validStatus] };
-    if (expectedComplianceDate) update.due_date = expectedComplianceDate;
+    if (expectedComplianceDate && ["partially_implemented", "not_implemented"].includes(validStatus)) update.due_date = expectedComplianceDate;
     const { error } = await supabase.from("controls").update(update).eq("id", controlId);
     setSyncing(false);
     onComplete(error ? `تعذر تحديث حالة الضابط: ${error.message}` : "تم تحديث حالة الضابط من نتيجة القياس. يبقى تقييم القياس محفوظًا كسجل مستقل.");
