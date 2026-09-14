@@ -6,6 +6,7 @@ import Link from "next/link";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { getEccOfficialTitle } from "@/lib/ecc-strategy-example";
+import "./evidence-upload.css";
 
 export default function NewEvidencePage() {
   const params = useParams<{ id: string }>();
@@ -20,7 +21,6 @@ export default function NewEvidencePage() {
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  const [controlTitle,setControlTitle]=useState("");
   const [controlRequirement,setControlRequirement]=useState("");
   const [controlCode,setControlCode]=useState("");
   const [frameworkCode,setFrameworkCode]=useState("");
@@ -33,7 +33,7 @@ export default function NewEvidencePage() {
     if(error||!data)throw new Error("الضابط غير موجود أو ليس ضمن صلاحيتك.");
     const code=(data.frameworks as {code?:string}|null)?.code||"";
     const requirement = (code === "ECC" ? getEccOfficialTitle(data.control_code) : undefined) || data.description_ar || data.title_ar;
-    if(active){setReady(true);setControlCode(data.control_code);setControlRequirement(requirement);setControlTitle(`${data.control_code} · ${requirement}`);setFrameworkCode(code);}
+    if(active){setReady(true);setControlCode(data.control_code);setControlRequirement(requirement);setFrameworkCode(code);}
     if(code==="ECC"){
       const {data:mappings}=await supabase.rpc("ecc_control_mappings",{p_ecc_control_id:controlId});
       if(active)setMappedControls((mappings??[]) as Array<{control_id:number;framework_code:string;control_code:string;control_title:string}>);
@@ -147,260 +147,132 @@ export default function NewEvidencePage() {
   }
 
   return (
-    <main
-      dir="rtl"
-      style={{
-        minHeight: "100vh",
-        background: "#f5f7f9",
-        fontFamily: "Arial, sans-serif",
-        color: "#0b1f33",
-      }}
-    >
-      {/* Header */}
-
-
-      <div className="cgp-page-body"
-        style={{
-          maxWidth: "850px",
-          margin: "0 auto",
-          padding: "38px 25px 60px",
-        }}
-      >
-        <Link
-          href={`/controls/${controlId}`}
-          style={{
-            color: "var(--cgp-teal)",
-            textDecoration: "none",
-            fontWeight: "bold",
-          }}
-        >
-          ← العودة إلى الضابط
+    <main dir="rtl" className="evidence-upload-page">
+      <div className="evidence-upload-container">
+        <Link href={`/controls/${controlId}`} className="evidence-upload-back">
+          <span aria-hidden="true">←</span> العودة إلى الضابط
         </Link>
 
-        <div
-          style={{
-            marginTop: "24px",
-            marginBottom: "24px",
-          }}
-        >
-          <div
-            style={{
-              color: "var(--cgp-teal)",
-              fontSize: "14px",
-              fontWeight: "bold",
-              marginBottom: "8px",
-            }}
-          >
-            {controlTitle||`الضابط رقم ${controlId}`}
+        <header className="evidence-upload-header">
+          <div className="evidence-upload-header-main">
+            <span className="evidence-upload-eyebrow">إضافة دليل امتثال</span>
+            <div className="evidence-upload-title-row">
+              <h1>رفع دليل</h1>
+              <span className="evidence-upload-code" dir="ltr">
+                {controlCode || `#${controlId}`}
+              </span>
+            </div>
+            <p>ارفع الملف الداعم للضابط وأضف وصفًا مختصرًا يسهل مراجعته.</p>
           </div>
 
-          <h1
-            style={{
-              margin: 0,
-              fontSize: "32px",
-            }}
-          >
-            رفع دليل
-          </h1>
-
-          <p
-            style={{
-              color: "#586875",
-              marginTop: "10px",
-            }}
-          >
-            ارفع الملف وأضف وصفًا واضحًا للدليل المطلوب.
-          </p>
-        </div>
-
-        <form aria-busy={uploading}
-          onSubmit={handleSubmit}
-          style={{
-            background: "white",
-            border: "1px solid #e2e7eb",
-            borderRadius: "16px",
-            padding: "28px",
-          }}
-        >
-          {/* Description */}
-          <div style={{ height: "22px" }} />
-
-          <FieldLabel text="وصف الدليل" htmlFor="evidence-description" />
-
-          <textarea disabled={uploading||!ready} id="evidence-description"
-            value={description}
-            onChange={(e) =>
-              setDescription(e.target.value)
-            }
-            placeholder="اكتب وصفًا مختصرًا للدليل..."
-            rows={5}
-            style={{
-              ...inputStyle,
-              resize: "vertical",
-              minHeight: "110px",
-            }}
-          />
-
-          {frameworkCode==="ECC"&&mappedControls.length>0&&<><div style={{height:"22px"}}/><fieldset disabled={uploading||!ready} style={{border:"1px solid #d9e5e4",borderRadius:12,padding:"16px 18px",background:"#f7fbfa"}}><legend style={{fontWeight:800,padding:"0 6px"}}>مشاركة الدليل مع ضوابط مرتبطة</legend><p style={{margin:"0 0 12px",color:"#586875",fontSize:13}}>يُرفع الملف مرة واحدة. كل ضابط مختار يمر بمراجعة مستقلة قبل انعكاس النتيجة عليه.</p>{mappedControls.map(item=><label key={item.control_id} style={{display:"flex",gap:10,alignItems:"start",padding:"8px 0",cursor:"pointer"}}><input type="checkbox" checked={selectedTargets.includes(item.control_id)} onChange={()=>setSelectedTargets(current=>current.includes(item.control_id)?current.filter(id=>id!==item.control_id):[...current,item.control_id])}/><span><strong dir="ltr">{item.framework_code} · {item.control_code}</strong><br/><small>{item.control_title}</small></span></label>)}</fieldset></>}
-
-          {/* File */}
-          <div style={{ height: "22px" }} />
-
-          <FieldLabel text="الملف *" htmlFor="evidence-file" />
-
-          <label className="cgp-file-choice"
-            style={{
-              display: "block",
-              border: "2px dashed #cfd7dd",
-              borderRadius: "14px",
-              padding: "34px 20px",
-              textAlign: "center",
-              cursor: "pointer",
-              background: "#fafbfc",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "34px",
-                marginBottom: "10px",
-              }}
-            >
-              📎
-            </div>
-
-            <div
-              style={{
-                fontWeight: "bold",
-                marginBottom: "7px",
-              }}
-            >
-              {file
-                ? file.name
-                : "اضغط لاختيار الملف"}
-            </div>
-
-            <div
-              style={{
-                color: "#586875",
-                fontSize: "13px",
-              }}
-            >
-              PDF, Word, Excel أو صورة — بحد أقصى 20 MB
-            </div>
-
-            <input
-              aria-label="ملف الدليل"
-              disabled={uploading||!ready} id="evidence-file" type="file"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,image/*"
-              onChange={(e) => {
-                const selected =
-                  e.target.files?.[0] ?? null;
-
-                setFile(selected);
-                setErrorMessage("");
-              }}
-              className="cgp-file-input"
-            />
-          </label>
-
-          {file && (
-            <div
-              style={{
-                marginTop: "10px",
-                color: "#5f6b76",
-                fontSize: "13px",
-              }}
-            >
-              الحجم:{" "}
-              {(file.size / 1024 / 1024).toFixed(2)} MB
-            </div>
+          {controlRequirement && (
+            <details className="evidence-upload-requirement">
+              <summary>عرض نص الضابط</summary>
+              <p>{controlRequirement}</p>
+            </details>
           )}
-          <p style={{margin:"12px 0 0",color:"#586875",fontSize:12}}>سيُسجل الدليل تلقائياً تحت رقم الضابط <b dir="ltr">{controlCode}</b>.</p>
+        </header>
 
-          {/* Errors */}
-          {errorMessage && (
-            <div role="alert"
-              style={{
-                marginTop: "20px",
-                background: "#fff1f0",
-                color: "#b42318",
-                padding: "13px 15px",
-                borderRadius: "9px",
-              }}
-            >
-              {errorMessage}
+        <form aria-busy={uploading} onSubmit={handleSubmit} className="evidence-upload-card">
+          <section className="evidence-upload-section">
+            <div className="evidence-upload-section-heading">
+              <span className="evidence-upload-step">1</span>
+              <div>
+                <h2>وصف الدليل</h2>
+                <p>اختياري، ويُفضل أن يوضح محتوى الملف وفترة تغطيته.</p>
+              </div>
             </div>
-          )}
-
-          {/* Success */}
-          {message && (
-            <div role="status"
-              style={{
-                marginTop: "20px",
-                background: "#e8f5f2",
-                color: "var(--cgp-teal-dark)",
-                padding: "13px 15px",
-                borderRadius: "9px",
-              }}
-            >
-              {message}
-            </div>
-          )}
-
-          {uploading&&<p role="status" className="workflow-form-hint">جاري إرسال الملف وتسجيله. انتظر حتى تظهر تفاصيل الضابط.</p>}
-          <p style={{color:"#586875",fontSize:13}}>الإرسال الجديد يحل محل الدليل الحالي للمراجعة، مع الاحتفاظ بالإرسالات السابقة في السجل.</p>
-
-          {/* Actions */}
-          <div
-            style={{
-              display: "flex",
-              gap: "12px",
-              justifyContent: "flex-start",
-              flexWrap: "wrap",
-              marginTop: "28px",
-            }}
-          >
-            <button
-              type="submit"
+            <FieldLabel text="وصف الدليل" htmlFor="evidence-description" />
+            <textarea
               disabled={uploading || !ready}
-              style={{
-                border: 0,
-                background: uploading
-                  ? "#91aaa6"
-                  : "var(--cgp-teal)",
-                color: "white",
-                padding: "13px 22px",
-                borderRadius: "9px",
-                fontWeight: "bold",
-                cursor: uploading
-                  ? "not-allowed"
-                  : "pointer",
-              }}
-            >
-              {uploading
-                ? "جاري الرفع..."
-                : "رفع وإرسال للمراجعة"}
-            </button>
+              id="evidence-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="مثال: سياسة الأمن السيبراني المعتمدة للإصدار الحالي، مع تاريخ الاعتماد."
+              rows={4}
+              className="evidence-upload-textarea"
+            />
+          </section>
 
-            <Link
-              href={`/controls/${controlId}`}
-              style={{
-                border: "1px solid #d9dee3",
-                color: "#44515c",
-                background: "white",
-                padding: "12px 20px",
-                borderRadius: "9px",
-                textDecoration: "none",
-                fontWeight: "bold",
-              }}
-            >
-              إلغاء
-            </Link>
-          </div>
+          <section className="evidence-upload-section evidence-upload-file-section">
+            <div className="evidence-upload-section-heading">
+              <span className="evidence-upload-step">2</span>
+              <div>
+                <h2>إرفاق الملف <em>*</em></h2>
+                <p>PDF أو Word أو Excel أو صورة، بحجم لا يتجاوز 20 MB.</p>
+              </div>
+            </div>
+
+            <label className="cgp-file-choice evidence-upload-file-choice">
+              <span className="evidence-upload-file-icon" aria-hidden="true">↑</span>
+              <span className="evidence-upload-file-copy">
+                <strong>{file ? file.name : "اختر ملفًا من جهازك"}</strong>
+                <small>{file ? `الحجم: ${(file.size / 1024 / 1024).toFixed(2)} MB` : "اضغط هنا لفتح مستعرض الملفات"}</small>
+              </span>
+              <span className="evidence-upload-file-action">اختيار ملف</span>
+              <input
+                aria-label="ملف الدليل"
+                disabled={uploading || !ready}
+                id="evidence-file"
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,image/*"
+                onChange={(e) => {
+                  setFile(e.target.files?.[0] ?? null);
+                  setErrorMessage("");
+                }}
+                className="cgp-file-input"
+              />
+            </label>
+            <p className="evidence-upload-note">
+              سيُسجل الدليل تلقائيًا تحت رقم الضابط <b dir="ltr">{controlCode}</b>.
+            </p>
+          </section>
+
+          {frameworkCode === "ECC" && mappedControls.length > 0 && (
+            <details className="evidence-upload-sharing">
+              <summary>
+                <span>مشاركة الدليل مع ضوابط مرتبطة</span>
+                <b>{mappedControls.length}</b>
+              </summary>
+              <div className="evidence-upload-sharing-body">
+                <p>يمكن استخدام الملف نفسه مع ضوابط مرتبطة. كل ضابط مختار يمر بمراجعة مستقلة قبل انعكاس النتيجة عليه.</p>
+                <fieldset disabled={uploading || !ready}>
+                  {mappedControls.map((item) => (
+                    <label key={item.control_id} className="evidence-upload-sharing-option">
+                      <input
+                        type="checkbox"
+                        checked={selectedTargets.includes(item.control_id)}
+                        onChange={() => setSelectedTargets((current) => current.includes(item.control_id) ? current.filter((id) => id !== item.control_id) : [...current, item.control_id])}
+                      />
+                      <span>
+                        <strong dir="ltr">{item.framework_code} · {item.control_code}</strong>
+                        <small>{item.control_title}</small>
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
+              </div>
+            </details>
+          )}
+
+          {errorMessage && <div role="alert" className="evidence-upload-alert evidence-upload-alert-error">{errorMessage}</div>}
+          {message && <div role="status" className="evidence-upload-alert evidence-upload-alert-success">{message}</div>}
+          {uploading && <p role="status" className="evidence-upload-status">جاري إرسال الملف وتسجيله. انتظر حتى تظهر تفاصيل الضابط.</p>}
+
+          <footer className="evidence-upload-actions">
+            <div>
+              <button type="submit" disabled={uploading || !ready} className="evidence-upload-submit">
+                {uploading ? "جاري الرفع..." : "رفع وإرسال للمراجعة"}
+              </button>
+              <Link href={`/controls/${controlId}`} className="evidence-upload-cancel">إلغاء</Link>
+            </div>
+            <p>الإرسال الجديد يحل محل الدليل الحالي للمراجعة، مع الاحتفاظ بالإرسالات السابقة في السجل.</p>
+          </footer>
         </form>
       </div>
     </main>
   );
+
 }
 
 function FieldLabel({
@@ -410,28 +282,5 @@ function FieldLabel({
   text: string;
   htmlFor: string;
 }) {
-  return (
-    <label className="cgp-field-label" htmlFor={htmlFor}
-      style={{
-        fontSize: "14px",
-        fontWeight: "bold",
-        color: "#34414c",
-        marginBottom: "8px",
-      }}
-    >
-      {text}
-    </label>
-  );
+  return <label className="evidence-upload-label" htmlFor={htmlFor}>{text}</label>;
 }
-
-const inputStyle = {
-  width: "100%",
-  boxSizing: "border-box" as const,
-  border: "1px solid #d9dee3",
-  borderRadius: "10px",
-  padding: "13px 14px",
-  fontSize: "14px",
-  background: "white",
-  color: "#26323d",
-  outline: "none",
-};
