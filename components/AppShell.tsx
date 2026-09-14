@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import FeedbackWidget from "@/components/FeedbackWidget";
-import { dataGovernanceEnabled } from "@/lib/workspaces";
 
 const navigation = [
   { href: "/", label: "لوحة المتابعة", group: "" },
@@ -154,14 +153,12 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   return <div className={`cgp-workspace ${navCollapsed?"cgp-nav-collapsed":""}`} dir="rtl">
     <a href="#cgp-content" className="cgp-skip">انتقل إلى المحتوى</a>
     <header className="cgp-topbar">
-      <Link href="/" className="cgp-brand" aria-label="CGP — الصفحة الرئيسية"><span className="cgp-brand-mark">CGP</span><span>منصة الحوكمة الرقمية<small>Digital Governance Platform</small></span></Link>
-      <nav className="cgp-workspace-switch" aria-label="تبديل مساحة العمل">
-        <Link href="/" aria-current={workspace === "cyber" ? "page" : undefined}>الأمن السيبراني</Link>
-        {dataGovernanceEnabled && account?.role !== "control_owner" && account?.role !== "nca_external_auditor" && <Link href="/data-governance" aria-current={workspace === "data" ? "page" : undefined}>حوكمة البيانات</Link>}
-        {dataGovernanceEnabled && account?.role === "admin" && <Link href="/shared-controls" aria-current={workspace === "shared" ? "page" : undefined}>مركز المواءمة</Link>}
-      </nav>
-      <button type="button" className="cgp-global-search" onClick={()=>setSearchOpen(true)} aria-haspopup="dialog"><span aria-hidden="true">⌕</span> بحث سريع <kbd>⌘ K</kbd></button>
-      <div className="cgp-account"><span>{account?.name || "مساحة العمل"}<small>{account ? roleLabels[account.role] : "جاري التحقق من الحساب"}</small></span><button type="button" onClick={signOut} disabled={signingOut} className="cgp-signout">{signingOut ? "جاري الخروج…" : "تسجيل الخروج"}</button></div>
+      <Link href="/" className="cgp-brand" aria-label="CGP — الصفحة الرئيسية"><span className="cgp-brand-mark">CGP</span><span>منصة الحوكمة السيبرانية<small>منصة موحدة للالتزام والمخاطر</small></span></Link>
+      <div className="cgp-topbar-context" aria-label="موقعك الحالي"><span>{workspaceLabel}</span><i aria-hidden="true">/</i><strong>{leaf}</strong></div>
+      <div className="cgp-topbar-tools">
+        <button type="button" className="cgp-global-search" onClick={()=>setSearchOpen(true)} aria-haspopup="dialog"><span aria-hidden="true">⌕</span><span>بحث</span><kbd>⌘ K</kbd></button>
+        <details className="cgp-account-menu"><summary aria-label="فتح قائمة الحساب"><span className="cgp-account-avatar" aria-hidden="true">{account?.name?.trim().slice(0, 1) || "ح"}</span><span className="cgp-account"><b>{account?.name || "حسابي"}</b><small>{account ? roleLabels[account.role] : "جاري التحقق من الحساب"}</small></span></summary><div className="cgp-account-panel"><p>{account ? roleLabels[account.role] : "جاري التحقق من الحساب"}</p><button type="button" onClick={signOut} disabled={signingOut} className="cgp-signout">{signingOut ? "جاري الخروج…" : "تسجيل الخروج"}</button></div></details>
+      </div>
     </header>
     {searchOpen && <div className="cgp-search-backdrop" role="presentation" onMouseDown={()=>setSearchOpen(false)}>
       <section className="cgp-search-dialog" role="dialog" aria-modal="true" aria-labelledby="global-search-title" onMouseDown={event=>event.stopPropagation()}>
