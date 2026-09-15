@@ -31,7 +31,8 @@ const navigation = [
   { href: "/risks", label: "سجل المخاطر السيبرانية", group: "العمليات" },
   { href: "/vulnerabilities", label: "سجل الثغرات", group: "العمليات" },
   { href: "/tasks", label: "التكليفات", group: "العمليات" },
-  { href: "/roadmap", label: "خارطة الطريق", group: "العمليات", team: true },
+  { href: "/roadmap/dashboard", label: "لوحة خارطة الطريق", group: "العمليات", team: true },
+  { href: "/roadmap", label: "سجل مشاريع الخارطة", group: "العمليات", team: true },
   { href: "/alerts", label: "مركز التنبيهات", group: "العمليات", team: true },
   { href: "/evidence", label: "الأدلة", group: "الامتثال" },
   { href: "/review", label: "مراجعة الأدلة", group: "الامتثال", team: true },
@@ -49,6 +50,7 @@ function NavIcon({ href }: { href: string }) {
     "/controls": "M5 3h14v18H5z M8 7h8 M8 12h8 M8 17h5",
     "/tasks": "M5 4h14v17H5z M9 3h6v3H9z M8 13l3 3 5-6",
     "/roadmap": "M4 18V6 M4 18h16 M8 15v-3 M12 15V8 M16 15v-5 M4 6h16 M17 3l3 3-3 3",
+    "/roadmap/dashboard": "M4 18V6 M4 18h16 M8 15v-3 M12 15V8 M16 15v-5 M4 6h16 M17 3l3 3-3 3",
     "/alerts": "M12 3l9 16H3L12 3z M12 9v4 M12 17h.01",
     "/evidence": "M3 6h7l2 3h9v11H3z M3 6V4h7l2 2h7v3",
     "/review": "M12 3l8 3v6c0 4-4 7-8 9-4-2-8-5-8-9V6z M8 12l3 3 5-6",
@@ -114,7 +116,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "لوحة المتابعة");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const leaf = pathname.endsWith("/assign") ? "تكليف المالك" : pathname.endsWith("/evidence/new") ? "رفع دليل" : controlId ? "تفاصيل الضابط" : current;
-  const linkFor = (item:typeof navigation[number]) => <Link key={item.href} href={item.href} className="cgp-nav-link" title={navCollapsed?item.label:undefined} aria-current={(item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/")) ? "page" : undefined}><NavIcon href={item.href}/><span>{item.href === "/tasks" && account?.role === "control_owner" ? "مهامي" : item.label}</span></Link>;
+  const linkFor = (item:typeof navigation[number]) => <Link key={item.href} href={item.href} className="cgp-nav-link" title={navCollapsed?item.label:undefined} aria-current={(item.href === "/" ? pathname === "/" : item.href === "/roadmap" ? pathname === "/roadmap" : pathname === item.href || pathname.startsWith(item.href + "/")) ? "page" : undefined}><NavIcon href={item.href}/><span>{item.href === "/tasks" && account?.role === "control_owner" ? "مهامي" : item.label}</span></Link>;
   const links = items.map(linkFor);
   const ungroupedItems = items.filter(item => !item.group);
   const groupOrder = workspace === "cyber" ? ["الامتثال", "قياس الالتزام", "العمليات", "الإدارة"] : [...new Set(items.map(item=>item.group).filter(Boolean))];
