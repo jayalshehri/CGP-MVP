@@ -1,4 +1,5 @@
 "use client";
+import AssessmentPortfolio from "@/components/AssessmentPortfolio";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -84,7 +85,7 @@ export default function ExecutivePage() {
       </section>
       <section className="exec-panel exec-report-bridge"><div><span className="exec-eyebrow">التحليل والتقارير</span><h2>القرار هنا، والتحليل في التقارير</h2><p>استخدم هذه اللوحة لتحديد ما يحتاج تدخلاً. تعرض التقارير المقارنات حسب الإطار والمجال والرسوم التفصيلية.</p></div><Link className="exec-text-link" href="/reports">فتح تقارير الالتزام ←</Link></section>
     </>}
-  </main>;
+  <AssessmentPortfolio/></main>;
 }
 function Meter({value,label,blue=false}:{value:number;label:string;blue?:boolean}) { return <progress className={blue ? "exec-meter blue" : "exec-meter"} value={value} max={100} aria-label={label}>{value}%</progress>; }
 function Metric({label,value,note,href,tone="neutral"}:{label:string;value:string|number;note:string;href:string;tone?:string}) { return <Link className={`exec-metric exec-${tone}`} href={href}><span>{label}</span><strong>{value}</strong><small>{note}</small><span className="exec-metric-arrow">فتح التفاصيل ←</span></Link>; }

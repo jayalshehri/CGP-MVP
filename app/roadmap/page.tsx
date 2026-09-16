@@ -1,4 +1,5 @@
 "use client";
+import AssessmentFindingLinks from "@/components/AssessmentFindingLinks";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -516,7 +517,7 @@ export default function ProjectRegisterPage() {
           </section>
         </div>
       )}
-    </main>
+    <AssessmentFindingLinks/></main>
   );
 }
 

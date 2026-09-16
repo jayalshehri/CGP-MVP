@@ -20,8 +20,11 @@ const nextConfig: NextConfig = {
             "form-action 'self'", "object-src 'none'", "img-src 'self' data: blob:",
             "font-src 'self' data:", "style-src 'self' 'unsafe-inline'",
             scriptPolicy,
-            "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-            "worker-src 'self' blob:", "upgrade-insecure-requests",
+            process.env.NODE_ENV === "development"
+              ? "connect-src 'self' https://*.supabase.co wss://*.supabase.co http://127.0.0.1:* ws://127.0.0.1:*"
+              : "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+            "worker-src 'self' blob:",
+            ...(process.env.NODE_ENV === "development" ? [] : ["upgrade-insecure-requests"]),
           ].join("; "),
         },
       ],

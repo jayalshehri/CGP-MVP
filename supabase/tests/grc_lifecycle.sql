@@ -10,7 +10,7 @@ insert into public.controls(id,framework_id,control_code,title_ar,domain_ar,impl
 select -910001,id,'GRC-QA-1','QA source','QA','not_implemented','not_uploaded','not_verified','10000000-0000-4000-8000-000000000001' from frameworks limit 1;
 insert into public.controls(id,framework_id,control_code,title_ar,domain_ar,implementation_status,evidence_status,verification_status)
 select -910002,id,'GRC-QA-2','QA target','QA','not_implemented','not_uploaded','not_verified' from frameworks order by id desc limit 1;
-insert into public.control_framework_links(source_control_id,target_control_id,relationship_type) values(-910001,-910002,'manual_mapping');
+insert into public.control_framework_links(source_control_id,target_control_id,relationship_type,validation_status) values(-910001,-910002,'manual_mapping','approved');
 insert into storage.objects(bucket_id,name,owner_id) values
  ('evidence-files','-910001/a.pdf','10000000-0000-4000-8000-000000000001'),
  ('evidence-files','-910001/b.pdf','10000000-0000-4000-8000-000000000001'),

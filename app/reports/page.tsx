@@ -1,4 +1,5 @@
 "use client";
+import AssessmentPortfolio from "@/components/AssessmentPortfolio";
 
 
 import { useEffect, useMemo, useState } from "react";
@@ -83,7 +84,7 @@ export default function ReportsPage(){
    </div>
    <details className="report-details report-analysis"><summary><span><b>تحليل إضافي ومقارنة الأطر</b><small>المقارنة، التحقق، خريطة الأولويات، والبيانات التفصيلية</small></span><span aria-hidden="true">‹</span></summary><FrameworkComparison rows={frameworkOverview} selected={selectedFramework} onSelect={setSelectedFramework}/><StatusBarChart items={[{label:"تم التحقق",value:stats.verified,tone:"implemented"},{label:"بانتظار التحقق",value:Math.max(0,stats.total-stats.verified),tone:"partial"},{label:"متأخرة",value:stats.overdue,tone:"missing"}]} total={stats.total} title="حالة التحقق والأولوية"/><AttentionMap domains={domains} onSelect={domain=>openControls(undefined,domain)}/><details className="report-details report-data-details"><summary>عرض البيانات التفصيلية</summary><div className="report-table-wrap">{domains.length===0?<Empty/>:<table style={table}><thead><tr><Th t="المجال"/><Th t="الضوابط"/><Th t="مكتمل"/><Th t="تم التحقق"/><Th t="متأخر"/><Th t="نسبة التنفيذ"/></tr></thead><tbody>{domains.map(d=>{const pct=d.total?Math.round(d.done/d.total*100):0;return <tr key={d.name}><Td>{d.name}</Td><Td>{d.total}</Td><Td>{d.done}</Td><Td>{d.verified}</Td><Td>{d.overdue}</Td><Td><strong>{pct}%</strong></Td></tr>})}</tbody></table>}</div></details></details>
   </section>
- </main>
+ <AssessmentPortfolio/></main>
 }
 function FrameworkComparison({rows,selected,onSelect}:{rows:FrameworkRow[];selected:string;onSelect:(code:string)=>void}){
  return <section className="report-chart" aria-labelledby="framework-comparison-title"><div className="report-chart-heading"><div><h2 id="framework-comparison-title">مقارنة الأطر التنظيمية</h2><p>مقارنة فورية لنسبة الالتزام؛ اضغط لتغيير التقرير</p></div></div><div className="report-framework-chart">{rows.map(row=><button type="button" key={row.code} className={selected===row.code?"active":""} onClick={()=>onSelect(row.code)} aria-label={`${row.name}: ${row.percent}%`}><span dir="ltr">{row.code}</span><div><i style={{height:`${Math.max(row.percent,3)}%`}}/><b>{row.percent}%</b></div><small>{row.done}/{row.total}</small></button>)}</div></section>

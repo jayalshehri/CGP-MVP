@@ -1,0 +1,28 @@
+begin;
+do $$ begin
+ if (select count(*) from assessment_items where legacy_source is not null and control_id in (-930001,-930002))<>3 then raise exception 'Import count mismatch'; end if;
+ if not exists(select 1 from assessment_items i join assessment_cycles a on a.id=i.cycle_id where a.system_id=-930001 and i.control_id=-930001 and i.compliance_status='implemented' and i.notes='Original A' and i.legacy_source->'record'->>'updated_at' like '2026-08-01%') then raise exception 'Original CSCC scope/time not retained'; end if;
+ if not exists(select 1 from assessment_items i join assessment_cycles a on a.id=i.cycle_id where a.system_id=-930002 and i.control_id=-930001 and i.compliance_status='not_implemented' and i.notes='Original B') then raise exception 'CSCC scopes mixed'; end if;
+ if exists(select 1 from assessment_cycles where imported and (status<>'draft' or approved_at is not null)) then raise exception 'Import invented approvals'; end if;
+ if (select count(*) from cscc_assessment_results where control_id=-930001)<>2 then raise exception 'Legacy data deleted'; end if;
+end $$;
+insert into auth.users(id) values('30000000-0000-4000-8000-000000000002');
+insert into profiles(user_id,display_name,role,is_active) values('30000000-0000-4000-8000-000000000002','Crosswalk approver','admin',true);
+create function pg_temp.rejects(statement text) returns void language plpgsql as $$ declare failed boolean:=false; begin begin execute statement; exception when others then failed:=true; end; if not failed then raise exception 'Expected rejection: %',statement; end if; end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"30000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select pg_temp.rejects($q$update controls set implementation_status='implemented' where id=-930002$q$);
+select pg_temp.rejects($q$update dcc_assessment_results set notes='tamper' where control_id=-930002$q$);
+select public.cgp_crosswalk_command(null,'{"action":"create","source_id":-930001,"target_id":-930002,"coverage_type":"partial","source_reference":"QA document v1 page 2","coverage_notes":"Only matching scope; differences retained"}');
+select set_config('qa.mapping',(select id::text from control_framework_links where source_control_id=-930001 and target_control_id=-930002),true);
+select pg_temp.rejects($q$select public.cgp_crosswalk_command(current_setting('qa.mapping')::bigint,'{"action":"approve","revision":1}')$q$);
+do $$ begin if exists(select 1 from public.grc_control_mappings(-930001)) then raise exception 'Unapproved mapping eligible for reuse'; end if; end $$;
+select set_config('request.jwt.claims','{"sub":"30000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.cgp_crosswalk_command(current_setting('qa.mapping')::bigint,'{"action":"approve","revision":1}');
+do $$ begin if not exists(select 1 from public.grc_control_mappings(-930001) where control_id=-930002 and relationship_type='partial') then raise exception 'Approved graph missing'; end if; if not exists(select 1 from public.grc_control_mappings(-930002) where control_id=-930001) then raise exception 'Reverse lookup missing'; end if; end $$;
+select pg_temp.rejects($q$select public.cgp_crosswalk_command(current_setting('qa.mapping')::bigint,'{"action":"review","revision":1,"coverage_type":"equivalent","source_reference":"stale","coverage_notes":"stale"}')$q$);
+select pg_temp.rejects($q$select public.cgp_crosswalk_command(null,'{"action":"create","source_id":-930001,"target_id":-930001,"coverage_type":"reference","source_reference":"self","coverage_notes":"self"}')$q$);
+select pg_temp.rejects($q$update public.control_framework_links set validation_status='approved'$q$);
+reset role;
+rollback;
+select 'PASS: non-destructive import, two CSCC scopes, legacy read-only, control guard, crosswalk independence/versioning and reciprocal lookup';

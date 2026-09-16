@@ -1,177 +1,39 @@
-"use client";
-
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { requireProfile } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
-
-type Mapping = {
-  control_id: number;
-  framework_code: string;
-  control_code: string;
-  control_title: string;
-  relationship_type: string;
-  source_note: string | null;
-};
-type Ecc = { ecc_id: number; ecc_code: string; ecc_title: string };
-
-export default function MappingsPage() {
-  const router = useRouter();
-  const [rows, setRows] = useState<Array<Mapping & Ecc>>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        await requireProfile(["admin", "cybersecurity_team"]);
-        const { data: controls, error: controlError } = await supabase
-          .from("controls")
-          .select("id,control_code,title_ar,frameworks!inner(code)")
-          .eq("frameworks.code", "ECC");
-        if (controlError) throw controlError;
-        const all = await Promise.all(
-          (controls ?? []).map(async (control) => {
-            const { data, error } = await supabase.rpc("ecc_control_mappings", {
-              p_ecc_control_id: control.id,
-            });
-            if (error) throw error;
-            return (data ?? ([] as Mapping[])).map((item: Mapping) => ({
-              ...item,
-              ecc_id: control.id,
-              ecc_code: control.control_code,
-              ecc_title: control.title_ar,
-            }));
-          }),
-        );
-        if (active) setRows(all.flat() as Array<Mapping & Ecc>);
-      } catch (e) {
-        if (active) {
-          setError(
-            e instanceof Error ? e.message : "تعذر تحميل خريطة المواءمة",
-          );
-          const { data } = await supabase.auth.getSession();
-          if (!data.session) router.replace("/login");
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [router]);
-  const visible = rows.filter((row) =>
-    `${row.framework_code} ${row.control_code} ${row.control_title} ${row.ecc_title} ${row.ecc_code}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
-  if (loading)
-    return (
-      <main
-        dir="rtl"
-        className="cgp-page-body"
-        style={{ padding: "38px 28px" }}
-      >
-        جاري تحميل خريطة المواءمة…
-      </main>
-    );
-  return (
-    <main
-      dir="rtl"
-      className="cgp-page-body"
-      style={{ maxWidth: 1300, margin: "0 auto", padding: "38px 28px 60px" }}
-    >
-      <header style={{ marginBottom: 24 }}>
-        <p style={{ color: "var(--cgp-teal)", fontWeight: 800, margin: 0 }}>
-          قياس الالتزام
-        </p>
-        <h1 style={{ fontSize: 32, margin: "8px 0" }}>خريطة مواءمة الضوابط</h1>
-        <p style={{ color: "#586875", maxWidth: 820 }}>
-          المواءمات أدناه مبنية على مراجع ECC الصريحة في نصوص أدوات الهيئة.
-          مشاركة الدليل لا تعني اعتمادًا تلقائيًا؛ لكل ضابط قرار مراجعة مستقل.
-        </p>
-      </header>
-      {error ? (
-        <p role="alert" style={{ color: "#b42318" }}>
-          {error}
-        </p>
-      ) : (
-        <>
-          <input
-            aria-label="بحث في خريطة المواءمة"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="ابحث برقم الضابط أو عنوانه أو الإطار"
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              padding: 13,
-              border: "1px solid #ccd6dc",
-              borderRadius: 10,
-              marginBottom: 16,
-              fontFamily: "inherit",
-            }}
-          />
-          <div
-            style={{
-              background: "white",
-              border: "1px solid #e2e7eb",
-              borderRadius: 14,
-              overflow: "auto",
-            }}
-          >
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                minWidth: 760,
-              }}
-            >
-              <thead>
-                <tr style={{ background: "#f5f8f8", textAlign: "right" }}>
-                  <th style={cell}>ضابط ECC</th>
-                  <th style={cell}>الضابط المرتبط</th>
-                  <th style={cell}>نوع المواءمة</th>
-                  <th style={cell}>إجراء</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((row) => (
-                  <tr key={`${row.ecc_id}-${row.control_id}`}>
-                    <td style={cell}>
-                      <strong dir="ltr">{row.ecc_code}</strong>
-                      <br />
-                      <small>{row.ecc_title}</small>
-                    </td>
-                    <td style={cell}>
-                      <strong dir="ltr">
-                        {row.framework_code} · {row.control_code}
-                      </strong>
-                      <br />
-                      <small>{row.control_title}</small>
-                    </td>
-                    <td style={cell}>مرجع رسمي صريح</td>
-                    <td style={cell}>
-                      <Link href={`/controls/${row.ecc_id}`}>فتح ECC</Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!visible.length && (
-              <p style={{ padding: 20 }}>لا توجد مواءمات مطابقة.</p>
-            )}
-          </div>
-        </>
-      )}
-    </main>
-  );
+'use client';
+import {useEffect,useState} from 'react';
+import Link from 'next/link';
+import {supabase} from '@/lib/supabase';
+import {requireProfile} from '@/lib/auth';
+import {WorkflowHeading,WorkflowMetric} from '@/components/WorkflowUI';
+import {csvDownload} from '@/lib/grc';
+import '@/components/assessment-workspace.css';
+type Mapping={id:number;source_id:number;target_id:number;source_framework:string;target_framework:string;source_code:string;target_code:string;source_title:string;target_title:string;source_version:string|null;target_version:string|null;relationship_type:string;coverage_type:string;validation_status:string;source_reference:string|null;coverage_notes:string|null;reviewed_by:string|null;reviewed_at:string|null;approved_by:string|null;approved_at:string|null;revision:number};
+type ControlChoice={id:number;label:string};
+const types:Record<string,string>={reference:'إشارة مرجعية',supports:'يدعم',partial:'تداخل جزئي',equivalent:'تكافؤ ضمن نطاق موثق'};
+const statuses:Record<string,string>={pending:'بحاجة إلى مراجعة واعتماد',approved:'معتمد',rejected:'مرفوض'};
+export default function MappingsPage(){
+ const [choices,setChoices]=useState<ControlChoice[]>([]);
+ const [rows,setRows]=useState<Mapping[]>([]),[actor,setActor]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(true),[refresh,setRefresh]=useState(0);
+ const [search,setSearch]=useState(''),[source,setSource]=useState(''),[target,setTarget]=useState(''),[status,setStatus]=useState(''),[type,setType]=useState(''),[page,setPage]=useState(0),[open,setOpen]=useState<number|null>(null);
+ useEffect(()=>{let active=true;void(async()=>{try{const {user}=await requireProfile(['admin','cybersecurity_team']);const [r,c]=await Promise.all([supabase.rpc('cgp_crosswalk'),supabase.from('controls').select('id,control_code,title_ar,frameworks(code)')]);if(r.error||c.error)throw r.error||c.error;if(active){setRows(r.data??[]);setChoices((c.data??[]).map(x=>({id:x.id,label:`${(Array.isArray(x.frameworks)?x.frameworks[0]:x.frameworks)?.code??''} ${x.control_code} — ${x.title_ar}`})));setActor(user.id);setError('');}}catch(e){if(active)setError(e instanceof Error?e.message:typeof e==='object'&&e&&'message'in e?String(e.message):'تعذر تحميل المواءمة');}finally{if(active)setLoading(false);}})();return()=>{active=false;};},[refresh]);
+ const visible=rows.filter(r=>(!source||r.source_framework===source)&&(!target||r.target_framework===target)&&(!status||r.validation_status===status)&&(!type||r.coverage_type===type)&&`${r.source_framework} ${r.source_code} ${r.source_title} ${r.target_framework} ${r.target_code} ${r.target_title}`.toLowerCase().includes(search.toLowerCase()));
+ const frameworks=[...new Set(rows.flatMap(r=>[r.source_framework,r.target_framework]))];
+ const change=(set:(s:string)=>void,v:string)=>{set(v);setPage(0);};
+ return <main className="workflow-page ae-page" dir="rtl"><WorkflowHeading title="خريطة مواءمة الضوابط" description="علاقات موثقة بين المتطلبات. الإشارة المرجعية لا تعني تكافؤ المتطلبات أو انتقال الالتزام تلقائيًا."/>
+ {error&&<p className="ae-error" role="alert">{error} <button onClick={()=>setRefresh(v=>v+1)}>إعادة المحاولة</button></p>}
+ <NewMapping choices={choices} refresh={()=>setRefresh(v=>v+1)}/><div className="workflow-metrics"><WorkflowMetric label="علاقات مسجلة" value={rows.length}/><WorkflowMetric label="علاقات معتمدة" value={rows.filter(r=>r.validation_status==='approved').length} tone="success"/><WorkflowMetric label="بحاجة إلى مراجعة" value={rows.filter(r=>r.validation_status==='pending').length} tone="warning"/></div>
+ <p className="ae-warning">الروابط المستوردة سابقًا محفوظة للمراجعة. راجع رقم المتطلب الكامل وإصدار الوثيقة وحدود التغطية قبل الاعتماد. مشاركة ملف تتطلب مراجعة مستقلة لكل ضابط.</p>
+ <div className="ae-toolbar"><label>البحث<input value={search} onChange={e=>change(setSearch,e.target.value)}/></label>{([['الإطار المصدر',source,setSource],['الإطار الهدف',target,setTarget]] as const).map(([l,v,set])=><label key={l}>{l}<select value={v} onChange={e=>change(set,e.target.value)}><option value="">الكل</option>{frameworks.map(f=><option key={f}>{f}</option>)}</select></label>)}<label>العلاقة<select value={type} onChange={e=>change(setType,e.target.value)}><option value="">الكل</option>{Object.entries(types).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><label>الاعتماد<select value={status} onChange={e=>change(setStatus,e.target.value)}><option value="">الكل</option>{Object.entries(statuses).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label></div>
+ <div className="ae-actions"><button onClick={()=>csvDownload('control-crosswalk.csv',[['المصدر','الهدف','العلاقة','الاعتماد','المرجع','حدود التغطية'],...visible.map(r=>[`${r.source_framework} ${r.source_code}`,`${r.target_framework} ${r.target_code}`,types[r.coverage_type],statuses[r.validation_status],r.source_reference??'',r.coverage_notes??''])])}>تصدير CSV</button><button onClick={()=>window.print()}>طباعة / PDF</button></div>
+ {loading?<p role="status">جاري التحميل…</p>:<><p>عدد العلاقات المطابقة: {visible.length}</p><div className="ae-table-wrap ae-no-print"><table className="ae-table"><thead><tr><th>المصدر</th><th>الهدف</th><th>العلاقة والاعتماد</th><th>المراجعة</th></tr></thead><tbody>{visible.slice(page*20,page*20+20).map(r=><MappingRow key={`${r.id}-${r.revision}`} row={r} open={open===r.id} toggle={()=>setOpen(open===r.id?null:r.id)} actor={actor} refresh={()=>setRefresh(v=>v+1)}/>)}</tbody></table></div><div className="ae-print-only"><table className="ae-table"><thead><tr><th>المصدر</th><th>الهدف</th><th>العلاقة</th><th>الاعتماد</th><th>المصدر وحدود التغطية</th></tr></thead><tbody>{visible.map(r=><tr key={r.id}><td>{r.source_framework} {r.source_code}<p>{r.source_title}</p></td><td>{r.target_framework} {r.target_code}<p>{r.target_title}</p></td><td>{types[r.coverage_type]}</td><td>{statuses[r.validation_status]}</td><td>{r.source_reference}<p>{r.coverage_notes}</p></td></tr>)}</tbody></table></div>{!visible.length&&<p className="workflow-empty">لا توجد علاقات مطابقة. غياب رابط لا يثبت غياب متطلب أو عدم انطباقه.</p>}<div className="ae-actions"><button disabled={!page} onClick={()=>setPage(v=>v-1)}>السابق</button><span>{page+1}</span><button disabled={(page+1)*20>=visible.length} onClick={()=>setPage(v=>v+1)}>التالي</button></div></>}
+ </main>;
 }
-const cell = {
-  padding: "14px 16px",
-  borderBottom: "1px solid #edf0f2",
-  verticalAlign: "top" as const,
-};
+function MappingRow({row:r,open,toggle,actor,refresh}:{row:Mapping;open:boolean;toggle:()=>void;actor:string;refresh:()=>void}){
+ const [reference,setReference]=useState(r.source_reference??''),[notes,setNotes]=useState(r.coverage_notes??''),[type,setType]=useState(r.coverage_type),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ async function act(action:string){setBusy(true);setError('');const q=await supabase.rpc('cgp_crosswalk_command',{p_id:r.id,p_data:{revision:r.revision,action,source_reference:reference,coverage_notes:notes,coverage_type:type}});setBusy(false);if(q.error)setError(q.error.message);else refresh();}
+ return <><tr><td><Link href={`/controls/${r.source_id}`}><b dir="ltr">{r.source_framework} · {r.source_code}</b><p>{r.source_title}</p></Link><small>الإصدار {r.source_version||'غير موثق'}</small></td><td><Link href={`/controls/${r.target_id}`}><b dir="ltr">{r.target_framework} · {r.target_code}</b><p>{r.target_title}</p></Link><small>الإصدار {r.target_version||'غير موثق'}</small></td><td>{types[r.coverage_type]}<p>{statuses[r.validation_status]}</p></td><td><button aria-expanded={open} onClick={toggle}>تفاصيل العلاقة</button></td></tr>{open&&<tr><td colSpan={4}><div className="ae-detail">{error&&<p role="alert" className="ae-error">{error}</p>}<label>نوع العلاقة<select value={type} onChange={e=>setType(e.target.value)}>{Object.entries(types).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><label>الوثيقة والإصدار والصفحة والمرجع الكامل<input value={reference} onChange={e=>setReference(e.target.value)}/></label><label>ما الذي يغطيه الرابط؟ وما المتطلبات الإضافية؟<textarea value={notes} onChange={e=>setNotes(e.target.value)}/></label><p>آخر مراجعة: {r.reviewed_at?.slice(0,10)||'لم تراجع'} · آخر اعتماد: {r.approved_at?.slice(0,10)||'لم تعتمد'}</p><div className="ae-actions"><button disabled={busy} onClick={()=>void act('review')}>حفظ المراجعة — يتطلب اعتمادًا مستقلًا</button><button disabled={busy||!r.reviewed_by||r.reviewed_by===actor||r.validation_status==='approved'||r.validation_status==='rejected'} onClick={()=>void act('approve')}>اعتماد العلاقة</button><button disabled={busy} onClick={()=>void act('reject')}>رفض العلاقة مع توثيق السبب</button></div><p>الأدلة المرشحة تُراجع من صفحة كل ضابط. لا يُنسخ قرار الالتزام بين الطرفين.</p></div></td></tr>}</>;
+}
+
+function NewMapping({choices,refresh}:{choices:ControlChoice[];refresh:()=>void}){
+ const [source,setSource]=useState(''),[target,setTarget]=useState(''),[reference,setReference]=useState(''),[notes,setNotes]=useState(''),[type,setType]=useState('reference'),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ return <details className="ae-card ae-no-print"><summary>اقتراح علاقة جديدة بين ضابطين</summary><form onSubmit={async e=>{e.preventDefault();const a=choices.find(c=>c.label===source),b=choices.find(c=>c.label===target);if(!a||!b){setError('اختر الضابطين من نتائج البحث');return;}setBusy(true);const r=await supabase.rpc('cgp_crosswalk_command',{p_id:null,p_data:{action:'create',source_id:a.id,target_id:b.id,coverage_type:type,source_reference:reference,coverage_notes:notes}});setBusy(false);if(r.error)setError(r.error.message);else{setError('');setSource('');setTarget('');setReference('');setNotes('');refresh();}}}><datalist id="mapping-control-choices">{choices.map(c=><option key={c.id} value={c.label}/>)}</datalist><div className="ae-form-grid"><label>ضابط المصدر<input required list="mapping-control-choices" value={source} onChange={e=>setSource(e.target.value)}/></label><label>ضابط الهدف<input required list="mapping-control-choices" value={target} onChange={e=>setTarget(e.target.value)}/></label><label>العلاقة<select value={type} onChange={e=>setType(e.target.value)}>{Object.entries(types).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><label>الوثيقة والإصدار والصفحة<input required value={reference} onChange={e=>setReference(e.target.value)}/></label><label>حدود التغطية والمتطلبات الإضافية<textarea required value={notes} onChange={e=>setNotes(e.target.value)}/></label></div>{error&&<p role="alert">{error}</p>}<button disabled={busy}>حفظ الاقتراح للاعتماد المستقل</button></form></details>;
+}
