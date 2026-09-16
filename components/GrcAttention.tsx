@@ -1,0 +1,11 @@
+'use client';
+import Link from 'next/link';
+import {useEffect,useState} from 'react';
+import {supabase} from '@/lib/supabase';
+import {type EvidenceRequest,type ReviewCycle,requestLabels,todayRiyadh,formatGrcDate} from '@/lib/grc';
+export default function GrcAttention({controlId,compact=false}:{controlId?:number;compact?:boolean}){
+ const [requests,setRequests]=useState<EvidenceRequest[]>([]),[cycles,setCycles]=useState<ReviewCycle[]>([]),[error,setError]=useState('');
+ useEffect(()=>{let live=true;(async()=>{let r=supabase.from('evidence_requests').select('*').in('status',['open','submitted','changes_requested','rejected']).order('due_date').limit(100);let c=supabase.from('control_review_cycles').select('*').eq('status','open').order('due_date').limit(100);if(controlId){r=r.eq('control_id',controlId);c=c.eq('control_id',controlId);}const [rr,cc]=await Promise.all([r,c]);if(live){setError(rr.error?.message||cc.error?.message||'');setRequests(rr.data??[]);setCycles(cc.data??[]);}})();return()=>{live=false};},[controlId]);
+ if(error)return <p role="alert">تعذر تحميل تنبيهات المراجعة: {error}</p>;
+ return <section className="workflow-card"><h2>طلبات الأدلة والمراجعات المطلوبة</h2><p>تنبيهات داخل المنصة محسوبة من المواعيد الحالية ضمن صلاحياتك. يعرض أول 100 طلب حسب الموعد.</p>{cycles.some(c=>c.due_date<todayRiyadh())&&<p className="grc-warning">توجد دورات مراجعة متأخرة. <Link href="/audit-schedule">فتح جدول المراجعات</Link></p>}{!requests.length?<p>لا توجد طلبات مفتوحة ضمن نطاقك.</p>:requests.slice(0,compact?5:100).map(r=><div className="control-evidence-item" key={r.id}><b>طلب #{r.id} · {r.requirement}</b><p>{requestLabels[r.status]} · {formatGrcDate(r.due_date)} {r.due_date<todayRiyadh()?' · متأخر':''}</p><Link className="workflow-button" href={`/controls/${r.control_id}`}>فتح الضابط</Link>{['open','changes_requested','rejected'].includes(r.status)&&<Link className="workflow-button" href={`/controls/${r.control_id}/evidence/new?request=${r.id}`}>تقديم الدليل</Link>}</div>)}{compact&&requests.length>5&&<Link href="/evidence">عرض بقية طلبات الأدلة ←</Link>}</section>;
+}

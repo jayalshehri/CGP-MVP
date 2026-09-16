@@ -1,4 +1,5 @@
 "use client";
+import GrcAttention from "@/components/GrcAttention";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -99,7 +100,7 @@ export default function Home() {
               <div className="cgp-framework-bars">{stats?.domains.length ? stats.domains.slice(0, 5).map(domain=><div key={domain.name}><div><b>{domain.name}</b><strong>{domain.percentage}%</strong></div><progress value={domain.percentage} max="100" aria-label={`نسبة الالتزام في ${domain.name}`}/><small>{domain.done} من {domain.total} ضابط مطبق</small></div>) : <p className="cgp-ops-empty">لا توجد بيانات كافية لعرض الأطر التنظيمية.</p>}</div>
             </article>
           </section>
-          <div className="cgp-ops-actions">
+          <GrcAttention key={refreshKey} compact/><div className="cgp-ops-actions">
             <Link href="/tasks" className="primary">فتح مهامي / التكليفات ←</Link>
             <Link href="/controls" className="secondary">عرض جميع الضوابط</Link>
             {userRole==="control_owner"&&<Link href="/evidence" className="secondary">مركز الأدلة</Link>}

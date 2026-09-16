@@ -14,6 +14,12 @@ export default function NewEvidencePage() {
 
   const controlId = Number(params.id);
 
+  const [versions,setVersions]=useState<Array<{id:number;file_name:string;version_number:number}>>([]);
+  const [replaceId,setReplaceId]=useState('');
+  const [requestId,setRequestId]=useState('');
+  const [validUntil,setValidUntil]=useState('');
+  const [coverageStart,setCoverageStart]=useState('');
+  const [coverageEnd,setCoverageEnd]=useState('');
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
@@ -28,14 +34,17 @@ export default function NewEvidencePage() {
   const [selectedTargets,setSelectedTargets]=useState<number[]>([]);
   const [ready,setReady]=useState(false);
   useEffect(()=>{let active=true;(async()=>{try{
-    await requireProfile();
+    const {profile}=await requireProfile(['admin','cybersecurity_team','control_owner']);
+    const query=new URLSearchParams(window.location.search);if(active){setRequestId(query.get('request')||'');setReplaceId(query.get('replace')||'');}
+    const {data:old}=await supabase.from('evidence').select('id,file_name,version_number').eq('control_id',controlId).eq('is_current',true);
+    if(active)setVersions(old??[]);
     const {data,error}=await supabase.from("controls").select("id,control_code,title_ar,description_ar,frameworks(code)").eq("id",controlId).single();
     if(error||!data)throw new Error("الضابط غير موجود أو ليس ضمن صلاحيتك.");
     const code=(data.frameworks as {code?:string}|null)?.code||"";
     const requirement = (code === "ECC" ? getEccOfficialTitle(data.control_code) : undefined) || data.description_ar || data.title_ar;
     if(active){setReady(true);setControlCode(data.control_code);setControlRequirement(requirement);setFrameworkCode(code);}
-    if(code==="ECC"){
-      const {data:mappings}=await supabase.rpc("ecc_control_mappings",{p_ecc_control_id:controlId});
+    if(profile.role!=="control_owner"){
+      const {data:mappings}=await supabase.rpc("grc_control_mappings",{p_control_id:controlId});
       if(active)setMappedControls((mappings??[]) as Array<{control_id:number;framework_code:string;control_code:string;control_title:string}>);
     }
   }catch(e){if(active)setErrorMessage(e instanceof Error?e.message:"تعذر التحقق من الصلاحيات");
@@ -99,20 +108,14 @@ export default function NewEvidencePage() {
       }
 
       // 2. Save evidence metadata in database
-      const { data: insertedEvidence, error: insertError } = await supabase
-        .from("evidence")
-        .insert({
-          control_id: controlId,
-          evidence_name: finalEvidenceName,
-          description: description.trim() || null,
-          file_name: file.name,
-          file_path: storagePath,
-          mime_type: file.type || null,
-          file_size: file.size,
-          status: "pending_review",
-          uploaded_at: new Date().toISOString(),
-          is_current: true,
-        }).select("id").single();
+      const { error: insertError } = await supabase.rpc('cgp_grc_command',{
+        p_action:'submit',p_control_id:controlId,p_data:{
+          evidence_name:finalEvidenceName,description:description.trim()||null,file_name:file.name,
+          file_path:storagePath,mime_type:file.type||null,file_size:file.size,
+          replaces_id:replaceId?Number(replaceId):null,request_id:requestId?Number(requestId):null,
+          valid_until:validUntil||null,coverage_start:coverageStart||null,coverage_end:coverageEnd||null,targets:selectedTargets
+        }
+      });
 
       if (insertError) {
         // If DB insert fails, remove uploaded file
@@ -123,11 +126,6 @@ export default function NewEvidencePage() {
         throw new Error(
           `تم رفع الملف ولكن تعذر تسجيل الدليل: ${insertError.message}`
         );
-      }
-
-      if (selectedTargets.length && insertedEvidence) {
-        const {error:linkError}=await supabase.from("evidence_control_links").insert(selectedTargets.map(targetId=>({evidence_id:insertedEvidence.id,control_id:targetId})));
-        if(linkError) throw new Error(`تم رفع الدليل، لكن تعذر ربطه بالضوابط المختارة: ${linkError.message}`);
       }
 
       setMessage(selectedTargets.length?"تم رفع الدليل وإرساله للمراجعة في الضوابط المختارة.":"تم رفع الدليل وربطه بالضابط بنجاح.");
@@ -174,7 +172,13 @@ export default function NewEvidencePage() {
         </header>
 
         <form aria-busy={uploading} onSubmit={handleSubmit} className="evidence-upload-card">
-          <section className="evidence-upload-section">
+          <section className="grc-form">
+            <label>نوع الإرسال<select disabled={uploading} value={replaceId} onChange={e=>setReplaceId(e.target.value)}><option value="">مستند جديد مستقل</option>{versions.map(v=><option key={v.id} value={v.id}>إصدار جديد من: {v.file_name} (الإصدار {v.version_number})</option>)}</select></label>
+            {requestId&&<p>مرتبط بطلب الدليل #{requestId}</p>}
+            <label>صالح حتى — إن كانت للدليل مدة صلاحية<input disabled={uploading} type="date" value={validUntil} onChange={e=>setValidUntil(e.target.value)}/></label>
+            <label>بداية فترة التغطية<input disabled={uploading} type="date" value={coverageStart} onChange={e=>setCoverageStart(e.target.value)}/></label>
+            <label>نهاية فترة التغطية<input disabled={uploading} type="date" min={coverageStart||undefined} value={coverageEnd} onChange={e=>setCoverageEnd(e.target.value)}/></label>
+          </section><section className="evidence-upload-section">
             <div className="evidence-upload-section-heading">
               <span className="evidence-upload-step">1</span>
               <div>

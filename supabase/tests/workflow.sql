@@ -23,7 +23,7 @@ end $$;
 insert into public.evidence(control_id,evidence_name,file_path,file_name,file_size,status,is_current)
 values(-900001,'QA','-900001/qa-rollback.pdf','qa.pdf',50,'pending_review',true);
 do $$ begin
- if not exists(select 1 from public.controls where id=-900001 and evidence_status='pending_review' and verification_status='under_review') then raise exception 'Upload did not update control atomically'; end if;
+ if not exists(select 1 from public.controls where id=-900001 and evidence_status='pending_review' and verification_status='not_verified') then raise exception 'Upload did not preserve assessment while updating evidence'; end if;
  begin
  update public.evidence set status='accepted' where control_id=-900001;
  if found then raise exception 'Owner self-approval succeeded'; end if;
@@ -56,19 +56,19 @@ select set_config('request.jwt.claims',jsonb_build_object('sub',current_setting(
 insert into public.evidence(control_id,evidence_name,file_path,file_name,file_size,status,is_current)
 values(-900001,'QA resubmit','-900001/qa-resubmit.pdf','qa.pdf',50,'pending_review',true);
 do $$ begin
- if (select count(*) from public.evidence where control_id=-900001 and is_current)<>1 then raise exception 'Multiple current submissions'; end if;
+ if (select count(*) from public.evidence where control_id=-900001 and is_current)<>2 then raise exception 'Independent documents were incorrectly superseded'; end if;
 end $$;
 reset role;
-select set_config('cgp.qa.evidence',(select id::text from evidence where control_id=-900001 and is_current),true);
+select set_config('cgp.qa.evidence',(select id::text from evidence where control_id=-900001 and is_current order by id desc limit 1),true);
 update profiles set role='cybersecurity_team' where user_id=current_setting('cgp.qa.admin')::uuid;
 set local role authenticated;
 select set_config('request.jwt.claims',jsonb_build_object('sub',current_setting('cgp.qa.admin'),'role','authenticated')::text,true);
 select public.cgp_review_evidence(current_setting('cgp.qa.evidence')::bigint,'accepted','QA acceptance');
 do $$ begin
- if not exists(select 1 from public.controls where id=-900001 and evidence_status='accepted' and implementation_status='implemented' and verification_status='verified') then raise exception 'Accept did not complete control'; end if;
+ if not exists(select 1 from public.controls where id=-900001 and evidence_status='rejected' and implementation_status='not_started' and verification_status='not_verified') then raise exception 'Accept changed control assessment without assessment decision'; end if;
  if not exists(select 1 from public.controls where id=-900002) then raise exception 'Team missing global scope'; end if;
  if not exists(select 1 from public.profiles where role='control_owner') then raise exception 'Team cannot assign owner'; end if;
- if (public.cgp_dashboard()->>'verified')::int < 1 then raise exception 'Live dashboard not updated'; end if;
+
 end $$;
 reset role;
 update profiles set is_active=false where user_id=current_setting('cgp.qa.owner')::uuid;

@@ -35,10 +35,10 @@ const navigation = [
   { href: "/roadmap/analysis", label: "تحليل المحفظة", group: "العمليات", subgroup: "إدارة خارطة الطريق", team: true },
   { href: "/roadmap", label: "سجل المشاريع", group: "العمليات", subgroup: "إدارة خارطة الطريق", team: true },
   { href: "/alerts", label: "مركز التنبيهات", group: "العمليات", team: true },
-  { href: "/evidence", label: "الأدلة", group: "الامتثال" },
+  { href: "/evidence", label: "الأدلة", group: "الامتثال", auditor: true },
   { href: "/review", label: "مراجعة الأدلة", group: "الامتثال", team: true },
   { href: "/audit", label: "سجل التدقيق", group: "الامتثال", team: true },
-  { href: "/audit-schedule", label: "جدول التدقيق الدوري", group: "الامتثال", team: true, auditor: true },
+  { href: "/audit-schedule", label: "جدول التدقيق الدوري", group: "الامتثال", auditor: true },
   { href: "/users", label: "إدارة المستخدمين", group: "الإدارة", admin: true },
   { href: "/feedback", label: "نتائج الاختبارات", group: "الإدارة", admin: true },
 ];
