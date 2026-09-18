@@ -1,6 +1,35 @@
 import { createClient } from '@supabase/supabase-js';
 
-const baseUrl = process.env.CGP_BASE_URL || 'https://cgp-mvp-grc13.vercel.app';
+const PRODUCTION_DOMAIN = 'cgp-mvp-grc13.vercel.app';
+const PRODUCTION_SUPABASE_REF = 'ahfindosbawqfvhbcplq';
+const QA_SUPABASE_REF = 'lkozjnpfufdpzqtzdxhe';
+
+function refuse(reason) {
+  console.error(`SAFETY GUARD REFUSED: ${reason}`);
+  console.error('This tool is blocked from running against Production to prevent accidental writes, data exposure, or credential misuse. Point CGP_BASE_URL and NEXT_PUBLIC_SUPABASE_URL at the QA/Preview environment instead.');
+  process.exit(1);
+}
+
+const baseUrl = process.env.CGP_BASE_URL;
+if (!baseUrl) {
+  refuse('CGP_BASE_URL is not set. Refusing to default to any URL, including Production.');
+}
+if (baseUrl.includes(PRODUCTION_DOMAIN)) {
+  refuse(`CGP_BASE_URL targets the Production domain (${PRODUCTION_DOMAIN}).`);
+}
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+if (supabaseUrl) {
+  if (supabaseUrl.includes(PRODUCTION_SUPABASE_REF)) {
+    refuse(`NEXT_PUBLIC_SUPABASE_URL targets the Production Supabase project (${PRODUCTION_SUPABASE_REF}).`);
+  }
+  if (!supabaseUrl.includes(QA_SUPABASE_REF)) {
+    refuse(`NEXT_PUBLIC_SUPABASE_URL does not match the approved QA Supabase project (${QA_SUPABASE_REF}).`);
+  }
+}
+
+console.log(`Safety guard passed: target is not Production.`);
+
 const routes = ['/login', '/', '/controls', '/tasks', '/evidence', '/review', '/reports', '/executive', '/change-password'];
 let failed = false;
 
@@ -18,7 +47,6 @@ for (const route of routes) {
   }
 }
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const email = process.env.QA_EMAIL;
 const password = process.env.QA_PASSWORD;
