@@ -146,14 +146,25 @@ export default function ProjectDetailPage() {
   }, [derivedControls]);
 
   const rollup = useMemo(() => {
-    const full = projectRequirements.filter((pr) => pr.coverage_type === "full").length;
-    const partial = projectRequirements.filter((pr) => pr.coverage_type === "partial").length;
-    const supporting = projectRequirements.filter((pr) => pr.coverage_type === "supporting").length;
+    // Full/Partial/Supporting is a breakdown of the LINKED CONTROLS by
+    // requirement<->control coverage_type — not the project<->requirement
+    // coverage (which is a separate, usually coarser, single value per
+    // requirement). One control can appear once per requirement it serves;
+    // dedupe by control id so a control isn't double-counted.
+    const seenForCoverage = new Set<number>();
+    const coverageRows = derivedControls.filter((row) => {
+      if (seenForCoverage.has(row.control.id)) return false;
+      seenForCoverage.add(row.control.id);
+      return true;
+    });
+    const full = coverageRows.filter((row) => row.coverage === "full").length;
+    const partial = coverageRows.filter((row) => row.coverage === "partial").length;
+    const supporting = coverageRows.filter((row) => row.coverage === "supporting").length;
     const readyForVerification = uniqueControls.filter((c) => c.evidence_status === "accepted" && c.verification_status !== "verified").length;
     const verified = uniqueControls.filter((c) => goodVerification(c.verification_status)).length;
     const contribution = uniqueControls.length ? Math.round((verified / uniqueControls.length) * 100) : null;
     return { requirementsCount: projectRequirements.length, totalControls: uniqueControls.length, full, partial, supporting, readyForVerification, verified, contribution };
-  }, [projectRequirements, uniqueControls]);
+  }, [projectRequirements, uniqueControls, derivedControls]);
 
   if (loading) return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading">جاري تحميل المشروع…</p></main>;
   if (error || !project) return <main className="roadmap-page" dir="rtl"><p role="alert">{error}</p><Link href="/roadmap">العودة إلى سجل المشاريع</Link></main>;
