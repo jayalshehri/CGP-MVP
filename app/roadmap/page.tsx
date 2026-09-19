@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { getRiyadhDate, isDelayed } from "./portfolio-metrics";
+import { getRiyadhDate, isDelayed, requirementRollup, type CoverageType, type RequirementControlLink } from "./portfolio-metrics";
 import "./roadmap.css";
 
 type Control = {
@@ -117,6 +117,8 @@ export default function ProjectRegisterPage() {
   const [controls, setControls] = useState<Control[]>([]);
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [treatments, setTreatments] = useState<GapTreatment[]>([]);
+  const [requirementCoverage, setRequirementCoverage] = useState<CoverageType[]>([]);
+  const [requirementControlLinks, setRequirementControlLinks] = useState<RequirementControlLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -136,11 +138,13 @@ export default function ProjectRegisterPage() {
   const canManage = role === "admin" || role === "cybersecurity_team";
 
   async function load() {
-    const [projectResult, controlResult, linkResult, treatmentResult] = await Promise.all([
+    const [projectResult, controlResult, linkResult, treatmentResult, projectRequirementResult, requirementControlResult] = await Promise.all([
       supabase.from("cybersecurity_projects").select("*").order("planned_year").order("planned_quarter").order("project_code"),
       supabase.from("controls").select("id,control_code,title_ar,frameworks!inner(code,name_ar)").order("control_code"),
       supabase.from("cybersecurity_project_controls").select("project_id,control_id,relationship_type,controls(id,control_code,title_ar,frameworks(code,name_ar))"),
       supabase.from("cybersecurity_project_gap_treatments").select("id,project_id,gap_title,treatment_type,recommendation,priority").order("id"),
+      supabase.from("cybersecurity_project_requirements").select("coverage_type"),
+      supabase.from("cybersecurity_requirement_controls").select("requirement_id,control_id,coverage_type,controls(evidence_status,verification_status)"),
     ]);
     if (projectResult.error) throw projectResult.error;
     if (controlResult.error) throw controlResult.error;
@@ -150,6 +154,19 @@ export default function ProjectRegisterPage() {
     setControls((controlResult.data ?? []) as unknown as Control[]);
     setLinks((linkResult.data ?? []) as unknown as LinkRow[]);
     setTreatments((treatmentResult.data ?? []) as GapTreatment[]);
+    if (!projectRequirementResult.error) {
+      setRequirementCoverage((projectRequirementResult.data ?? []).map((row) => row.coverage_type as CoverageType));
+    }
+    if (!requirementControlResult.error) {
+      type RawLink = { requirement_id: number; control_id: number; coverage_type: CoverageType; controls: { evidence_status: string; verification_status: string } | { evidence_status: string; verification_status: string }[] | null };
+      const rows = (requirementControlResult.data ?? []) as unknown as RawLink[];
+      setRequirementControlLinks(
+        rows.map((row) => {
+          const control = Array.isArray(row.controls) ? row.controls[0] : row.controls;
+          return { requirement_id: row.requirement_id, control_id: row.control_id, coverage_type: row.coverage_type, evidence_status: control?.evidence_status ?? "not_uploaded", verification_status: control?.verification_status ?? "not_verified" };
+        }),
+      );
+    }
   }
 
   useEffect(() => {
@@ -183,6 +200,11 @@ export default function ProjectRegisterPage() {
 
   const linkedFor = (projectId: number) => links.filter((link) => link.project_id === projectId);
   const treatmentsFor = (projectId: number) => treatments.filter((item) => item.project_id === projectId);
+
+  const requirementStats = useMemo(
+    () => requirementRollup(requirementCoverage, requirementControlLinks),
+    [requirementCoverage, requirementControlLinks],
+  );
 
   const stats = useMemo(() => {
     const missingDates = projects.filter((project) => !project.target_end_date).length;
@@ -421,6 +443,8 @@ export default function ProjectRegisterPage() {
           <Metric label="قيد التنفيذ" value={stats.active} tone="active" />
           <Metric label="بلا تاريخ مستهدف" value={stats.missingDates} tone="warning" />
           <Metric label="ضوابط مرتبطة بمشروع معالجة" value={stats.linked} tone="linked" />
+          <Metric label="متطلبات سيبرانية مرتبطة" value={requirementStats.requirementsCount} tone="linked" />
+          <Metric label="ضوابط مُتحقَّقة عبر المتطلبات" value={requirementStats.verified} tone="active" />
         </section>
 
         <section className="register-toolbar" aria-label="تصفية سجل المشاريع">
@@ -450,7 +474,7 @@ export default function ProjectRegisterPage() {
                 <div className="register-progress"><b>{Number(project.progress_percent)}%</b><i><span style={{ width: `${Math.max(0, Math.min(100, Number(project.progress_percent)))}%` }} /></i></div>
                 <span className={delayed ? "register-date delayed" : "register-date"}>{project.target_end_date || "غير محدد"}{delayed && <small>متأخر</small>}</span>
                 <span>{projectLinks.length} مرتبط</span>
-                <button type="button" onClick={() => openProject(project)}>عرض وإدارة ←</button>
+                <span><Link href={`/roadmap/${project.id}`}>صفحة المشروع ←</Link> · <button type="button" onClick={() => openProject(project)}>عرض وإدارة ←</button></span>
               </article>
             );
           })}

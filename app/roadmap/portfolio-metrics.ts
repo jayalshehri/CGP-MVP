@@ -83,3 +83,54 @@ export function scheduleMetric(
     missingDates: projects.length - dated.length,
   };
 }
+
+// --- Requirement layer rollups (Program -> Project -> Requirement -> Control) ---
+// Compliance is never stored here: every number below is derived at read time
+// from controls.evidence_status/verification_status. A project's progress or
+// completion never implies a control is compliant.
+
+export type CoverageType = "full" | "partial" | "supporting";
+
+export type RequirementControlLink = {
+  requirement_id: number;
+  control_id: number;
+  coverage_type: CoverageType;
+  evidence_status: string;
+  verification_status: string;
+};
+
+export type RequirementRollup = {
+  requirementsCount: number;
+  linkedControlsCount: number;
+  full: number;
+  partial: number;
+  supporting: number;
+  readyForVerification: number;
+  verified: number;
+  complianceContributionPercent: number | null;
+};
+
+const isVerified = (verificationStatus: string) => verificationStatus === "verified";
+const isReadyForVerification = (evidenceStatus: string, verificationStatus: string) =>
+  evidenceStatus === "accepted" && verificationStatus !== "verified";
+
+export function requirementRollup(
+  projectRequirementCoverage: CoverageType[],
+  requirementControlLinks: RequirementControlLink[],
+): RequirementRollup {
+  const uniqueControlIds = new Set(requirementControlLinks.map((link) => link.control_id));
+  const uniqueLinks = Array.from(uniqueControlIds).map(
+    (controlId) => requirementControlLinks.find((link) => link.control_id === controlId)!,
+  );
+  const verified = uniqueLinks.filter((link) => isVerified(link.verification_status)).length;
+  return {
+    requirementsCount: projectRequirementCoverage.length,
+    linkedControlsCount: uniqueControlIds.size,
+    full: projectRequirementCoverage.filter((coverage) => coverage === "full").length,
+    partial: projectRequirementCoverage.filter((coverage) => coverage === "partial").length,
+    supporting: projectRequirementCoverage.filter((coverage) => coverage === "supporting").length,
+    readyForVerification: uniqueLinks.filter((link) => isReadyForVerification(link.evidence_status, link.verification_status)).length,
+    verified,
+    complianceContributionPercent: uniqueLinks.length ? Math.round((verified / uniqueLinks.length) * 100) : null,
+  };
+}
