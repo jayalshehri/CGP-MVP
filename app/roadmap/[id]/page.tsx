@@ -240,7 +240,7 @@ export default function ProjectDetailPage() {
             <span dir="ltr">{project.project_code}</span> · {initiativeTypeText[project.initiative_type] ?? project.initiative_type} · {statusText[project.status] ?? project.status} · أولوية {priorityText[project.priority] ?? project.priority}
           </p>
           <p className="project-detail-line">
-            {project.planned_year} · {project.planned_quarter} <span className="sep">|</span> المالك: {project.executive_owner || "—"} <span className="sep">|</span> الإنجاز: {clampedProgress}%
+            {project.planned_year} · {project.planned_quarter} <span className="sep">|</span> المالك: {project.executive_owner || "غير محدد"} <span className="sep">|</span> الإنجاز: {clampedProgress}%
           </p>
           <div className="project-detail-progress"><i style={{ width: `${clampedProgress}%` }} /></div>
         </header>
@@ -286,9 +286,9 @@ export default function ProjectDetailPage() {
               )}
             </div>
             <ul className="coverage-legend">
-              <li><span className="legend-dot full" />تغطية كاملة: {rollup.full}</li>
-              <li><span className="legend-dot partial" />تغطية جزئية: {rollup.partial}</li>
-              <li><span className="legend-dot supporting" />تغطية داعمة: {rollup.supporting}</li>
+              <li><span className="legend-dot full" />تغطية كاملة: <b>{rollup.full}</b></li>
+              <li><span className="legend-dot partial" />تغطية جزئية: <b>{rollup.partial}</b></li>
+              <li><span className="legend-dot supporting" />تغطية داعمة: <b>{rollup.supporting}</b></li>
             </ul>
           </article>
 

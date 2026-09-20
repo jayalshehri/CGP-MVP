@@ -219,12 +219,16 @@ export default function ProjectRegisterPage() {
   // Verified), derived the same way as the project detail page's rollup -- read
   // only, no new query shape, just a client-side grouping of data already loaded.
   const perProjectStats = useMemo(() => {
-    const map = new Map<number, { requirementsCount: number; controlsCount: number; verifiedCount: number }>();
+    const map = new Map<
+      number,
+      { requirementsCount: number; controlsCount: number; verifiedCount: number; confirmedCount: number; probableCount: number; requirementsWithoutMapping: number }
+    >();
     const reqToProject = new Map<number, number>();
+    const reqIdsWithLinks = new Set<number>();
     for (const row of requirementCoverage) {
       if (row.project_id == null) continue;
       reqToProject.set(row.requirement_id, row.project_id);
-      const entry = map.get(row.project_id) ?? { requirementsCount: 0, controlsCount: 0, verifiedCount: 0 };
+      const entry = map.get(row.project_id) ?? { requirementsCount: 0, controlsCount: 0, verifiedCount: 0, confirmedCount: 0, probableCount: 0, requirementsWithoutMapping: 0 };
       entry.requirementsCount += 1;
       map.set(row.project_id, entry);
     }
@@ -232,6 +236,7 @@ export default function ProjectRegisterPage() {
     for (const link of requirementControlLinks) {
       const projectId = reqToProject.get(link.requirement_id);
       if (projectId == null) continue;
+      reqIdsWithLinks.add(link.requirement_id);
       const seen = seenPerProject.get(projectId) ?? new Set<number>();
       if (seen.has(link.control_id)) continue;
       seen.add(link.control_id);
@@ -240,6 +245,13 @@ export default function ProjectRegisterPage() {
       if (!entry) continue;
       entry.controlsCount += 1;
       if (link.verification_status === "verified") entry.verifiedCount += 1;
+      if (link.mapping_confidence === "confirmed") entry.confirmedCount += 1;
+      else entry.probableCount += 1;
+    }
+    for (const row of requirementCoverage) {
+      if (row.project_id == null || reqIdsWithLinks.has(row.requirement_id)) continue;
+      const entry = map.get(row.project_id);
+      if (entry) entry.requirementsWithoutMapping += 1;
     }
     return map;
   }, [requirementCoverage, requirementControlLinks]);
@@ -524,9 +536,13 @@ export default function ProjectRegisterPage() {
                 <span className={`register-priority ${project.priority}`}>{priorityText[project.priority]}</span>
                 <div className="register-progress"><b>{Number(project.progress_percent)}%</b><i><span style={{ width: `${Math.max(0, Math.min(100, Number(project.progress_percent)))}%` }} /></i></div>
                 <div className="register-req-ctrl-stats">
-                  <span><b>{reqStats?.requirementsCount ?? 0}</b> متطلب</span>
-                  <span><b>{reqStats?.controlsCount ?? 0}</b> ضابط</span>
-                  <span><b>{reqStats?.verifiedCount ?? 0}</b> متحقَّق</span>
+                  <span className="register-stats-line">
+                    {reqStats?.requirementsCount ?? 0} متطلب · {reqStats?.controlsCount ?? 0} ضوابط · {reqStats?.verifiedCount ?? 0} متحقق
+                  </span>
+                  <span className="register-mapping-line">
+                    {reqStats?.confirmedCount ?? 0} مؤكد · {reqStats?.probableCount ?? 0} محتمل
+                    {Boolean(reqStats?.requirementsWithoutMapping) && <em className="register-needs-mapping">يحتاج ربط ضابط</em>}
+                  </span>
                 </div>
                 <div className="register-actions">
                   <Link className="register-action-primary" href={`/roadmap/${project.id}`}>صفحة المشروع ←</Link>
