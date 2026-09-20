@@ -42,10 +42,11 @@ function ControlsContent(){
  const requestedDomain=searchParams.get("domain")??"";
  const [search,setSearch]=useState(""),[framework,setFramework]=useState(requestedFramework);
  const [activeDomain,setActiveDomain]=useState(requestedDomain),[scope,setScope]=useState("all"),[view,setView]=useState<ViewMode>("structure");
- const [controls,setControls]=useState<Control[]>([]),[frameworks,setFrameworks]=useState<Framework[]>([]);
+ const [controls,setControls]=useState<Control[]>([]),[frameworks,setFrameworks]=useState<Framework[]>([]),[canManage,setCanManage]=useState(false);
  const [error,setError]=useState<Error|null>(null),[loading,setLoading]=useState(true);
  useEffect(()=>{let active=true;(async()=>{try{
   const {user,profile}=await requireProfile();if(!active)return;
+  setCanManage(profile.role==="admin"||profile.role==="cybersecurity_team");
   let query=supabase.from("controls").select("id,framework_id,control_code,title_ar,description_ar,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner,control_owner_id").order("id");
   if(profile.role==="control_owner")query=query.eq("control_owner_id",user.id);
   const [{data,error},{data:frameworkData,error:frameworkError}]=await Promise.all([query,supabase.from("frameworks").select("id,code,name_ar,version").eq("is_active",true).order("id")]);
@@ -76,7 +77,7 @@ function ControlsContent(){
  if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>;
  if(error)return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل الضوابط</h1><p className="catalog-error">{error.message}</p><Link href="/">العودة إلى لوحة المتابعة</Link></main>;
  return <main className="workflow-page catalog-page" dir="rtl">
-  <WorkflowHeading title="مكتبة الضوابط" description="اختر الإطار، ثم المجال الرئيسي والمجال الفرعي للوصول إلى الضابط ومتابعة تنفيذه."/>
+  <WorkflowHeading title="مكتبة الضوابط" description="اختر الإطار، ثم المجال الرئيسي والمجال الفرعي للوصول إلى الضابط ومتابعة تنفيذه." action={canManage?<Link className="workflow-button" href="/controls/bulk-assign">تعيين المالكين جماعيًا ←</Link>:undefined}/>
   <section aria-labelledby="framework-heading">
    <div className="catalog-section-heading"><div><span>الخطوة 1</span><h2 id="framework-heading">اختر الإطار التنظيمي</h2></div><small>{frameworks.length} إطارات متاحة</small></div>
    <div className="framework-grid">{frameworks.map(item=>{const rows=controls.filter(c=>c.framework_id===item.id);const done=rows.filter(c=>good(c.implementation_status)).length;return <button key={item.id} className={`framework-card ${framework===item.code?"active":""}`} onClick={()=>chooseFramework(item.code)} aria-pressed={framework===item.code}><strong dir="ltr">{item.code}</strong><span>{item.name_ar}</span><small>{item.version} · {rows.length} ضابط</small><progress max={Math.max(rows.length,1)} value={done}/></button>})}</div>
