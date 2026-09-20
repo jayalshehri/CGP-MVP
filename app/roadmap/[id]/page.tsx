@@ -42,6 +42,7 @@ type RequirementControl = {
   requirement_id: number;
   control_id: number;
   coverage_type: "full" | "partial" | "supporting";
+  mapping_confidence: "confirmed" | "probable";
   controls: ControlRow | ControlRow[] | null;
 };
 
@@ -96,7 +97,7 @@ export default function ProjectDetailPage() {
         if (requirementIds.length) {
           const rc = await supabase
             .from("cybersecurity_requirement_controls")
-            .select("requirement_id,control_id,coverage_type,controls(id,control_code,title_ar,implementation_status,evidence_status,verification_status,frameworks(code))")
+            .select("requirement_id,control_id,coverage_type,mapping_confidence,controls(id,control_code,title_ar,implementation_status,evidence_status,verification_status,frameworks(code))")
             .in("requirement_id", requirementIds);
           if (rc.error) throw new Error("تعذر تحميل الضوابط المشتقة من المتطلبات.");
           if (active) setRequirementControls((rc.data ?? []) as unknown as RequirementControl[]);
@@ -123,7 +124,12 @@ export default function ProjectDetailPage() {
           const control = single(rc.controls);
           return control && goodVerification(control.verification_status);
         }).length;
-        return { requirement, coverage: pr.coverage_type, controlsCount: links.length, verifiedCount };
+        // A requirement with zero linked controls is "Unresolved" (Needs Control Mapping) —
+        // derived live from the junction table, never a stored/guessed status. It is excluded
+        // from Verified Controls / Compliance Contribution / Coverage below simply because it
+        // contributes no controls to those pools.
+        const mappingStatus: "mapped" | "unresolved" = links.length === 0 ? "unresolved" : "mapped";
+        return { requirement, coverage: pr.coverage_type, controlsCount: links.length, verifiedCount, mappingStatus };
       }),
     [projectRequirements, requirementControls],
   );
@@ -163,8 +169,30 @@ export default function ProjectDetailPage() {
     const readyForVerification = uniqueControls.filter((c) => c.evidence_status === "accepted" && c.verification_status !== "verified").length;
     const verified = uniqueControls.filter((c) => goodVerification(c.verification_status)).length;
     const contribution = uniqueControls.length ? Math.round((verified / uniqueControls.length) * 100) : null;
-    return { requirementsCount: projectRequirements.length, totalControls: uniqueControls.length, full, partial, supporting, readyForVerification, verified, contribution };
-  }, [projectRequirements, uniqueControls, derivedControls]);
+    // Confirmed/Probable is a mapping-QUALITY signal (does an official control text
+    // directly support this link, from the Phase 2 reconciliation) — a separate axis
+    // from Full/Partial/Supporting (coverage completeness). Dedupe by control id per
+    // requirement the same way the coverage breakdown above does.
+    const confirmedMappings = coverageRows.filter((row) => {
+      const rc = requirementControls.find((item) => item.control_id === row.control.id);
+      return rc?.mapping_confidence === "confirmed";
+    }).length;
+    const probableMappings = coverageRows.length - confirmedMappings;
+    const requirementsWithoutMapping = requirementsWithStats.filter((item) => item.mappingStatus === "unresolved").length;
+    return {
+      requirementsCount: projectRequirements.length,
+      totalControls: uniqueControls.length,
+      full,
+      partial,
+      supporting,
+      readyForVerification,
+      verified,
+      contribution,
+      confirmedMappings,
+      probableMappings,
+      requirementsWithoutMapping,
+    };
+  }, [projectRequirements, uniqueControls, derivedControls, requirementControls, requirementsWithStats]);
 
   if (loading) return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading">جاري تحميل المشروع…</p></main>;
   if (error || !project) return <main className="roadmap-page" dir="rtl"><p role="alert">{error}</p><Link href="/roadmap">العودة إلى سجل المشاريع</Link></main>;
@@ -191,6 +219,9 @@ export default function ProjectDetailPage() {
           <Metric label="جاهزة للتحقق" value={rollup.readyForVerification} tone="active" />
           <Metric label="ضوابط مُتحقَّقة" value={rollup.verified} tone="linked" />
           <Metric label="نسبة مساهمة الامتثال" value={rollup.contribution === null ? "—" : `${rollup.contribution}%`} />
+          <Metric label="ربط مؤكَّد (Confirmed)" value={rollup.confirmedMappings} tone="linked" />
+          <Metric label="ربط محتمل (Probable)" value={rollup.probableMappings} tone="warning" />
+          <Metric label="متطلبات بلا ربط ضوابط" value={rollup.requirementsWithoutMapping} tone={rollup.requirementsWithoutMapping ? "warning" : "muted"} />
         </section>
         <p className="detail-hint">نسبة المساهمة محسوبة لحظيًا من حالة التحقق الفعلية للضوابط المرتبطة — إنجاز المشروع لا يعني امتثال الضابط.</p>
 
@@ -222,9 +253,15 @@ export default function ProjectDetailPage() {
                     item.requirement && (
                       <article className="control-evidence-item" key={item.requirement.id}>
                         <b dir="ltr">{item.requirement.requirement_code}</b> — {item.requirement.title_ar}
-                        <p>
-                          التغطية: {coverageText[item.coverage] ?? item.coverage} · الضوابط: {item.controlsCount} · تحقق: {item.verifiedCount}/{item.controlsCount}
-                        </p>
+                        {item.mappingStatus === "unresolved" ? (
+                          <p>
+                            <StatusBadge status="needs_control_mapping" /> لا يوجد ضابط رسمي موثوق مرتبط بهذا المتطلب بعد — غير محسوب ضمن الضوابط المُتحقَّقة أو نسبة المساهمة أو تغطية الضوابط.
+                          </p>
+                        ) : (
+                          <p>
+                            التغطية: {coverageText[item.coverage] ?? item.coverage} · الضوابط: {item.controlsCount} · تحقق: {item.verifiedCount}/{item.controlsCount}
+                          </p>
+                        )}
                       </article>
                     ),
                 )}

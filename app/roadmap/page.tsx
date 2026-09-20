@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { getRiyadhDate, isDelayed, requirementRollup, type CoverageType, type RequirementControlLink } from "./portfolio-metrics";
+import { getRiyadhDate, isDelayed, requirementRollup, type CoverageType, type RequirementControlLink, type ProjectRequirementRow } from "./portfolio-metrics";
 import "./roadmap.css";
 
 type Control = {
@@ -117,7 +117,7 @@ export default function ProjectRegisterPage() {
   const [controls, setControls] = useState<Control[]>([]);
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [treatments, setTreatments] = useState<GapTreatment[]>([]);
-  const [requirementCoverage, setRequirementCoverage] = useState<CoverageType[]>([]);
+  const [requirementCoverage, setRequirementCoverage] = useState<ProjectRequirementRow[]>([]);
   const [requirementControlLinks, setRequirementControlLinks] = useState<RequirementControlLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -143,8 +143,8 @@ export default function ProjectRegisterPage() {
       supabase.from("controls").select("id,control_code,title_ar,frameworks!inner(code,name_ar)").order("control_code"),
       supabase.from("cybersecurity_project_controls").select("project_id,control_id,relationship_type,controls(id,control_code,title_ar,frameworks(code,name_ar))"),
       supabase.from("cybersecurity_project_gap_treatments").select("id,project_id,gap_title,treatment_type,recommendation,priority").order("id"),
-      supabase.from("cybersecurity_project_requirements").select("coverage_type"),
-      supabase.from("cybersecurity_requirement_controls").select("requirement_id,control_id,coverage_type,controls(evidence_status,verification_status)"),
+      supabase.from("cybersecurity_project_requirements").select("requirement_id,coverage_type"),
+      supabase.from("cybersecurity_requirement_controls").select("requirement_id,control_id,coverage_type,mapping_confidence,controls(evidence_status,verification_status)"),
     ]);
     if (projectResult.error) throw projectResult.error;
     if (controlResult.error) throw controlResult.error;
@@ -155,15 +155,15 @@ export default function ProjectRegisterPage() {
     setLinks((linkResult.data ?? []) as unknown as LinkRow[]);
     setTreatments((treatmentResult.data ?? []) as GapTreatment[]);
     if (!projectRequirementResult.error) {
-      setRequirementCoverage((projectRequirementResult.data ?? []).map((row) => row.coverage_type as CoverageType));
+      setRequirementCoverage((projectRequirementResult.data ?? []) as ProjectRequirementRow[]);
     }
     if (!requirementControlResult.error) {
-      type RawLink = { requirement_id: number; control_id: number; coverage_type: CoverageType; controls: { evidence_status: string; verification_status: string } | { evidence_status: string; verification_status: string }[] | null };
+      type RawLink = { requirement_id: number; control_id: number; coverage_type: CoverageType; mapping_confidence: "confirmed" | "probable"; controls: { evidence_status: string; verification_status: string } | { evidence_status: string; verification_status: string }[] | null };
       const rows = (requirementControlResult.data ?? []) as unknown as RawLink[];
       setRequirementControlLinks(
         rows.map((row) => {
           const control = Array.isArray(row.controls) ? row.controls[0] : row.controls;
-          return { requirement_id: row.requirement_id, control_id: row.control_id, coverage_type: row.coverage_type, evidence_status: control?.evidence_status ?? "not_uploaded", verification_status: control?.verification_status ?? "not_verified" };
+          return { requirement_id: row.requirement_id, control_id: row.control_id, coverage_type: row.coverage_type, mapping_confidence: row.mapping_confidence, evidence_status: control?.evidence_status ?? "not_uploaded", verification_status: control?.verification_status ?? "not_verified" };
         }),
       );
     }
@@ -445,6 +445,9 @@ export default function ProjectRegisterPage() {
           <Metric label="ضوابط مرتبطة بمشروع معالجة" value={stats.linked} tone="linked" />
           <Metric label="متطلبات سيبرانية مرتبطة" value={requirementStats.requirementsCount} tone="linked" />
           <Metric label="ضوابط مُتحقَّقة عبر المتطلبات" value={requirementStats.verified} tone="active" />
+          <Metric label="ربط مؤكَّد (Confirmed)" value={requirementStats.confirmedMappings} tone="linked" />
+          <Metric label="ربط محتمل (Probable)" value={requirementStats.probableMappings} tone="warning" />
+          <Metric label="متطلبات بلا ربط ضوابط" value={requirementStats.requirementsWithoutMapping} tone={requirementStats.requirementsWithoutMapping ? "warning" : "muted"} />
         </section>
 
         <section className="register-toolbar" aria-label="تصفية سجل المشاريع">
