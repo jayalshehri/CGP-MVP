@@ -162,6 +162,7 @@ export default function BulkAssignPage() {
 
       <div className="workflow-metrics">
         <WorkflowMetric label="إجمالي الضوابط" value={controls.length} />
+        <WorkflowMetric label="النتائج الظاهرة" value={filtered.length} />
         <WorkflowMetric label="غير معيّنة" value={controls.filter((c) => !c.control_owner_id).length} tone="warning" />
         <WorkflowMetric label="محددة الآن" value={selected.size} tone="success" />
       </div>
@@ -200,26 +201,31 @@ export default function BulkAssignPage() {
           <thead>
             <tr>
               <th><input type="checkbox" checked={filtered.length > 0 && filtered.every((c) => selected.has(c.id))} onChange={toggleAllVisible} aria-label="تحديد الكل" /></th>
-              <th>الضابط</th>
+              <th>الإطار</th>
+              <th>رمز الضابط</th>
+              <th>عنوان الضابط</th>
               <th>المجال</th>
               <th>المالك الحالي</th>
-              <th>حالة الأمان</th>
+              <th>حالة الدورة/العنصر المفتوح</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((c) => {
               const hasOpen = openControlIds.has(c.id);
+              const fwCode = single(c.frameworks)?.code ?? "—";
               return (
                 <tr key={c.id} className={selected.has(c.id) ? "is-selected" : ""}>
-                  <td><input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} aria-label={`تحديد ${c.control_code}`} /></td>
-                  <td><strong dir="ltr">{c.control_code}</strong><span>{c.title_ar}</span></td>
+                  <td><input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} aria-label={`تحديد ${fwCode} ${c.control_code}`} /></td>
+                  <td><span className="bulk-assign-framework-pill" dir="ltr">{fwCode}</span></td>
+                  <td><strong dir="ltr">{c.control_code}</strong></td>
+                  <td>{c.title_ar}</td>
                   <td>{c.domain_ar}</td>
                   <td>{c.control_owner ?? "غير معيّن"}</td>
-                  <td>{c.control_owner_id && hasOpen ? <em className="bulk-assign-unsafe">دورة/طلب مفتوح</em> : <em className="bulk-assign-safe">آمن</em>}</td>
+                  <td>{c.control_owner_id && hasOpen ? <em className="bulk-assign-unsafe">دورة/طلب مفتوح</em> : <em className="bulk-assign-safe">لا يوجد عنصر مفتوح</em>}</td>
                 </tr>
               );
             })}
-            {!filtered.length && <tr><td colSpan={5} className="bulk-assign-empty">لا توجد ضوابط مطابقة للفلاتر الحالية.</td></tr>}
+            {!filtered.length && <tr><td colSpan={7} className="bulk-assign-empty">لا توجد ضوابط مطابقة للفلاتر الحالية.</td></tr>}
           </tbody>
         </table>
       </section>
@@ -241,14 +247,24 @@ export default function BulkAssignPage() {
         <div className="bulk-assign-dialog-backdrop" role="presentation" onMouseDown={() => !saving && setConfirming(false)}>
           <section className="bulk-assign-dialog" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
             <h2>تأكيد التعيين الجماعي</h2>
-            <p>المالك الجديد: <strong>{owners.find((o) => o.user_id === targetOwner)?.display_name ?? targetOwner}</strong></p>
-            <p className="bulk-assign-safe-count">{safeToAssign.length} ضابطًا سيُعيَّن الآن بأمان.</p>
-            {blocked.length > 0 && (
-              <div className="bulk-assign-blocked-list">
-                <p className="bulk-assign-unsafe">{blocked.length} ضابطًا لن يُعيَّن — لديه دورة مراجعة أو طلب دليل مفتوح مرتبط بالمالك الحالي. أغلق الدورة/الطلب أولًا أو تابع بدونها لتفادي ملكية غير متسقة.</p>
-                <ul>{blocked.map((c) => <li key={c.id}><span dir="ltr">{c.control_code}</span> — {c.title_ar}</li>)}</ul>
+            <p className="bulk-assign-confirm-headline">سيتم تعيين <strong>{safeToAssign.length}</strong> ضابطًا إلى <strong>{owners.find((o) => o.user_id === targetOwner)?.display_name ?? targetOwner}</strong></p>
+
+            <div className="bulk-assign-breakdown">
+              <div className="bulk-assign-breakdown-row">
+                <span className="bulk-assign-safe-count">✓ {safeToAssign.length} ضابطًا مؤهلًا للتعيين الآن</span>
+                {safeToAssign.length > 0 && (
+                  <ul>{safeToAssign.map((c) => <li key={c.id}><span className="bulk-assign-framework-pill" dir="ltr">{single(c.frameworks)?.code ?? "—"}</span> <span dir="ltr">{c.control_code}</span> — {c.title_ar}</li>)}</ul>
+                )}
               </div>
-            )}
+
+              {blocked.length > 0 && (
+                <div className="bulk-assign-breakdown-row bulk-assign-blocked-list">
+                  <span className="bulk-assign-unsafe">⚠ {blocked.length} ضابطًا مستبعد — لديه دورة مراجعة أو طلب دليل مفتوح</span>
+                  <p className="bulk-assign-hint">لن يُعاد تعيين هذه الضوابط لتفادي إنشاء ملكية غير متسقة أثناء وجود دورة مراجعة أو طلب دليل مفتوح. أغلق الدورة/الطلب أولًا ثم أعد المحاولة.</p>
+                  <ul>{blocked.map((c) => <li key={c.id}><span className="bulk-assign-framework-pill" dir="ltr">{single(c.frameworks)?.code ?? "—"}</span> <span dir="ltr">{c.control_code}</span> — {c.title_ar}</li>)}</ul>
+                </div>
+              )}
+            </div>
             <div className="bulk-assign-dialog-actions">
               <button type="button" disabled={saving} onClick={() => setConfirming(false)}>إلغاء</button>
               <button type="button" className="workflow-button" disabled={saving || !safeToAssign.length} onClick={() => void confirmSave()}>
