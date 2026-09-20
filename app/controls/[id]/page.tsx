@@ -17,10 +17,21 @@ type Control = { id:number; control_code:string; title_ar:string; description_ar
 type Evidence = { link_id:number|null;source_control_id:number;version_number:number;valid_until:string|null;uploader_name:string|null;reviewer_display_name:string|null; is_current?:boolean; uploaded_at?:string|null; file_path?:string|null; review_notes?:string|null; reviewed_at?:string|null; id:number; evidence_name?:string|null; file_name?:string|null; description?:string|null; status?:string|null };
 type AssessmentReflection = {source_framework:string;source_control_code:string;source_control_title:string;assessment_scope:string|null;compliance_status:string;notes:string|null;corrective_action:string|null;expected_compliance_date:string|null;updated_at:string|null};
 type MappedControl = {control_id:number;framework_code:string;control_code:string;control_title:string;relationship_type:string;source_note:string|null};
+type RequirementLink = {
+ requirement_id:number; coverage_type:'full'|'partial'|'supporting'; mapping_confidence:'confirmed'|'probable';
+ cybersecurity_requirements:{requirement_code:string;title_ar:string} | {requirement_code:string;title_ar:string}[] | null;
+};
+type ProjectRequirementLink = {
+ requirement_id:number; project_id:number;
+ cybersecurity_projects:{project_code:string;name_ar:string} | {project_code:string;name_ar:string}[] | null;
+};
 const tabs=['نظرة عامة','الأدلة المطلوبة','الضوابط المرتبطة','السجل والمراجعات'];
 const date=(value:string)=>new Date(value).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'});
 const goodStatus=(value:string)=>['verified','approved','accepted','compliant'].includes(value);
 const assessmentStatusText:Record<string,string>={implemented:'مطبق كليًا',partially_implemented:'مطبق جزئيًا',not_implemented:'غير مطبق',not_applicable:'لا ينطبق'};
+const coverageText:Record<string,string>={full:'كاملة',partial:'جزئية',supporting:'داعمة'};
+const mappingConfidenceText:Record<string,string>={confirmed:'مؤكد',probable:'محتمل'};
+const single=<T,>(value:T|T[]|null):T|null=>Array.isArray(value)?value[0]??null:value;
 
 export default function ControlDetailsPage() {
  const {id}=useParams<{id:string}>(); const router=useRouter();
@@ -30,15 +41,28 @@ export default function ControlDetailsPage() {
 
  const [reflections,setReflections]=useState<AssessmentReflection[]>([]);
  const [mappedControls,setMappedControls]=useState<MappedControl[]>([]);
+ const [requirementLinks,setRequirementLinks]=useState<RequirementLink[]>([]);
+ const [projectLinks,setProjectLinks]=useState<ProjectRequirementLink[]>([]);
  useEffect(()=>{let active=true;(async()=>{try{
   const {profile}=await requireProfile();if(!active)return;setRole(profile.role);
   const controlId=Number(id);if(!Number.isSafeInteger(controlId)||controlId<=0)throw new Error('رقم الضابط غير صحيح.');
-  const [c,e]=await Promise.all([
+  const [c,e,rc]=await Promise.all([
    supabase.from('controls').select('*,frameworks(code)').eq('id',controlId).single(),
-   supabase.rpc('grc_evidence_register')]);
+   supabase.rpc('grc_evidence_register'),
+   supabase.from('cybersecurity_requirement_controls').select('requirement_id,coverage_type,mapping_confidence,cybersecurity_requirements(requirement_code,title_ar)').eq('control_id',controlId)]);
   if(c.error||!c.data)throw new Error('الضابط غير موجود أو ليس ضمن صلاحيتك.');
   if(e.error)throw new Error('تعذر تحميل أدلة الضابط. أعد تحميل الصفحة.');
-  if(active){setControl(c.data);setEvidence((e.data??[]).filter((row: {control_id:number})=>row.control_id===controlId));}
+  if(active){
+   setControl(c.data);
+   setEvidence((e.data??[]).filter((row: {control_id:number})=>row.control_id===controlId));
+   const links=(rc.data??[]) as unknown as RequirementLink[];
+   setRequirementLinks(links);
+   const requirementIds=links.map(l=>l.requirement_id);
+   if(requirementIds.length){
+    const pr=await supabase.from('cybersecurity_project_requirements').select('requirement_id,project_id,cybersecurity_projects(project_code,name_ar)').in('requirement_id',requirementIds);
+    if(active&&!pr.error)setProjectLinks((pr.data??[]) as unknown as ProjectRequirementLink[]);
+   }
+  }
  }catch(e){if(active)setError(e instanceof Error?e.message:'تعذر التحميل');const {data}=await supabase.auth.getSession();if(!data.session)router.replace('/login');}
  finally{if(active)setLoading(false);}})();return()=>{active=false;};},[id,router]);
  const canReview=role==='admin'||role==='cybersecurity_team';
@@ -59,12 +83,33 @@ export default function ControlDetailsPage() {
  return <main className="detail-page" dir="rtl">
   <Link className="detail-back" href="/controls">← العودة إلى الضوابط</Link>
   <header className="detail-hero"><div><span className="detail-code">{control.control_code}</span><h1>{(isEcc?getEccOfficialTitle(control.control_code):undefined)||strategyExample?.title||control.title_ar}</h1><p>{control.domain_ar}</p></div><div className="detail-hero-actions"><StatusBadge status={control.implementation_status}/>{canReview&&<Link className="detail-assign-owner" href={`/controls/${control.id}/assign`}>{control.control_owner?"تغيير مالك الضابط":"تعيين مالك الضابط"} ←</Link>}</div></header>
-  <section className="detail-next"><div><span>{canUpload?'الإجراء التالي':'وضع المراجعة'}</span><strong>{canUpload?(control.evidence_status==='not_uploaded'?'رفع الدليل المطلوب للضابط':!goodStatus(control.verification_status)?'متابعة مراجعة الدليل والتحقق':'مراجعة الضابط دوريًا والمحافظة على الأدلة'):'تستطيع معاينة الدليل والسجل فقط ضمن نطاق التدقيق الممنوح لك.'}</strong></div>{canUpload&&control.evidence_status==='not_uploaded'?<Link className="detail-button" href={`/controls/${control.id}/evidence/new`}>رفع دليل ←</Link>:<button className="detail-button" onClick={()=>setTab(3)}>فتح السجل ←</button>}</section>
   <div className="detail-metrics"><section><small>حالة التطبيق</small><StatusBadge status={control.implementation_status}/></section><section><small>حالة الدليل</small><StatusBadge status={control.evidence_status}/></section><section><small>حالة التحقق</small><StatusBadge status={control.verification_status}/></section><section><small>موعد الاستحقاق</small><strong>{control.due_date||'غير محدد'}</strong></section></div>
+  <section className="detail-next"><div><span>{canUpload?'الإجراء التالي':'وضع المراجعة'}</span><strong>{canUpload?(control.evidence_status==='not_uploaded'?'رفع الدليل المطلوب للضابط':!goodStatus(control.verification_status)?'متابعة مراجعة الدليل والتحقق':'مراجعة الضابط دوريًا والمحافظة على الأدلة'):'تستطيع معاينة الدليل والسجل فقط ضمن نطاق التدقيق الممنوح لك.'}</strong></div>{canUpload&&control.evidence_status==='not_uploaded'?<Link className="detail-button" href={`/controls/${control.id}/evidence/new`}>رفع دليل ←</Link>:<button className="detail-button" onClick={()=>setTab(3)}>فتح السجل ←</button>}</section>
   <div className="detail-tabs" role="tablist" aria-label="تفاصيل الضابط">{tabs.map((label,index)=><button key={label} id={`detail-tab-${index}`} role="tab" aria-selected={tab===index} aria-controls={`detail-panel-${index}`} tabIndex={tab===index?0:-1} onClick={()=>setTab(index)} onKeyDown={event=>{let next=index;if(event.key==='ArrowLeft')next=(index+1)%tabs.length;else if(event.key==='ArrowRight')next=(index+tabs.length-1)%tabs.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;event.preventDefault();setTab(next);document.getElementById(`detail-tab-${next}`)?.focus();}}>{label}</button>)}</div>
   <section id={`detail-panel-${tab}`} role="tabpanel" aria-labelledby={`detail-tab-${tab}`} className="detail-columns">
    <div className="detail-content">
-   {tab===0&&<>{["CSCC","DCC","TCC","OSMACC"].includes(frameworkCode)&&<ControlAssessmentHistory controlId={control.id} framework={frameworkCode}/>}<ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload}/><section className="detail-card"><h2>المتطلب الرسمي</h2><p className="detail-official">{officialRequirement}</p>{plan.requirements.length>0&&<><h3>المتطلبات الفرعية</h3>{plan.requirements.map(r=><p className="detail-requirement" key={r.key}><b dir="ltr">{r.key}</b> {r.text}</p>)}</>}<a className="detail-back" href={isEcc?eccOfficialControlsUrl:`https://nca.gov.sa/ar/regulatory-documents/controls-list/${frameworkCode}/`} target="_blank" rel="noreferrer">مرجع الضوابط الرسمية للهيئة ↗</a></section>{isEcc&&<section className="detail-card"><h2>الإرشاد المرجعي للهيئة</h2><p>يوجد دليل إرشادي مستقل لتطبيق ECC. يُستخدم للاستئناس بمنهج التطبيق، بينما يبقى نص ECC الحالي هو المتطلب الملزم عند اختلاف الإصدار أو الصياغة.</p><a className="detail-back" href={eccImplementationGuideUrl} target="_blank" rel="noreferrer">فتح الدليل الإرشادي ↗</a></section>}</>}
+   {tab===0&&<><ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload}/>
+   <section className="detail-card requirements-projects-card">
+    <h2>المتطلبات والمشاريع المرتبطة</h2>
+    <p className="detail-hint">علاقة للقراءة فقط، مصدرها ربط المتطلبات السيبرانية الحالي — لا منطق ربط جديد ولا تكرار للبيانات.</p>
+    {!requirementLinks.length?<p>لا يدعم هذا الضابط أي متطلب سيبراني مسجل حاليًا.</p>:
+    <div className="req-proj-table-wrap"><table className="req-proj-table"><thead><tr><th>رمز المتطلب</th><th>المتطلب</th><th>التغطية</th><th>جودة الربط</th><th>رمز المشروع</th><th>المشروع</th></tr></thead><tbody>
+     {requirementLinks.map(link=>{
+      const requirement=single(link.cybersecurity_requirements);
+      const projectLink=projectLinks.find(p=>p.requirement_id===link.requirement_id);
+      const project=projectLink?single(projectLink.cybersecurity_projects):null;
+      return <tr key={link.requirement_id}>
+       <td dir="ltr">{requirement?.requirement_code??'—'}</td>
+       <td>{requirement?.title_ar??'—'}</td>
+       <td><span className={`coverage-pill ${link.coverage_type}`}>{coverageText[link.coverage_type]??link.coverage_type}</span></td>
+       <td><span className={`mapping-pill ${link.mapping_confidence}`}>{mappingConfidenceText[link.mapping_confidence]??link.mapping_confidence}</span></td>
+       <td dir="ltr">{project?.project_code??'—'}</td>
+       <td>{project?<Link href={`/roadmap/${projectLink!.project_id}`}>{project.name_ar}</Link>:'غير مرتبط بمشروع'}</td>
+      </tr>;
+     })}
+    </tbody></table></div>}
+   </section>
+   <section className="detail-card"><h2>المتطلب الرسمي</h2><p className="detail-official">{officialRequirement}</p>{plan.requirements.length>0&&<><h3>المتطلبات الفرعية</h3>{plan.requirements.map(r=><p className="detail-requirement" key={r.key}><b dir="ltr">{r.key}</b> {r.text}</p>)}</>}<a className="detail-back" href={isEcc?eccOfficialControlsUrl:`https://nca.gov.sa/ar/regulatory-documents/controls-list/${frameworkCode}/`} target="_blank" rel="noreferrer">مرجع الضوابط الرسمية للهيئة ↗</a></section>{isEcc&&<section className="detail-card"><h2>الإرشاد المرجعي للهيئة</h2><p>يوجد دليل إرشادي مستقل لتطبيق ECC. يُستخدم للاستئناس بمنهج التطبيق، بينما يبقى نص ECC الحالي هو المتطلب الملزم عند اختلاف الإصدار أو الصياغة.</p><a className="detail-back" href={eccImplementationGuideUrl} target="_blank" rel="noreferrer">فتح الدليل الإرشادي ↗</a></section>}{["CSCC","DCC","TCC","OSMACC"].includes(frameworkCode)&&<ControlAssessmentHistory controlId={control.id} framework={frameworkCode}/>}</>}
    {tab===1&&<><section className="detail-card"><h2>الأدلة المقترحة</h2><p className="detail-hint">أمثلة مساعدة؛ تُحدد كفايتها وفق نص الضابط ونطاق التطبيق.</p><ul>{plan.evidence.map(item=><li key={item}>{item}</li>)}</ul>{canUpload&&<Link className="detail-button" href={`/controls/${control.id}/evidence/new`}>+ رفع دليل</Link>}</section><section className="detail-card"><h2>الأدلة والإصدارات</h2>{!evidence.length&&<p>لا توجد أدلة مرفوعة بعد.</p>}{evidence.map(e=><article className="control-evidence-item" key={`${e.id}-${e.link_id??"source"}`}><small>{e.is_current?'الإرسال الحالي':'إصدار سابق'} · إصدار {e.version_number}{e.link_id?' · مشترك':''}</small><h3>{e.evidence_name||e.file_name}</h3><p>{e.file_name} · {e.uploader_name||"رافع غير موثق بالاسم"}</p>{e.valid_until&&<p>الصلاحية: {e.valid_until}</p>}{canUpload&&e.is_current&&!e.link_id&&<Link href={`/controls/${control.id}/evidence/new?replace=${e.id}`}>رفع إصدار جديد</Link>}<StatusBadge status={e.status||''}/>{e.uploaded_at&&<p>{date(e.uploaded_at)}</p>}{e.description&&<p>{e.description}</p>}{e.review_notes&&<p>ملاحظات المراجع: {e.review_notes}</p>}<EvidenceDownload path={e.file_path} name={e.file_name}/>{canReview&&e.is_current&&['pending_review','under_review'].includes(e.status||'')&&<Link className="detail-button" href={`/review#evidence-${e.id}`}>مراجعة الدليل</Link>}</article>)}</section></>}
    {tab===2&&<section className="detail-card"><h2>الضوابط المرتبطة</h2><p className="detail-hint">هذه علاقات مواءمة راجعها واعتمدها الفريق؛ نوع العلاقة وحدود تغطيتها موثقان في خريطة المواءمة. يمكن رفع الدليل مرة واحدة ثم اختياره للضوابط المرتبطة؛ ويظل قرار القبول مستقلًا لكل ضابط.</p>{!canReview?<p>تظهر المواءمات التفصيلية لمدير الامتثال والمراجعة ومدير النظام.</p>:!mappedControls.length?<p>لا توجد علاقات مواءمة معتمدة لهذا الضابط.</p>:<div className="detail-timeline">{mappedControls.map(item=>{const matchedReflections=reflections.filter(result=>result.source_framework===item.framework_code&&result.source_control_code===item.control_code);return <article key={item.control_id}><strong><span dir="ltr">{item.framework_code} · {item.control_code}</span> — {item.control_title}</strong><small>{matchedReflections.length?matchedReflections.map(result=>`${result.assessment_scope}: ${assessmentStatusText[result.compliance_status]||'لم يُقيّم'}`).join(' | '):'لا توجد نتيجة معتمدة ضمن علاقة موثقة'}</small><p>{item.source_note||'راجع مصدر العلاقة وحدودها في خريطة المواءمة.'}</p><Link className="detail-back" href={`/controls/${item.control_id}`}>فتح الضابط المرتبط ←</Link></article>})}</div>}{canReview&&<p style={{marginTop:18}}><Link className="detail-button" href="/mappings">فتح خريطة المواءمة ←</Link></p>}</section>}
    {tab===3&&<section className="detail-card"><h2>سجل الأدلة والملاحظات</h2>{!timeline.length&&<p>لا توجد أنشطة مسجلة بعد.</p>}<ol className="detail-timeline">{timeline.map(item=><li key={item.key}><strong>{item.title}</strong><small>{date(item.time)}</small>{item.body&&<p>{item.body}</p>}</li>)}</ol></section>}
