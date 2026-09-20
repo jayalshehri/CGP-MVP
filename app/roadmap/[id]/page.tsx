@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { requireProfile } from "@/lib/auth";
+import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import StatusBadge from "@/components/StatusBadge";
 import GrcAuditTrail from "@/components/GrcAuditTrail";
@@ -23,6 +23,16 @@ type Project = {
   planned_year: number;
   planned_quarter: string;
   target_end_date: string | null;
+  recommended_technologies: string | null;
+};
+
+type GapTreatment = {
+  id: number;
+  project_id: number;
+  gap_title: string;
+  treatment_type: "technology" | "procedure" | "policy" | "training";
+  recommendation: string;
+  priority: "high" | "medium" | "low";
 };
 
 type Requirement = { id: number; requirement_code: string; title_ar: string; status: string };
@@ -49,7 +59,13 @@ type RequirementControl = {
   controls: ControlRow | ControlRow[] | null;
 };
 
-const tabs = ["نظرة عامة", "المتطلبات", "الضوابط", "الأدلة", "سجل التدقيق"];
+const tabs = ["نظرة عامة", "المتطلبات", "الضوابط", "الأدلة", "المعالجات", "سجل التدقيق"];
+const treatmentText: Record<string, string> = {
+  technology: "تقنية",
+  procedure: "إجراء",
+  policy: "وثيقة/سياسة",
+  training: "تدريب",
+};
 const initiativeTypeText: Record<string, string> = {
   technology_project: "مشروع تقني",
   managed_service: "خدمة مُدارة",
@@ -73,19 +89,40 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [projectRequirements, setProjectRequirements] = useState<ProjectRequirement[]>([]);
   const [requirementControls, setRequirementControls] = useState<RequirementControl[]>([]);
+  const [treatments, setTreatments] = useState<GapTreatment[]>([]);
+  const [role, setRole] = useState<UserRole>("control_owner");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [message, setMessage] = useState("");
   const [tab, setTab] = useState(0);
   const [frameworkFilter, setFrameworkFilter] = useState("all");
   const [coverageFilter, setCoverageFilter] = useState("all");
   const [verificationFilter, setVerificationFilter] = useState("all");
+  const [saving, setSaving] = useState(false);
+  const [gapTitle, setGapTitle] = useState("");
+  const [treatmentType, setTreatmentType] = useState<GapTreatment["treatment_type"]>("technology");
+  const [recommendation, setRecommendation] = useState("");
+  const [treatmentPriority, setTreatmentPriority] = useState<GapTreatment["priority"]>("medium");
+  const [technologies, setTechnologies] = useState("");
+  const canManage = role === "admin" || role === "cybersecurity_team";
+
+  async function loadTreatments(projectId: number) {
+    const result = await supabase
+      .from("cybersecurity_project_gap_treatments")
+      .select("id,project_id,gap_title,treatment_type,recommendation,priority")
+      .eq("project_id", projectId)
+      .order("id");
+    if (!result.error) setTreatments((result.data ?? []) as GapTreatment[]);
+  }
 
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        await requireProfile();
+        const { profile } = await requireProfile();
         if (!active) return;
+        setRole(profile.role);
         const projectId = Number(id);
         if (!Number.isSafeInteger(projectId) || projectId <= 0) throw new Error("رقم المشروع غير صحيح.");
         const [p, pr] = await Promise.all([
@@ -99,8 +136,10 @@ export default function ProjectDetailPage() {
         if (pr.error) throw new Error("تعذر تحميل متطلبات المشروع.");
         if (!active) return;
         setProject(p.data as Project);
+        setTechnologies((p.data as Project).recommended_technologies ?? "");
         const rows = (pr.data ?? []) as unknown as ProjectRequirement[];
         setProjectRequirements(rows);
+        await loadTreatments(projectId);
         const requirementIds = rows.map((row) => row.requirement_id);
         if (requirementIds.length) {
           const rc = await supabase
@@ -122,6 +161,64 @@ export default function ProjectDetailPage() {
       active = false;
     };
   }, [id, router]);
+
+  async function addTreatment() {
+    if (!project || !gapTitle.trim() || !recommendation.trim()) return;
+    setSaving(true);
+    setActionError("");
+    try {
+      const { user } = await requireProfile(["admin", "cybersecurity_team"]);
+      const { error: treatmentError } = await supabase.from("cybersecurity_project_gap_treatments").insert({
+        project_id: project.id,
+        gap_title: gapTitle.trim(),
+        treatment_type: treatmentType,
+        recommendation: recommendation.trim(),
+        priority: treatmentPriority,
+        created_by: user.id,
+      });
+      if (treatmentError) throw treatmentError;
+      await loadTreatments(project.id);
+      setGapTitle("");
+      setRecommendation("");
+      setMessage("تمت إضافة معالجة الفجوة. لا تتغير حالة الالتزام إلا بعد الدليل والمراجعة.");
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "تعذر إضافة معالجة الفجوة.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeTreatment(treatmentId: number) {
+    if (!project) return;
+    setSaving(true);
+    const { error: removeError } = await supabase.from("cybersecurity_project_gap_treatments").delete().eq("id", treatmentId);
+    if (removeError) setActionError("تعذر حذف معالجة الفجوة.");
+    else {
+      await loadTreatments(project.id);
+      setMessage("تم حذف معالجة الفجوة.");
+    }
+    setSaving(false);
+  }
+
+  async function saveTechnologies() {
+    if (!project) return;
+    setSaving(true);
+    setActionError("");
+    try {
+      await requireProfile(["admin", "cybersecurity_team"]);
+      const { error: updateError } = await supabase
+        .from("cybersecurity_projects")
+        .update({ recommended_technologies: technologies || null, updated_at: new Date().toISOString() })
+        .eq("id", project.id);
+      if (updateError) throw updateError;
+      setProject({ ...project, recommended_technologies: technologies || null });
+      setMessage("تم حفظ التقنيات المرشحة.");
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "تعذر حفظ التقنيات المرشحة.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const requirementsWithStats = useMemo(
     () =>
@@ -234,6 +331,9 @@ export default function ProjectDetailPage() {
       <section className="roadmap-shell">
         <Link className="detail-back" href="/roadmap">← العودة إلى سجل المشاريع</Link>
 
+        {actionError && <p className="roadmap-alert" role="alert">{actionError}</p>}
+        {message && <p className="roadmap-message" role="status">{message}</p>}
+
         <header className="project-detail-head">
           <h1>{project.name_ar}</h1>
           <p className="project-detail-tags">
@@ -324,6 +424,7 @@ export default function ProjectDetailPage() {
                 <p>الحالة: {statusText[project.status] ?? project.status} · الأولوية: {priorityText[project.priority] ?? project.priority}</p>
                 <p>المالك التنفيذي: {project.executive_owner || "غير محدد"}</p>
                 <p>نسبة الإنجاز: {clampedProgress}% · الموعد المستهدف: <span dir="ltr">{formatDateAr(project.target_end_date)}</span></p>
+                <p>{project.description_ar || "لا يوجد وصف مسجل."}</p>
               </section>
             )}
 
@@ -440,6 +541,59 @@ export default function ProjectDetailPage() {
             )}
 
             {tab === 4 && (
+              <section className="roadmap-treatments">
+                <header>
+                  <div>
+                    <span>خطة إغلاق الفجوات</span>
+                    <h3>الفجوات والمعالجات المقترحة</h3>
+                    <p>المعالجة لا تغيّر حالة الالتزام إلا بعد اكتمال الدليل والمراجعة.</p>
+                  </div>
+                </header>
+                {canManage && (
+                  <div className="roadmap-treatment-form">
+                    <input value={gapTitle} onChange={(event) => setGapTitle(event.target.value)} placeholder="وصف الفجوة" />
+                    <select value={treatmentType} onChange={(event) => setTreatmentType(event.target.value as GapTreatment["treatment_type"])}>
+                      {Object.entries(treatmentText).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                    <select value={treatmentPriority} onChange={(event) => setTreatmentPriority(event.target.value as GapTreatment["priority"])}>
+                      {Object.entries(priorityText).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                    <textarea value={recommendation} onChange={(event) => setRecommendation(event.target.value)} placeholder="التقنية أو الإجراء المقترح لإغلاق الفجوة" />
+                    <button className="roadmap-primary" type="button" disabled={saving || !gapTitle.trim() || !recommendation.trim()} onClick={addTreatment}>إضافة معالجة</button>
+                  </div>
+                )}
+                <div className="roadmap-treatment-list">
+                  {treatments.length ? (
+                    treatments.map((item) => (
+                      <article key={item.id}>
+                        <div>
+                          <b>{item.gap_title}</b>
+                          <p>{item.recommendation}</p>
+                        </div>
+                        <aside>
+                          <span className={`roadmap-type ${item.treatment_type}`}>{treatmentText[item.treatment_type]}</span>
+                          <small>{priorityText[item.priority]} الأولوية</small>
+                          {canManage && <button type="button" onClick={() => removeTreatment(item.id)} aria-label="حذف معالجة الفجوة">×</button>}
+                        </aside>
+                      </article>
+                    ))
+                  ) : (
+                    <p className="roadmap-empty">لم تسجل معالجات فجوات لهذا المشروع بعد.</p>
+                  )}
+                </div>
+                <div className="technologies-field">
+                  <label>
+                    <span>تقنيات مرشحة لإغلاق الفجوات</span>
+                    <textarea rows={2} value={technologies} disabled={!canManage} onChange={(event) => setTechnologies(event.target.value)} placeholder="لا توجد تقنيات مسجلة بعد." />
+                  </label>
+                  {canManage && (
+                    <button type="button" className="roadmap-secondary" disabled={saving} onClick={saveTechnologies}>حفظ التقنيات</button>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {tab === 5 && (
               <section>
                 {!uniqueControls.length && <section className="detail-card"><p>لا توجد ضوابط مرتبطة، لا يوجد سجل تدقيق مرتبط بعد.</p></section>}
                 {uniqueControls.map((control) => (
