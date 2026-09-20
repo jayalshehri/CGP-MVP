@@ -83,3 +83,82 @@ export function scheduleMetric(
     missingDates: projects.length - dated.length,
   };
 }
+
+// --- Requirement layer rollups (Program -> Project -> Requirement -> Control) ---
+// Compliance is never stored here: every number below is derived at read time
+// from controls.evidence_status/verification_status. A project's progress or
+// completion never implies a control is compliant.
+
+export type CoverageType = "full" | "partial" | "supporting";
+export type MappingConfidence = "confirmed" | "probable";
+
+export type RequirementControlLink = {
+  requirement_id: number;
+  control_id: number;
+  coverage_type: CoverageType;
+  mapping_confidence: MappingConfidence;
+  evidence_status: string;
+  verification_status: string;
+};
+
+export type ProjectRequirementRow = { requirement_id: number; coverage_type: CoverageType; project_id?: number };
+
+// Presentation-only date formatter: "YYYY-MM-DD" -> "DD/MM/YYYY". Never touches
+// the stored value -- callers keep passing/saving the original ISO string.
+export function formatDateAr(value: string | null | undefined): string {
+  if (!value) return "غير محدد";
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return value;
+  const [, year, month, day] = match;
+  return `${day}/${month}/${year}`;
+}
+
+export type RequirementRollup = {
+  requirementsCount: number;
+  linkedControlsCount: number;
+  full: number;
+  partial: number;
+  supporting: number;
+  readyForVerification: number;
+  verified: number;
+  complianceContributionPercent: number | null;
+  confirmedMappings: number;
+  probableMappings: number;
+  requirementsWithoutMapping: number;
+};
+
+const isVerified = (verificationStatus: string) => verificationStatus === "verified";
+const isReadyForVerification = (evidenceStatus: string, verificationStatus: string) =>
+  evidenceStatus === "accepted" && verificationStatus !== "verified";
+
+export function requirementRollup(
+  projectRequirements: ProjectRequirementRow[],
+  requirementControlLinks: RequirementControlLink[],
+): RequirementRollup {
+  const uniqueControlIds = new Set(requirementControlLinks.map((link) => link.control_id));
+  const uniqueLinks = Array.from(uniqueControlIds).map(
+    (controlId) => requirementControlLinks.find((link) => link.control_id === controlId)!,
+  );
+  const verified = uniqueLinks.filter((link) => isVerified(link.verification_status)).length;
+  // A requirement with zero linked controls ("Needs Control Mapping" / Unresolved) is
+  // derived live from the junction table, never a stored/guessed status — it is excluded
+  // from Verified/Contribution/Coverage below simply because it contributes no controls,
+  // but it still counts toward requirementsCount.
+  const requirementIdsWithLinks = new Set(requirementControlLinks.map((link) => link.requirement_id));
+  const requirementsWithoutMapping = projectRequirements.filter(
+    (item) => !requirementIdsWithLinks.has(item.requirement_id),
+  ).length;
+  return {
+    requirementsCount: projectRequirements.length,
+    linkedControlsCount: uniqueControlIds.size,
+    full: projectRequirements.filter((item) => item.coverage_type === "full").length,
+    partial: projectRequirements.filter((item) => item.coverage_type === "partial").length,
+    supporting: projectRequirements.filter((item) => item.coverage_type === "supporting").length,
+    readyForVerification: uniqueLinks.filter((link) => isReadyForVerification(link.evidence_status, link.verification_status)).length,
+    verified,
+    complianceContributionPercent: uniqueLinks.length ? Math.round((verified / uniqueLinks.length) * 100) : null,
+    confirmedMappings: uniqueLinks.filter((link) => link.mapping_confidence === "confirmed").length,
+    probableMappings: uniqueLinks.filter((link) => link.mapping_confidence === "probable").length,
+    requirementsWithoutMapping,
+  };
+}
