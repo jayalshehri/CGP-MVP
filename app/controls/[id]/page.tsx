@@ -11,6 +11,7 @@ import { controlPlan } from "@/lib/control-plan";
 import { eccImplementationGuideUrl, eccOfficialControlsUrl, getEccOfficialTitle, getEccStrategyExample } from "@/lib/ecc-strategy-example";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { frequencyLabels, formatGrcDate, scheduleState, scheduleStateLabels, cycleStage, cycleStageLabels } from "@/lib/grc";
 import "./detail.css";
 
 type Control = { id:number; control_code:string; title_ar:string; description_ar:string|null; domain_ar:string; implementation_status:string; evidence_status:string; verification_status:string; due_date:string|null; last_review_date:string|null; control_owner:string|null; evidence_owner:string|null; audit_frequency:string; next_audit_date:string|null; frameworks:{code:string}|null; };
@@ -43,13 +44,18 @@ export default function ControlDetailsPage() {
  const [mappedControls,setMappedControls]=useState<MappedControl[]>([]);
  const [requirementLinks,setRequirementLinks]=useState<RequirementLink[]>([]);
  const [projectLinks,setProjectLinks]=useState<ProjectRequirementLink[]>([]);
+ const [openCycleDue,setOpenCycleDue]=useState<string|null>(null);
+ const [openCycleId,setOpenCycleId]=useState<number|null>(null);
+ const [latestRequestStatus,setLatestRequestStatus]=useState<string|undefined>(undefined);
+ const [reviewerName,setReviewerName]=useState<string|null>(null);
  useEffect(()=>{let active=true;(async()=>{try{
   const {profile}=await requireProfile();if(!active)return;setRole(profile.role);
   const controlId=Number(id);if(!Number.isSafeInteger(controlId)||controlId<=0)throw new Error('رقم الضابط غير صحيح.');
-  const [c,e,rc]=await Promise.all([
+  const [c,e,rc,cy]=await Promise.all([
    supabase.from('controls').select('*,frameworks(code)').eq('id',controlId).single(),
    supabase.rpc('grc_evidence_register'),
-   supabase.from('cybersecurity_requirement_controls').select('requirement_id,coverage_type,mapping_confidence,cybersecurity_requirements(requirement_code,title_ar)').eq('control_id',controlId)]);
+   supabase.from('cybersecurity_requirement_controls').select('requirement_id,coverage_type,mapping_confidence,cybersecurity_requirements(requirement_code,title_ar)').eq('control_id',controlId),
+   supabase.from('control_review_cycles').select('id,reviewer_id,due_date').eq('control_id',controlId).eq('status','open').limit(1)]);
   if(c.error||!c.data)throw new Error('الضابط غير موجود أو ليس ضمن صلاحيتك.');
   if(e.error)throw new Error('تعذر تحميل أدلة الضابط. أعد تحميل الصفحة.');
   if(active){
@@ -62,6 +68,14 @@ export default function ControlDetailsPage() {
     const pr=await supabase.from('cybersecurity_project_requirements').select('requirement_id,project_id,cybersecurity_projects(project_code,name_ar)').in('requirement_id',requirementIds);
     if(active&&!pr.error)setProjectLinks((pr.data??[]) as unknown as ProjectRequirementLink[]);
    }
+   const cycle=(cy.data??[])[0] as {id:number;reviewer_id:string;due_date:string}|undefined;
+   if(cycle){
+    setOpenCycleId(cycle.id);setOpenCycleDue(cycle.due_date);
+    const [rq,rv]=await Promise.all([
+     supabase.from('evidence_requests').select('status').eq('cycle_id',cycle.id).order('id',{ascending:false}).limit(1),
+     supabase.from('profiles').select('display_name').eq('user_id',cycle.reviewer_id).single()]);
+    if(active){setLatestRequestStatus(!rq.error?(rq.data??[])[0]?.status:undefined);setReviewerName(!rv.error?rv.data?.display_name??null:null);}
+   }else{setOpenCycleId(null);setOpenCycleDue(null);setLatestRequestStatus(undefined);setReviewerName(null);}
   }
  }catch(e){if(active)setError(e instanceof Error?e.message:'تعذر التحميل');const {data}=await supabase.auth.getSession();if(!data.session)router.replace('/login');}
  finally{if(active)setLoading(false);}})();return()=>{active=false;};},[id,router]);
@@ -85,6 +99,13 @@ export default function ControlDetailsPage() {
   <header className="detail-hero"><div><span className="detail-code">{control.control_code}</span><h1>{(isEcc?getEccOfficialTitle(control.control_code):undefined)||strategyExample?.title||control.title_ar}</h1><p>{control.domain_ar}</p></div><div className="detail-hero-actions"><StatusBadge status={control.implementation_status}/>{canReview&&<Link className="detail-assign-owner" href={`/controls/${control.id}/assign`}>{control.control_owner?"تغيير مالك الضابط":"تعيين مالك الضابط"} ←</Link>}</div></header>
   <div className="detail-metrics"><section><small>حالة التطبيق</small><StatusBadge status={control.implementation_status}/></section><section><small>حالة الدليل</small><StatusBadge status={control.evidence_status}/></section><section><small>حالة التحقق</small><StatusBadge status={control.verification_status}/></section><section><small>موعد الاستحقاق</small><strong>{control.due_date||'غير محدد'}</strong></section></div>
   <section className="detail-next"><div><span>{canUpload?'الإجراء التالي':'وضع المراجعة'}</span><strong>{canUpload?(control.evidence_status==='not_uploaded'?'رفع الدليل المطلوب للضابط':!goodStatus(control.verification_status)?'متابعة مراجعة الدليل والتحقق':'مراجعة الضابط دوريًا والمحافظة على الأدلة'):'تستطيع معاينة الدليل والسجل فقط ضمن نطاق التدقيق الممنوح لك.'}</strong></div>{canUpload&&control.evidence_status==='not_uploaded'?<Link className="detail-button" href={`/controls/${control.id}/evidence/new`}>رفع دليل ←</Link>:<button className="detail-button" onClick={()=>setTab(3)}>فتح السجل ←</button>}</section>
+  <section className="detail-schedule-strip">
+   <div><small>تكرار المراجعة</small><strong>{frequencyLabels[control.audit_frequency]??control.audit_frequency}</strong></div>
+   <div><small>آخر مراجعة</small><strong>{formatGrcDate(control.last_review_date)}</strong></div>
+   <div><small>المراجعة القادمة</small><strong>{formatGrcDate(control.next_audit_date)}</strong><span className={`audit-state ${scheduleState(control.next_audit_date)}`}>{scheduleStateLabels[scheduleState(control.next_audit_date)]}</span></div>
+   <div><small>مرحلة الدورة الحالية</small><span className={`audit-stage ${cycleStage(!!openCycleId,latestRequestStatus)}`}>{cycleStageLabels[cycleStage(!!openCycleId,latestRequestStatus)]}</span>{openCycleDue&&<small className="detail-schedule-due">حتى {formatGrcDate(openCycleDue)}</small>}</div>
+   {openCycleId&&reviewerName&&<div><small>المراجع المكلف</small><strong>{reviewerName}</strong></div>}
+  </section>
   <div className="detail-tabs" role="tablist" aria-label="تفاصيل الضابط">{tabs.map((label,index)=><button key={label} id={`detail-tab-${index}`} role="tab" aria-selected={tab===index} aria-controls={`detail-panel-${index}`} tabIndex={tab===index?0:-1} onClick={()=>setTab(index)} onKeyDown={event=>{let next=index;if(event.key==='ArrowLeft')next=(index+1)%tabs.length;else if(event.key==='ArrowRight')next=(index+tabs.length-1)%tabs.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;event.preventDefault();setTab(next);document.getElementById(`detail-tab-${next}`)?.focus();}}>{label}</button>)}</div>
   <section id={`detail-panel-${tab}`} role="tabpanel" aria-labelledby={`detail-tab-${tab}`} className="detail-columns">
    <div className="detail-content">
