@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { getRiyadhDate, isDelayed, requirementRollup, type CoverageType, type RequirementControlLink, type ProjectRequirementRow } from "./portfolio-metrics";
+import { getRiyadhDate, isDelayed, requirementRollup, formatDateAr, type CoverageType, type RequirementControlLink, type ProjectRequirementRow } from "./portfolio-metrics";
 import "./roadmap.css";
 
 type Control = {
@@ -25,6 +25,7 @@ type Project = {
   planned_quarter: string;
   status: "planned" | "in_progress" | "on_hold" | "completed";
   priority: "high" | "medium" | "low";
+  initiative_type: string;
   executive_owner: string | null;
   solution_scope: string | null;
   framework_scope: string | null;
@@ -106,6 +107,15 @@ const statusText = {
   completed: "مكتمل",
 };
 const priorityText = { high: "عالية", medium: "متوسطة", low: "منخفضة" };
+const initiativeTypeText: Record<string, string> = {
+  technology_project: "مشروع تقني",
+  managed_service: "خدمة مُدارة",
+  framework_agreement: "اتفاقية إطارية",
+  internal_program: "برنامج داخلي",
+  policy_governance: "سياسة وحوكمة",
+  assessment: "تقييم",
+  continuous_activity: "نشاط مستمر",
+};
 const frameworkOf = (value: Control["frameworks"] | undefined) =>
   Array.isArray(value) ? value[0] : value;
 const controlOf = (value: LinkRow["controls"]) => (Array.isArray(value) ? value[0] : value);
@@ -143,7 +153,7 @@ export default function ProjectRegisterPage() {
       supabase.from("controls").select("id,control_code,title_ar,frameworks!inner(code,name_ar)").order("control_code"),
       supabase.from("cybersecurity_project_controls").select("project_id,control_id,relationship_type,controls(id,control_code,title_ar,frameworks(code,name_ar))"),
       supabase.from("cybersecurity_project_gap_treatments").select("id,project_id,gap_title,treatment_type,recommendation,priority").order("id"),
-      supabase.from("cybersecurity_project_requirements").select("requirement_id,coverage_type"),
+      supabase.from("cybersecurity_project_requirements").select("project_id,requirement_id,coverage_type"),
       supabase.from("cybersecurity_requirement_controls").select("requirement_id,control_id,coverage_type,mapping_confidence,controls(evidence_status,verification_status)"),
     ]);
     if (projectResult.error) throw projectResult.error;
@@ -198,13 +208,41 @@ export default function ProjectRegisterPage() {
     };
   }, [router]);
 
-  const linkedFor = (projectId: number) => links.filter((link) => link.project_id === projectId);
   const treatmentsFor = (projectId: number) => treatments.filter((item) => item.project_id === projectId);
 
   const requirementStats = useMemo(
     () => requirementRollup(requirementCoverage, requirementControlLinks),
     [requirementCoverage, requirementControlLinks],
   );
+
+  // Per-project display counts for the register table (Requirements / Controls /
+  // Verified), derived the same way as the project detail page's rollup -- read
+  // only, no new query shape, just a client-side grouping of data already loaded.
+  const perProjectStats = useMemo(() => {
+    const map = new Map<number, { requirementsCount: number; controlsCount: number; verifiedCount: number }>();
+    const reqToProject = new Map<number, number>();
+    for (const row of requirementCoverage) {
+      if (row.project_id == null) continue;
+      reqToProject.set(row.requirement_id, row.project_id);
+      const entry = map.get(row.project_id) ?? { requirementsCount: 0, controlsCount: 0, verifiedCount: 0 };
+      entry.requirementsCount += 1;
+      map.set(row.project_id, entry);
+    }
+    const seenPerProject = new Map<number, Set<number>>();
+    for (const link of requirementControlLinks) {
+      const projectId = reqToProject.get(link.requirement_id);
+      if (projectId == null) continue;
+      const seen = seenPerProject.get(projectId) ?? new Set<number>();
+      if (seen.has(link.control_id)) continue;
+      seen.add(link.control_id);
+      seenPerProject.set(projectId, seen);
+      const entry = map.get(projectId);
+      if (!entry) continue;
+      entry.controlsCount += 1;
+      if (link.verification_status === "verified") entry.verifiedCount += 1;
+    }
+    return map;
+  }, [requirementCoverage, requirementControlLinks]);
 
   const stats = useMemo(() => {
     const missingDates = projects.filter((project) => !project.target_end_date).length;
@@ -463,21 +501,37 @@ export default function ProjectRegisterPage() {
 
         <section className="project-register-table" aria-label="المشاريع">
           <div className="project-register-head">
-            <span>المشروع</span><span>المالك</span><span>الحالة</span><span>الأولوية</span><span>الإنجاز</span><span>الموعد المستهدف</span><span>الضوابط</span><span aria-hidden="true" />
+            <span>المشروع</span><span>النوع</span><span>الحالة</span><span>الأولوية</span><span>الإنجاز</span><span>المتطلبات والضوابط</span><span aria-hidden="true" />
           </div>
           {filteredProjects.map((project) => {
-            const projectLinks = linkedFor(project.id);
             const delayed = isDelayed(project, getRiyadhDate());
+            const reqStats = perProjectStats.get(project.id);
             return (
               <article key={project.id} className={delayed ? "is-delayed" : ""}>
-                <div className="project-register-name"><b dir="ltr">{project.project_code}</b><strong>{project.name_ar}</strong><small>{project.planned_year} · {project.planned_quarter}</small></div>
-                <span>{project.executive_owner || "غير محدد"}</span>
+                <div className="project-register-name">
+                  <b dir="ltr">{project.project_code}</b>
+                  <strong>{project.name_ar}</strong>
+                  <small>
+                    {project.planned_year} · {project.planned_quarter}
+                    {project.executive_owner ? ` · ${project.executive_owner}` : ""}
+                    {" · "}
+                    <span dir="ltr">{formatDateAr(project.target_end_date)}</span>
+                    {delayed && <em className="register-delayed-flag">متأخر</em>}
+                  </small>
+                </div>
+                <span className="register-initiative-type">{initiativeTypeText[project.initiative_type] ?? project.initiative_type}</span>
                 <span className={`roadmap-status ${project.status}`}>{statusText[project.status]}</span>
                 <span className={`register-priority ${project.priority}`}>{priorityText[project.priority]}</span>
                 <div className="register-progress"><b>{Number(project.progress_percent)}%</b><i><span style={{ width: `${Math.max(0, Math.min(100, Number(project.progress_percent)))}%` }} /></i></div>
-                <span className={delayed ? "register-date delayed" : "register-date"}>{project.target_end_date || "غير محدد"}{delayed && <small>متأخر</small>}</span>
-                <span>{projectLinks.length} مرتبط</span>
-                <span><Link href={`/roadmap/${project.id}`}>صفحة المشروع ←</Link> · <button type="button" onClick={() => openProject(project)}>عرض وإدارة ←</button></span>
+                <div className="register-req-ctrl-stats">
+                  <span><b>{reqStats?.requirementsCount ?? 0}</b> متطلب</span>
+                  <span><b>{reqStats?.controlsCount ?? 0}</b> ضابط</span>
+                  <span><b>{reqStats?.verifiedCount ?? 0}</b> متحقَّق</span>
+                </div>
+                <div className="register-actions">
+                  <Link className="register-action-primary" href={`/roadmap/${project.id}`}>صفحة المشروع ←</Link>
+                  <button type="button" className="register-action-secondary" onClick={() => openProject(project)}>عرض وإدارة</button>
+                </div>
               </article>
             );
           })}
@@ -507,10 +561,10 @@ export default function ProjectRegisterPage() {
               <label>نسبة الإنجاز<input type="number" min="0" max="100" value={form.progress_percent} onChange={(event) => setForm({ ...form, progress_percent: Number(event.target.value) })} /></label>
 
               <h3 className="roadmap-form-section">الجدول الزمني</h3>
-              <label>تاريخ البدء المخطط<input type="date" value={form.planned_start_date} onChange={(event) => setForm({ ...form, planned_start_date: event.target.value })} /></label>
-              <label>التاريخ المستهدف<input type="date" value={form.target_end_date} onChange={(event) => setForm({ ...form, target_end_date: event.target.value })} /></label>
-              <label>تاريخ البدء الفعلي<input type="date" value={form.actual_start_date} onChange={(event) => setForm({ ...form, actual_start_date: event.target.value })} /></label>
-              <label>تاريخ الإنجاز المتوقع<input type="date" value={form.forecast_end_date} onChange={(event) => setForm({ ...form, forecast_end_date: event.target.value })} /></label>
+              <label>تاريخ البدء المخطط<input dir="ltr" type="date" value={form.planned_start_date} onChange={(event) => setForm({ ...form, planned_start_date: event.target.value })} /></label>
+              <label>التاريخ المستهدف<input dir="ltr" type="date" value={form.target_end_date} onChange={(event) => setForm({ ...form, target_end_date: event.target.value })} /></label>
+              <label>تاريخ البدء الفعلي<input dir="ltr" type="date" value={form.actual_start_date} onChange={(event) => setForm({ ...form, actual_start_date: event.target.value })} /></label>
+              <label>تاريخ الإنجاز المتوقع<input dir="ltr" type="date" value={form.forecast_end_date} onChange={(event) => setForm({ ...form, forecast_end_date: event.target.value })} /></label>
 
               <h3 className="roadmap-form-section">النطاق والنتائج</h3>
               <label className="wide">نطاق الحلول<textarea rows={2} value={form.solution_scope} onChange={(event) => setForm({ ...form, solution_scope: event.target.value })} /></label>

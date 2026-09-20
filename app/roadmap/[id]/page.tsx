@@ -6,6 +6,7 @@ import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import StatusBadge from "@/components/StatusBadge";
 import GrcAuditTrail from "@/components/GrcAuditTrail";
+import { formatDateAr } from "../portfolio-metrics";
 import "../roadmap.css";
 import "@/app/controls/[id]/detail.css";
 
@@ -19,6 +20,8 @@ type Project = {
   initiative_type: string;
   executive_owner: string | null;
   progress_percent: number;
+  planned_year: number;
+  planned_quarter: string;
   target_end_date: string | null;
 };
 
@@ -56,9 +59,11 @@ const initiativeTypeText: Record<string, string> = {
   assessment: "تقييم",
   continuous_activity: "نشاط مستمر",
 };
-const coverageText: Record<string, string> = { full: "كامل", partial: "جزئي", supporting: "داعم" };
+const coverageText: Record<string, string> = { full: "كاملة", partial: "جزئية", supporting: "داعمة" };
 const statusText: Record<string, string> = { planned: "مخطط", in_progress: "قيد التنفيذ", on_hold: "متوقف", completed: "مكتمل" };
 const priorityText: Record<string, string> = { high: "عالية", medium: "متوسطة", low: "منخفضة" };
+const mappingConfidenceText: Record<string, string> = { confirmed: "مؤكد", probable: "محتمل" };
+const verificationFilterText: Record<string, string> = { verified: "تم التحقق", not_verified: "غير متحقق" };
 const goodVerification = (value: string) => value === "verified";
 const single = <T,>(value: T | T[] | null): T | null => (Array.isArray(value) ? value[0] ?? null : value);
 
@@ -71,6 +76,9 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState(0);
+  const [frameworkFilter, setFrameworkFilter] = useState("all");
+  const [coverageFilter, setCoverageFilter] = useState("all");
+  const [verificationFilter, setVerificationFilter] = useState("all");
 
   useEffect(() => {
     let active = true;
@@ -124,23 +132,25 @@ export default function ProjectDetailPage() {
           const control = single(rc.controls);
           return control && goodVerification(control.verification_status);
         }).length;
+        const confirmedCount = links.filter((rc) => rc.mapping_confidence === "confirmed").length;
+        const probableCount = links.filter((rc) => rc.mapping_confidence === "probable").length;
         // A requirement with zero linked controls is "Unresolved" (Needs Control Mapping) —
         // derived live from the junction table, never a stored/guessed status. It is excluded
         // from Verified Controls / Compliance Contribution / Coverage below simply because it
         // contributes no controls to those pools.
         const mappingStatus: "mapped" | "unresolved" = links.length === 0 ? "unresolved" : "mapped";
-        return { requirement, coverage: pr.coverage_type, controlsCount: links.length, verifiedCount, mappingStatus };
+        return { requirement, coverage: pr.coverage_type, controlsCount: links.length, verifiedCount, confirmedCount, probableCount, mappingStatus };
       }),
     [projectRequirements, requirementControls],
   );
 
   const derivedControls = useMemo(() => {
-    const rows: Array<{ requirementCode: string; coverage: string; control: ControlRow }> = [];
+    const rows: Array<{ requirementCode: string; coverage: "full" | "partial" | "supporting"; mappingConfidence: "confirmed" | "probable"; control: ControlRow }> = [];
     for (const rc of requirementControls) {
       const control = single(rc.controls);
       if (!control) continue;
       const requirement = requirementsWithStats.find((item) => item.requirement?.id === rc.requirement_id)?.requirement;
-      rows.push({ requirementCode: requirement?.requirement_code ?? "—", coverage: rc.coverage_type, control });
+      rows.push({ requirementCode: requirement?.requirement_code ?? "—", coverage: rc.coverage_type, mappingConfidence: rc.mapping_confidence, control });
     }
     return rows;
   }, [requirementControls, requirementsWithStats]);
@@ -150,6 +160,28 @@ export default function ProjectDetailPage() {
     for (const row of derivedControls) if (!seen.has(row.control.id)) seen.set(row.control.id, row.control);
     return Array.from(seen.values());
   }, [derivedControls]);
+
+  const controlFrameworks = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of derivedControls) {
+      const fw = single(row.control.frameworks)?.code;
+      if (fw) set.add(fw);
+    }
+    return Array.from(set).sort();
+  }, [derivedControls]);
+
+  const filteredControlRows = useMemo(
+    () =>
+      derivedControls.filter((row) => {
+        const fw = single(row.control.frameworks)?.code;
+        return (
+          (frameworkFilter === "all" || fw === frameworkFilter) &&
+          (coverageFilter === "all" || row.coverage === coverageFilter) &&
+          (verificationFilter === "all" || row.control.verification_status === verificationFilter)
+        );
+      }),
+    [derivedControls, frameworkFilter, coverageFilter, verificationFilter],
+  );
 
   const rollup = useMemo(() => {
     // Full/Partial/Supporting is a breakdown of the LINKED CONTROLS by
@@ -171,12 +203,8 @@ export default function ProjectDetailPage() {
     const contribution = uniqueControls.length ? Math.round((verified / uniqueControls.length) * 100) : null;
     // Confirmed/Probable is a mapping-QUALITY signal (does an official control text
     // directly support this link, from the Phase 2 reconciliation) — a separate axis
-    // from Full/Partial/Supporting (coverage completeness). Dedupe by control id per
-    // requirement the same way the coverage breakdown above does.
-    const confirmedMappings = coverageRows.filter((row) => {
-      const rc = requirementControls.find((item) => item.control_id === row.control.id);
-      return rc?.mapping_confidence === "confirmed";
-    }).length;
+    // from Full/Partial/Supporting (coverage completeness). Dedupe by control id.
+    const confirmedMappings = coverageRows.filter((row) => row.mappingConfidence === "confirmed").length;
     const probableMappings = coverageRows.length - confirmedMappings;
     const requirementsWithoutMapping = requirementsWithStats.filter((item) => item.mappingStatus === "unresolved").length;
     return {
@@ -192,38 +220,93 @@ export default function ProjectDetailPage() {
       probableMappings,
       requirementsWithoutMapping,
     };
-  }, [projectRequirements, uniqueControls, derivedControls, requirementControls, requirementsWithStats]);
+  }, [projectRequirements, uniqueControls, derivedControls, requirementsWithStats]);
 
   if (loading) return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading">جاري تحميل المشروع…</p></main>;
   if (error || !project) return <main className="roadmap-page" dir="rtl"><p role="alert">{error}</p><Link href="/roadmap">العودة إلى سجل المشاريع</Link></main>;
+
+  const clampedProgress = Math.max(0, Math.min(100, Number(project.progress_percent) || 0));
+  const coverageTotal = rollup.full + rollup.partial + rollup.supporting;
+  const coveragePct = (n: number) => (coverageTotal ? Math.round((n / coverageTotal) * 100) : 0);
 
   return (
     <main className="roadmap-page" dir="rtl">
       <section className="roadmap-shell">
         <Link className="detail-back" href="/roadmap">← العودة إلى سجل المشاريع</Link>
 
-        <header className="roadmap-hero project-register-hero">
-          <div>
-            <span>{initiativeTypeText[project.initiative_type] ?? project.initiative_type}</span>
-            <h1><span dir="ltr">{project.project_code}</span> — {project.name_ar}</h1>
-            <p>{project.description_ar || "لا يوجد وصف مسجل."}</p>
-          </div>
+        <header className="project-detail-head">
+          <h1>{project.name_ar}</h1>
+          <p className="project-detail-tags">
+            <span dir="ltr">{project.project_code}</span> · {initiativeTypeText[project.initiative_type] ?? project.initiative_type} · {statusText[project.status] ?? project.status} · أولوية {priorityText[project.priority] ?? project.priority}
+          </p>
+          <p className="project-detail-line">
+            {project.planned_year} · {project.planned_quarter} <span className="sep">|</span> المالك: {project.executive_owner || "—"} <span className="sep">|</span> الإنجاز: {clampedProgress}%
+          </p>
+          <div className="project-detail-progress"><i style={{ width: `${clampedProgress}%` }} /></div>
         </header>
 
-        <section className="roadmap-metrics register-metrics" aria-label="مؤشرات المشروع">
-          <Metric label="المتطلبات" value={rollup.requirementsCount} />
-          <Metric label="ضوابط مشتقة" value={rollup.totalControls} />
-          <Metric label="تغطية كاملة" value={rollup.full} tone="linked" />
-          <Metric label="تغطية جزئية" value={rollup.partial} tone="warning" />
-          <Metric label="تغطية داعمة" value={rollup.supporting} tone="muted" />
-          <Metric label="جاهزة للتحقق" value={rollup.readyForVerification} tone="active" />
-          <Metric label="ضوابط مُتحقَّقة" value={rollup.verified} tone="linked" />
-          <Metric label="نسبة مساهمة الامتثال" value={rollup.contribution === null ? "—" : `${rollup.contribution}%`} />
-          <Metric label="ربط مؤكَّد (Confirmed)" value={rollup.confirmedMappings} tone="linked" />
-          <Metric label="ربط محتمل (Probable)" value={rollup.probableMappings} tone="warning" />
-          <Metric label="متطلبات بلا ربط ضوابط" value={rollup.requirementsWithoutMapping} tone={rollup.requirementsWithoutMapping ? "warning" : "muted"} />
+        <section className="project-kpi-row" aria-label="مؤشرات المشروع الأساسية">
+          <article className="project-kpi">
+            <span>المتطلبات</span>
+            <strong>{rollup.requirementsCount}</strong>
+          </article>
+          <article className="project-kpi">
+            <span>الضوابط المرتبطة</span>
+            <strong>{rollup.totalControls}</strong>
+          </article>
+          <article className="project-kpi" title="Confirmed mappings — ربط مدعوم مباشرة بنص ضابط رسمي">
+            <span>الربط المؤكد</span>
+            <strong>{rollup.confirmedMappings}</strong>
+          </article>
+          <article className="project-kpi">
+            <span>جاهزة للتحقق</span>
+            <strong>{rollup.readyForVerification}</strong>
+          </article>
+          <article className="project-kpi project-kpi-contribution">
+            <span>مساهمة الامتثال</span>
+            <strong>{rollup.contribution === null ? "—" : `${rollup.contribution}%`}</strong>
+            <small>{rollup.verified} من {rollup.totalControls} ضوابط متحققة</small>
+            <div className="project-kpi-progress"><i style={{ width: `${rollup.contribution ?? 0}%` }} /></div>
+          </article>
         </section>
         <p className="detail-hint">نسبة المساهمة محسوبة لحظيًا من حالة التحقق الفعلية للضوابط المرتبطة — إنجاز المشروع لا يعني امتثال الضابط.</p>
+
+        <section className="project-summary-grid">
+          <article className="coverage-summary-card">
+            <header><h2>تغطية الضوابط</h2></header>
+            <div className="coverage-seg-bar" role="img" aria-label={`تغطية كاملة ${rollup.full}، جزئية ${rollup.partial}، داعمة ${rollup.supporting}`}>
+              {coverageTotal ? (
+                <>
+                  <i className="seg-full" style={{ width: `${coveragePct(rollup.full)}%` }} />
+                  <i className="seg-partial" style={{ width: `${coveragePct(rollup.partial)}%` }} />
+                  <i className="seg-supporting" style={{ width: `${coveragePct(rollup.supporting)}%` }} />
+                </>
+              ) : (
+                <i className="seg-empty" style={{ width: "100%" }} />
+              )}
+            </div>
+            <ul className="coverage-legend">
+              <li><span className="legend-dot full" />تغطية كاملة: {rollup.full}</li>
+              <li><span className="legend-dot partial" />تغطية جزئية: {rollup.partial}</li>
+              <li><span className="legend-dot supporting" />تغطية داعمة: {rollup.supporting}</li>
+            </ul>
+          </article>
+
+          <article className="mapping-quality-card">
+            <header><h2>جودة الربط</h2></header>
+            <ul>
+              <li className="mq-confirmed" title="Confirmed — دعمها نص ضابط رسمي مباشرة، من تصنيف Phase 2 المعتمد">
+                <span className="legend-dot confirmed" />ربط مؤكد: <b>{rollup.confirmedMappings}</b>
+              </li>
+              <li className="mq-probable" title="Probable — احتمالي، ولا يُعتمد بمفرده كدليل امتثال رسمي">
+                <span className="legend-dot probable" />ربط محتمل: <b>{rollup.probableMappings}</b>
+              </li>
+              <li className="mq-unresolved" title="لا يوجد ضابط رسمي موثوق مرتبط بعد؛ غير محسوب ضمن الامتثال">
+                <span className="legend-dot unresolved" />يحتاج ربط ضابط: <b>{rollup.requirementsWithoutMapping}</b>
+              </li>
+            </ul>
+          </article>
+        </section>
 
         <div className="detail-tabs" role="tablist" aria-label="تفاصيل المشروع">
           {tabs.map((label, index) => (
@@ -240,26 +323,32 @@ export default function ProjectDetailPage() {
                 <h2>نظرة عامة</h2>
                 <p>الحالة: {statusText[project.status] ?? project.status} · الأولوية: {priorityText[project.priority] ?? project.priority}</p>
                 <p>المالك التنفيذي: {project.executive_owner || "غير محدد"}</p>
-                <p>نسبة الإنجاز: {project.progress_percent}% · الموعد المستهدف: {project.target_end_date || "غير محدد"}</p>
+                <p>نسبة الإنجاز: {clampedProgress}% · الموعد المستهدف: <span dir="ltr">{formatDateAr(project.target_end_date)}</span></p>
               </section>
             )}
 
             {tab === 1 && (
-              <section className="detail-card">
-                <h2>المتطلبات المرتبطة</h2>
-                {!requirementsWithStats.length && <p>لا توجد متطلبات مرتبطة بهذا المشروع بعد.</p>}
+              <section className="requirements-tab">
+                {!requirementsWithStats.length && <p className="roadmap-empty">لا توجد متطلبات مرتبطة بهذا المشروع بعد.</p>}
                 {requirementsWithStats.map(
                   (item) =>
                     item.requirement && (
-                      <article className="control-evidence-item" key={item.requirement.id}>
-                        <b dir="ltr">{item.requirement.requirement_code}</b> — {item.requirement.title_ar}
+                      <article className="requirement-card" key={item.requirement.id}>
+                        <header>
+                          <h3><span dir="ltr">{item.requirement.requirement_code}</span> — {item.requirement.title_ar}</h3>
+                          {item.mappingStatus === "mapped" && (
+                            <span className="requirement-coverage-tag">تغطية المشروع: {coverageText[item.coverage] ?? item.coverage}</span>
+                          )}
+                        </header>
                         {item.mappingStatus === "unresolved" ? (
-                          <p>
+                          <p className="requirement-warning">
                             <StatusBadge status="needs_control_mapping" /> لا يوجد ضابط رسمي موثوق مرتبط بهذا المتطلب بعد — غير محسوب ضمن الضوابط المُتحقَّقة أو نسبة المساهمة أو تغطية الضوابط.
                           </p>
                         ) : (
-                          <p>
-                            التغطية: {coverageText[item.coverage] ?? item.coverage} · الضوابط: {item.controlsCount} · تحقق: {item.verifiedCount}/{item.controlsCount}
+                          <p className="requirement-stats">
+                            {item.controlsCount} ضوابط مرتبطة · {item.confirmedCount} ربط مؤكد · {item.probableCount} ربط محتمل
+                            <br />
+                            التحقق: {item.verifiedCount}/{item.controlsCount}
                           </p>
                         )}
                       </article>
@@ -269,21 +358,66 @@ export default function ProjectDetailPage() {
             )}
 
             {tab === 2 && (
-              <section className="detail-card">
-                <h2>الضوابط المشتقة من المتطلبات</h2>
-                {!derivedControls.length && <p>لا توجد ضوابط مشتقة بعد.</p>}
-                {derivedControls.map((row, index) => {
-                  const framework = single(row.control.frameworks);
-                  return (
-                    <article className="control-evidence-item" key={`${row.control.id}-${index}`}>
-                      <small>متطلب: <span dir="ltr">{row.requirementCode}</span> · تغطية: {coverageText[row.coverage] ?? row.coverage}</small>
-                      <h3><Link href={`/controls/${row.control.id}`}><span dir="ltr">{framework?.code} · {row.control.control_code}</span> — {row.control.title_ar}</Link></h3>
-                      <p>
-                        التطبيق: <StatusBadge status={row.control.implementation_status} /> · الدليل: <StatusBadge status={row.control.evidence_status} /> · التحقق: <StatusBadge status={row.control.verification_status} />
-                      </p>
-                    </article>
-                  );
-                })}
+              <section className="controls-tab">
+                <div className="controls-table-filters">
+                  <label>
+                    <span>الإطار</span>
+                    <select value={frameworkFilter} onChange={(event) => setFrameworkFilter(event.target.value)}>
+                      <option value="all">الكل</option>
+                      {controlFrameworks.map((fw) => <option key={fw} value={fw}>{fw}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>التغطية</span>
+                    <select value={coverageFilter} onChange={(event) => setCoverageFilter(event.target.value)}>
+                      <option value="all">الكل</option>
+                      {Object.entries(coverageText).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>التحقق</span>
+                    <select value={verificationFilter} onChange={(event) => setVerificationFilter(event.target.value)}>
+                      <option value="all">الكل</option>
+                      {Object.entries(verificationFilterText).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="controls-table-wrap">
+                  <table className="controls-table">
+                    <thead>
+                      <tr>
+                        <th>الإطار</th>
+                        <th>الضابط</th>
+                        <th>التغطية</th>
+                        <th>جودة الربط</th>
+                        <th>التطبيق</th>
+                        <th>الدليل</th>
+                        <th>التحقق</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredControlRows.map((row, index) => {
+                        const framework = single(row.control.frameworks);
+                        return (
+                          <tr key={`${row.control.id}-${index}`}>
+                            <td dir="ltr">{framework?.code ?? "—"}</td>
+                            <td>
+                              <Link href={`/controls/${row.control.id}`}>
+                                <span dir="ltr">{row.control.control_code}</span> — {row.control.title_ar}
+                              </Link>
+                            </td>
+                            <td><span className={`coverage-pill ${row.coverage}`}>{coverageText[row.coverage] ?? row.coverage}</span></td>
+                            <td><span className={`mapping-pill ${row.mappingConfidence}`}>{mappingConfidenceText[row.mappingConfidence] ?? row.mappingConfidence}</span></td>
+                            <td><StatusBadge status={row.control.implementation_status} /></td>
+                            <td><StatusBadge status={row.control.evidence_status} /></td>
+                            <td><StatusBadge status={row.control.verification_status} /></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {!filteredControlRows.length && <p className="roadmap-empty">لا توجد ضوابط مطابقة للفلاتر الحالية.</p>}
+                </div>
               </section>
             )}
 
@@ -291,14 +425,17 @@ export default function ProjectDetailPage() {
               <section className="detail-card">
                 <h2>الأدلة</h2>
                 <p className="detail-hint">يُستخدم سجل الأدلة والمراجعة الحالي كما هو — لا مسار رفع أو مراجعة جديد هنا. افتح الضابط لإدارة دليله.</p>
-                {!uniqueControls.length && <p>لا توجد ضوابط مرتبطة بعد.</p>}
-                {uniqueControls.map((control) => (
-                  <article className="control-evidence-item" key={control.id}>
-                    <b dir="ltr">{control.control_code}</b> — {control.title_ar}
-                    <p>حالة الدليل: <StatusBadge status={control.evidence_status} /></p>
-                    <Link className="detail-back" href={`/controls/${control.id}`}>فتح الأدلة والمراجعة ←</Link>
-                  </article>
-                ))}
+                {!uniqueControls.length ? (
+                  <p className="roadmap-empty">لا توجد أدلة مرتبطة بضوابط هذا المشروع حتى الآن.</p>
+                ) : (
+                  uniqueControls.map((control) => (
+                    <article className="control-evidence-item" key={control.id}>
+                      <b dir="ltr">{control.control_code}</b> — {control.title_ar}
+                      <p>حالة الدليل: <StatusBadge status={control.evidence_status} /></p>
+                      <Link className="detail-back" href={`/controls/${control.id}`}>فتح الأدلة والمراجعة ←</Link>
+                    </article>
+                  ))
+                )}
               </section>
             )}
 
@@ -317,14 +454,5 @@ export default function ProjectDetailPage() {
         </section>
       </section>
     </main>
-  );
-}
-
-function Metric({ label, value, tone = "" }: { label: string; value: number | string; tone?: string }) {
-  return (
-    <article className={`roadmap-metric ${tone}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </article>
   );
 }

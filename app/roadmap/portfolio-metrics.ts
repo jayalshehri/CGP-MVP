@@ -101,7 +101,17 @@ export type RequirementControlLink = {
   verification_status: string;
 };
 
-export type ProjectRequirementRow = { requirement_id: number; coverage_type: CoverageType };
+export type ProjectRequirementRow = { requirement_id: number; coverage_type: CoverageType; project_id?: number };
+
+// Presentation-only date formatter: "YYYY-MM-DD" -> "DD/MM/YYYY". Never touches
+// the stored value -- callers keep passing/saving the original ISO string.
+export function formatDateAr(value: string | null | undefined): string {
+  if (!value) return "غير محدد";
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return value;
+  const [, year, month, day] = match;
+  return `${day}/${month}/${year}`;
+}
 
 export type RequirementRollup = {
   requirementsCount: number;
