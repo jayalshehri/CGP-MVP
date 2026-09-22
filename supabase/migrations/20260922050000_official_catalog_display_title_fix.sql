@@ -1,7 +1,7 @@
 -- Fix: research/extraction metadata (PDF page refs, bracketed analyst notes, unstripped
 -- English translations) that leaked into controls.domain_ar / controls.title_ar for a
 -- small number of CCC and DCC rows during the 2026-09-22 official-catalog data migration
--- (20260922020000_official_catalog_data_correction.sql).
+-- (20260922030000_official_catalog_data_correction.sql).
 --
 -- Root cause: the source-parsing script's domain/subdomain header regexes expected a bare
 -- numeric "pdf p.N" page reference immediately followed by end-of-line (or a short bracket

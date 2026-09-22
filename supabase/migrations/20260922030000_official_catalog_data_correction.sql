@@ -1,3 +1,4 @@
+-- A-02: uniquely versioned after the catalog hierarchy migration.
 -- QA-ONLY. Official NCA catalog data correction: upserts the full
 -- validated Master Catalog (nca_reconciliation/framework_catalogs/*.md) into
 -- public.controls by (framework, control_code). For codes already present,

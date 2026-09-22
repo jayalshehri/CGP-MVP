@@ -1,3 +1,5 @@
+-- A-02: uniquely versioned after the already-registered 20260922010000
+-- Production-safe review-cycle guard.
 -- QA-ONLY. Schema foundation for representing the official NCA regulatory
 -- hierarchy (Framework -> Domain -> Subdomain -> Control -> Sub-control)
 -- faithfully, without disrupting any existing table, FK, RLS policy, or
