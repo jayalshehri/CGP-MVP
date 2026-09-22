@@ -52,7 +52,7 @@ export function getEccOfficialTitle(code: string) {
 }
 
 export const eccOfficialControlsUrl =
-  "https://cdn.nca.gov.sa/api/files/public/upload/072773cb-cdc0-439f-afaa-45fa42f17479_ECC-2-2024-AR-n.pdf";
+  "https://cdn.nca.gov.sa/api/files/public/upload/29a9e86a-595f-4af9-8db5-88715a458a14_ECC-2-2024---NCA.pdf";
 
 export const eccImplementationGuideUrl =
   "https://cdn.nca.gov.sa/api/public/cms/files/1d3a5d95-3c0e-495f-8aa1-d7f288c5a856_Guide-to-Essential-Cybersecurity-Controls-Implementation-ar.pdf";
