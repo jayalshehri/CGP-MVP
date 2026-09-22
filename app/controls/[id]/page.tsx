@@ -35,6 +35,12 @@ const assessmentStatusText:Record<string,string>={implemented:'مطبق كليً
 const coverageText:Record<string,string>={full:'كاملة',partial:'جزئية',supporting:'داعمة'};
 const mappingConfidenceText:Record<string,string>={confirmed:'مؤكد',probable:'محتمل'};
 const single=<T,>(value:T|T[]|null):T|null=>Array.isArray(value)?value[0]??null:value;
+// title_ar is stored as "{subdomain label} - {control_code}" (a list-display
+// convention, not a header title) -- stripping the trailing code here both
+// recovers the subdomain label for the breadcrumb and avoids ever rendering
+// a bare digit/hyphen code sequence inside RTL prose, which the browser's
+// BiDi algorithm can visually reorder.
+const cleanTitle=(value:string)=>value.replace(/\s*[-–]\s*[\d-]+\s*$/,"").trim();
 
 export default function ControlDetailsPage() {
  const {id}=useParams<{id:string}>(); const router=useRouter();
@@ -112,8 +118,13 @@ export default function ControlDetailsPage() {
  ])].sort((a,b)=>Date.parse(b.time)-Date.parse(a.time));
  return <main className="detail-page" dir="rtl">
   <Link className="detail-back" href="/controls">← العودة إلى الضوابط</Link>
-  {parentControl&&<p className="detail-breadcrumb">الضابط الأساسي: <Link href={`/controls/${parentControl.id}`} dir="ltr">{parentControl.control_code}</Link> {parentControl.title_ar}</p>}
-  <header className="detail-hero"><div><span className="detail-code" dir="ltr">{control.control_code}</span>{control.frameworks&&<span className="detail-framework-tag" dir="ltr">{control.frameworks.code} {control.frameworks.version}</span>}{control.hierarchy_level==='sub_control'?<span className="detail-hierarchy-tag">ضابط فرعي</span>:<span className="detail-hierarchy-tag">ضابط أساسي</span>}{applicability&&<span className="catalog-applicability">{applicability}</span>}<h1>{(isEcc?getEccOfficialTitle(control.control_code):undefined)||strategyExample?.title||control.title_ar}</h1><p>{control.domain_ar}</p></div><div className="detail-hero-actions"><StatusBadge status={control.implementation_status}/>{canReview&&<Link className="detail-assign-owner" href={`/controls/${control.id}/assign`}>{control.control_owner?"تغيير مالك الضابط":"تعيين مالك الضابط"} ←</Link>}</div></header>
+  <nav className="detail-breadcrumb" aria-label="مسار التصنيف الهرمي">
+   <span>{control.domain_ar}</span>
+   <span aria-hidden="true">←</span>
+   <span>{cleanTitle(control.title_ar)}</span>
+   {parentControl&&<><span aria-hidden="true">←</span><Link href={`/controls/${parentControl.id}`}><span dir="ltr">{parentControl.control_code}</span> {parentControl.official_text_ar||cleanTitle(parentControl.title_ar)}</Link></>}
+  </nav>
+  <header className="detail-hero"><div><span className="detail-code" dir="ltr">{control.control_code}</span>{control.frameworks&&<span className="detail-framework-tag" dir="ltr">{control.frameworks.code} {control.frameworks.version}</span>}{control.hierarchy_level==='sub_control'?<span className="detail-hierarchy-tag">ضابط فرعي</span>:<span className="detail-hierarchy-tag">ضابط أساسي</span>}{applicability&&<span className="catalog-applicability">{applicability}</span>}<h1>{control.official_text_ar||(isEcc?getEccOfficialTitle(control.control_code):undefined)||strategyExample?.title||cleanTitle(control.title_ar)}</h1><p>{control.domain_ar}</p></div><div className="detail-hero-actions"><StatusBadge status={control.implementation_status}/>{canReview&&<Link className="detail-assign-owner" href={`/controls/${control.id}/assign`}>{control.control_owner?"تغيير مالك الضابط":"تعيين مالك الضابط"} ←</Link>}</div></header>
   <div className="detail-metrics"><section><small>حالة التطبيق</small><StatusBadge status={control.implementation_status}/></section><section><small>حالة الدليل</small><StatusBadge status={control.evidence_status}/></section><section><small>حالة التحقق</small><StatusBadge status={control.verification_status}/></section><section><small>موعد الاستحقاق</small><strong>{control.due_date||'غير محدد'}</strong></section></div>
   <section className="detail-next"><div><span>{canUpload?'الإجراء التالي':'وضع المراجعة'}</span><strong>{canUpload?(control.evidence_status==='not_uploaded'?'رفع الدليل المطلوب للضابط':!goodStatus(control.verification_status)?'متابعة مراجعة الدليل والتحقق':'مراجعة الضابط دوريًا والمحافظة على الأدلة'):'تستطيع معاينة الدليل والسجل فقط ضمن نطاق التدقيق الممنوح لك.'}</strong></div>{canUpload&&control.evidence_status==='not_uploaded'?<Link className="detail-button" href={`/controls/${control.id}/evidence/new`}>رفع دليل ←</Link>:<button className="detail-button" onClick={()=>setTab(3)}>فتح السجل ←</button>}</section>
   <section className="detail-schedule-strip">
