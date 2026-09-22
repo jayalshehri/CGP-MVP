@@ -15,6 +15,16 @@ type ViewMode="structure"|"followup";
 const good=(value:string)=>["implemented","compliant"].includes(value);
 const cleanTitle=(value:string)=>value.replace(/\s*[-–]\s*[\d-]+\s*$/,"").trim();
 const domainNumber=(rows:Control[])=>rows[0]?.control_code.split("-")[0]||"—";
+// control_code is the canonical LTR identifier; search must match against
+// it directly, never against visually-rendered (possibly BiDi-reordered)
+// text. Normalizes Arabic-Indic digits and dash-variant characters (from
+// keyboards/locales/paste sources that don't produce a plain ASCII "-")
+// so a code like "١-٩-٣-١" or "1–9–3–1" still matches "1-9-3-1".
+const normalizeCode=(value:string)=>value
+ .replace(/[٠-٩]/g,d=>String(d.charCodeAt(0)-0x0660))
+ .replace(/[۰-۹]/g,d=>String(d.charCodeAt(0)-0x06F0))
+ .replace(/[‐-―−]/g,"-")
+ .toLowerCase().trim();
 const hasArabic=(value:string|null)=>!!value&&/[\u0600-\u06ff]/.test(value);
 // The concise navigation label. official_text_ar (the validated NCA
 // regulatory text) is shown separately wherever a row is expanded — this
@@ -61,15 +71,27 @@ function ControlsContent(){
  const domains=useMemo(()=>Map.groupBy(scoped,c=>c.domain_ar||"غير مصنف"),[scoped]);
  const selectedDomain=activeDomain&&domains.has(activeDomain)?activeDomain:[...domains.keys()][0]||"";
  const domainControls=domains.get(selectedDomain)??[];
+ const normalizedQuery=normalizeCode(search);
  const filtered=domainControls.filter(c=>{
-  const searchMatch=`${c.control_code} ${c.title_ar} ${c.official_text_ar||""} ${framework} ${c.control_owner||""}`.toLowerCase().includes(search.trim().toLowerCase());
+  const searchMatch=normalizeCode(`${c.control_code} ${c.title_ar} ${c.official_text_ar||""} ${framework} ${c.control_owner||""}`).includes(normalizedQuery);
   const statusMatch=status==="all"||(status==="implemented"?good(c.implementation_status):c.implementation_status===status);
   const assignmentMatch=assignment==="all"||(assignment==="assigned"?!!c.control_owner_id:!c.control_owner_id);
   return searchMatch&&statusMatch&&assignmentMatch;
  });
  const sorted=[...filtered].sort((a,b)=>a.control_code.localeCompare(b.control_code,"en",{numeric:true}));
- const subdomains=Map.groupBy(sorted,c=>c.control_code.split("-").slice(0,2).join("-"));
  const searching=!!search.trim()||status!=="all"||assignment!=="all";
+ // A sub-control's own code/text can match the search even when its parent's
+ // does not (e.g. searching the exact code "1-9-3-1" never matches parent
+ // "1-9-3"). The structure view renders sub-controls nested under their
+ // parent row, so without the parent present the matching child would be
+ // silently unreachable. Back-fill any such parent -- present so the child
+ // can render, but not counted as a match (it's excluded from `filtered`/
+ // `sorted`, which drive the result count and the follow-up table).
+ const filteredIds=new Set(filtered.map(c=>c.id));
+ const structureRows=searching
+  ?[...sorted,...domainControls.filter(c=>c.hierarchy_level!=="sub_control"&&!filteredIds.has(c.id)&&filtered.some(f=>f.parent_control_id===c.id))].sort((a,b)=>a.control_code.localeCompare(b.control_code,"en",{numeric:true}))
+  :sorted;
+ const subdomains=Map.groupBy(structureRows,c=>c.control_code.split("-").slice(0,2).join("-"));
  function setFilter(key:"status"|"assignment",value:string){const params=new URLSearchParams(searchParams.toString());if(value==="all")params.delete(key);else params.set(key,value);router.replace(params.size?`/controls?${params.toString()}`:"/controls",{scroll:false});}
  function resetFilters(){setSearch("");router.replace("/controls",{scroll:false});}
  function chooseFramework(code:string){setFramework(code);setActiveDomain("");setScope("all");setSearch("");router.replace("/controls",{scroll:false});}
@@ -92,7 +114,7 @@ function ControlsContent(){
    </section>
    <section className="catalog-workspace" aria-labelledby="selected-domain-heading">
     <div className="catalog-workspace-head"><div><span>الخطوة 3</span><h2 id="selected-domain-heading"><b dir="ltr">{domainNumber(domainControls)}</b> {selectedDomain}</h2><p>{domainControls.length} ضابط ضمن المجال المحدد</p></div></div>
-    <div className="workflow-filter workflow-filter-grid catalog-filters"><div><label htmlFor="control-search" className="cgp-field-label">البحث داخل المجال</label><input id="control-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="رقم الضابط أو اسمه أو المالك"/></div><div><label htmlFor="control-status" className="cgp-field-label">حالة التنفيذ</label><select id="control-status" value={status} onChange={e=>setFilter("status",e.target.value)}><option value="all">كل الحالات</option><option value="implemented">مطبق كليًا</option><option value="in_progress">مطبق جزئيًا</option><option value="not_started">غير مطبق</option><option value="not_applicable">لا ينطبق</option></select></div><div><label htmlFor="control-assignment" className="cgp-field-label">الإسناد</label><select id="control-assignment" value={assignment} onChange={e=>setFilter("assignment",e.target.value)}><option value="all">الكل</option><option value="assigned">معيّن</option><option value="unassigned">غير معيّن</option></select></div></div>
+    <div className="workflow-filter workflow-filter-grid catalog-filters"><div><label htmlFor="control-search" className="cgp-field-label">البحث داخل المجال</label><input id="control-search" dir="auto" value={search} onChange={e=>setSearch(e.target.value)} placeholder="رقم الضابط أو اسمه أو المالك"/></div><div><label htmlFor="control-status" className="cgp-field-label">حالة التنفيذ</label><select id="control-status" value={status} onChange={e=>setFilter("status",e.target.value)}><option value="all">كل الحالات</option><option value="implemented">مطبق كليًا</option><option value="in_progress">مطبق جزئيًا</option><option value="not_started">غير مطبق</option><option value="not_applicable">لا ينطبق</option></select></div><div><label htmlFor="control-assignment" className="cgp-field-label">الإسناد</label><select id="control-assignment" value={assignment} onChange={e=>setFilter("assignment",e.target.value)}><option value="all">الكل</option><option value="assigned">معيّن</option><option value="unassigned">غير معيّن</option></select></div></div>
     <ResultSummary count={filtered.length} total={domainControls.length} active={searching} reset={resetFilters}/>
     {view==="structure"?<div className="subdomain-list">{[...subdomains].map(([code,rows],index)=>{const parents=rows.filter(c=>c.hierarchy_level!=="sub_control");const byParent=Map.groupBy(rows.filter(c=>c.hierarchy_level==="sub_control"),c=>c.parent_control_id??-1);return <details className="subdomain-card" key={code} open={searching||index===0}><summary><span><b dir="ltr">{code}</b><strong>{code==="1-1"&&framework==="ECC"?"استراتيجية الأمن السيبراني":cleanTitle(rows[0].title_ar)}</strong><small>{rows.length} ضابط وبند فرعي</small></span><span className="catalog-chevron" aria-hidden="true">‹</span></summary><ul>{parents.map(c=>{const subs=byParent.get(c.id)??[];const appl=applicabilityLabel(c.applicability);return <li key={c.id}><Link className="catalog-row" href={`/controls/${c.id}`}><span className="catalog-code" dir="ltr">{c.control_code}</span><span className="catalog-title" title={c.official_text_ar??undefined}>{displayTitle(c,framework)}</span>{appl&&<span className="catalog-applicability">{appl}</span>}<StatusBadge status={c.implementation_status}/><span aria-hidden="true">←</span></Link>{subs.length>0&&<ul className="catalog-subrows">{subs.map(s=>{const sAppl=applicabilityLabel(s.applicability);return <li key={s.id}><Link className="catalog-row catalog-subrow" href={`/controls/${s.id}`}><span className="catalog-code" dir="ltr">{s.control_code}</span><span className="catalog-title" title={s.official_text_ar??undefined}>{displayTitle(s,framework)}</span>{sAppl&&<span className="catalog-applicability">{sAppl}</span>}<StatusBadge status={s.implementation_status}/><span aria-hidden="true">←</span></Link></li>})}</ul>}</li>})}</ul></details>})}</div>:<div className="followup-table-wrap">
 <table className="followup-table"><thead><tr><th>الضابط</th><th>الاسم</th><th>المالك</th><th>التنفيذ</th><th>الدليل</th><th>الاستحقاق</th><th></th></tr></thead><tbody>{sorted.map(c=><tr key={c.id}><td dir="ltr">{c.control_code}</td><td>{displayTitle(c,framework)}</td><td>{c.control_owner||"غير معيّن"}</td><td><StatusBadge status={c.implementation_status}/></td><td><StatusBadge status={c.evidence_status}/></td><td>{c.due_date||"غير محدد"}</td><td><Link href={`/controls/${c.id}`}>فتح ←</Link></td></tr>)}</tbody></table></div>}
