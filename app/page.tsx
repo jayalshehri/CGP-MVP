@@ -41,7 +41,7 @@ export default function Home() {
 
         setAuthReady(true);
         const [controlResult,evidenceResult] = await Promise.all([
-          supabase.from("controls").select("id,domain_ar,implementation_status,evidence_status,verification_status,due_date,frameworks!inner(code,name_ar)"),
+          supabase.from("controls").select("id,domain_ar,implementation_status,evidence_status,verification_status,due_date,frameworks!inner(code,name_ar)").eq("hierarchy_level","control"),
           supabase.from("evidence").select("id",{count:"exact",head:true}).eq("is_current",true).in("status",["pending_review","under_review"]),
         ]);
         if (controlResult.error || evidenceResult.error) throw controlResult.error || evidenceResult.error;

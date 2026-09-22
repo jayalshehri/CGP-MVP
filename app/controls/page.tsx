@@ -9,23 +9,23 @@ import "./catalog.css";
 import { supabase } from "@/lib/supabase";
 import { getEccOfficialTitle } from "@/lib/ecc-strategy-example";
 
-type Control={id:number;framework_id:number;control_code:string;title_ar:string;description_ar:string|null;domain_ar:string;implementation_status:string;evidence_status:string;verification_status:string;due_date:string|null;control_owner:string|null;control_owner_id:string|null};
+type Control={id:number;framework_id:number;control_code:string;title_ar:string;description_ar:string|null;official_text_ar:string|null;hierarchy_level:string;parent_control_id:number|null;applicability:string|null;domain_ar:string;implementation_status:string;evidence_status:string;verification_status:string;due_date:string|null;control_owner:string|null;control_owner_id:string|null};
 type Framework={id:number;code:string;name_ar:string;version:string};
 type ViewMode="structure"|"followup";
 const good=(value:string)=>["implemented","compliant"].includes(value);
 const cleanTitle=(value:string)=>value.replace(/\s*[-–]\s*[\d-]+\s*$/,"").trim();
 const domainNumber=(rows:Control[])=>rows[0]?.control_code.split("-")[0]||"—";
 const hasArabic=(value:string|null)=>!!value&&/[\u0600-\u06ff]/.test(value);
+// The concise navigation label. official_text_ar (the validated NCA
+// regulatory text) is shown separately wherever a row is expanded — this
+// function never substitutes for it, it only picks the best short label.
 const displayTitle=(control:Control,frameworkCode:string)=>{
- // Descriptions are the official requirement wording imported with each framework.
- // Show them in the catalog so controls in the same subdomain remain distinguishable.
- // ECC keeps its verified concise titles where they are available.
+ if(control.official_text_ar)return control.official_text_ar;
  if(frameworkCode==="ECC")return getEccOfficialTitle(control.control_code)||control.description_ar||cleanTitle(control.title_ar);
- // CCC wording is introduced from the official Arabic source in verified batches.
- // Until a row is verified, retain its approved Arabic catalog title rather than showing English.
  if(frameworkCode==="CCC")return hasArabic(control.description_ar)?control.description_ar:cleanTitle(control.title_ar);
  return control.description_ar||cleanTitle(control.title_ar);
 };
+const applicabilityLabel=(value:string|null)=>value==="CSP"?"مقدم الخدمة CSP":value==="CST"?"المشترك CST":null;
 
 export default function ControlsPage(){
  return <Suspense fallback={<main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>}><ControlsContent/></Suspense>;
@@ -47,7 +47,7 @@ function ControlsContent(){
  useEffect(()=>{let active=true;(async()=>{try{
   const {user,profile}=await requireProfile();if(!active)return;
   setCanManage(profile.role==="admin"||profile.role==="cybersecurity_team");
-  let query=supabase.from("controls").select("id,framework_id,control_code,title_ar,description_ar,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner,control_owner_id").order("id");
+  let query=supabase.from("controls").select("id,framework_id,control_code,title_ar,description_ar,official_text_ar,hierarchy_level,parent_control_id,applicability,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner,control_owner_id").order("id");
   if(profile.role==="control_owner")query=query.eq("control_owner_id",user.id);
   const [{data,error},{data:frameworkData,error:frameworkError}]=await Promise.all([query,supabase.from("frameworks").select("id,code,name_ar,version").eq("is_active",true).order("id")]);
   if(error||frameworkError)throw error||frameworkError;
@@ -62,7 +62,7 @@ function ControlsContent(){
  const selectedDomain=activeDomain&&domains.has(activeDomain)?activeDomain:[...domains.keys()][0]||"";
  const domainControls=domains.get(selectedDomain)??[];
  const filtered=domainControls.filter(c=>{
-  const searchMatch=`${c.control_code} ${c.title_ar} ${c.control_owner||""}`.toLowerCase().includes(search.trim().toLowerCase());
+  const searchMatch=`${c.control_code} ${c.title_ar} ${c.official_text_ar||""} ${framework} ${c.control_owner||""}`.toLowerCase().includes(search.trim().toLowerCase());
   const statusMatch=status==="all"||(status==="implemented"?good(c.implementation_status):c.implementation_status===status);
   const assignmentMatch=assignment==="all"||(assignment==="assigned"?!!c.control_owner_id:!c.control_owner_id);
   return searchMatch&&statusMatch&&assignmentMatch;
@@ -94,7 +94,8 @@ function ControlsContent(){
     <div className="catalog-workspace-head"><div><span>الخطوة 3</span><h2 id="selected-domain-heading"><b dir="ltr">{domainNumber(domainControls)}</b> {selectedDomain}</h2><p>{domainControls.length} ضابط ضمن المجال المحدد</p></div></div>
     <div className="workflow-filter workflow-filter-grid catalog-filters"><div><label htmlFor="control-search" className="cgp-field-label">البحث داخل المجال</label><input id="control-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="رقم الضابط أو اسمه أو المالك"/></div><div><label htmlFor="control-status" className="cgp-field-label">حالة التنفيذ</label><select id="control-status" value={status} onChange={e=>setFilter("status",e.target.value)}><option value="all">كل الحالات</option><option value="implemented">مطبق كليًا</option><option value="in_progress">مطبق جزئيًا</option><option value="not_started">غير مطبق</option><option value="not_applicable">لا ينطبق</option></select></div><div><label htmlFor="control-assignment" className="cgp-field-label">الإسناد</label><select id="control-assignment" value={assignment} onChange={e=>setFilter("assignment",e.target.value)}><option value="all">الكل</option><option value="assigned">معيّن</option><option value="unassigned">غير معيّن</option></select></div></div>
     <ResultSummary count={filtered.length} total={domainControls.length} active={searching} reset={resetFilters}/>
-    {view==="structure"?<div className="subdomain-list">{[...subdomains].map(([code,rows],index)=><details className="subdomain-card" key={code} open={searching||index===0}><summary><span><b dir="ltr">{code}</b><strong>{code==="1-1"&&framework==="ECC"?"استراتيجية الأمن السيبراني":cleanTitle(rows[0].title_ar)}</strong><small>{rows.length} ضابط</small></span><span className="catalog-chevron" aria-hidden="true">‹</span></summary><ul>{rows.map(c=><li key={c.id}><Link className="catalog-row" href={`/controls/${c.id}`}><span className="catalog-code" dir="ltr">{c.control_code}</span><span className="catalog-title">{displayTitle(c,framework)}</span><StatusBadge status={c.implementation_status}/><span aria-hidden="true">←</span></Link></li>)}</ul></details>)}</div>:<div className="followup-table-wrap"><table className="followup-table"><thead><tr><th>الضابط</th><th>الاسم</th><th>المالك</th><th>التنفيذ</th><th>الدليل</th><th>الاستحقاق</th><th></th></tr></thead><tbody>{sorted.map(c=><tr key={c.id}><td dir="ltr">{c.control_code}</td><td>{displayTitle(c,framework)}</td><td>{c.control_owner||"غير معيّن"}</td><td><StatusBadge status={c.implementation_status}/></td><td><StatusBadge status={c.evidence_status}/></td><td>{c.due_date||"غير محدد"}</td><td><Link href={`/controls/${c.id}`}>فتح ←</Link></td></tr>)}</tbody></table></div>}
+    {view==="structure"?<div className="subdomain-list">{[...subdomains].map(([code,rows],index)=>{const parents=rows.filter(c=>c.hierarchy_level!=="sub_control");const byParent=Map.groupBy(rows.filter(c=>c.hierarchy_level==="sub_control"),c=>c.parent_control_id??-1);return <details className="subdomain-card" key={code} open={searching||index===0}><summary><span><b dir="ltr">{code}</b><strong>{code==="1-1"&&framework==="ECC"?"استراتيجية الأمن السيبراني":cleanTitle(rows[0].title_ar)}</strong><small>{rows.length} ضابط وبند فرعي</small></span><span className="catalog-chevron" aria-hidden="true">‹</span></summary><ul>{parents.map(c=>{const subs=byParent.get(c.id)??[];const appl=applicabilityLabel(c.applicability);return <li key={c.id}><Link className="catalog-row" href={`/controls/${c.id}`}><span className="catalog-code" dir="ltr">{c.control_code}</span><span className="catalog-title" title={c.official_text_ar??undefined}>{displayTitle(c,framework)}</span>{appl&&<span className="catalog-applicability">{appl}</span>}<StatusBadge status={c.implementation_status}/><span aria-hidden="true">←</span></Link>{subs.length>0&&<ul className="catalog-subrows">{subs.map(s=>{const sAppl=applicabilityLabel(s.applicability);return <li key={s.id}><Link className="catalog-row catalog-subrow" href={`/controls/${s.id}`}><span className="catalog-code" dir="ltr">{s.control_code}</span><span className="catalog-title" title={s.official_text_ar??undefined}>{displayTitle(s,framework)}</span>{sAppl&&<span className="catalog-applicability">{sAppl}</span>}<StatusBadge status={s.implementation_status}/><span aria-hidden="true">←</span></Link></li>})}</ul>}</li>})}</ul></details>})}</div>:<div className="followup-table-wrap">
+<table className="followup-table"><thead><tr><th>الضابط</th><th>الاسم</th><th>المالك</th><th>التنفيذ</th><th>الدليل</th><th>الاستحقاق</th><th></th></tr></thead><tbody>{sorted.map(c=><tr key={c.id}><td dir="ltr">{c.control_code}</td><td>{displayTitle(c,framework)}</td><td>{c.control_owner||"غير معيّن"}</td><td><StatusBadge status={c.implementation_status}/></td><td><StatusBadge status={c.evidence_status}/></td><td>{c.due_date||"غير محدد"}</td><td><Link href={`/controls/${c.id}`}>فتح ←</Link></td></tr>)}</tbody></table></div>}
     {!filtered.length&&<div className="workflow-empty">لا توجد ضوابط مطابقة داخل هذا المجال.</div>}
    </section>
   </>}
