@@ -24,7 +24,7 @@ export default function ExecutivePage() {
     (async () => {
       try {
         await requireProfile(["admin", "cybersecurity_team"]);
-        const controlResult = await supabase.from("controls").select("id,domain_ar,implementation_status,evidence_status,verification_status,due_date,frameworks!inner(code,name_ar)").eq("hierarchy_level","control");
+        const controlResult = await supabase.from("controls").select("id,domain_ar,implementation_status,evidence_status,verification_status,due_date,frameworks!inner(code,name_ar,is_active)").eq("frameworks.is_active",true).eq("hierarchy_level","control");
         if (controlResult.error) throw new Error("تعذر تحديث البيانات. حاول مرة أخرى.");
         if (active) { setControls((controlResult.data ?? []) as Control[]); setUpdated(new Date()); setError(""); }
       } catch (loadError) {

@@ -41,7 +41,7 @@ export default function EvidencePage(){
       const userRole=(profile.role||"control_owner") as UserRole;
       setRole(userRole);
 
-      let controlQuery=supabase.from("controls").select("id,control_code,title_ar,domain_ar,control_owner_id,frameworks!inner(code,name_ar)").order("id");
+      let controlQuery=supabase.from("controls").select("id,control_code,title_ar,domain_ar,control_owner_id,frameworks!inner(code,name_ar,is_active)").eq("frameworks.is_active",true).order("id");
       if(userRole==="control_owner") controlQuery=controlQuery.eq("control_owner_id",session.user.id);
       const {data:controlData,error:controlError}=await controlQuery;
       if(controlError){setError("تعذر تحميل الضوابط: "+controlError.message);setLoading(false);return;}

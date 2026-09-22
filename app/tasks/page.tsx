@@ -16,7 +16,7 @@ export default function TasksPage(){
   useEffect(()=>{ let active=true; async function load(){ try {
     const {user,profile}=await requireProfile(); if(!active)return; setRole(profile.role);
     const params=new URLSearchParams(window.location.search); const initialFilter=params.get("filter"); if(initialFilter&&["all","overdue","evidence","done","progress","pending","unassigned","due"].includes(initialFilter))setFilter(initialFilter); setFramework(params.get("framework")||"all");
-    let query=supabase.from("controls").select("id,control_code,title_ar,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner_id,control_owner,frameworks!inner(code,name_ar)").order("due_date",{ascending:true,nullsFirst:false});
+    let query=supabase.from("controls").select("id,control_code,title_ar,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner_id,control_owner,frameworks!inner(code,name_ar,is_active)").eq("frameworks.is_active",true).order("due_date",{ascending:true,nullsFirst:false});
     if(profile.role==="control_owner") query=query.eq("control_owner_id",user.id);
     const {data,error:controlsError}=await query; if(controlsError)throw controlsError; if(active)setTasks((data??[]) as ControlTask[]);
   } catch(loadError){ if(!active)return; const message=loadError instanceof Error?loadError.message:"تعذر تحميل التكليفات"; if(message.includes("تسجيل الدخول")){router.replace("/login");return;} setError(message); } finally {if(active)setLoading(false);} }
