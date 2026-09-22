@@ -146,6 +146,7 @@ export default function ProjectDetailPage() {
             supabase
               .from("cybersecurity_requirement_controls")
               .select("requirement_id,control_id,coverage_type,mapping_confidence,controls(id,control_code,title_ar,implementation_status,evidence_status,verification_status,frameworks(code))")
+              .eq("mapping_status", "active")
               .in("requirement_id", requirementIds),
             supabase.from("controls").select("id,frameworks!inner(is_active)").eq("frameworks.is_active",true),
           ]);

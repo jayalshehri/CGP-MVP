@@ -64,7 +64,7 @@ export default function ControlDetailsPage() {
   const [c,e,rc,cy]=await Promise.all([
    supabase.from('controls').select('*,frameworks(code,name_ar,version,is_active,source_url)').eq('id',controlId).single(),
    supabase.rpc('grc_evidence_register'),
-   supabase.from('cybersecurity_requirement_controls').select('requirement_id,coverage_type,mapping_confidence,cybersecurity_requirements(requirement_code,title_ar)').eq('control_id',controlId),
+   supabase.from('cybersecurity_requirement_controls').select('requirement_id,coverage_type,mapping_confidence,cybersecurity_requirements(requirement_code,title_ar)').eq('control_id',controlId).eq('mapping_status','active'),
    supabase.from('control_review_cycles').select('id,reviewer_id,due_date').eq('control_id',controlId).eq('status','open').limit(1)]);
   if(c.error||!c.data)throw new Error('الضابط غير موجود أو ليس ضمن صلاحيتك.');
   if(e.error)throw new Error('تعذر تحميل أدلة الضابط. أعد تحميل الصفحة.');

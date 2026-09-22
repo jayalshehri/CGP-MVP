@@ -105,7 +105,7 @@ export default function ProjectRegisterPage() {
       supabase.from("cybersecurity_projects").select("*").order("planned_year").order("planned_quarter").order("project_code"),
       supabase.from("cybersecurity_project_controls").select("project_id,control_id"),
       supabase.from("cybersecurity_project_requirements").select("project_id,requirement_id,coverage_type"),
-      supabase.from("cybersecurity_requirement_controls").select("requirement_id,control_id,coverage_type,mapping_confidence,controls(evidence_status,verification_status)"),
+      supabase.from("cybersecurity_requirement_controls").select("requirement_id,control_id,coverage_type,mapping_confidence,controls(evidence_status,verification_status)").eq("mapping_status", "active"),
       supabase.from("controls").select("id,frameworks!inner(is_active)").eq("frameworks.is_active",true),
     ]);
     if (projectResult.error) throw projectResult.error;
