@@ -33,7 +33,7 @@ export default function ReportsPage(){
    return;
   }
   const [{data:c,error:ce},{data:e,error:ee},{data:f,error:fe}]=await Promise.all([
-   supabase.from("controls").select("id,framework_id,control_code,title_ar,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner").eq("hierarchy_level","control").order("id"),
+   supabase.from("controls").select("id,framework_id,control_code,title_ar,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner,frameworks!inner(is_active)").eq("frameworks.is_active",true).eq("hierarchy_level","control").order("id"),
    supabase.rpc("grc_evidence_register"),
    supabase.from("frameworks").select("id,code,name_ar,version").eq("is_active",true).order("id")
   ]);

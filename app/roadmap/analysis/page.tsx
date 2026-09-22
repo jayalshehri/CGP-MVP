@@ -38,17 +38,20 @@ export default function PortfolioAnalysisPage() {
     (async () => {
       try {
         await requireProfile();
-        const [projectResult, linkResult, treatmentResult] = await Promise.all([
+        const [projectResult, linkResult, treatmentResult, activeControlResult] = await Promise.all([
           supabase.from("cybersecurity_projects").select("id,project_code,name_ar,planned_year,planned_quarter,status,priority,executive_owner,target_outcome,target_end_date,recommended_technologies,progress_percent").order("planned_year").order("planned_quarter"),
           supabase.from("cybersecurity_project_controls").select("project_id,control_id"),
           supabase.from("cybersecurity_project_gap_treatments").select("project_id,priority"),
+          supabase.from("controls").select("id,frameworks!inner(is_active)").eq("frameworks.is_active",true),
         ]);
         if (projectResult.error) throw projectResult.error;
         if (linkResult.error) throw linkResult.error;
         if (treatmentResult.error) throw treatmentResult.error;
+        if (activeControlResult.error) throw activeControlResult.error;
         if (live) {
+          const activeIds = new Set((activeControlResult.data ?? []).map(row => row.id));
           setProjects((projectResult.data ?? []) as Project[]);
-          setLinks((linkResult.data ?? []) as ControlLink[]);
+          setLinks((linkResult.data ?? []).filter(row => activeIds.has(row.control_id)) as ControlLink[]);
           setTreatments((treatmentResult.data ?? []) as Treatment[]);
         }
       } catch (cause) {

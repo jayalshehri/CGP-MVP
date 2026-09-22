@@ -33,14 +33,17 @@ export default function NewEvidencePage() {
   const [mappedControls,setMappedControls]=useState<Array<{control_id:number;framework_code:string;control_code:string;control_title:string}>>([]);
   const [selectedTargets,setSelectedTargets]=useState<number[]>([]);
   const [ready,setReady]=useState(false);
+  const [archived,setArchived]=useState(false);
   useEffect(()=>{let active=true;(async()=>{try{
     const {profile}=await requireProfile(['admin','cybersecurity_team','control_owner']);
     const query=new URLSearchParams(window.location.search);if(active){setRequestId(query.get('request')||'');setReplaceId(query.get('replace')||'');}
     const {data:old}=await supabase.from('evidence').select('id,file_name,version_number').eq('control_id',controlId).eq('is_current',true);
     if(active)setVersions(old??[]);
-    const {data,error}=await supabase.from("controls").select("id,control_code,title_ar,description_ar,frameworks(code)").eq("id",controlId).single();
+    const {data,error}=await supabase.from("controls").select("id,control_code,title_ar,description_ar,frameworks(code,is_active)").eq("id",controlId).single();
     if(error||!data)throw new Error("الضابط غير موجود أو ليس ضمن صلاحيتك.");
-    const code=(data.frameworks as {code?:string}|null)?.code||"";
+    const framework=Array.isArray(data.frameworks)?data.frameworks[0]:data.frameworks;
+    if(framework?.is_active===false){if(active)setArchived(true);return;}
+    const code=framework?.code||"";
     const requirement = (code === "ECC" ? getEccOfficialTitle(data.control_code) : undefined) || data.description_ar || data.title_ar;
     if(active){setReady(true);setControlCode(data.control_code);setControlRequirement(requirement);setFrameworkCode(code);}
     if(profile.role!=="control_owner"){
@@ -54,7 +57,7 @@ export default function NewEvidencePage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!ready || uploading) return;
+    if (!ready || uploading || archived) return;
     setMessage("");
     setErrorMessage("");
 
@@ -143,6 +146,8 @@ export default function NewEvidencePage() {
       setUploading(false);
     }
   }
+
+  if(archived)return <main dir="rtl" className="evidence-upload-page"><div className="evidence-upload-container"><h1>ضابط مؤرشف</h1><p>هذا الضابط محفوظ للسجل التاريخي فقط، ولا يقبل أدلة جديدة.</p><Link href={`/controls/${controlId}`}>عرض السجل التاريخي ←</Link></div></main>;
 
   return (
     <main dir="rtl" className="evidence-upload-page">

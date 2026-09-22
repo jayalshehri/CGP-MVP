@@ -21,6 +21,7 @@ export default function AssignControlPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [archived, setArchived] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -32,11 +33,13 @@ export default function AssignControlPage() {
       }
 
       const [{ data: controlData, error: controlError }, { data: ownerData, error: ownerError }] = await Promise.all([
-        supabase.from("controls").select("id,control_code,title_ar,control_owner_id,due_date").eq("id", Number(params.id)).single(),
+        supabase.from("controls").select("id,control_code,title_ar,control_owner_id,due_date,frameworks(is_active)").eq("id", Number(params.id)).single(),
         supabase.from("profiles").select("user_id,display_name,role,is_active").eq("role", "control_owner").eq("is_active", true).order("display_name"),
       ]);
 
       if (controlError || !controlData) { setError("تعذر تحميل الضابط."); setLoading(false); return; }
+      const framework = Array.isArray(controlData.frameworks) ? controlData.frameworks[0] : controlData.frameworks;
+      if (framework?.is_active === false) { setArchived(true); setLoading(false); return; }
       if (ownerError) { setError("تعذر تحميل ملاك الضوابط."); setLoading(false); return; }
 
       setControl(controlData as Control);
@@ -49,7 +52,7 @@ export default function AssignControlPage() {
   }, [params.id, router]);
 
   async function save() {
-    if (saving) return;
+    if (saving || archived) return;
     if (!control || !ownerId) { setError("اختر مالك الضابط أولاً."); return; }
     setSaving(true); setError("");
     const owner = owners.find((item) => item.user_id === ownerId);
@@ -64,6 +67,7 @@ export default function AssignControlPage() {
   }
 
   if (loading) return <main dir="rtl" style={{display:"grid",placeItems:"center"}}>جاري تحميل التكليف...</main>;
+  if (archived) return <main dir="rtl" className="cgp-page-body"><h1>ضابط مؤرشف</h1><p>هذا الضابط محفوظ للتاريخ فقط؛ لا يمكن تغيير المالك أو موعد الاستحقاق.</p><Link href={`/controls/${params.id}`}>عرض السجل التاريخي ←</Link></main>;
 
   return <main dir="rtl" style={{color:"var(--cgp-ink)"}}>
 

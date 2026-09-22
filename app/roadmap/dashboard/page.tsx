@@ -42,15 +42,18 @@ export default function RoadmapDashboard() {
     (async () => {
       try {
         await requireProfile();
-        const [projectResult, linkResult] = await Promise.all([
+        const [projectResult, linkResult, activeControlResult] = await Promise.all([
           supabase.from("cybersecurity_projects").select("id,project_code,name_ar,planned_year,planned_quarter,status,priority,progress_percent,executive_owner,target_outcome,recommended_technologies,planned_start_date,target_end_date,forecast_end_date").order("planned_year").order("planned_quarter").order("project_code"),
           supabase.from("cybersecurity_project_controls").select("project_id,control_id"),
+          supabase.from("controls").select("id,frameworks!inner(is_active)").eq("frameworks.is_active",true),
         ]);
         if (projectResult.error) throw projectResult.error;
         if (linkResult.error) throw linkResult.error;
+        if (activeControlResult.error) throw activeControlResult.error;
         if (live) {
+          const activeIds = new Set((activeControlResult.data ?? []).map(row => row.id));
           setProjects((projectResult.data ?? []) as Project[]);
-          setLinks((linkResult.data ?? []) as LinkRow[]);
+          setLinks((linkResult.data ?? []).filter(row => activeIds.has(row.control_id)) as LinkRow[]);
         }
       } catch (cause) {
         if (!live) return;

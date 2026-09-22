@@ -52,7 +52,7 @@ export default function EvidencePage(){
       if(evidenceError){setError("تعذر تحميل الأدلة: "+evidenceError.message);setLoading(false);return;}
 
       const map=new Map(controls.map(c=>[c.id,c]));
-      setRows(((evidenceData??[]) as Evidence[]).map(e=>({...e,control:map.get(e.control_id)})));
+      setRows(((evidenceData??[]) as Evidence[]).filter(e=>map.has(e.control_id)).map(e=>({...e,control:map.get(e.control_id)})));
       setLoading(false);
     }
     load();
