@@ -101,16 +101,19 @@ export default function ProjectRegisterPage() {
   const canManage = role === "admin" || role === "cybersecurity_team";
 
   async function load() {
-    const [projectResult, linkResult, projectRequirementResult, requirementControlResult] = await Promise.all([
+    const [projectResult, linkResult, projectRequirementResult, requirementControlResult, activeControlResult] = await Promise.all([
       supabase.from("cybersecurity_projects").select("*").order("planned_year").order("planned_quarter").order("project_code"),
       supabase.from("cybersecurity_project_controls").select("project_id,control_id"),
       supabase.from("cybersecurity_project_requirements").select("project_id,requirement_id,coverage_type"),
-      supabase.from("cybersecurity_requirement_controls").select("requirement_id,control_id,coverage_type,mapping_confidence,controls(evidence_status,verification_status)"),
+      supabase.from("cybersecurity_requirement_controls").select("requirement_id,control_id,coverage_type,mapping_confidence,controls(evidence_status,verification_status)").eq("mapping_status", "active"),
+      supabase.from("controls").select("id,frameworks!inner(is_active)").eq("frameworks.is_active",true),
     ]);
     if (projectResult.error) throw projectResult.error;
     if (linkResult.error) throw linkResult.error;
+    if (activeControlResult.error) throw activeControlResult.error;
+    const activeIds = new Set((activeControlResult.data ?? []).map(row => row.id));
     setProjects((projectResult.data ?? []) as Project[]);
-    setLinks((linkResult.data ?? []) as unknown as LinkRow[]);
+    setLinks((linkResult.data ?? []).filter(row => activeIds.has(row.control_id)) as unknown as LinkRow[]);
     if (!projectRequirementResult.error) {
       setRequirementCoverage((projectRequirementResult.data ?? []) as ProjectRequirementRow[]);
     }
@@ -118,7 +121,7 @@ export default function ProjectRegisterPage() {
       type RawLink = { requirement_id: number; control_id: number; coverage_type: CoverageType; mapping_confidence: "confirmed" | "probable"; controls: { evidence_status: string; verification_status: string } | { evidence_status: string; verification_status: string }[] | null };
       const rows = (requirementControlResult.data ?? []) as unknown as RawLink[];
       setRequirementControlLinks(
-        rows.map((row) => {
+        rows.filter(row => activeIds.has(row.control_id)).map((row) => {
           const control = Array.isArray(row.controls) ? row.controls[0] : row.controls;
           return { requirement_id: row.requirement_id, control_id: row.control_id, coverage_type: row.coverage_type, mapping_confidence: row.mapping_confidence, evidence_status: control?.evidence_status ?? "not_uploaded", verification_status: control?.verification_status ?? "not_verified" };
         }),

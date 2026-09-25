@@ -48,7 +48,7 @@ export default function BulkAssignPage() {
     try {
       await requireProfile(["admin", "cybersecurity_team"]);
       const [c, f, o, cy, rq] = await Promise.all([
-        supabase.from("controls").select("id,control_code,title_ar,domain_ar,control_owner_id,control_owner,framework_id,frameworks(code)").order("control_code"),
+        supabase.from("controls").select("id,control_code,title_ar,domain_ar,control_owner_id,control_owner,framework_id,frameworks!inner(code,is_active)").eq("frameworks.is_active",true).order("control_code"),
         supabase.from("frameworks").select("id,code").eq("is_active", true).order("id"),
         supabase.from("profiles").select("user_id,display_name").eq("role", "control_owner").eq("is_active", true).order("display_name"),
         supabase.from("control_review_cycles").select("control_id").eq("status", "open"),

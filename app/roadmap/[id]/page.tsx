@@ -142,12 +142,18 @@ export default function ProjectDetailPage() {
         await loadTreatments(projectId);
         const requirementIds = rows.map((row) => row.requirement_id);
         if (requirementIds.length) {
-          const rc = await supabase
-            .from("cybersecurity_requirement_controls")
-            .select("requirement_id,control_id,coverage_type,mapping_confidence,controls(id,control_code,title_ar,implementation_status,evidence_status,verification_status,frameworks(code))")
-            .in("requirement_id", requirementIds);
+          const [rc, activeControlResult] = await Promise.all([
+            supabase
+              .from("cybersecurity_requirement_controls")
+              .select("requirement_id,control_id,coverage_type,mapping_confidence,controls(id,control_code,title_ar,implementation_status,evidence_status,verification_status,frameworks(code))")
+              .eq("mapping_status", "active")
+              .in("requirement_id", requirementIds),
+            supabase.from("controls").select("id,frameworks!inner(is_active)").eq("frameworks.is_active",true),
+          ]);
           if (rc.error) throw new Error("تعذر تحميل الضوابط المشتقة من المتطلبات.");
-          if (active) setRequirementControls((rc.data ?? []) as unknown as RequirementControl[]);
+          if (activeControlResult.error) throw new Error("تعذر التحقق من الضوابط النشطة.");
+          const activeIds = new Set((activeControlResult.data ?? []).map(row => row.id));
+          if (active) setRequirementControls((rc.data ?? []).filter(row => activeIds.has(row.control_id)) as unknown as RequirementControl[]);
         }
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : "تعذر التحميل");
