@@ -83,7 +83,7 @@ export default function Home() {
       <div className="cgp-page-body" style={{display:"flex",minHeight:"calc(100vh - 86px)"}}>
         <section className="cgp-content cgp-ops-content">
           <header className="cgp-dashboard-hero">
-            <div className="cgp-dashboard-hero-copy"><span className="cgp-dashboard-eyebrow"><i aria-hidden="true"/>متابعة تشغيلية مباشرة</span><h1>لوحة المتابعة التشغيلية</h1><p>رؤية يومية للقرارات المطلوبة، الأدلة الناقصة، وحالة الالتزام.</p><small>{userRole==="control_owner"?"الضوابط المسندة إليك فقط":"جميع الضوابط ضمن نطاقك"}{updatedAt&&` · آخر تحديث ${updatedAt}`}</small></div>
+            <div className="cgp-dashboard-hero-copy"><span className="cgp-dashboard-eyebrow"><i aria-hidden="true"/>بيانات حية</span><h1>الرئيسية</h1><p>رؤية يومية للقرارات المطلوبة، الأدلة الناقصة، وحالة الالتزام.</p><small>{userRole==="control_owner"?"الضوابط المسندة إليك فقط":userRole==="nca_external_auditor"?"الضوابط المتاحة لمراجعتك فقط":"جميع الضوابط ضمن نطاقك"}{updatedAt&&` · آخر تحديث ${updatedAt}`}</small></div>
             <div className="cgp-dashboard-hero-score"><span>نسبة الالتزام</span><strong>{stats ? `${stats.compliance}%` : "—"}</strong><progress value={stats?.compliance ?? 0} max="100" aria-label="نسبة الالتزام الحالية"/><button type="button" disabled={refreshing} onClick={()=>setRefreshKey(k=>k+1)}>{refreshing?"جاري التحديث...":"تحديث البيانات"}</button></div>
           </header>
           {error&&<div role="alert" style={{background:"#fff2f0",color:"#b42318",padding:16,marginBottom:18,borderRadius:9}}>{error}</div>}
@@ -101,9 +101,10 @@ export default function Home() {
             </article>
           </section>
           <GrcAttention key={refreshKey} compact/><div className="cgp-ops-actions">
-            <Link href="/tasks" className="primary">فتح مهامي / التكليفات ←</Link>
+            <Link href="/tasks" className="primary">فتح مهامي ←</Link>
             <Link href="/controls" className="secondary">عرض جميع الضوابط</Link>
             {userRole==="control_owner"&&<Link href="/evidence" className="secondary">مركز الأدلة</Link>}
+            {(userRole==="admin"||userRole==="cybersecurity_team")&&<Link href="/executive" className="secondary">العرض التنفيذي ←</Link>}
           </div>
         </section>
       </div>

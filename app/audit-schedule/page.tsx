@@ -33,7 +33,7 @@ export default function AuditSchedulePage(){
  const overdueCount=controls.filter(c=>scheduleState(c.next_audit_date)==='overdue').length;
  const dueSoonCount=controls.filter(c=>['due_today','due_soon'].includes(scheduleState(c.next_audit_date,period))).length;
  const completedThisPeriodCount=assessments.length;
- return <main className="workflow-page audit-schedule-page" dir="rtl"><WorkflowHeading title="جدول التدقيق الدوري" description="دورات مراجعة محفوظة وفق سياسة الجهة. إغلاق الدورة يتطلب قرار تقييم، وينشئ الدورة التالية تلقائيًا."/>{error&&<p role="alert" className="cgp-shell-error">{error}</p>}{message&&<p role="status">{message}</p>}
+ return <main className="workflow-page audit-schedule-page" dir="rtl"><WorkflowHeading title="المراجعات الدورية للضوابط" description="دورات مراجعة محفوظة وفق سياسة الجهة. إغلاق الدورة يتطلب قرار تقييم، وينشئ الدورة التالية تلقائيًا."/>{error&&<p role="alert" className="cgp-shell-error">{error}</p>}{message&&<p role="status">{message}</p>}
  <div className="workflow-metrics">
   <WorkflowMetric label="متأخرة" value={overdueCount} tone="danger"/>
   <WorkflowMetric label={`مستحقة خلال ${period} يومًا`} value={dueSoonCount} tone="warning"/>

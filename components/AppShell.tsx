@@ -7,11 +7,49 @@ import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import FeedbackWidget from "@/components/FeedbackWidget";
 
+// CGP v2 IA (Package P1): grouped by domain (الامتثال / المخاطر / المراجعة
+// والتدقيق / الاستراتيجية والتنفيذ), each with at most one subgroup level.
+// Items sharing a `group` (or `subgroup`) must stay adjacent in this array --
+// the sidebar renderer below groups them by walking the array in order, not
+// by a separate lookup table, so array order IS visual order.
+// Deliberately NOT included (no real page behind them yet, so no nav entry
+// per the "no empty placeholders" rule): a dedicated الامتثال overview
+// ("مركز الامتثال" is a subgroup label, not its own page), a Risk overview
+// page, "خطط المعالجة" (treatment plans), and Audit Management's
+// "نظرة عامة / خطة التدقيق / عمليات التدقيق / النتائج والإجراءات" (P4).
 const navigation = [
-  { href: "/", label: "لوحة المتابعة", group: "" },
-  { href: "/executive", label: "اللوحة التنفيذية", group: "", team: true },
+  { href: "/", label: "الرئيسية", group: "" },
+
+  // الامتثال
+  { href: "/evidence", label: "الأدلة", group: "الامتثال", subgroup: "مركز الامتثال", auditor: true },
+  { href: "/review", label: "مراجعة الأدلة", group: "الامتثال", subgroup: "مركز الامتثال", team: true },
+  { href: "/controls", label: "مكتبة الضوابط", group: "الامتثال", subgroup: "الأطر والضوابط", auditor: true },
+  { href: "/assessments", label: "تقييم CSCC", group: "الامتثال", subgroup: "الأطر والضوابط", auditor: true },
+  { href: "/dcc-assessment", label: "تقييم DCC", group: "الامتثال", subgroup: "الأطر والضوابط", auditor: true },
+  { href: "/tcc-assessment", label: "تقييم TCC", group: "الامتثال", subgroup: "الأطر والضوابط", auditor: true },
+  { href: "/osmacc-assessment", label: "تقييم OSMACC", group: "الامتثال", subgroup: "الأطر والضوابط", auditor: true },
+  { href: "/mappings", label: "المواءمة", group: "الامتثال", team: true },
+
+  // المخاطر
+  { href: "/risks", label: "سجل المخاطر", group: "المخاطر" },
+  { href: "/assets", label: "الأصول", group: "المخاطر", team: true },
+  { href: "/vulnerabilities", label: "الثغرات", group: "المخاطر" },
+  { href: "/third-parties", label: "الأطراف الثالثة", group: "المخاطر", team: true },
+
+  // المراجعة والتدقيق (Full Audit Management is P4 -- only the periodic
+  // control-review schedule, which already exists, is exposed in P1)
+  { href: "/audit-schedule", label: "المراجعات الدورية للضوابط", group: "المراجعة والتدقيق", auditor: true },
+
+  // الاستراتيجية والتنفيذ
+  { href: "/roadmap/analysis", label: "المحفظة السيبرانية", group: "الاستراتيجية والتنفيذ", team: true },
+  { href: "/roadmap/dashboard", label: "خارطة الطريق", group: "الاستراتيجية والتنفيذ", team: true },
+  { href: "/roadmap", label: "المشاريع والمبادرات", group: "الاستراتيجية والتنفيذ", team: true },
+
   { href: "/reports", label: "التقارير", group: "", team: true },
-  { href: "/controls", label: "الضوابط", group: "الامتثال", auditor: true },
+  { href: "/tasks", label: "مهامي", group: "", separatorBefore: true },
+
+  // مساحات العمل (data governance / shared workspaces) -- untouched by P1,
+  // this IA package only restructures the cybersecurity workspace above.
   { href: "/data-governance", label: "إدارة البيانات والحوكمة", group: "مساحات العمل", data: true },
   { href: "/data-governance/requests", label: "طلبات إدارة البيانات", group: "مساحات العمل", data: true },
   { href: "/data-governance/assets", label: "سجل أصول البيانات", group: "مساحات العمل", data: true },
@@ -21,26 +59,11 @@ const navigation = [
   { href: "/data-governance/privacy", label: "الخصوصية وسجل المعالجة", group: "مساحات العمل", data: true },
   { href: "/data-governance/sharing", label: "مشاركة البيانات", group: "مساحات العمل", data: true },
   { href: "/data-governance/reports", label: "تقارير حوكمة البيانات", group: "مساحات العمل", data: true },
-  { href: "/assessments", label: "تقييم CSCC", group: "قياس الالتزام", auditor: true },
-  { href: "/dcc-assessment", label: "تقييم DCC", group: "قياس الالتزام", auditor: true },
-  { href: "/tcc-assessment", label: "تقييم TCC", group: "قياس الالتزام", auditor: true },
-  { href: "/osmacc-assessment", label: "تقييم OSMACC", group: "قياس الالتزام", auditor: true },
-  { href: "/mappings", label: "خريطة المواءمة", group: "قياس الالتزام", team: true },
-  { href: "/third-parties", label: "مخاطر الأطراف الخارجية", group: "العمليات", team: true },
-  { href: "/assets", label: "سجل الأصول التقنية", group: "العمليات", team: true },
-  { href: "/risks", label: "سجل المخاطر السيبرانية", group: "العمليات" },
-  { href: "/vulnerabilities", label: "سجل الثغرات", group: "العمليات" },
-  { href: "/tasks", label: "التكليفات", group: "العمليات" },
-  { href: "/roadmap/dashboard", label: "خارطة الطريق", group: "العمليات", subgroup: "إدارة خارطة الطريق", team: true },
-  { href: "/roadmap/analysis", label: "تحليل المحفظة", group: "العمليات", subgroup: "إدارة خارطة الطريق", team: true },
-  { href: "/roadmap", label: "سجل المشاريع", group: "العمليات", subgroup: "إدارة خارطة الطريق", team: true },
-  { href: "/alerts", label: "مركز التنبيهات", group: "العمليات", team: true },
-  { href: "/evidence", label: "الأدلة", group: "الامتثال", auditor: true },
-  { href: "/review", label: "مراجعة الأدلة", group: "الامتثال", team: true },
-  { href: "/audit", label: "سجل التدقيق", group: "الامتثال", team: true },
-  { href: "/audit-schedule", label: "جدول التدقيق الدوري", group: "الامتثال", auditor: true },
-  { href: "/users", label: "إدارة المستخدمين", group: "الإدارة", admin: true },
-  { href: "/feedback", label: "نتائج الاختبارات", group: "الإدارة", admin: true },
+
+  // الإدارة والإعدادات
+  { href: "/users", label: "إدارة المستخدمين", group: "الإدارة والإعدادات", admin: true },
+  { href: "/feedback", label: "نتائج الاختبارات", group: "الإدارة والإعدادات", admin: true },
+  { href: "/audit", label: "سجل النشاط والتغييرات", group: "الإدارة والإعدادات", team: true },
 ];
 const roleLabels: Record<UserRole, string> = { admin: "مدير النظام", cybersecurity_team: "مدير الامتثال والمراجعة", data_governance_team: "فريق إدارة البيانات", control_owner: "مالك الضابط", nca_external_auditor: "مراجع خارجي — NCA" };
 type SearchResult = { id:number; control_code:string; title_ar:string };
@@ -115,15 +138,29 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const workspaceLabel = workspace === "data" ? "حوكمة البيانات" : workspace === "shared" ? "مركز المواءمة" : "الأمن السيبراني";
   const permittedItems = account ? navigation.filter(item => account.role === "data_governance_team" ? Boolean(item.data) : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];
   const items = permittedItems.filter(item => workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls");
-  const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "لوحة المتابعة");
+  const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "الرئيسية");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const leaf = pathname.endsWith("/assign") ? "تكليف المالك" : pathname.endsWith("/evidence/new") ? "رفع دليل" : controlId ? "تفاصيل الضابط" : current;
-  const linkFor = (item:typeof navigation[number]) => <Link key={item.href} href={item.href} className="cgp-nav-link" title={navCollapsed?item.label:undefined} aria-current={(item.href === "/" ? pathname === "/" : item.href === "/roadmap" ? pathname === "/roadmap" : pathname === item.href || pathname.startsWith(item.href + "/")) ? "page" : undefined}><NavIcon href={item.href}/><span>{item.href === "/tasks" && account?.role === "control_owner" ? "مهامي" : item.label}</span></Link>;
+  const linkFor = (item:typeof navigation[number]) => <Link key={item.href} href={item.href} className="cgp-nav-link" title={navCollapsed?item.label:undefined} aria-current={(item.href === "/" ? pathname === "/" : item.href === "/roadmap" ? pathname === "/roadmap" : pathname === item.href || pathname.startsWith(item.href + "/")) ? "page" : undefined}><NavIcon href={item.href}/><span>{item.label}</span></Link>;
   const links = items.map(linkFor);
-  const ungroupedItems = items.filter(item => !item.group);
-  const groupOrder = workspace === "cyber" ? ["الامتثال", "قياس الالتزام", "العمليات", "الإدارة"] : [...new Set(items.map(item=>item.group).filter(Boolean))];
-  const groups = groupOrder.filter(group=>items.some(item=>item.group===group));
-  const activeGroup = navigation.find(item => item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/"))?.group ?? "";
+  // Blocks preserve array order: adjacent items sharing a `group` (or, inside
+  // a group, a `subgroup`) become one visual block. This is what lets the new
+  // IA interleave standalone links (التقارير, مهامي) between domain groups
+  // instead of forcing every ungrouped item to the very top.
+  function blocksBy<T extends { group?: string }>(list: T[]): { key: string; items: T[] }[] {
+    const blocks: { key: string; items: T[] }[] = [];
+    for (const item of list) {
+      const key = item.group || "";
+      const last = blocks[blocks.length - 1];
+      if (last && last.key === key && key !== "") last.items.push(item);
+      else blocks.push({ key, items: [item] });
+    }
+    return blocks;
+  }
+  const topBlocks = blocksBy(items);
+  const activeItem = navigation.find(item => item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/"));
+  const activeGroup = activeItem?.group ?? "";
+  const activeSubgroup = activeItem?.subgroup ?? "";
   const navigationResults = useMemo(() => {
     const normalized = searchQuery.trim().toLowerCase();
     return normalized ? items.filter(item => item.label.toLowerCase().includes(normalized)).slice(0, 5) : [];
@@ -164,6 +201,8 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       <div className="cgp-topbar-context" aria-label="موقعك الحالي"><span>{workspaceLabel}</span><i aria-hidden="true">/</i><strong>{leaf}</strong></div>
       <div className="cgp-topbar-tools">
         <button type="button" className="cgp-global-search" onClick={()=>setSearchOpen(true)} aria-haspopup="dialog"><span aria-hidden="true">⌕</span><span>بحث</span><kbd>⌘ K</kbd></button>
+        {workspace==="cyber"&&<Link href="/alerts" className="cgp-icon-button" aria-label="التنبيهات" title="التنبيهات"><svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3l9 16H3L12 3z M12 9v4 M12 17h.01"/></svg></Link>}
+        <details className="cgp-account-menu cgp-help-menu"><summary aria-label="المساعدة" title="المساعدة"><span className="cgp-icon-button" aria-hidden="true">؟</span></summary><div className="cgp-account-panel"><p>للمساعدة أو الدعم، تواصل مع مسؤول النظام في جهتك.</p></div></details>
         <details className="cgp-account-menu"><summary aria-label="فتح قائمة الحساب"><span className="cgp-account-avatar" aria-hidden="true">{account?.name?.trim().slice(0, 1) || "ح"}</span><span className="cgp-account"><b>{account?.name || "حسابي"}</b><small>{account ? roleLabels[account.role] : "جاري التحقق من الحساب"}</small></span></summary><div className="cgp-account-panel"><p>{account ? roleLabels[account.role] : "جاري التحقق من الحساب"}</p><button type="button" onClick={signOut} disabled={signingOut} className="cgp-signout">{signingOut ? "جاري الخروج…" : "تسجيل الخروج"}</button></div></details>
       </div>
     </header>
@@ -179,10 +218,15 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       </section>
     </div>}
     <div className="cgp-workspace-grid">
-      <aside className="cgp-navigation"><div className="cgp-nav-head"><p className="cgp-nav-caption">{workspaceLabel}</p><button type="button" onClick={()=>setNavCollapsed(v=>!v)} aria-label={navCollapsed?"توسيع القائمة":"طي القائمة"} aria-expanded={!navCollapsed}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 18l6-6-6-6"/></svg></button></div><nav aria-label="التنقل الرئيسي">{ungroupedItems.map(linkFor)}{groups.map(group=>{const groupItems=items.filter(item=>item.group===group);const standalone=groupItems.filter(item=>!item.subgroup);const subgroups=[...new Set(groupItems.map(item=>item.subgroup).filter(Boolean))];return <details className="cgp-nav-group" key={group} open={group===activeGroup}><summary><span>{group}</span><span className="cgp-nav-group-count">{groupItems.length}</span></summary>{standalone.map(linkFor)}{subgroups.map(subgroup=><div className="cgp-nav-subgroup" key={subgroup}><span>{subgroup}</span>{groupItems.filter(item=>item.subgroup===subgroup).map(linkFor)}</div>)}</details>})}</nav><Link href="/change-password" className="cgp-nav-link cgp-account-link" aria-current={pathname === "/change-password" ? "page" : undefined}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-8H4v8a2 2 0 0 0 2 2zm1-10V8a5 5 0 0 1 10 0v3"/></svg><span>إعدادات كلمة المرور</span></Link><p className="cgp-scope">{workspace === "data" ? "سجلات وضوابط وطلبات إدارة البيانات ضمن صلاحيات حسابك." : workspace === "shared" ? "مواءمة معتمدة بين الأطر دون خلط مساحات العمل." : account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الأمن السيبراني ضمن صلاحيات حسابك."}</p></aside>
+      <aside className="cgp-navigation"><div className="cgp-nav-head"><p className="cgp-nav-caption">{workspaceLabel}</p><button type="button" onClick={()=>setNavCollapsed(v=>!v)} aria-label={navCollapsed?"توسيع القائمة":"طي القائمة"} aria-expanded={!navCollapsed}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 18l6-6-6-6"/></svg></button></div><nav aria-label="التنقل الرئيسي">{topBlocks.map((block,index)=>{
+        if(!block.key) return <span key={`u-${index}`}>{block.items.map(item=><span key={item.href}>{item.separatorBefore&&<hr className="cgp-nav-separator"/>}{linkFor(item)}</span>)}</span>;
+        const subBlocks: { key: string; items: typeof block.items }[] = [];
+        for(const item of block.items){const key=item.subgroup||"";const last=subBlocks[subBlocks.length-1];if(last&&last.key===key&&key!=="")last.items.push(item);else subBlocks.push({key,items:[item]});}
+        return <details className="cgp-nav-group" key={block.key} open={block.key===activeGroup}><summary><span>{block.key}</span><span className="cgp-nav-group-count">{block.items.length}</span></summary>{subBlocks.map((sub,subIndex)=>!sub.key?sub.items.map(linkFor):<div className="cgp-nav-subgroup" key={`${block.key}-${sub.key}-${subIndex}`}><span>{sub.key}</span>{sub.items.map(linkFor)}</div>)}</details>;
+      })}</nav><Link href="/change-password" className="cgp-nav-link cgp-account-link" aria-current={pathname === "/change-password" ? "page" : undefined}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-8H4v8a2 2 0 0 0 2 2zm1-10V8a5 5 0 0 1 10 0v3"/></svg><span>إعدادات كلمة المرور</span></Link><p className="cgp-scope">{workspace === "data" ? "سجلات وضوابط وطلبات إدارة البيانات ضمن صلاحيات حسابك." : workspace === "shared" ? "مواءمة معتمدة بين الأطر دون خلط مساحات العمل." : account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الأمن السيبراني ضمن صلاحيات حسابك."}</p></aside>
       <div className="cgp-page-column">
         <details key={pathname} className="cgp-mobile-navigation" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>القائمة <span>{current}</span></summary><nav aria-label="التنقل على الجوال">{links}<Link className="cgp-nav-link" href="/change-password">إعدادات كلمة المرور</Link></nav></details>
-        <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname !== "/" && <><span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">الضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>
+        <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname !== "/" && <>{activeGroup&&<><span aria-hidden="true">/</span><span>{activeGroup}</span></>}{activeSubgroup&&<><span aria-hidden="true">/</span><span>{activeSubgroup}</span></>}<span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">مكتبة الضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>
         {error && <p role="alert" className="cgp-shell-error">{error}</p>}
         <div id="cgp-content" tabIndex={-1} className="cgp-route">{children}</div>
         <FeedbackWidget pagePath={pathname} visible={Boolean(account)} />
