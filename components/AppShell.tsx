@@ -20,14 +20,15 @@ import FeedbackWidget from "@/components/FeedbackWidget";
 const navigation = [
   { href: "/", label: "الرئيسية", group: "" },
 
-  // الامتثال
-  { href: "/evidence", label: "الأدلة", group: "الامتثال", subgroup: "مركز الامتثال", auditor: true },
-  { href: "/review", label: "مراجعة الأدلة", group: "الامتثال", subgroup: "مركز الامتثال", team: true },
-  { href: "/controls", label: "مكتبة الضوابط", group: "الامتثال", subgroup: "الأطر والضوابط", auditor: true },
-  { href: "/assessments", label: "تقييم CSCC", group: "الامتثال", subgroup: "الأطر والضوابط", auditor: true },
-  { href: "/dcc-assessment", label: "تقييم DCC", group: "الامتثال", subgroup: "الأطر والضوابط", auditor: true },
-  { href: "/tcc-assessment", label: "تقييم TCC", group: "الامتثال", subgroup: "الأطر والضوابط", auditor: true },
-  { href: "/osmacc-assessment", label: "تقييم OSMACC", group: "الامتثال", subgroup: "الأطر والضوابط", auditor: true },
+  // الامتثال -- shallow on purpose (P1.1): no subgroups, four real
+  // destinations only. CSCC/DCC/TCC/OSMACC assessment routes are
+  // intentionally NOT linked here anymore -- their pages/URLs are
+  // untouched and still fully reachable as deep links; P2 re-surfaces them
+  // inside each framework's own workspace. "مركز الامتثال" has no page of
+  // its own yet, so it is not a nav item (no placeholder links).
+  { href: "/controls", label: "الأطر والضوابط", group: "الامتثال", auditor: true },
+  { href: "/evidence", label: "الأدلة", group: "الامتثال", auditor: true },
+  { href: "/review", label: "التحقق", group: "الامتثال", team: true },
   { href: "/mappings", label: "المواءمة", group: "الامتثال", team: true },
 
   // المخاطر
@@ -160,7 +161,6 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const topBlocks = blocksBy(items);
   const activeItem = navigation.find(item => item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/"));
   const activeGroup = activeItem?.group ?? "";
-  const activeSubgroup = activeItem?.subgroup ?? "";
   const navigationResults = useMemo(() => {
     const normalized = searchQuery.trim().toLowerCase();
     return normalized ? items.filter(item => item.label.toLowerCase().includes(normalized)).slice(0, 5) : [];
@@ -220,13 +220,11 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
     <div className="cgp-workspace-grid">
       <aside className="cgp-navigation"><div className="cgp-nav-head"><p className="cgp-nav-caption">{workspaceLabel}</p><button type="button" onClick={()=>setNavCollapsed(v=>!v)} aria-label={navCollapsed?"توسيع القائمة":"طي القائمة"} aria-expanded={!navCollapsed}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 18l6-6-6-6"/></svg></button></div><nav aria-label="التنقل الرئيسي">{topBlocks.map((block,index)=>{
         if(!block.key) return <span key={`u-${index}`}>{block.items.map(item=><span key={item.href}>{item.separatorBefore&&<hr className="cgp-nav-separator"/>}{linkFor(item)}</span>)}</span>;
-        const subBlocks: { key: string; items: typeof block.items }[] = [];
-        for(const item of block.items){const key=item.subgroup||"";const last=subBlocks[subBlocks.length-1];if(last&&last.key===key&&key!=="")last.items.push(item);else subBlocks.push({key,items:[item]});}
-        return <details className="cgp-nav-group" key={block.key} open={block.key===activeGroup}><summary><span>{block.key}</span><span className="cgp-nav-group-count">{block.items.length}</span></summary>{subBlocks.map((sub,subIndex)=>!sub.key?sub.items.map(linkFor):<div className="cgp-nav-subgroup" key={`${block.key}-${sub.key}-${subIndex}`}><span>{sub.key}</span>{sub.items.map(linkFor)}</div>)}</details>;
+        return <details className="cgp-nav-group" key={block.key} open={block.key===activeGroup}><summary><span>{block.key}</span></summary>{block.items.map(linkFor)}</details>;
       })}</nav><Link href="/change-password" className="cgp-nav-link cgp-account-link" aria-current={pathname === "/change-password" ? "page" : undefined}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-8H4v8a2 2 0 0 0 2 2zm1-10V8a5 5 0 0 1 10 0v3"/></svg><span>إعدادات كلمة المرور</span></Link><p className="cgp-scope">{workspace === "data" ? "سجلات وضوابط وطلبات إدارة البيانات ضمن صلاحيات حسابك." : workspace === "shared" ? "مواءمة معتمدة بين الأطر دون خلط مساحات العمل." : account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الأمن السيبراني ضمن صلاحيات حسابك."}</p></aside>
       <div className="cgp-page-column">
         <details key={pathname} className="cgp-mobile-navigation" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>القائمة <span>{current}</span></summary><nav aria-label="التنقل على الجوال">{links}<Link className="cgp-nav-link" href="/change-password">إعدادات كلمة المرور</Link></nav></details>
-        <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname !== "/" && <>{activeGroup&&<><span aria-hidden="true">/</span><span>{activeGroup}</span></>}{activeSubgroup&&<><span aria-hidden="true">/</span><span>{activeSubgroup}</span></>}<span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">مكتبة الضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>
+        <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname !== "/" && <>{activeGroup&&<><span aria-hidden="true">/</span><span>{activeGroup}</span></>}<span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">الأطر والضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>
         {error && <p role="alert" className="cgp-shell-error">{error}</p>}
         <div id="cgp-content" tabIndex={-1} className="cgp-route">{children}</div>
         <FeedbackWidget pagePath={pathname} visible={Boolean(account)} />
