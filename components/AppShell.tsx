@@ -30,6 +30,15 @@ const navigation = [
   { href: "/evidence", label: "الأدلة", group: "الامتثال", auditor: true },
   { href: "/review", label: "التحقق", group: "الامتثال", team: true },
   { href: "/mappings", label: "المواءمة", group: "الامتثال", team: true },
+  // P1.1 removed these four from the Sidebar (still fully functional --
+  // reachable via the P1.2 assessment launcher on /controls, or by direct
+  // URL). Kept here only so the Header/breadcrumb can resolve a real title
+  // instead of falling back to "الرئيسية" (P1.3 fix) -- `sidebarHidden`
+  // keeps them out of the Sidebar, mobile nav, and global search results.
+  { href: "/assessments", label: "تقييم CSCC", group: "الامتثال", auditor: true, sidebarHidden: true },
+  { href: "/dcc-assessment", label: "تقييم DCC", group: "الامتثال", auditor: true, sidebarHidden: true },
+  { href: "/tcc-assessment", label: "تقييم TCC", group: "الامتثال", auditor: true, sidebarHidden: true },
+  { href: "/osmacc-assessment", label: "تقييم OSMACC", group: "الامتثال", auditor: true, sidebarHidden: true },
 
   // المخاطر
   { href: "/risks", label: "سجل المخاطر", group: "المخاطر" },
@@ -138,7 +147,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const workspace = pathname === "/shared-controls" ? "shared" : pathname.startsWith("/data-governance") ? "data" : "cyber";
   const workspaceLabel = workspace === "data" ? "حوكمة البيانات" : workspace === "shared" ? "مركز المواءمة" : "الأمن السيبراني";
   const permittedItems = account ? navigation.filter(item => account.role === "data_governance_team" ? Boolean(item.data) : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];
-  const items = permittedItems.filter(item => workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls");
+  const items = permittedItems.filter(item => !item.sidebarHidden && (workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls"));
   const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "الرئيسية");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const leaf = pathname.endsWith("/assign") ? "تكليف المالك" : pathname.endsWith("/evidence/new") ? "رفع دليل" : controlId ? "تفاصيل الضابط" : current;
@@ -201,7 +210,8 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       <div className="cgp-topbar-context" aria-label="موقعك الحالي"><span>{workspaceLabel}</span><i aria-hidden="true">/</i><strong>{leaf}</strong></div>
       <div className="cgp-topbar-tools">
         <button type="button" className="cgp-global-search" onClick={()=>setSearchOpen(true)} aria-haspopup="dialog"><span aria-hidden="true">⌕</span><span>بحث</span><kbd>⌘ K</kbd></button>
-        {workspace==="cyber"&&<Link href="/alerts" className="cgp-icon-button" aria-label="التنبيهات" title="التنبيهات"><svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3l9 16H3L12 3z M12 9v4 M12 17h.01"/></svg></Link>}
+        {/* /alerts only permits admin/cybersecurity_team (requireProfile(["admin","cybersecurity_team"]) in app/alerts/page.tsx) -- mirror that exact check here so the Header control is never shown to a role that would just get redirected away. */}
+        {workspace==="cyber"&&(account?.role==="admin"||account?.role==="cybersecurity_team")&&<Link href="/alerts" className="cgp-icon-button" aria-label="التنبيهات" title="التنبيهات"><svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3l9 16H3L12 3z M12 9v4 M12 17h.01"/></svg></Link>}
         <details className="cgp-account-menu cgp-help-menu"><summary aria-label="المساعدة" title="المساعدة"><span className="cgp-icon-button" aria-hidden="true">؟</span></summary><div className="cgp-account-panel"><p>للمساعدة أو الدعم، تواصل مع مسؤول النظام في جهتك.</p></div></details>
         <details className="cgp-account-menu"><summary aria-label="فتح قائمة الحساب"><span className="cgp-account-avatar" aria-hidden="true">{account?.name?.trim().slice(0, 1) || "ح"}</span><span className="cgp-account"><b>{account?.name || "حسابي"}</b><small>{account ? roleLabels[account.role] : "جاري التحقق من الحساب"}</small></span></summary><div className="cgp-account-panel"><p>{account ? roleLabels[account.role] : "جاري التحقق من الحساب"}</p><button type="button" onClick={signOut} disabled={signingOut} className="cgp-signout">{signingOut ? "جاري الخروج…" : "تسجيل الخروج"}</button></div></details>
       </div>
