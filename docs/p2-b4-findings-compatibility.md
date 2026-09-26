@@ -16,7 +16,7 @@ The new `grc_findings` and `grc_corrective_actions` tables are additive. An asse
 - `vulnerability` links to a real `vulnerabilities` row and uses its existing `linked_control_id` when present.
 - `internal_audit` is reserved in the source vocabulary but rejected by the command and source guard until a genuine independent audit record exists. Periodic control reviews are not reclassified as internal audits.
 - `accepted risk` / `exception` are not finding statuses in P2-B4. Existing risk/vulnerability governance already has separate concepts, but no shared approval authority for overriding finding verification was established. Adding such a transition requires a distinct decision and authorization design.
-- Corrective-action/finding verification can reference an existing, current, accepted control evidence version. No evidence file is duplicated. An expired version or evidence with unknown/same uploader cannot satisfy independent evidence verification. A reasoned verification decision without an evidence ID remains possible where no evidence requirement has been established.
+- Corrective-action/finding verification can reference an existing, current evidence version directly on the control or shared through an accepted evidence link and approved cross-control mapping. The same eligibility predicate drives the Findings selector and command; the source control must remain active. No evidence file is duplicated. An expired, obsolete, invalid or archived-source version, or evidence with unknown/same uploader, cannot satisfy independent evidence verification. A reasoned verification decision without an evidence ID remains possible where no evidence requirement has been established.
 
 ## Rollout and regression gate
 

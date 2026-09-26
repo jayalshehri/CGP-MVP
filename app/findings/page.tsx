@@ -14,7 +14,7 @@ import {WorkflowHeading, WorkflowMetric} from '@/components/WorkflowUI';
 import './findings.css';
 
 type Person = {user_id:string;display_name:string|null;role:string};
-type EvidenceOption = {id:number;file_name:string|null;evidence_name:string|null;version_number:number;valid_until:string|null;uploaded_by:string|null};
+type EvidenceOption = {id:number;file_name:string|null;evidence_name:string|null;version_number:number;valid_until:string|null;uploaded_by:string;association:'direct'|'shared'};
 const roleCanWork = (role:UserRole) => role==='admin'||role==='cybersecurity_team'||role==='control_owner';
 const teamRole = (role:UserRole) => role==='admin'||role==='cybersecurity_team';
 const validSource = (value:string|null):FindingSource =>
@@ -220,17 +220,22 @@ function FindingDetail({finding,actions,actor,role,people,busy,run}:{
   const [reason,setReason]=useState('');
   const [findingEvidence,setFindingEvidence]=useState('');
   const [evidence,setEvidence]=useState<EvidenceOption[]>([]);
+  const [evidenceError,setEvidenceError]=useState('');
   const canFollow=teamRole(role)||(role==='control_owner'&&finding.owner_id===actor);
   const canVerify=teamRole(role)&&actor!==finding.created_by&&actor!==finding.owner_id;
   useEffect(()=>{
     let active=true;
     if(!finding.control_id)return;
-    void supabase.from('evidence').select('id,file_name,evidence_name,version_number,valid_until,uploaded_by')
-      .eq('control_id',finding.control_id).eq('is_current',true).eq('status','accepted')
-      .then(({data,error})=>{if(active&&!error)setEvidence((data??[]) as EvidenceOption[]);});
+    void supabase.rpc('cgp_finding_evidence_options',{p_finding_id:finding.id})
+      .then(({data,error})=>{
+        if(!active)return;
+        setEvidenceError(error?.message??'');
+        setEvidence(error?[]:(data??[]) as EvidenceOption[]);
+      });
     return()=>{active=false;};
-  },[finding.control_id]);
-  const acceptedEvidence=evidence.filter(e=>!e.valid_until||e.valid_until>=todayRiyadh());
+  },[finding.id,finding.control_id,finding.revision]);
+  const verifierEvidence=evidence.filter(e=>e.uploaded_by!==actor);
+  const evidenceLabel=(item:EvidenceOption)=>`${item.file_name||item.evidence_name||`دليل #${item.id}`} · v${item.version_number} · ${item.association==='direct'?'دليل مباشر':'دليل مشترك عبر مواءمة معتمدة'}`;
   async function addAction(event:FormEvent){event.preventDefault();
     const saved=await run('add_action',finding,{...newAction,due_date:newAction.due_date||null});
     if(saved){setActionOpen(false);setNewAction({title:'',description:'',owner_id:teamRole(role)?'':actor,due_date:'',reference_note:''});}
@@ -240,6 +245,7 @@ function FindingDetail({finding,actions,actor,role,people,busy,run}:{
       <p>{sourceLabels[finding.source_type]} #{finding.source_record_id} · {findingStatusLabels[finding.status]}</p></div>
       {finding.control_id&&<Link href={`/controls/${finding.control_id}`}>فتح الضابط ←</Link>}</header>
     <p className="findings-description">{finding.description}</p>
+    {evidenceError&&<p className="findings-error" role="alert">تعذر تحميل الأدلة المؤهلة: {evidenceError}</p>}
     {canFollow&&['open','in_treatment'].includes(finding.status)&&<details className="findings-edit">
       <summary>تعديل تفاصيل الملاحظة</summary>
       <form className="findings-form-grid" onSubmit={event=>{event.preventDefault();void run('update_finding',finding,
@@ -278,7 +284,7 @@ function FindingDetail({finding,actions,actor,role,people,busy,run}:{
     {actions.length===0?<p className="workflow-empty">لا توجد إجراءات مرتبطة. يمكن التحقق من الملاحظة بلا إجراء فقط بقرار صريح ومبرر.</p>:
       <div className="findings-actions">{actions.map(action=><CorrectiveActionCard key={`${action.id}-${action.revision}`}
         action={action} finding={finding} actor={actor} role={role} busy={busy}
-        evidence={acceptedEvidence} run={run}/>)}</div>}
+        evidence={evidence} run={run}/>)}</div>}
     {canFollow&&finding.status!=='closed'&&<div className="findings-lifecycle">
       <h3>دورة الملاحظة</h3>
       <label>سبب القرار<textarea value={reason} onChange={e=>setReason(e.target.value)}/></label>
@@ -287,7 +293,7 @@ function FindingDetail({finding,actions,actor,role,people,busy,run}:{
         onClick={()=>void run('submit_verification',finding,{reason})}>إرسال للتحقق</button>}
       {finding.status==='pending_verification'&&canVerify&&<>
         <label>دليل تحقق مقبول، إن وجد<select value={findingEvidence} onChange={e=>setFindingEvidence(e.target.value)}><option value="">بدون دليل إضافي</option>
-          {acceptedEvidence.map(e=><option key={e.id} value={e.id}>{e.file_name||e.evidence_name||`دليل #${e.id}`} · v{e.version_number}</option>)}</select></label>
+          {verifierEvidence.map(e=><option key={e.id} value={e.id}>{evidenceLabel(e)}</option>)}</select></label>
         {finding.verification_status!=='accepted'&&<><button disabled={busy||!reason.trim()||actions.some(a=>a.verification_status!=='accepted')}
           onClick={()=>void run('verify_finding',finding,{reason,evidence_id:findingEvidence||null})}>قبول التحقق</button>
           <button disabled={busy||!reason.trim()} onClick={()=>void run('reject_finding',finding,{reason})}>إعادة للمعالجة</button></>}
@@ -337,7 +343,7 @@ function CorrectiveActionCard({action,finding,actor,role,busy,evidence,run}:{
     </details>}
     {canComplete&&<div className="findings-action-controls"><label>إفادة الإكمال<textarea value={note} onChange={e=>setNote(e.target.value)}/></label>
       <label>دليل مرتبط بالضابط، إن وجد<select value={evidenceId} onChange={e=>setEvidenceId(e.target.value)}><option value="">بدون دليل</option>
-        {evidence.map(e=><option key={e.id} value={e.id}>{e.file_name||e.evidence_name||`دليل #${e.id}`} · v{e.version_number}</option>)}</select></label>
+        {evidence.map(e=><option key={e.id} value={e.id}>{e.file_name||e.evidence_name||`دليل #${e.id}`} · v{e.version_number} · {e.association==='direct'?'دليل مباشر':'دليل مشترك عبر مواءمة معتمدة'}</option>)}</select></label>
       <button disabled={busy||!note.trim()} onClick={()=>void run('complete_action',finding,{action_id:action.id,action_revision:action.revision,completion_note:note,evidence_id:evidenceId||null})}>إكمال الإجراء</button>
     </div>}
     {canReview&&action.verification_status!=='accepted'&&<div className="findings-action-controls"><label>سبب التحقق<textarea value={reason} onChange={e=>setReason(e.target.value)}/></label>

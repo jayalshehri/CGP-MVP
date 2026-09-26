@@ -295,15 +295,77 @@ create function private.grc_finding_evidence_valid(
   select p_evidence_id is null or (
     p_control_id is not null and exists (
       select 1 from public.evidence e
-      where e.id = p_evidence_id and e.control_id = p_control_id
-        and e.is_current and e.status in ('accepted', 'approved')
+      where e.id = p_evidence_id and e.is_current
+        and exists (
+          select 1 from public.controls source_control
+          join public.frameworks source_framework
+            on source_framework.id = source_control.framework_id
+          where source_control.id = e.control_id and source_framework.is_active
+        )
         and (e.valid_until is null or e.valid_until >= (now() at time zone 'Asia/Riyadh')::date)
-        and e.uploaded_by is not null and e.uploaded_by <> p_verifier
+        and e.uploaded_by is not null
+        and (p_verifier is null or e.uploaded_by <> p_verifier)
+        and (
+          (e.control_id = p_control_id and e.status in ('accepted', 'approved'))
+          or exists (
+            select 1 from public.evidence_control_links l
+            where l.evidence_id = e.id and l.control_id = p_control_id
+              and l.status in ('accepted', 'approved')
+              and exists (
+                select 1 from public.control_framework_links m
+                where m.validation_status = 'approved'
+                  and ((m.source_control_id = e.control_id and m.target_control_id = p_control_id)
+                    or (m.target_control_id = e.control_id and m.source_control_id = p_control_id))
+              )
+          )
+        )
     )
   );
 $evidence$;
 revoke all on function private.grc_finding_evidence_valid(bigint,bigint,uuid)
   from public, anon, authenticated;
+
+-- The selector and command share one eligibility predicate. The selector is
+-- scoped to a readable finding and, for owners, to their own control; it never
+-- returns an evidence file or grants access to a source control.
+create function private.grc_finding_evidence_options(p_finding_id bigint)
+returns table (
+  id bigint, file_name text, evidence_name text, version_number integer,
+  valid_until date, uploaded_by uuid, association text
+) language sql stable security definer set search_path = '' as $options$
+  select e.id, e.file_name, e.evidence_name, e.version_number,
+    e.valid_until, e.uploaded_by,
+    case when e.control_id = f.control_id and e.status in ('accepted', 'approved')
+      then 'direct' else 'shared' end
+  from public.grc_findings f
+  join public.evidence e on e.id in (
+    select d.id from public.evidence d where d.control_id = f.control_id
+    union
+    select l.evidence_id from public.evidence_control_links l
+      where l.control_id = f.control_id and l.status in ('accepted', 'approved')
+  )
+  where f.id = p_finding_id and f.control_id is not null
+    and auth.uid() is not null
+    and private.current_user_role() in ('admin', 'cybersecurity_team', 'control_owner')
+    and private.grc_finding_can_read(f.id)
+    and (private.current_user_role() in ('admin', 'cybersecurity_team')
+      or exists (select 1 from public.controls c
+        where c.id = f.control_id and c.control_owner_id = auth.uid()))
+    and private.grc_finding_evidence_valid(e.id, f.control_id, null)
+  order by e.id desc;
+$options$;
+revoke all on function private.grc_finding_evidence_options(bigint) from public, anon;
+grant execute on function private.grc_finding_evidence_options(bigint) to authenticated;
+
+create function public.cgp_finding_evidence_options(p_finding_id bigint)
+returns table (
+  id bigint, file_name text, evidence_name text, version_number integer,
+  valid_until date, uploaded_by uuid, association text
+) language sql stable security invoker set search_path = '' as $wrapper$
+  select * from private.grc_finding_evidence_options(p_finding_id);
+$wrapper$;
+revoke all on function public.cgp_finding_evidence_options(bigint) from public, anon;
+grant execute on function public.cgp_finding_evidence_options(bigint) to authenticated;
 
 -- All application mutations use one explicit, audited command. No direct
 -- table INSERT/UPDATE/DELETE is granted to anon or authenticated.
@@ -494,10 +556,14 @@ begin
       raise exception 'Completion note required' using errcode = '22023';
     end if;
     evidence_id := nullif(p_data->>'evidence_id','')::bigint;
-    if evidence_id is not null and not exists (
-      select 1 from public.evidence e where e.id = evidence_id
-        and e.control_id = f.control_id) then
-      raise exception 'Action evidence must belong to the finding control'
+    if evidence_id is not null and (
+      not private.grc_finding_evidence_valid(evidence_id, f.control_id, null)
+      or (actor_role = 'control_owner' and not exists (
+        select 1 from public.controls c
+        where c.id = f.control_id and c.control_owner_id = actor
+      ))
+    ) then
+      raise exception 'Action evidence must be current and valid for the finding control'
         using errcode = '42501';
     end if;
     update public.grc_corrective_actions set status = 'completed',
