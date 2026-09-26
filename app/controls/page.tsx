@@ -8,6 +8,7 @@ import Link from "next/link";
 import "./catalog.css";
 import { supabase } from "@/lib/supabase";
 import { getEccOfficialTitle } from "@/lib/ecc-strategy-example";
+import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
 
 type Control={id:number;framework_id:number;control_code:string;title_ar:string;description_ar:string|null;official_text_ar:string|null;hierarchy_level:string;parent_control_id:number|null;applicability:string|null;domain_ar:string;implementation_status:string;evidence_status:string;verification_status:string;due_date:string|null;control_owner:string|null;control_owner_id:string|null};
 type Framework={id:number;code:string;name_ar:string;version:string};
@@ -15,19 +16,6 @@ type ViewMode="structure"|"followup";
 const good=(value:string)=>["implemented","compliant"].includes(value);
 const cleanTitle=(value:string)=>value.replace(/\s*[-–]\s*[\d-]+\s*$/,"").trim();
 const domainNumber=(rows:Control[])=>rows[0]?.control_code.split("-")[0]||"—";
-// Interim P1.2 discoverability launcher (P1.1 removed the four individual
-// assessment links from the Sidebar). ECC and CCC have no separate
-// assessment route today -- href stays null rather than inventing one; the
-// UI shows an honest "no separate assessment" state for those two instead
-// of a fake link. Full per-framework integration is a P2 concern.
-const assessmentRoutes:{code:string;href:string|null}[]=[
- {code:"ECC",href:null},
- {code:"DCC",href:"/dcc-assessment"},
- {code:"CSCC",href:"/assessments"},
- {code:"TCC",href:"/tcc-assessment"},
- {code:"OSMACC",href:"/osmacc-assessment"},
- {code:"CCC",href:null},
-];
 // control_code is the canonical LTR identifier; search must match against
 // it directly, never against visually-rendered (possibly BiDi-reordered)
 // text. Normalizes Arabic-Indic digits and dash-variant characters (from
@@ -118,8 +106,8 @@ function ControlsContent(){
    <div className="framework-grid">{frameworks.map(item=>{const rows=controls.filter(c=>c.framework_id===item.id);const done=rows.filter(c=>good(c.implementation_status)).length;return <button key={item.id} className={`framework-card ${framework===item.code?"active":""}`} onClick={()=>chooseFramework(item.code)} aria-pressed={framework===item.code}><strong dir="ltr">{item.code}</strong><span>{item.name_ar}</span><small>{item.version} · {rows.length} ضابط</small><progress max={Math.max(rows.length,1)} value={done}/></button>})}</div>
   </section>
   <section aria-labelledby="assessment-launcher-heading" className="assessment-launcher">
-   <div className="catalog-section-heading"><div><span>تقييم الأطر</span><h2 id="assessment-launcher-heading">أدوات التقييم لكل إطار</h2></div><small>حل مؤقت للوصول — سيُدمج داخل مساحة كل إطار لاحقًا</small></div>
-   <div className="assessment-launcher-grid">{assessmentRoutes.map(item=>{const fw=frameworks.find(f=>f.code===item.code);return <div className="assessment-launcher-card" key={item.code}><strong dir="ltr">{item.code}</strong><span>{fw?.name_ar??item.code}</span>{item.href?<Link className="assessment-launcher-action" href={item.href}>فتح التقييم ←</Link>:<small className="assessment-launcher-muted">لا يوجد تقييم منفصل حاليًا</small>}</div>})}</div>
+   <div className="catalog-section-heading"><div><span>تقييم الأطر</span><h2 id="assessment-launcher-heading">أدوات التقييم لكل إطار</h2></div><small><Link href="/compliance">فتح مركز الامتثال ←</Link></small></div>
+   <div className="assessment-launcher-grid">{ASSESSMENT_ROUTES.map(item=>{const fw=frameworks.find(f=>f.code===item.code);return <div className="assessment-launcher-card" key={item.code}><strong dir="ltr">{item.code}</strong><span>{fw?.name_ar??item.code}</span><div className="assessment-launcher-links">{item.href&&<Link className="assessment-launcher-action" href={item.href}>فتح التقييم ←</Link>}<Link className="assessment-launcher-action" href={`/compliance/${item.code}`}>مساحة الإطار ←</Link></div>{!item.href&&<small className="assessment-launcher-muted">لا يوجد تقييم منفصل حاليًا</small>}</div>})}</div>
   </section>
   {selectedFramework&&<>
    <section className="framework-summary"><div><span className="catalog-kicker">{selectedFramework.code} · الإصدار {selectedFramework.version}</span><h2>{selectedFramework.name_ar}</h2><p>اختر مجالًا لعرض مكوناته وضوابطه بصورة مستقلة.</p></div><div className="view-switch" role="group" aria-label="طريقة العرض"><button className={view==="structure"?"active":""} onClick={()=>setView("structure")}>عرض الهيكل</button><button className={view==="followup"?"active":""} onClick={()=>setView("followup")}>عرض المتابعة</button></div></section>
