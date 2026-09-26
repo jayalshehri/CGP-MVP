@@ -58,7 +58,7 @@ export default function ComplianceCenterPage(){
     </div>
     <div className="compliance-framework-footer">
      <div className="compliance-framework-pct"><span>نسبة التنفيذ</span><b>{pct===null?"—":`${pct}%`}</b></div>
-     <span className={`compliance-framework-assessment ${assessmentHref?"available":"unavailable"}`}>{assessmentHref?"تقييم متاح":"لا توجد أداة تقييم رسمية"}</span>
+     <span className={`compliance-framework-assessment ${assessmentHref?"available":"unavailable"}`}>{assessmentHref?"التقييم متاح في CGP":"التقييم غير مفعّل في CGP حاليًا"}</span>
     </div>
    </Link>;
   })}</div>}

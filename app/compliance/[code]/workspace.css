@@ -21,6 +21,12 @@
 .workspace-hint{color:#647682;font-size:13px;line-height:1.8;margin:0 0 14px}
 .workspace-gap{padding:28px 20px;text-align:center;display:grid;gap:8px}
 .workspace-gap small{color:#8a97a1}
+.workspace-exchange{display:grid;gap:12px;margin-top:24px;padding:20px 24px;border:1px solid #dbe4e8;background:#fff;border-radius:16px}
+.workspace-exchange h2{margin:0 0 8px;font-size:17px}
+.workspace-exchange .workspace-hint{margin:0}
+.workspace-exchange-actions{display:flex;flex-wrap:wrap;gap:10px}
+.workspace-exchange-actions button{border:1px solid #cbd7dc;background:#f2f4f5;color:#647682;border-radius:9px;padding:10px 14px;font:inherit;font-size:12px;font-weight:800;cursor:not-allowed}
+.workspace-exchange small{color:#647682;line-height:1.7}
 .workspace-domain-list{list-style:none;margin:0 0 16px;padding:0;display:grid;gap:1px;border:1px solid #e0e7ea;border-radius:11px;overflow:hidden}
 .workspace-domain-list li{display:flex;justify-content:space-between;gap:14px;padding:13px 16px;background:#fff;font-size:13px}
 .workspace-domain-list li:nth-child(even){background:#fafcfc}
