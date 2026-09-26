@@ -442,7 +442,7 @@ export default function ProjectDetailPage() {
                     item.requirement && (
                       <article className="requirement-card" key={item.requirement.id}>
                         <header>
-                          <h3><span dir="ltr">{item.requirement.requirement_code}</span> — {item.requirement.title_ar}</h3>
+                          <h3>{item.requirement.title_ar}</h3><small>معرف المطلب الداخلي: <span dir="ltr">{item.requirement.requirement_code}</span></small>
                           {item.mappingStatus === "mapped" && (
                             <span className="requirement-coverage-tag">تغطية المشروع: {coverageText[item.coverage] ?? item.coverage}</span>
                           )}

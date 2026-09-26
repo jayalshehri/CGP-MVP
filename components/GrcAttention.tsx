@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {supabase} from '@/lib/supabase';
-import {type EvidenceRequest,type ReviewCycle,requestLabels,todayRiyadh,formatGrcDate} from '@/lib/grc';
+import {type EvidenceRequest,type ReviewCycle,requestLabels,todayRiyadh,formatComplianceDate as formatGrcDate} from '@/lib/grc';
 export default function GrcAttention({controlId,compact=false}:{controlId?:number;compact?:boolean}){
  const [requests,setRequests]=useState<EvidenceRequest[]>([]),[cycles,setCycles]=useState<ReviewCycle[]>([]),[error,setError]=useState('');
  useEffect(()=>{let live=true;(async()=>{let r=supabase.from('evidence_requests').select('*').in('status',['open','submitted','changes_requested','rejected']).order('due_date').limit(100);let c=supabase.from('control_review_cycles').select('*').eq('status','open').order('due_date').limit(100);if(controlId){r=r.eq('control_id',controlId);c=c.eq('control_id',controlId);}const [rr,cc,active]=await Promise.all([r,c,supabase.from('controls').select('id,frameworks!inner(is_active)').eq('frameworks.is_active',true)]);if(live){setError(rr.error?.message||cc.error?.message||active.error?.message||'');const activeIds=new Set((active.data??[]).map(row=>row.id));setRequests((rr.data??[]).filter(row=>activeIds.has(row.control_id)));setCycles((cc.data??[]).filter(row=>activeIds.has(row.control_id)));}})();return()=>{live=false};},[controlId]);
