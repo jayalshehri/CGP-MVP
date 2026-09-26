@@ -5,7 +5,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { isImplemented, isApplicable, percentage } from "@/lib/compliance";
-import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
+import { ASSESSMENT_ROUTES, isBusinessFramework } from "@/lib/compliance-frameworks";
+import { isExpired } from "@/lib/grc";
 import AssessmentWorkspace from "@/components/AssessmentWorkspace";
 import AssessmentPortfolio from "@/components/AssessmentPortfolio";
 import "./workspace.css";
@@ -66,7 +67,7 @@ function FrameworkWorkspaceContent(){
  if(!framework)return <main className="workflow-page" dir="rtl"><h1>الإطار غير متاح</h1><p>لا يوجد إطار مفعّل بهذا الرمز، أو أنه مؤرشف حاليًا.</p><Link href="/compliance">العودة إلى مركز الامتثال</Link></main>;
 
  return <main className="workflow-page workspace-page" dir="rtl">
-  <nav className="workspace-switcher" aria-label="تبديل الإطار">{frameworks.map(f=><Link key={f.code} href={`/compliance/${f.code}`} className={f.code===code?"active":""} aria-current={f.code===code?"page":undefined}>{f.code}</Link>)}</nav>
+  <nav className="workspace-switcher" aria-label="تبديل الإطار">{frameworks.filter(f=>isBusinessFramework(f.code)).map(f=><Link key={f.code} href={`/compliance/${f.code}`} className={f.code===code?"active":""} aria-current={f.code===code?"page":undefined}>{f.code}</Link>)}</nav>
   <header className="workspace-header">
    <div><span className="workspace-kicker">{code} · الإصدار {framework.version}</span><h1>{framework.name_ar}</h1></div>
    <Link className="workflow-button" href="/compliance">مركز الامتثال ←</Link>
@@ -76,7 +77,7 @@ function FrameworkWorkspaceContent(){
    {tab==="overview"&&<OverviewTab controls={controls} assessmentHref={assessmentHref} setTab={setTab}/>}
    {tab==="controls"&&<ControlsTab code={code} controls={controls}/>}
    {tab==="assessment"&&(assessmentHref?<AssessmentWorkspace frameworkCode={code}/>:<HonestGap text="لا يوجد مسار تقييم مفعّل لهذا الإطار في CGP حاليًا." note="سيتم تحديد منهجية وحقول التقييم بعد اعتماد وربط أداة التقييم المرجعية."/>)}
-   {tab==="evidence"&&<EvidenceTab code={code}/>}
+   {tab==="evidence"&&<EvidenceTab code={code} controls={controls}/>}
    {tab==="verification"&&<VerificationTab canReview={canReview}/>}
    {tab==="findings"&&<AssessmentPortfolio framework={code}/>}
   </div>
@@ -132,10 +133,22 @@ function ControlsTab({code,controls}:{code:string;controls:Control[]}){
  </div>;
 }
 
-function EvidenceTab({code}:{code:string}){
+function EvidenceTab({code,controls}:{code:string;controls:Control[]}){
+ const [summary,setSummary]=useState<{withEvidence:number;pending:number;expired:number}|null>(null);
+ const [summaryError,setSummaryError]=useState(false);
+ useEffect(()=>{let active=true;(async()=>{
+  const result=await supabase.rpc("grc_evidence_register");
+  if(!active)return;
+  if(result.error){setSummaryError(true);return;}
+  const ids=new Set(controls.map(control=>control.id));
+  const current=((result.data??[]) as {control_id:number;is_current:boolean;status:string;valid_until:string|null}[]).filter(row=>row.is_current&&ids.has(row.control_id));
+  setSummary({withEvidence:new Set(current.map(row=>row.control_id)).size,pending:current.filter(row=>["pending_review","under_review"].includes(row.status)).length,expired:current.filter(row=>isExpired(row.valid_until)).length});
+ })();return()=>{active=false;};},[controls]);
  return <div className="workspace-evidence-tab">
-  <p className="workspace-hint">هذه مساحة إطار {code}. تُدار الأدلة وإصداراتها وصلاحيتها في مستودع الأدلة المركزي؛ لا يعرض هذا التبويب قائمة أدلة مصفّاة أو حالة صلاحية الدليل.</p>
-  <Link className="workflow-button" href="/evidence">فتح مستودع الأدلة المركزي ←</Link>
+  <p className="workspace-hint">هذه مساحة إطار {code}. تبقى الأدلة وإصداراتها وقرارات مراجعتها في المستودع المركزي، ولا تُنسخ إلى مساحة الإطار.</p>
+  {summary?<div className="workspace-evidence-summary"><div><span>ضوابط لها دليل حالي</span><b>{summary.withEvidence}</b></div><div><span>سجلات أدلة بانتظار المراجعة</span><b>{summary.pending}</b></div><div><span>سجلات أدلة منتهية الصلاحية</span><b>{summary.expired}</b></div></div>:<p className="workspace-hint" role="status">{summaryError?"تعذر تحميل ملخص الأدلة؛ التفاصيل متاحة في المستودع المركزي.":"جاري تحميل ملخص الأدلة…"}</p>}
+  <p className="workspace-hint">الأعداد تخص سجلات المستودع الحالية التي تتيحها صلاحياتك لهذا الإطار؛ تفاصيل الإصدارات والقرارات في المستودع.</p>
+  <Link className="workflow-button" href={`/evidence?framework=${encodeURIComponent(code)}`}>فتح مستودع الأدلة ←</Link>
  </div>;
 }
 

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { isImplemented, isApplicable, percentage } from "@/lib/compliance";
-import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
+import { ASSESSMENT_ROUTES, isBusinessFramework } from "@/lib/compliance-frameworks";
 import { WorkflowHeading } from "@/components/WorkflowUI";
 import "./compliance.css";
 
@@ -26,7 +26,7 @@ export default function ComplianceCenterPage(){
    supabase.from("controls").select("framework_id,hierarchy_level,implementation_status,frameworks!inner(is_active)").eq("frameworks.is_active",true),
   ]);
   if(f.error||c.error)throw f.error||c.error;
-  if(active){setFrameworks((f.data??[]) as Framework[]);setControls((c.data??[]) as ControlRow[]);setError("");}
+  if(active){setFrameworks(((f.data??[]) as Framework[]).filter(fw=>isBusinessFramework(fw.code)));setControls((c.data??[]) as ControlRow[]);setError("");}
  }catch(e){
   if(active){
    const message=e instanceof Error?e.message:"";

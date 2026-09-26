@@ -32,4 +32,8 @@
 .workspace-domain-list li:nth-child(even){background:#fafcfc}
 .workspace-domain-list li>span:first-child{font-weight:800}
 .workspace-domain-list li>span:last-child{color:#647682;white-space:nowrap}
+.workspace-evidence-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:0 0 14px}
+.workspace-evidence-summary>div{border:1px solid #dbe4e8;background:#fff;border-radius:10px;padding:13px 16px;display:grid;gap:5px}
+.workspace-evidence-summary span{color:#647682;font-size:12px}
+.workspace-evidence-summary b{font-size:20px;color:#0d4b4d}
 @media(max-width:640px){.workspace-header{flex-direction:column;align-items:stretch}}

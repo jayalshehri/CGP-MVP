@@ -16,3 +16,7 @@ export const ASSESSMENT_ROUTES: { code: string; href: string | null }[] = [
 
 export const assessmentHrefFor = (code: string): string | null =>
  ASSESSMENT_ROUTES.find((item) => item.code === code)?.href ?? null;
+
+// QA_SYNTH is a test-only framework. Keep its direct workspace URL available
+// to QA fixtures while excluding it from normal business framework navigation.
+export const isBusinessFramework = (code: string): boolean => code.toUpperCase() !== "QA_SYNTH";

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import {useCallback,useEffect,useState} from 'react';
 import {supabase} from '@/lib/supabase';
-import {type ReviewCycle,type EvidenceRequest,type EvidenceRecord,requestLabels,formatGrcDate,isExpired} from '@/lib/grc';
+import {type ReviewCycle,type EvidenceRequest,type EvidenceRecord,requestLabels,formatComplianceDate as formatGrcDate,isExpired} from '@/lib/grc';
 import StatusBadge from './StatusBadge';
 type Assessment={id:number;result:string;rationale:string;assessed_at:string;evidence_ids:number[]};
 export default function ControlReviewPanel({controlId,canManage,canSubmit}:{controlId:number;canManage:boolean;canSubmit:boolean}){

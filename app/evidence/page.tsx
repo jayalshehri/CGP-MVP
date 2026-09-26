@@ -1,110 +1,104 @@
 "use client";
 
-import { WorkflowHeading, WorkflowMetric as Kpi, ResultSummary } from "@/components/WorkflowUI";
-import GrcAttention from "@/components/GrcAttention";
-import {isExpired,formatGrcDate} from "@/lib/grc";
-import StatusBadge from "@/components/StatusBadge";
-import EvidenceDownload from "@/components/EvidenceDownload";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import EvidenceDownload from "@/components/EvidenceDownload";
+import GrcAttention from "@/components/GrcAttention";
+import StatusBadge from "@/components/StatusBadge";
+import { ResultSummary, WorkflowHeading } from "@/components/WorkflowUI";
 import { frameworkOf } from "@/lib/compliance";
+import { formatComplianceDate, isExpired } from "@/lib/grc";
+import { supabase } from "@/lib/supabase";
+import "./evidence.css";
 
 type UserRole = "admin" | "cybersecurity_team" | "control_owner" | "nca_external_auditor";
-type Control = { id:number; control_code:string; title_ar:string; domain_ar:string; control_owner_id:string|null; frameworks:unknown };
-type Evidence = { link_id:number|null;source_control_id:number;version_number:number;valid_until:string|null;uploader_name:string|null;reviewer_display_name:string|null; is_current:boolean; id:number; control_id:number; evidence_name:string|null; description:string|null; file_name:string|null; file_path:string|null; status:string|null; uploaded_at:string|null; reviewed_at:string|null; review_notes:string|null };
-
+type Control = { id:number; control_code:string; title_ar:string; control_owner:string|null; control_owner_id:string|null; frameworks:unknown };
+type Evidence = { link_id:number|null; source_control_id:number; version_number:number; valid_until:string|null; uploader_name:string|null; reviewer_display_name:string|null; is_current:boolean; id:number; control_id:number; evidence_name:string|null; description:string|null; file_name:string|null; file_path:string|null; status:string|null; uploaded_at:string|null; reviewed_at:string|null; review_notes:string|null };
 type EvidenceRow = Evidence & { control?:Control };
 
-
-
 export default function EvidencePage(){
-  const router=useRouter();
-  const [loading,setLoading]=useState(true);
-  const [role,setRole]=useState<UserRole>("control_owner");
-  const [rows,setRows]=useState<EvidenceRow[]>([]);
-  const [search,setSearch]=useState("");
-  const [status,setStatus]=useState("all");
-  const [scope,setScope]=useState("current");
-  const [framework,setFramework]=useState("all");
-  const [error,setError]=useState("");
-
-  useEffect(()=>{
-    async function load(){
-      const {data:sessionData}=await supabase.auth.getSession();
-      const session=sessionData.session;
-      if(!session){router.replace("/login");return;}
-
-      const {data:profile}=await supabase.from("profiles").select("role,is_active").eq("user_id",session.user.id).maybeSingle();
-      if(!profile||profile.is_active===false){setError("تعذر التحقق من صلاحية المستخدم.");setLoading(false);return;}
-      const userRole=(profile.role||"control_owner") as UserRole;
-      setRole(userRole);
-
-      let controlQuery=supabase.from("controls").select("id,control_code,title_ar,domain_ar,control_owner_id,frameworks!inner(code,name_ar,is_active)").eq("frameworks.is_active",true).order("id");
-      if(userRole==="control_owner") controlQuery=controlQuery.eq("control_owner_id",session.user.id);
-      const {data:controlData,error:controlError}=await controlQuery;
-      if(controlError){setError("تعذر تحميل الضوابط: "+controlError.message);setLoading(false);return;}
-
-      const controls=(controlData??[]) as Control[];
-      if(controls.length===0){setRows([]);setLoading(false);return;}
-      const {data:evidenceData,error:evidenceError}=await supabase.rpc("grc_evidence_register");
-      if(evidenceError){setError("تعذر تحميل الأدلة: "+evidenceError.message);setLoading(false);return;}
-
-      const map=new Map(controls.map(c=>[c.id,c]));
-      setRows(((evidenceData??[]) as Evidence[]).filter(e=>map.has(e.control_id)).map(e=>({...e,control:map.get(e.control_id)})));
-      setLoading(false);
-    }
-    load();
-  },[router]);
-
-  const frameworks=useMemo(()=>[...new Set(rows.map(row=>frameworkOf(row.control?.frameworks).code))].filter(code=>code!=="—").sort(),[rows]);
-  const filtered=useMemo(()=>rows.filter(row=>{
-    const q=search.trim().toLowerCase();
-    const text=`${row.evidence_name||""} ${row.file_name||""} ${row.control?.control_code||""} ${row.control?.title_ar||""}`.toLowerCase();
-    const matchesSearch=!q||text.includes(q);
-    const matchesStatus=status==="all"||(row.status||"")===status;
-    return matchesSearch&&matchesStatus&&(scope==="all"||row.is_current)&&(framework==="all"||frameworkOf(row.control?.frameworks).code===framework);
-  }),[rows,search,status,scope,framework]);
-
-  const scoped=rows.filter(row=>scope==="all"||row.is_current);
-  const pending=scoped.filter(r=>["pending_review","under_review"].includes(r.status||"")).length;
-  const accepted=scoped.filter(r=>r.status==="accepted").length;
-  const rejected=scoped.filter(r=>r.status==="rejected").length;
-
-  if(loading)return <main dir="rtl" style={center}>جاري تحميل مركز الأدلة...</main>;
- if(error)return <main dir="rtl"><h1>تعذر تحميل البيانات</h1><p role="alert">{error}</p><button onClick={()=>window.location.reload()}>إعادة المحاولة</button></main>;
-
-
-  return <main className="workflow-page" dir="rtl" style={{color:"var(--cgp-ink)"}}>
-
-    <div className="cgp-page-body" style={{display:"flex",minHeight:"calc(100vh - 86px)"}}>
-
-      <section style={{flex:1,padding:40,minWidth:0}}>
-        <WorkflowHeading title="الأدلة" description="تابع الأدلة وحالة مراجعتها، وارجع إلى الضابط لاتخاذ الخطوة التالية." action={<Link className="workflow-button" href="/controls">اختيار ضابط لرفع دليل ←</Link>}/>
-{error&&<div style={{background:"#fff2f0",color:"#9d2e24",padding:14,borderRadius:10,marginBottom:18}}>{error}</div>}
-        {role!=="nca_external_auditor"&&<GrcAttention/>}<div className="workflow-tabs" role="group" aria-label="نطاق الأدلة"><button aria-pressed={scope==="current"} onClick={()=>setScope("current")}>الإرسالات الحالية</button><button aria-pressed={scope==="all"} onClick={()=>setScope("all")}>جميع الإصدارات</button></div>
-        <div className="cgp-responsive-grid cgp-kpi-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:16,marginBottom:22}}><Kpi label="إجمالي الأدلة" value={scoped.length}/><Kpi label="بانتظار المراجعة" value={pending} tone={pending?"warning":"neutral"}/><Kpi label="مقبولة" value={accepted} tone="success"/><Kpi label="مرفوضة" value={rejected} tone={rejected?"danger":"neutral"}/></div>
-        <div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,padding:18,marginBottom:18,display:"flex",gap:12,flexWrap:"wrap"}}>
-          <div className="cgp-filter-field"><label className="cgp-field-label" htmlFor="evidence-search">البحث في الأدلة</label><input id="evidence-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="ابحث باسم الدليل أو رقم الضابط" style={{flex:1,minWidth:260,border:"1px solid #ccd6dc",borderRadius:9,padding:"11px 13px",fontSize:14}}/>
-          </div><div className="cgp-filter-field"><label className="cgp-field-label" htmlFor="evidence-framework">الإطار التنظيمي</label><select id="evidence-framework" value={framework} onChange={e=>setFramework(e.target.value)} style={{border:"1px solid #ccd6dc",borderRadius:9,padding:"11px 13px",background:"white"}}><option value="all">جميع الأطر</option>{frameworks.map(code=><option key={code}>{code}</option>)}</select></div><div className="cgp-filter-field"><label className="cgp-field-label" htmlFor="evidence-filter">حالة الدليل</label><select id="evidence-filter" value={status} onChange={e=>setStatus(e.target.value)} style={{border:"1px solid #ccd6dc",borderRadius:9,padding:"11px 13px",background:"white"}}><option value="all">كل الحالات</option><option value="pending_review">بانتظار المراجعة</option><option value="under_review">قيد المراجعة</option><option value="accepted">مقبول</option><option value="rejected">مرفوض</option><option value="changes_requested">يحتاج استكمالًا</option></select></div>
-        </div>
-        <ResultSummary count={filtered.length} total={scoped.length} active={!!search||status!=="all"||framework!=="all"} reset={()=>{setSearch("");setStatus("all");setFramework("all");}}/>
-<div style={{background:"white",border:"1px solid #e2e7eb",borderRadius:14,overflow:"hidden"}}>
-          {filtered.length===0?<div style={{padding:45,textAlign:"center",color:"#586875"}}>لا توجد أدلة مطابقة حاليًا.</div>:filtered.map(row=><div className="workflow-row cgp-responsive-grid" key={`${row.id}-${row.link_id??"source"}`} style={{padding:20,borderBottom:"1px solid #edf0f2",display:"grid",gridTemplateColumns:"1.6fr 1fr .8fr auto",gap:16,alignItems:"center"}}>
-            <div><div style={{color:"var(--cgp-teal)",fontWeight:800,fontSize:13}}><span dir="ltr">{frameworkOf(row.control?.frameworks).code} · {row.control?.control_code||`ضابط ${row.control_id}`}</span></div><div style={{fontWeight:800,marginTop:6}}>{row.evidence_name||row.file_name||`دليل ${row.id}`}</div><div style={{fontSize:13,color:"#586875",marginTop:5}}>{row.control?.title_ar||""}</div></div>
-            <div><div style={{fontSize:12,color:"#586875",marginBottom:5}}>تاريخ الرفع</div><p>{row.uploader_name||"رافع غير موثق بالاسم"}</p><strong>{row.uploaded_at?new Date(row.uploaded_at).toLocaleDateString("ar-SA"):"غير محدد"}</strong></div>
-            <div><StatusBadge status={row.status||""}/><small>الإصدار {row.version_number}{row.link_id?" · مشترك":""}</small>{row.valid_until&&<p className={isExpired(row.valid_until)?"grc-warning":""}>صالح حتى {formatGrcDate(row.valid_until)}</p>}{!row.is_current&&<small className="workflow-version">إصدار سابق</small>}</div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`} style={secondary}>فتح الضابط</Link>{["admin","cybersecurity_team"].includes(role)&&row.is_current&&["pending_review","under_review"].includes(row.status||"")&&<Link href={`/review#evidence-${row.id}`} style={primary}>مراجعة</Link>}</div>
-          </div>)}
-        </div>
-      </section>
-    </div>
-  </main>;
+ return <Suspense fallback={<main className="workflow-page" dir="rtl" role="status">جاري تحميل مستودع الأدلة…</main>}><EvidenceContent/></Suspense>;
 }
 
+function EvidenceContent(){
+ const router=useRouter();
+ const searchParams=useSearchParams();
+ const requestedFramework=searchParams.get("framework")?.toUpperCase()||"all";
+ const [loading,setLoading]=useState(true);
+ const [role,setRole]=useState<UserRole>("control_owner");
+ const [rows,setRows]=useState<EvidenceRow[]>([]);
+ const [search,setSearch]=useState("");
+ const [status,setStatus]=useState("all");
+ const [scope,setScope]=useState("current");
+ const [frameworkSelection,setFrameworkSelection]=useState<{routeCode:string;selected:string}|null>(null);
+ const framework=frameworkSelection?.routeCode===requestedFramework?frameworkSelection.selected:requestedFramework;
+ const setFramework=(selected:string)=>setFrameworkSelection({routeCode:requestedFramework,selected});
+ const [error,setError]=useState("");
 
+ useEffect(()=>{let active=true;
+  async function load(){
+   const {data:sessionData}=await supabase.auth.getSession();
+   const session=sessionData.session;
+   if(!session){router.replace("/login");return;}
+   const {data:profile}=await supabase.from("profiles").select("role,is_active").eq("user_id",session.user.id).maybeSingle();
+   if(!profile||profile.is_active===false){if(active){setError("تعذر التحقق من صلاحية المستخدم.");setLoading(false);}return;}
+   const userRole=(profile.role||"control_owner") as UserRole;
+   if(active)setRole(userRole);
+   let controlQuery=supabase.from("controls").select("id,control_code,title_ar,control_owner,control_owner_id,frameworks!inner(code,name_ar,is_active)").eq("frameworks.is_active",true).order("id");
+   if(userRole==="control_owner")controlQuery=controlQuery.eq("control_owner_id",session.user.id);
+   const {data:controlData,error:controlError}=await controlQuery;
+   if(controlError){if(active){setError("تعذر تحميل الضوابط: "+controlError.message);setLoading(false);}return;}
+   const controls=(controlData??[]) as Control[];
+   if(controls.length===0){if(active){setRows([]);setLoading(false);}return;}
+   const {data:evidenceData,error:evidenceError}=await supabase.rpc("grc_evidence_register");
+   if(evidenceError){if(active){setError("تعذر تحميل الأدلة: "+evidenceError.message);setLoading(false);}return;}
+   const map=new Map(controls.map(control=>[control.id,control]));
+   if(active){setRows(((evidenceData??[]) as Evidence[]).filter(row=>map.has(row.control_id)).map(row=>({...row,control:map.get(row.control_id)})));setLoading(false);}
+  }
+  void load();return()=>{active=false;};
+ },[router]);
 
-const primary={background:"var(--cgp-teal)",color:"white",textDecoration:"none",padding:"9px 12px",borderRadius:8,fontWeight:800,fontSize:13};
-const secondary={background:"#eef3f5",color:"#0b1f33",textDecoration:"none",padding:"9px 12px",borderRadius:8,fontWeight:800,fontSize:13};
-const center={display:"grid",placeItems:"center",color:"var(--cgp-ink)"};
+ const frameworks=useMemo(()=>[...new Set(rows.map(row=>frameworkOf(row.control?.frameworks).code))].filter(code=>code!=="—").sort(),[rows]);
+ const filtered=useMemo(()=>rows.filter(row=>{
+  const q=search.trim().toLowerCase();
+  const text=`${row.evidence_name||""} ${row.file_name||""} ${row.control?.control_code||""} ${row.control?.title_ar||""}`.toLowerCase();
+  return (!q||text.includes(q))&&(status==="all"||(row.status||"")===status)&&(scope==="all"||row.is_current)&&(framework==="all"||frameworkOf(row.control?.frameworks).code===framework);
+ }),[rows,search,status,scope,framework]);
+ const scoped=rows.filter(row=>scope==="all"||row.is_current);
+ const pending=scoped.filter(row=>["pending_review","under_review"].includes(row.status||"")).length;
+ const accepted=scoped.filter(row=>row.status==="accepted").length;
+ const rejected=scoped.filter(row=>row.status==="rejected").length;
+
+ if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل مستودع الأدلة…</main>;
+ if(error)return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل البيانات</h1><p role="alert">{error}</p><button onClick={()=>window.location.reload()}>إعادة المحاولة</button></main>;
+
+ return <main className="workflow-page evidence-page" dir="rtl">
+  <WorkflowHeading title="مستودع الأدلة" description="اعرض الدليل والضابط والإطار وحالة المراجعة في قائمة واحدة، وافتح التفاصيل عند الحاجة." action={<Link className="workflow-button" href="/controls">اختيار ضابط لرفع دليل ←</Link>}/>
+  {role!=="nca_external_auditor"&&<details className="evidence-attention"><summary>طلبات الأدلة والمراجعات المطلوبة</summary><GrcAttention/></details>}
+  <div className="workflow-tabs" role="group" aria-label="نطاق الأدلة"><button aria-pressed={scope==="current"} onClick={()=>setScope("current")}>الإرسالات الحالية</button><button aria-pressed={scope==="all"} onClick={()=>setScope("all")}>جميع الإصدارات</button></div>
+  <div className="evidence-metrics"><span>إجمالي الأدلة <b>{scoped.length}</b></span><span>بانتظار المراجعة <b>{pending}</b></span><span>مقبولة <b>{accepted}</b></span><span>مرفوضة <b>{rejected}</b></span></div>
+  <div className="evidence-filters">
+   <label>البحث في الأدلة<input value={search} onChange={event=>setSearch(event.target.value)} placeholder="اسم الدليل أو رمز الضابط"/></label>
+   <label>الإطار التنظيمي<select value={framework} onChange={event=>setFramework(event.target.value)}><option value="all">جميع الأطر</option>{frameworks.map(code=><option key={code} value={code}>{code}</option>)}{framework!=="all"&&!frameworks.includes(framework)&&<option value={framework}>{framework}</option>}</select></label>
+   <label>حالة الدليل<select value={status} onChange={event=>setStatus(event.target.value)}><option value="all">كل الحالات</option><option value="pending_review">بانتظار المراجعة</option><option value="under_review">قيد المراجعة</option><option value="accepted">مقبول</option><option value="rejected">مرفوض</option><option value="changes_requested">يحتاج استكمالًا</option></select></label>
+  </div>
+  <ResultSummary count={filtered.length} total={scoped.length} active={!!search||status!=="all"||framework!=="all"} reset={()=>{setSearch("");setStatus("all");setFramework("all");}}/>
+  <div className="evidence-table-scroll"><table className="evidence-table"><thead><tr><th>الدليل</th><th>الضابط</th><th>الإطار</th><th>المالك</th><th>الإصدار</th><th>الحالة</th><th>الصلاحية</th><th>الإجراءات</th></tr></thead><tbody>
+   {filtered.length===0?<tr><td colSpan={8} className="evidence-empty">لا توجد أدلة مطابقة حاليًا.</td></tr>:filtered.map(row=>{
+    const key=`${row.id}-${row.link_id??"source"}`;
+    const frameworkCode=frameworkOf(row.control?.frameworks).code;
+    return <tr key={key}>
+     <td className="evidence-primary"><strong>{row.evidence_name||row.file_name||`دليل ${row.id}`}</strong><small>{row.file_name||"اسم الملف غير موثق"}</small><details><summary>تفاصيل الدليل</summary><dl><dt>تاريخ الرفع</dt><dd>{formatComplianceDate(row.uploaded_at)}</dd><dt>رافع الدليل</dt><dd>{row.uploader_name||"غير موثق بالاسم"}</dd><dt>الوصف</dt><dd>{row.description||"لا يوجد"}</dd><dt>نوع الربط</dt><dd>{row.link_id?"دليل مشترك":"دليل مباشر"}</dd>{row.reviewed_at&&<><dt>تاريخ القرار</dt><dd>{formatComplianceDate(row.reviewed_at)}</dd><dt>المراجع</dt><dd>{row.reviewer_display_name||"مسجل في سجل القرار"}</dd><dt>ملاحظات المراجعة</dt><dd>{row.review_notes||"لا توجد"}</dd></>}</dl></details></td>
+     <td><span dir="ltr">{row.control?.control_code||`#${row.control_id}`}</span><small>{row.control?.title_ar||""}</small></td>
+     <td><span dir="ltr">{frameworkCode}</span></td>
+     <td>{row.control?.control_owner||"غير معيّن"}</td>
+     <td><span dir="ltr">{row.version_number}</span>{!row.is_current&&<small>إصدار سابق</small>}</td>
+     <td><StatusBadge status={row.status||""}/></td>
+     <td className={isExpired(row.valid_until)?"grc-warning":undefined}>{row.valid_until?formatComplianceDate(row.valid_until,true):"غير محددة"}</td>
+     <td><div className="evidence-actions"><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`}>فتح الضابط</Link>{["admin","cybersecurity_team"].includes(role)&&row.is_current&&["pending_review","under_review"].includes(row.status||"")&&<Link href={`/review#evidence-${row.id}`}>مراجعة</Link>}</div></td>
+    </tr>;
+   })}
+  </tbody></table></div>
+ </main>;
+}

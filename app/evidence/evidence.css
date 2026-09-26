@@ -1,0 +1,30 @@
+.evidence-page{color:var(--cgp-ink)}
+.evidence-attention{margin-bottom:14px;border:1px solid #dce5e8;background:#fff;border-radius:10px}
+.evidence-attention>summary{cursor:pointer;padding:11px 15px;font-weight:800;color:#234c53}
+.evidence-attention .workflow-card{margin:0;border:0;box-shadow:none}
+.evidence-metrics{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px}
+.evidence-metrics span{display:flex;gap:8px;align-items:center;border:1px solid #dce5e8;background:#fff;border-radius:8px;padding:7px 11px;color:#586875;font-size:12px}
+.evidence-metrics b{font-size:15px;color:#173b43}
+.evidence-filters{display:flex;align-items:end;flex-wrap:wrap;gap:12px;background:#fff;border:1px solid #dce5e8;border-radius:10px;padding:13px;margin-bottom:12px}
+.evidence-filters label{display:grid;gap:5px;color:#405461;font-size:12px;font-weight:700;min-width:150px}
+.evidence-filters label:first-child{flex:1;min-width:230px}
+.evidence-filters input,.evidence-filters select{min-height:38px;border:1px solid #ccd6dc;border-radius:7px;background:#fff;padding:7px 10px;font:inherit;font-weight:400;color:#122d36}
+.evidence-table-scroll{overflow-x:auto;background:#fff;border:1px solid #dce5e8;border-radius:11px}
+.evidence-table{width:100%;border-collapse:collapse;min-width:1060px;font-size:12.5px}
+.evidence-table th{text-align:right;background:#f4f7f8;color:#526670;font-weight:800;white-space:nowrap;padding:10px 11px;border-bottom:1px solid #dce5e8}
+.evidence-table td{vertical-align:top;padding:10px 11px;border-bottom:1px solid #edf1f2}
+.evidence-table tbody tr:last-child td{border-bottom:0}
+.evidence-table tbody tr:hover{background:#fbfdfd}
+.evidence-table td small{display:block;color:#687b84;font-size:11px;line-height:1.5;margin-top:3px;max-width:170px}
+.evidence-table .evidence-primary{min-width:190px;max-width:250px}
+.evidence-table .evidence-primary strong{display:block;font-size:13px;overflow-wrap:anywhere}
+.evidence-table .evidence-primary details{margin-top:5px}
+.evidence-table .evidence-primary summary{color:var(--cgp-teal);cursor:pointer;font-weight:700}
+.evidence-table .evidence-primary dl{display:grid;grid-template-columns:max-content 1fr;gap:5px 9px;min-width:190px;margin:8px 0 0;font-size:11px}
+.evidence-table .evidence-primary dt{color:#687b84}
+.evidence-table .evidence-primary dd{margin:0;overflow-wrap:anywhere}
+.evidence-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:195px}
+.evidence-actions a{display:inline-flex;text-decoration:none;background:#eef3f5;color:#123e44;border-radius:7px;padding:7px 9px;font-weight:700}
+.evidence-actions button{padding:7px 9px!important;font-size:12px}
+.evidence-empty{text-align:center;color:#687b84;padding:30px!important}
+@media(max-width:700px){.evidence-filters label,.evidence-filters label:first-child{min-width:100%}.evidence-table-scroll{margin-inline:-6px}}
