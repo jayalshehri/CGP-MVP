@@ -29,6 +29,7 @@ const navigation = [
   { href: "/compliance", label: "مركز الامتثال", group: "الامتثال", auditor: true },
   { href: "/controls", label: "الأطر والضوابط", group: "الامتثال", auditor: true },
   { href: "/evidence", label: "الأدلة", group: "الامتثال", auditor: true },
+  { href: "/findings", label: "الملاحظات والإجراءات", group: "الامتثال", auditor: true },
   { href: "/review", label: "التحقق", group: "الامتثال", team: true },
   { href: "/mappings", label: "المواءمة", group: "الامتثال", team: true },
   // P1.1 removed these four from the Sidebar (still fully functional --
@@ -89,6 +90,7 @@ function NavIcon({ href }: { href: string }) {
     "/roadmap/analysis": "M4 18V6 M4 18h16 M8 15v-3 M12 15V8 M16 15v-5 M4 6h16 M17 3l3 3-3 3",
     "/alerts": "M12 3l9 16H3L12 3z M12 9v4 M12 17h.01",
     "/evidence": "M3 6h7l2 3h9v11H3z M3 6V4h7l2 2h7v3",
+    "/findings": "M5 4h14v17H5z M8 8h8 M8 12h8 M8 16h5 M17 3v4",
     "/review": "M12 3l8 3v6c0 4-4 7-8 9-4-2-8-5-8-9V6z M8 12l3 3 5-6",
     "/audit": "M5 3h14v18H5z M8 7h8 M8 12h8 M8 17h5",
     "/audit-schedule": "M7 3v3 M17 3v3 M4 8h16v12H4z M4 11h16 M8 15h3",
