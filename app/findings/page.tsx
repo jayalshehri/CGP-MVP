@@ -214,6 +214,8 @@ function FindingDetail({finding,actions,actor,role,people,busy,run}:{
   busy:boolean;run:(action:string,finding:SharedFinding,payload:Record<string,unknown>)=>Promise<boolean>;
 }){
   const [actionOpen,setActionOpen]=useState(false);
+  const [findingDraft,setFindingDraft]=useState({title:finding.title,description:finding.description,
+    severity:finding.severity,due_date:finding.due_date??''});
   const [newAction,setNewAction]=useState({title:'',description:'',owner_id:teamRole(role)?'':actor,due_date:'',reference_note:''});
   const [reason,setReason]=useState('');
   const [findingEvidence,setFindingEvidence]=useState('');
@@ -238,6 +240,22 @@ function FindingDetail({finding,actions,actor,role,people,busy,run}:{
       <p>{sourceLabels[finding.source_type]} #{finding.source_record_id} · {findingStatusLabels[finding.status]}</p></div>
       {finding.control_id&&<Link href={`/controls/${finding.control_id}`}>فتح الضابط ←</Link>}</header>
     <p className="findings-description">{finding.description}</p>
+    {canFollow&&['open','in_treatment'].includes(finding.status)&&<details className="findings-edit">
+      <summary>تعديل تفاصيل الملاحظة</summary>
+      <form className="findings-form-grid" onSubmit={event=>{event.preventDefault();void run('update_finding',finding,
+        {...findingDraft,due_date:findingDraft.due_date||null});}}>
+        <label>العنوان<input required minLength={2} maxLength={300} value={findingDraft.title}
+          onChange={event=>setFindingDraft({...findingDraft,title:event.target.value})}/></label>
+        <label>الخطورة<select disabled={!teamRole(role)} value={findingDraft.severity}
+          onChange={event=>setFindingDraft({...findingDraft,severity:event.target.value as SharedFinding['severity']})}>
+          {Object.entries(severityLabels).map(([key,value])=><option key={key} value={key}>{value}</option>)}</select></label>
+        <label className="findings-wide">الوصف<textarea required value={findingDraft.description}
+          onChange={event=>setFindingDraft({...findingDraft,description:event.target.value})}/></label>
+        <label>الاستحقاق<input type="date" value={findingDraft.due_date}
+          onChange={event=>setFindingDraft({...findingDraft,due_date:event.target.value})}/></label>
+        <button className="workflow-button" disabled={busy}>حفظ التعديل</button>
+      </form>
+    </details>}
     <dl className="findings-facts"><div><dt>تاريخ التحديد</dt><dd>{formatComplianceDate(finding.identified_date)}</dd></div>
       <div><dt>الخطورة</dt><dd>{severityLabels[finding.severity]}</dd></div>
       <div><dt>الاستحقاق</dt><dd>{formatComplianceDate(finding.due_date)}</dd></div>
@@ -290,6 +308,10 @@ function CorrectiveActionCard({action,finding,actor,role,busy,evidence,run}:{
   const [note,setNote]=useState('');
   const [reason,setReason]=useState('');
   const [evidenceId,setEvidenceId]=useState('');
+  const [draft,setDraft]=useState({title:action.title,description:action.description,
+    due_date:action.due_date??'',status:action.status});
+  const canEdit=(teamRole(role)||action.owner_id===actor)&&['open','in_treatment'].includes(finding.status)
+    &&action.status!=='completed';
   const canComplete=(teamRole(role)||action.owner_id===actor)&&['open','in_treatment'].includes(finding.status)&&action.status!=='completed';
   const canReview=teamRole(role)&&finding.status==='pending_verification'&&action.status==='completed'
     &&action.owner_id!==actor&&action.completed_by!==actor&&finding.created_by!==actor;
@@ -299,6 +321,20 @@ function CorrectiveActionCard({action,finding,actor,role,busy,evidence,run}:{
     {action.completion_note&&<p>إفادة الإكمال: {action.completion_note}</p>}
     {action.verification_reason&&<p>قرار التحقق: {action.verification_reason}</p>}
     {action.verification_evidence_id&&<Link href="/evidence">دليل التحقق #{action.verification_evidence_id} في المستودع المركزي</Link>}
+    {canEdit&&<details className="findings-edit"><summary>تعديل الإجراء</summary>
+      <form className="findings-form-grid" onSubmit={event=>{event.preventDefault();void run('update_action',finding,
+        {...draft,due_date:draft.due_date||null,action_id:action.id,action_revision:action.revision});}}>
+        <label>العنوان<input required minLength={2} maxLength={300} value={draft.title}
+          onChange={event=>setDraft({...draft,title:event.target.value})}/></label>
+        <label>الحالة<select value={draft.status} onChange={event=>setDraft({...draft,status:event.target.value as CorrectiveAction['status']})}>
+          <option value="open">مفتوح</option><option value="in_progress">قيد التنفيذ</option></select></label>
+        <label className="findings-wide">الوصف<textarea required value={draft.description}
+          onChange={event=>setDraft({...draft,description:event.target.value})}/></label>
+        <label>الاستحقاق<input type="date" value={draft.due_date}
+          onChange={event=>setDraft({...draft,due_date:event.target.value})}/></label>
+        <button className="workflow-button" disabled={busy}>حفظ التعديل</button>
+      </form>
+    </details>}
     {canComplete&&<div className="findings-action-controls"><label>إفادة الإكمال<textarea value={note} onChange={e=>setNote(e.target.value)}/></label>
       <label>دليل مرتبط بالضابط، إن وجد<select value={evidenceId} onChange={e=>setEvidenceId(e.target.value)}><option value="">بدون دليل</option>
         {evidence.map(e=><option key={e.id} value={e.id}>{e.file_name||e.evidence_name||`دليل #${e.id}`} · v{e.version_number}</option>)}</select></label>

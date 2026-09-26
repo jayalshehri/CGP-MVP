@@ -16,6 +16,7 @@ Rollback-only synthetic checks passed in both clones:
 - Completing both actions left the finding open. Explicit submission, independent action verification, independent finding verification, and separate closure passed. Owner self-verification was rejected.
 - A risk finding did not accept an arbitrary client-supplied control. A vulnerability finding inherited its existing linked control.
 - Physical deletion and mutation of a finding after control archival were rejected; history remained readable.
+- New finding/action inserts and a finding update produced central audit events with the expected entity IDs and before/after JSON values.
 - Existing synthetic assessment cycle/item/legacy-finding/audit-event row counts were identical before and after migration and rollback-only tests.
 
 Limitations: the local schema snapshot predates the latest QA schema and omits some runtime GRANTs; the test fixture supplied synthetic Auth rows and representative read grants. It is therefore not a certified exact-current-QA replay. Live QA migration application, post-application role tests, and authenticated visual review remain separate gates. No Production connection or write was made.

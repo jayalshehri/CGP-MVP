@@ -37,5 +37,8 @@
 .findings-action-controls,.findings-lifecycle { display:grid; gap:10px; border-top:1px solid var(--cgp-line); margin-top:14px; padding-top:14px; }
 .findings-action-controls button,.findings-lifecycle button { justify-self:start; }
 .findings-action-form { margin-top:14px; padding:16px; border:1px dashed #a5c9c2; border-radius:10px; }
+.findings-edit { margin:14px 0; border:1px solid var(--cgp-line); border-radius:9px; padding:12px 14px; }
+.findings-edit summary { cursor:pointer; color:var(--cgp-teal-dark); font-weight:700; }
+.findings-edit form { margin-top:12px; }
 @media(max-width:900px) { .findings-filter { grid-template-columns:repeat(2,minmax(0,1fr)); } .findings-facts { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:600px) { .findings-panel { padding:16px; } .findings-form-grid,.findings-filter,.findings-facts { grid-template-columns:1fr; } .findings-detail>header,.findings-action-card>header,.findings-section-heading { flex-wrap:wrap; } }
