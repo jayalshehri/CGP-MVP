@@ -8,6 +8,7 @@ import Link from "next/link";
 import "./catalog.css";
 import { supabase } from "@/lib/supabase";
 import { getEccOfficialTitle } from "@/lib/ecc-strategy-example";
+import { assessmentHrefFor, isBusinessFramework } from "@/lib/compliance-frameworks";
 
 type Control={id:number;framework_id:number;control_code:string;title_ar:string;description_ar:string|null;official_text_ar:string|null;hierarchy_level:string;parent_control_id:number|null;applicability:string|null;domain_ar:string;implementation_status:string;evidence_status:string;verification_status:string;due_date:string|null;control_owner:string|null;control_owner_id:string|null};
 type Framework={id:number;code:string;name_ar:string;version:string};
@@ -48,9 +49,9 @@ function ControlsContent(){
  const status=["all","implemented","in_progress","not_started","not_applicable"].includes(rawStatus)?rawStatus:"all";
  const rawAssignment=searchParams.get("assignment")??"all";
  const assignment=["all","assigned","unassigned"].includes(rawAssignment)?rawAssignment:"all";
- const requestedFramework=searchParams.get("framework")??"ECC";
+ const requestedFramework=searchParams.get("framework")?.toUpperCase()??"ECC";
  const requestedDomain=searchParams.get("domain")??"";
- const [search,setSearch]=useState(""),[framework,setFramework]=useState(requestedFramework);
+ const [search,setSearch]=useState("");
  const [activeDomain,setActiveDomain]=useState(requestedDomain),[scope,setScope]=useState("all"),[view,setView]=useState<ViewMode>("structure");
  const [controls,setControls]=useState<Control[]>([]),[frameworks,setFrameworks]=useState<Framework[]>([]),[canManage,setCanManage]=useState(false);
  const [error,setError]=useState<Error|null>(null),[loading,setLoading]=useState(true);
@@ -61,11 +62,13 @@ function ControlsContent(){
   if(profile.role==="control_owner")query=query.eq("control_owner_id",user.id);
   const [{data,error},{data:frameworkData,error:frameworkError}]=await Promise.all([query,supabase.from("frameworks").select("id,code,name_ar,version").eq("is_active",true).order("id")]);
   if(error||frameworkError)throw error||frameworkError;
-  if(active){setControls((data??[]) as Control[]);setFrameworks(((frameworkData??[]) as Framework[]).filter(item=>item.code!=="QA_SYNTH"));}
+  if(active){setControls((data??[]) as Control[]);setFrameworks(((frameworkData??[]) as Framework[]).filter(item=>isBusinessFramework(item.code)));}
  }catch(e){if(active)setError(new Error(e instanceof Error?e.message:"تعذر تحميل الضوابط"));const {data}=await supabase.auth.getSession();if(!data.session)router.replace("/login");}
  finally{if(active)setLoading(false);}})();return()=>{active=false;};},[router]);
 
- const selectedFramework=frameworks.find(item=>item.code===framework);
+ const selectedFramework=frameworks.find(item=>item.code===requestedFramework)??frameworks[0];
+ const framework=selectedFramework?.code??"ECC";
+ const assessmentHref=assessmentHrefFor(framework);
  const frameworkControls=useMemo(()=>selectedFramework?controls.filter(c=>c.framework_id===selectedFramework.id):[],[controls,selectedFramework]);
  const scoped=useMemo(()=>framework!=="CCC"||scope==="all"?frameworkControls:frameworkControls.filter(c=>c.control_code.includes(scope==="provider"?"-P-":"-T-")),[framework,frameworkControls,scope]);
  const domains=useMemo(()=>Map.groupBy(scoped,c=>c.domain_ar||"غير مصنف"),[scoped]);
@@ -93,8 +96,8 @@ function ControlsContent(){
   :sorted;
  const subdomains=Map.groupBy(structureRows,c=>c.control_code.split("-").slice(0,2).join("-"));
  function setFilter(key:"status"|"assignment",value:string){const params=new URLSearchParams(searchParams.toString());if(value==="all")params.delete(key);else params.set(key,value);router.replace(params.size?`/controls?${params.toString()}`:"/controls",{scroll:false});}
- function resetFilters(){setSearch("");router.replace("/controls",{scroll:false});}
- function chooseFramework(code:string){setFramework(code);setActiveDomain("");setScope("all");setSearch("");router.replace("/controls",{scroll:false});}
+ function resetFilters(){setSearch("");router.replace(`/controls?framework=${encodeURIComponent(framework)}`,{scroll:false});}
+ function chooseFramework(code:string){if(code===framework)return;setActiveDomain("");setScope("all");setSearch("");router.push(`/controls?framework=${encodeURIComponent(code)}`,{scroll:false});}
 
  if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>;
  if(error)return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل الضوابط</h1><p className="catalog-error">{error.message}</p><Link href="/">العودة إلى لوحة المتابعة</Link></main>;
@@ -105,7 +108,7 @@ function ControlsContent(){
    <div className="framework-grid">{frameworks.map(item=>{const rows=controls.filter(c=>c.framework_id===item.id);const done=rows.filter(c=>good(c.implementation_status)).length;return <button key={item.id} className={`framework-card ${framework===item.code?"active":""}`} onClick={()=>chooseFramework(item.code)} aria-pressed={framework===item.code}><strong dir="ltr">{item.code}</strong><span>{item.name_ar}</span><small>{item.version} · {rows.length} ضابط</small><progress max={Math.max(rows.length,1)} value={done}/></button>})}</div>
   </section>
   {selectedFramework&&<>
-   <section className="framework-summary"><div><span className="catalog-kicker">{selectedFramework.code} · الإصدار {selectedFramework.version}</span><h2>{selectedFramework.name_ar}</h2><p>اختر مجالًا لعرض مكوناته وضوابطه بصورة مستقلة.</p></div><div className="view-switch" role="group" aria-label="طريقة العرض"><button className={view==="structure"?"active":""} onClick={()=>setView("structure")}>عرض الهيكل</button><button className={view==="followup"?"active":""} onClick={()=>setView("followup")}>عرض المتابعة</button></div></section>
+   <section className="framework-summary"><div className="framework-summary-main"><span className="catalog-kicker">{selectedFramework.code} · الإصدار {selectedFramework.version}</span><h2>{selectedFramework.name_ar}</h2><p>اختر مجالًا لعرض مكوناته وضوابطه بصورة مستقلة.</p><div className="framework-actions">{assessmentHref?<Link href={assessmentHref}>فتح تقييم {framework} ←</Link>:<span className="framework-assessment-unavailable">التقييم غير مفعّل حاليًا</span>}<Link href={`/compliance/${framework}`}>مساحة {framework} ←</Link></div></div><div className="view-switch" role="group" aria-label="طريقة العرض"><button className={view==="structure"?"active":""} onClick={()=>setView("structure")}>عرض الهيكل</button><button className={view==="followup"?"active":""} onClick={()=>setView("followup")}>عرض المتابعة</button></div></section>
    {framework==="CCC"&&<div className="scope-switch" role="group" aria-label="نطاق ضوابط الحوسبة السحابية"><button className={scope==="all"?"active":""} onClick={()=>{setScope("all");setActiveDomain("")}}>الكل</button><button className={scope==="provider"?"active":""} onClick={()=>{setScope("provider");setActiveDomain("")}}>مقدم الخدمة CSP</button><button className={scope==="tenant"?"active":""} onClick={()=>{setScope("tenant");setActiveDomain("")}}>المشترك CST</button></div>}
    <div className="workflow-metrics"><WorkflowMetric label="إجمالي الضوابط" value={scoped.length}/><WorkflowMetric label="مطبق كليًا" value={scoped.filter(c=>good(c.implementation_status)).length} tone="success"/><WorkflowMetric label="مطبق جزئيًا" value={scoped.filter(c=>c.implementation_status==="in_progress").length} tone="warning"/><WorkflowMetric label="غير مطبق" value={scoped.filter(c=>c.implementation_status==="not_started").length}/></div>
    <section aria-labelledby="domain-heading">
