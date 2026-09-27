@@ -1,25 +1,27 @@
 "use client";
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { isImplemented, isApplicable, percentage } from "@/lib/compliance";
 import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
 import { isExpired } from "@/lib/grc";
-import AssessmentPortfolio from "@/components/AssessmentPortfolio";
+import { cycleLabels, displayPercent } from "@/lib/assessment";
+import ControlsCatalog from "@/components/ControlsCatalog";
 import "./workspace.css";
 
 type Framework = { id:number; code:string; name_ar:string; version:string };
 type Control = { id:number; control_code:string; title_ar:string; domain_ar:string; hierarchy_level:string; implementation_status:string; control_owner:string|null };
-type Tab = "overview"|"controls"|"assessment"|"evidence"|"verification"|"findings";
+type CycleSummary = { id:number; framework:string; scope_name:string; status:string; completion:number|null; compliance:number|null };
+type EvidenceSummaryRow = { control_id:number; is_current:boolean; status:string; valid_until:string|null };
+type Tab = "overview"|"controls"|"assessment"|"evidence"|"findings";
 const tabs:{key:Tab;label:string}[]=[
  {key:"overview",label:"نظرة عامة"},
  {key:"controls",label:"الضوابط"},
  {key:"assessment",label:"التقييم"},
  {key:"evidence",label:"الأدلة"},
- {key:"verification",label:"التحقق"},
- {key:"findings",label:"النتائج والإجراءات"},
+ {key:"findings",label:"الملاحظات والإجراءات"},
 ];
 
 export default function FrameworkWorkspacePage(){
@@ -39,7 +41,7 @@ function FrameworkWorkspaceContent(){
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const canAssess=role!==null&&role!=="data_governance_team";
- const tab:Tab=tabs.some(t=>t.key===requestedTab)&&!(requestedTab==="assessment"&&!canAssess)?(requestedTab as Tab):"overview";
+ const tab:Tab=tabs.some(t=>t.key===requestedTab)&&!(requestedTab==="assessment"&&!canAssess)&&!(requestedTab==="findings"&&role==="data_governance_team")?(requestedTab as Tab):"overview";
 
  useEffect(()=>{let active=true;(async()=>{try{
   const {profile}=await requireProfile();
@@ -58,7 +60,7 @@ function FrameworkWorkspaceContent(){
  }finally{if(active)setLoading(false);}})();return()=>{active=false;};},[router,code]);
 
  const framework=frameworks.find(f=>f.code===code);
- const setTab=(next:Tab)=>{const p=new URLSearchParams(searchParams.toString());if(next==="overview")p.delete("tab");else p.set("tab",next);router.replace(`/compliance/${code}${p.size?`?${p.toString()}`:""}`,{scroll:false});};
+ const setTab=(next:Tab)=>{const p=new URLSearchParams(searchParams.toString());if(next==="overview")p.delete("tab");else p.set("tab",next);router.push(`/compliance/${code}${p.size?`?${p.toString()}`:""}`,{scroll:false});};
  const assessmentHref=ASSESSMENT_ROUTES.find(a=>a.code===code)?.href??null;
  const openTab=(next:Tab)=>{
   if(next==="assessment"){
@@ -67,7 +69,6 @@ function FrameworkWorkspaceContent(){
   }
   setTab(next);
  };
- const canReview=role==="admin"||role==="cybersecurity_team";
 
  if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل مساحة الإطار…</main>;
  if(error)return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل مساحة الإطار</h1><p className="catalog-error">{error}</p><Link href="/compliance">العودة إلى مركز الامتثال</Link></main>;
@@ -78,16 +79,14 @@ function FrameworkWorkspaceContent(){
    <div><span className="workspace-kicker">{code} · الإصدار {framework.version}</span><h1>{framework.name_ar}</h1></div>
    <Link className="workflow-button" href="/compliance">مركز الامتثال ←</Link>
   </header>
-  <div className="workspace-tabs" role="tablist" aria-label="أقسام مساحة الإطار">{tabs.filter(t=>t.key!=="assessment"||canAssess).map(t=><button key={t.key} role="tab" aria-selected={tab===t.key} className={tab===t.key?"active":""} onClick={()=>openTab(t.key)}>{t.label}</button>)}</div>
+  <div className="workspace-tabs" role="tablist" aria-label="أقسام مساحة الإطار">{tabs.filter(t=>(t.key!=="assessment"||canAssess)&&(t.key!=="findings"||role!=="data_governance_team")).map(t=><button key={t.key} type="button" role="tab" aria-selected={tab===t.key} className={tab===t.key?"active":""} onClick={()=>openTab(t.key)}>{t.label}</button>)}</div>
   <div className="workspace-panel" role="tabpanel">
-   {tab==="overview"&&<OverviewTab controls={controls} assessmentHref={assessmentHref} canAssess={canAssess} setTab={openTab}/>}
-   {tab==="controls"&&<ControlsTab code={code} controls={controls}/>}
+   {tab==="overview"&&<OverviewTab key={code} code={code} controls={controls}/>}
+   {tab==="controls"&&<ControlsCatalog key={code} fixedFramework={code}/>}
    {tab==="assessment"&&(assessmentHref?<div className="workflow-empty workspace-gap"><p>تقييم {code} متاح في صفحة التقييم المخصصة لهذا الإطار.</p><Link href={assessmentHref}>فتح تقييم {code} ←</Link></div>:<HonestGap text="لا يوجد مسار تقييم مفعّل لهذا الإطار في CGP حاليًا." note="لا يُستنتج من ذلك عدم وجود متطلبات رسمية؛ لم تُربط أداة تقييم لهذا الإطار داخل CGP بعد."/>)}
    {tab==="evidence"&&<EvidenceTab code={code} controls={controls}/>}
-   {tab==="verification"&&<VerificationTab canReview={canReview}/>}
-   {tab==="findings"&&<div><AssessmentPortfolio framework={code}/>{role!=="data_governance_team"&&<p className="workspace-hint">سجل الملاحظات والإجراءات التصحيحية مركزي ولا يدعم حاليًا تصفية حسب الإطار. <Link href="/findings">فتح سجل الملاحظات والإجراءات ←</Link></p>}</div>}
+   {tab==="findings"&&<div className="workflow-empty workspace-gap"><p>سجل الملاحظات والإجراءات مركزي حاليًا؛ تصفية {code} ستُضاف بعد اعتماد عرضها السياقي.</p><Link href="/findings">فتح سجل الملاحظات والإجراءات ←</Link></div>}
   </div>
-  <ImportExportFoundation/>
  </main>;
 }
 
@@ -95,47 +94,29 @@ function HonestGap({text,note}:{text:string;note?:string}){
  return <div className="workflow-empty workspace-gap"><p>{text}</p>{note&&<small>{note}</small>}</div>;
 }
 
-function OverviewTab({controls,assessmentHref,canAssess,setTab}:{controls:Control[];assessmentHref:string|null;canAssess:boolean;setTab:(t:Tab)=>void}){
+function OverviewTab({code,controls}:{code:string;controls:Control[]}){
+ const [cycles,setCycles]=useState<{rows:CycleSummary[];error:boolean}|null>(null);
+ const [evidence,setEvidence]=useState<{rows:EvidenceSummaryRow[];error:boolean}|null>(null);
+ useEffect(()=>{let active=true;void(async()=>{
+  const [cycleResult,evidenceResult]=await Promise.all([supabase.rpc("cgp_assessment_summary"),supabase.rpc("grc_evidence_register")]);
+  if(active){setCycles({rows:(cycleResult.data??[]) as CycleSummary[],error:!!cycleResult.error});setEvidence({rows:(evidenceResult.data??[]) as EvidenceSummaryRow[],error:!!evidenceResult.error});}
+ })();return()=>{active=false;};},[code]);
  const parents=controls.filter(c=>c.hierarchy_level!=="sub_control");
- const subs=controls.filter(c=>c.hierarchy_level==="sub_control");
  const applicable=parents.filter(c=>isApplicable(c.implementation_status));
  const implemented=applicable.filter(c=>isImplemented(c.implementation_status));
  const pct=applicable.length?percentage(implemented.length,applicable.length):null;
- const domains=new Set(controls.map(c=>c.domain_ar)).size;
+ const latest=cycles?.rows.filter(c=>c.framework===code).sort((a,b)=>b.id-a.id)[0];
+ const controlIds=new Set(controls.map(c=>c.id));
+ const currentEvidence=evidence?.rows.filter(row=>row.is_current&&controlIds.has(row.control_id))??[];
+ const pending=currentEvidence.filter(row=>["pending_review","under_review"].includes(row.status)).length;
+ const expired=currentEvidence.filter(row=>isExpired(row.valid_until)).length;
  return <div className="workspace-overview">
-  <div className="workspace-metrics">
-   <div><span>الضوابط الأساسية</span><b>{parents.length}</b></div>
-   <div><span>الضوابط الفرعية</span><b>{subs.length}</b></div>
-   <div><span>المجالات</span><b>{domains}</b></div>
-   <div><span>نسبة التنفيذ</span><b>{pct===null?"—":`${pct}%`}</b></div>
-  </div>
-  <div className="workspace-journey">
-   <button onClick={()=>setTab("controls")}><strong>الضوابط</strong><small>استعراض الهيكل التنظيمي والنص الرسمي</small></button>
-   {canAssess&&<button onClick={()=>setTab("assessment")}><strong>التقييم</strong><small>{assessmentHref?"التقييم متاح في CGP":"التقييم غير مفعّل في CGP حاليًا"}</small></button>}
-   <button onClick={()=>setTab("evidence")}><strong>الأدلة</strong><small>إدارة الأدلة من المستودع المركزي دون نسخها</small></button>
-   <button onClick={()=>setTab("verification")}><strong>التحقق</strong><small>مراجعة الأدلة واعتماد القرار</small></button>
-   <button onClick={()=>setTab("findings")}><strong>النتائج والإجراءات</strong><small>الفجوات المفتوحة والمعالجات</small></button>
+  <div className="workspace-summary-grid">
+   <section className="workspace-summary-card"><h2>حالة التنفيذ</h2><strong>{pct===null?"—":`${pct}%`}</strong><p>{implemented.length} من {applicable.length} ضابط أساسي منطبق بحالة تنفيذ مكتمل.</p><small>هذه حالة تطبيق الضوابط، وليست نتيجة قياس الالتزام المعتمدة.</small></section>
+   <section className="workspace-summary-card"><h2>آخر دورة تقييم</h2>{cycles===null?<p>جاري تحميل الدورة…</p>:cycles.error?<p>تعذر تحميل ملخص التقييم.</p>:latest?<><strong>{cycleLabels[latest.status]??latest.status}</strong><p>{latest.scope_name} · الدورة #{latest.id}</p><p>اكتمال الإدخال: {displayPercent(latest.completion)}</p>{["approved","closed"].includes(latest.status)&&latest.compliance!==null&&<p>نتيجة قياس الالتزام المعتمدة لهذا النطاق: {displayPercent(latest.compliance)}</p>}<small>النتيجة تخص هذه الدورة ونطاقها فقط، ولا تمثل متوسطًا لجميع النطاقات.</small></>:<p>لا توجد دورة تقييم ضمن صلاحياتك لهذا الإطار.</p>}</section>
+   <section className="workspace-summary-card"><h2>الأدلة</h2>{evidence===null?<p>جاري تحميل ملخص الأدلة…</p>:evidence.error?<p>تعذر تحميل ملخص الأدلة.</p>:<><strong>{currentEvidence.length} سجلًا حاليًا</strong><p>{pending} بانتظار المراجعة · {expired} منتهي الصلاحية</p><small>إصدارات وقرارات الأدلة محفوظة في المستودع المركزي.</small></>}</section>
   </div>
   {!controls.length&&<HonestGap text="لا توجد ضوابط محمّلة لهذا الإطار ضمن نطاق صلاحياتك حاليًا."/>}
- </div>;
-}
-
-function ControlsTab({code,controls}:{code:string;controls:Control[]}){
- const domains=useMemo(()=>{
-  const map=new Map<string,{total:number;parents:number;subs:number;done:number}>();
-  for(const c of controls){
-   const row=map.get(c.domain_ar)??{total:0,parents:0,subs:0,done:0};
-   row.total++;
-   if(c.hierarchy_level==="sub_control")row.subs++;else row.parents++;
-   if(isImplemented(c.implementation_status))row.done++;
-   map.set(c.domain_ar,row);
-  }
-  return [...map.entries()];
- },[controls]);
- return <div className="workspace-controls-tab">
-  <p className="workspace-hint">هيكل الضوابط والنص التنظيمي الرسمي متاحان بكامل التفاصيل في مكتبة الضوابط. النص التنظيمي لا يُعرض أو يُعدَّل هنا.</p>
-  {!domains.length?<HonestGap text="لا توجد ضوابط محمّلة لهذا الإطار ضمن نطاق صلاحياتك حاليًا."/>:<ul className="workspace-domain-list">{domains.map(([name,row])=><li key={name}><span>{name}</span><span>{row.parents>0?`${row.parents} ضابط أساسي`:""}{row.subs>0?` · ${row.subs} ضابط فرعي`:""}</span></li>)}</ul>}
-  <Link className="workflow-button" href={`/controls?framework=${code}`}>فتح مكتبة الضوابط لهذا الإطار ←</Link>
  </div>;
 }
 
@@ -156,19 +137,4 @@ function EvidenceTab({code,controls}:{code:string;controls:Control[]}){
   <p className="workspace-hint">الأعداد تخص سجلات المستودع الحالية التي تتيحها صلاحياتك لهذا الإطار؛ تفاصيل الإصدارات والقرارات في المستودع.</p>
   <Link className="workflow-button" href={`/evidence?framework=${encodeURIComponent(code)}`}>فتح مستودع الأدلة ←</Link>
  </div>;
-}
-
-function VerificationTab({canReview}:{canReview:boolean}){
- return <div className="workspace-verification-tab">
-  <p className="workspace-hint">التحقق هو اعتماد الأدلة المرفوعة مقابل المتطلب الرسمي ونتيجة التقييم عند توفرها؛ وهو منفصل عن قرار التقييم نفسه ومنفصل عن التدقيق.</p>
-  {canReview?<Link className="workflow-button" href="/review">فتح التحقق ←</Link>:<p className="workspace-hint">إجراء مراجعة الأدلة متاح فقط لمدير النظام وفريق الأمن السيبراني.</p>}
- </div>;
-}
-
-function ImportExportFoundation(){
- return <section className="workspace-exchange" aria-labelledby="workspace-exchange-heading">
-  <div><h2 id="workspace-exchange-heading">استيراد وتصدير بيانات التقييم</h2><p className="workspace-hint">مسار مستقبلي مضبوط: رفع الملف ← التحقق ← المعاينة ← المطابقة ← الاستيراد. لن تُقبل ملفات أو تُغيَّر نتائج قبل اعتماد قالب الربط.</p></div>
-  <div className="workspace-exchange-actions"><button type="button" disabled>استيراد أداة/ملف التقييم</button><button type="button" disabled>تصدير بيانات التقييم</button></div>
-  <small>قريبًا — سيُفعّل بعد اعتماد قالب الربط. هذه الأزرار لا ترفع ملفًا ولا تصدّر بيانات ولا تغيّر تقييمًا.</small>
- </section>;
 }

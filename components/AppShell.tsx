@@ -21,14 +21,10 @@ import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
 const navigation = [
   { href: "/", label: "الرئيسية", group: "" },
 
-  // الامتثال -- shallow on purpose (P1.1): no subgroups, four real
-  // destinations only. CSCC/DCC/TCC/OSMACC assessment routes are
-  // intentionally NOT linked here anymore -- their pages/URLs are
-  // untouched and still fully reachable as deep links; P2 re-surfaces them
-  // inside each framework's own workspace. "مركز الامتثال" has no page of
-  // its own yet, so it is not a nav item (no placeholder links).
+  // Compliance work starts in the Center. Keep the legacy catalog entry for
+  // control owners until the dedicated My Controls journey exists.
   { href: "/compliance", label: "مركز الامتثال", group: "الامتثال", auditor: true },
-  { href: "/controls", label: "الأطر والضوابط", group: "الامتثال", auditor: true },
+  { href: "/controls", label: "ضوابطي", group: "الامتثال" },
   { href: "/evidence", label: "الأدلة", group: "الامتثال", auditor: true },
   { href: "/findings", label: "الملاحظات والإجراءات", group: "الامتثال", auditor: true },
   { href: "/review", label: "التحقق", group: "الامتثال", team: true },
@@ -151,12 +147,12 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const workspace = pathname === "/shared-controls" ? "shared" : pathname.startsWith("/data-governance") ? "data" : "cyber";
   const workspaceLabel = workspace === "data" ? "حوكمة البيانات" : workspace === "shared" ? "مركز المواءمة" : "الأمن السيبراني";
   const permittedItems = account ? navigation.filter(item => account.role === "data_governance_team" ? Boolean(item.data) : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];
-  const items = permittedItems.filter(item => !item.sidebarHidden && (workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls"));
+  const items = permittedItems.filter(item => !item.sidebarHidden && (item.href !== "/controls" || account?.role === "control_owner") && (workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls"));
   const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "الرئيسية");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const complianceCode = /^\/compliance\/([^/]+)/.exec(pathname)?.[1];
   const assessmentFramework = ASSESSMENT_ROUTES.find(route => route.href === pathname)?.code;
-  const leaf = pathname.endsWith("/assign") ? "تكليف المالك" : pathname.endsWith("/evidence/new") ? "رفع دليل" : controlId ? "تفاصيل الضابط" : complianceCode ? complianceCode.toUpperCase() : current;
+  const leaf = pathname.endsWith("/assign") ? "تكليف المالك" : pathname.endsWith("/evidence/new") ? "رفع دليل" : controlId ? "تفاصيل الضابط" : pathname === "/controls" ? "مكتبة الضوابط" : complianceCode ? complianceCode.toUpperCase() : current;
   const linkFor = (item:typeof navigation[number]) => <Link key={item.href} href={item.href} className="cgp-nav-link" title={navCollapsed?item.label:undefined} aria-current={(item.href === "/" ? pathname === "/" : item.href === "/roadmap" ? pathname === "/roadmap" : pathname === item.href || pathname.startsWith(item.href + "/")) ? "page" : undefined}><NavIcon href={item.href}/><span>{item.label}</span></Link>;
   const links = items.map(linkFor);
   // Blocks preserve array order: adjacent items sharing a `group` (or, inside
@@ -189,7 +185,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       // Strip PostgREST filter separators (`,()`) and ILIKE wildcard characters (`%_`)
       // so a raw search string can't widen the match beyond the typed text.
       const escaped = query.replace(/[,%()_]/g, " ");
-      const { data } = await supabase.from("controls").select("id,control_code,title_ar,frameworks!inner(is_active)").eq("frameworks.is_active",true).or(`control_code.ilike.%${escaped}%,title_ar.ilike.%${escaped}%`).order("control_code").limit(8);
+      const { data } = await supabase.from("controls").select("id,control_code,title_ar,frameworks!inner(code,is_active)").eq("frameworks.is_active",true).neq("frameworks.code","QA_SYNTH").or(`control_code.ilike.%${escaped}%,title_ar.ilike.%${escaped}%`).order("control_code").limit(8);
       setControlResults((data ?? []) as SearchResult[]);
       setSearching(false);
     }, 220);
@@ -240,7 +236,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       })}</nav><Link href="/change-password" className="cgp-nav-link cgp-account-link" aria-current={pathname === "/change-password" ? "page" : undefined}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-8H4v8a2 2 0 0 0 2 2zm1-10V8a5 5 0 0 1 10 0v3"/></svg><span>إعدادات كلمة المرور</span></Link><p className="cgp-scope">{workspace === "data" ? "سجلات وضوابط وطلبات إدارة البيانات ضمن صلاحيات حسابك." : workspace === "shared" ? "مواءمة معتمدة بين الأطر دون خلط مساحات العمل." : account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الأمن السيبراني ضمن صلاحيات حسابك."}</p></aside>
       <div className="cgp-page-column">
         <details key={pathname} className="cgp-mobile-navigation" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>القائمة <span>{current}</span></summary><nav aria-label="التنقل على الجوال">{links}<Link className="cgp-nav-link" href="/change-password">إعدادات كلمة المرور</Link></nav></details>
-        <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname !== "/" && <>{activeGroup&&<><span aria-hidden="true">/</span><span>{activeGroup}</span></>}<span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">الأطر والضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : complianceCode || assessmentFramework ? <><Link href="/compliance">مركز الامتثال</Link><span aria-hidden="true">/</span>{assessmentFramework&&<><Link href={`/compliance/${assessmentFramework}`}>{assessmentFramework}</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>
+        <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname !== "/" && <>{activeGroup&&<><span aria-hidden="true">/</span><span>{activeGroup}</span></>}<span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">مكتبة الضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : complianceCode || assessmentFramework ? <><Link href="/compliance">مركز الامتثال</Link><span aria-hidden="true">/</span>{assessmentFramework&&<><Link href={`/compliance/${assessmentFramework}`}>{assessmentFramework}</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>
         {error && <p role="alert" className="cgp-shell-error">{error}</p>}
         <div id="cgp-content" tabIndex={-1} className="cgp-route">{children}</div>
         <FeedbackWidget pagePath={pathname} visible={Boolean(account)} />

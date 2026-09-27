@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import StatusBadge, { statusText } from "@/components/StatusBadge";
 import EvidenceDownload from "@/components/EvidenceDownload";
@@ -42,7 +42,12 @@ const single=<T,>(value:T|T[]|null):T|null=>Array.isArray(value)?value[0]??null:
 const cleanTitle=(value:string)=>value.replace(/\s*[-–]\s*[\d-]+\s*$/,"").trim();
 
 export default function ControlDetailsPage() {
+ return <Suspense fallback={<main className="detail-page" role="status">جاري تحميل الضابط…</main>}><ControlDetailsContent/></Suspense>;
+}
+
+function ControlDetailsContent() {
  const {id}=useParams<{id:string}>(); const router=useRouter();
+ const searchParams=useSearchParams();
  const [control,setControl]=useState<Control|null>(null),[evidence,setEvidence]=useState<Evidence[]>([]);
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[role,setRole]=useState<UserRole|null>(null);
  const [tab,setTab]=useState(0);
@@ -113,12 +118,21 @@ export default function ControlDetailsPage() {
  const officialRequirement=control.official_text_ar||strategyExample?.requirement||(isCcc?control.title_ar:control.description_ar)||'لا يوجد وصف مسجل.';
  const applicability=applicabilityLabel(control.applicability);
  const frameworkCode=(control.frameworks?.code||'ECC').toLowerCase();
+ const returnParams=new URLSearchParams();
+ const domain=searchParams.get('domain');if(domain)returnParams.set('domain',domain);
+ const view=searchParams.get('view');if(view==='followup')returnParams.set('view',view);
+ const scope=searchParams.get('scope');if(scope==='provider'||scope==='tenant')returnParams.set('scope',scope);
+ const status=searchParams.get('status');if(status&&['implemented','in_progress','not_started','not_applicable'].includes(status))returnParams.set('status',status);
+ const assignment=searchParams.get('assignment');if(assignment==='assigned'||assignment==='unassigned')returnParams.set('assignment',assignment);
+ const query=searchParams.get('q');if(query)returnParams.set('q',query);
+ const fromWorkspace=searchParams.get('from')==='workspace';
+ const backHref=fromWorkspace?`/compliance/${frameworkCode.toUpperCase()}?tab=controls${returnParams.size?`&${returnParams.toString()}`:''}`:`/controls?framework=${frameworkCode.toUpperCase()}${returnParams.size?`&${returnParams.toString()}`:''}`;
  const timeline=[...evidence.flatMap(e=>[
   ...(e.uploaded_at?[{key:`upload-${e.id}`,time:e.uploaded_at,title:`رفع دليل: ${e.evidence_name||e.file_name}`,body:e.description}]:[]),
   ...(e.reviewed_at?[{key:`review-${e.id}`,time:e.reviewed_at,title:`قرار المراجعة: ${statusText(e.status||'')}`,body:e.review_notes}]:[])
  ])].sort((a,b)=>Date.parse(b.time)-Date.parse(a.time));
  return <main className="detail-page" dir="rtl">
-  <Link className="detail-back" href="/controls">← العودة إلى الضوابط</Link>
+  <Link className="detail-back" href={backHref}>← العودة إلى ضوابط {frameworkCode.toUpperCase()}</Link>
   {archived&&<section className="detail-card" role="status"><h2>ضابط مؤرشف</h2><p>ينتمي هذا الضابط إلى إصدار تنظيمي سابق، وهو محفوظ للرجوع التاريخي وسجل التدقيق فقط. لا يمكن إسناده أو رفع أدلة جديدة له أو بدء مراجعة أو تقييم جديد.</p></section>}
   <nav className="detail-breadcrumb" aria-label="مسار التصنيف الهرمي">
    <span>{control.domain_ar}</span>

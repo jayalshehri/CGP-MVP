@@ -1,33 +1,15 @@
 .compliance-center-page{max-width:1200px}
-.compliance-framework-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:20px}
-.compliance-framework-card{display:flex;flex-direction:column;gap:10px;border:1px solid #dbe4e8;background:#fff;border-radius:16px;padding:18px 20px;color:#0b1f33;min-height:110px;text-align:right;font:inherit;cursor:pointer}
-.compliance-framework-card:hover,.compliance-framework-card:focus-visible{border-color:#6ba9a2;box-shadow:0 8px 20px rgba(13,75,77,.08)}
-.compliance-framework-card.selected{border-color:#0d4b4d;background:#f3faf8;box-shadow:0 0 0 2px rgba(13,75,77,.12)}
-.compliance-framework-top{display:flex;align-items:center;justify-content:space-between;width:100%}
-.compliance-framework-top>strong{font-size:20px;color:var(--cgp-teal)}
-.compliance-framework-chevron{font-size:20px;line-height:1;color:var(--cgp-teal)}
-.compliance-framework-name{font-size:14px;font-weight:800;line-height:1.55}
-.compliance-framework-panel{margin-top:16px;padding:22px 24px;border:1px solid #b8d3ce;background:#fff;border-radius:16px;box-shadow:0 8px 24px rgba(13,75,77,.06)}
-.compliance-panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
-.compliance-panel-heading h2{margin:5px 0 0;font-size:19px;color:#0b1f33}
-.compliance-panel-kicker{font-size:13px;font-weight:900;color:var(--cgp-teal)}
-.compliance-panel-close{border:0;background:transparent;color:#647682;font:inherit;font-size:12px;font-weight:800;cursor:pointer;padding:5px}
-.compliance-panel-close:hover,.compliance-panel-close:focus-visible{color:var(--cgp-teal)}
-.compliance-panel-metrics{display:flex;flex-wrap:wrap;gap:10px 28px;margin:18px 0;padding:14px 0;border-block:1px solid #edf1f3}
-.compliance-panel-metrics>div{display:flex;align-items:baseline;gap:8px}
-.compliance-panel-metrics dt{font-size:12px;color:#647682}
-.compliance-panel-metrics dd{margin:0;font-size:15px;font-weight:900;color:#0b1f33}
-.compliance-panel-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.compliance-panel-actions>a,.compliance-action-unavailable{display:grid;align-content:center;gap:4px;min-height:72px;padding:12px 14px;border:1px solid #dbe4e8;border-radius:11px;background:#fbfdfd;color:#0b1f33;text-decoration:none}
-.compliance-panel-actions>a:hover,.compliance-panel-actions>a:focus-visible{border-color:#6ba9a2;background:#f3faf8}
-.compliance-panel-actions strong{font-size:13px;color:var(--cgp-teal)}
-.compliance-panel-actions small{font-size:11px;line-height:1.5;color:#647682}
-.compliance-action-unavailable{background:#f6f8f8;color:#647682}
-.compliance-action-unavailable strong{color:#647682}
-.compliance-panel-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:16px}
-.compliance-panel-footer>a{color:var(--cgp-teal);font-size:13px;font-weight:800;text-decoration:none}
-.compliance-panel-footer>a:hover{text-decoration:underline}
-.compliance-panel-footer>small{color:#647682;font-size:11px}
-@media(max-width:780px){.compliance-panel-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:640px){.compliance-framework-grid{grid-template-columns:1fr}.compliance-framework-panel{padding:18px}.compliance-panel-metrics{gap:8px 18px}}
-@media(max-width:430px){.compliance-panel-actions{grid-template-columns:1fr}}
+.compliance-framework-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px;margin-top:20px}
+.compliance-framework-card{display:flex;flex-direction:column;gap:10px;border:1px solid #dbe4e8;background:#fff;border-radius:16px;padding:20px;color:#0b1f33;min-height:190px}
+.compliance-framework-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#647682;font-size:12px}
+.compliance-framework-heading>strong{font-size:20px;color:var(--cgp-teal)}
+.compliance-framework-heading b{font-weight:800;color:#415460}
+.compliance-framework-card h2{font-size:17px;line-height:1.55;margin:0}
+.compliance-framework-card p{font-size:13px;color:#526675;margin:0}
+.compliance-framework-card .compliance-cycle-state{font-size:12px;color:#0d4b4d}
+.compliance-framework-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:auto;padding-top:10px}
+.compliance-framework-actions>a:not(.workflow-button){color:var(--cgp-teal);font-size:13px;font-weight:800;text-decoration:none}
+.compliance-framework-actions>a:hover{text-decoration:underline}
+.compliance-framework-actions span{color:#647682;font-size:12px}
+.compliance-framework-actions a:focus-visible{outline:3px solid #138b80;outline-offset:3px}
+@media(max-width:640px){.compliance-framework-grid{grid-template-columns:1fr}.compliance-framework-card{min-height:0}}

@@ -49,7 +49,9 @@ function EvidenceContent(){
    if(userRole==="control_owner")controlQuery=controlQuery.eq("control_owner_id",session.user.id);
    const {data:controlData,error:controlError}=await controlQuery;
    if(controlError){if(active){setError("تعذر تحميل الضوابط: "+controlError.message);setLoading(false);}return;}
-   const controls=(controlData??[]) as Control[];
+   // Keep synthetic QA evidence reachable by its explicit test deep link, but
+   // never mix it into the ordinary business repository view.
+   const controls=((controlData??[]) as Control[]).filter(control=>requestedFramework==="QA_SYNTH"||frameworkOf(control.frameworks).code!=="QA_SYNTH");
    if(controls.length===0){if(active){setRows([]);setLoading(false);}return;}
    const {data:evidenceData,error:evidenceError}=await supabase.rpc("grc_evidence_register");
    if(evidenceError){if(active){setError("تعذر تحميل الأدلة: "+evidenceError.message);setLoading(false);}return;}
@@ -57,7 +59,7 @@ function EvidenceContent(){
    if(active){setRows(((evidenceData??[]) as Evidence[]).filter(row=>map.has(row.control_id)).map(row=>({...row,control:map.get(row.control_id)})));setLoading(false);}
   }
   void load();return()=>{active=false;};
- },[router]);
+ },[router,requestedFramework]);
 
  const frameworks=useMemo(()=>[...new Set(rows.map(row=>frameworkOf(row.control?.frameworks).code))].filter(code=>code!=="—").sort(),[rows]);
  const filtered=useMemo(()=>rows.filter(row=>{
@@ -74,7 +76,7 @@ function EvidenceContent(){
  if(error)return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل البيانات</h1><p role="alert">{error}</p><button onClick={()=>window.location.reload()}>إعادة المحاولة</button></main>;
 
  return <main className="workflow-page evidence-page" dir="rtl">
-  <WorkflowHeading title="مستودع الأدلة" description="اعرض الدليل والضابط والإطار وحالة المراجعة في قائمة واحدة، وافتح التفاصيل عند الحاجة." action={<Link className="workflow-button" href="/controls">اختيار ضابط لرفع دليل ←</Link>}/>
+  <WorkflowHeading title="مستودع الأدلة" description="اعرض الدليل والضابط والإطار وحالة المراجعة في قائمة واحدة، وافتح التفاصيل عند الحاجة." action={role!=="nca_external_auditor"?<Link className="workflow-button" href="/controls">اختيار ضابط لرفع دليل ←</Link>:undefined}/>
   {role!=="nca_external_auditor"&&<details className="evidence-attention"><summary>طلبات الأدلة والمراجعات المطلوبة</summary><GrcAttention/></details>}
   <div className="workflow-tabs" role="group" aria-label="نطاق الأدلة"><button aria-pressed={scope==="current"} onClick={()=>setScope("current")}>الإرسالات الحالية</button><button aria-pressed={scope==="all"} onClick={()=>setScope("all")}>جميع الإصدارات</button></div>
   <div className="evidence-metrics"><span>إجمالي الأدلة <b>{scoped.length}</b></span><span>بانتظار المراجعة <b>{pending}</b></span><span>مقبولة <b>{accepted}</b></span><span>مرفوضة <b>{rejected}</b></span></div>
