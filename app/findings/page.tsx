@@ -10,7 +10,7 @@ import {
   type CorrectiveAction, type FindingSource, type SharedFinding,
 } from '@/lib/findings';
 import {supabase} from '@/lib/supabase';
-import {assessmentHrefFor} from '@/lib/compliance-frameworks';
+import {ASSESSMENT_ROUTES, assessmentHrefFor} from '@/lib/compliance-frameworks';
 import {WorkflowHeading, WorkflowMetric} from '@/components/WorkflowUI';
 import './findings.css';
 
@@ -30,7 +30,9 @@ export default function FindingsPage(){
 
 function FindingsRoute(){
   const params=useSearchParams();
-  return <FindingsContent key={params.toString()} params={params}/>;
+  const context=new URLSearchParams(params.toString());
+  context.delete('finding');
+  return <FindingsContent key={context.toString()} params={params}/>;
 }
 
 function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
@@ -38,6 +40,9 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   const sourceFromUrl=validSource(params.get('source'));
   const idFromUrl=Number(params.get('source_id'));
   const frameworkCode=params.get('framework')?.toUpperCase()??'';
+  const origin=params.get('from')==='workspace'?params.get('origin')?.toUpperCase():null;
+  const originCode=origin&&ASSESSMENT_ROUTES.some(route=>route.code===origin)?origin:null;
+  const findingFromUrl=Number(params.get('finding'));
   const assessmentHref=assessmentHrefFor(frameworkCode);
   const cycleFromUrl=Number(params.get('cycle'));
   const hasAssessmentContext=sourceFromUrl==='assessment'&&assessmentHref&&Number.isSafeInteger(cycleFromUrl)&&cycleFromUrl>0;
@@ -82,10 +87,10 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
     setFindings(allFindings);
     setActions(allActions);
     setPeople((directory?.data??[]) as Person[]);
-    setSelectedId(previous=>previous&&allFindings.some(f=>f.id===previous)?previous:
+    setSelectedId(previous=>Number.isSafeInteger(findingFromUrl)&&findingFromUrl>0&&allFindings.some(f=>f.id===findingFromUrl)?findingFromUrl:previous&&allFindings.some(f=>f.id===previous)?previous:
       allFindings.find(f=>f.source_type===sourceFromUrl&&f.source_record_id===idFromUrl)?.id??
       (Number.isSafeInteger(idFromUrl)&&idFromUrl>0?null:allFindings[0]?.id??null));
-  },[sourceFromUrl,idFromUrl]);
+  },[sourceFromUrl,idFromUrl,findingFromUrl]);
 
   useEffect(()=>{
     let active=true;
@@ -117,6 +122,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   const overdue=openFindings.filter(f=>f.due_date&&f.due_date<todayRiyadh());
   const canCreate=roleCanWork(role)&&
     (teamRole(role)||!Number.isSafeInteger(idFromUrl)||idFromUrl<=0||sourceFromUrl==='assessment');
+  const selectFinding=(findingId:number)=>{const next=new URLSearchParams(params.toString());next.set('finding',String(findingId));router.push(`/findings?${next.toString()}`,{scroll:false});};
 
   async function run(action:string,finding:SharedFinding|null,payload:Record<string,unknown>){
     if(busy)return false;
@@ -128,7 +134,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
       });
       if(commandError)throw commandError;
       await load(teamRole(role));
-      if(action==='create_finding'&&data?.id)setSelectedId(Number(data.id));
+      if(action==='create_finding'&&data?.id)selectFinding(Number(data.id));
       setNotice('حُفظ الإجراء في سجل الملاحظات والتدقيق.');
       return true;
     }catch(cause){setError(errorMessage(cause));return false;}
@@ -148,6 +154,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
 
   if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل مساحة الملاحظات…</main>;
   return <main className="workflow-page findings-page" dir="rtl">
+    {originCode&&<p className="findings-context"><Link href={`/compliance/${originCode}?tab=findings`}>العودة إلى ملاحظات {originCode} ←</Link></p>}
     <WorkflowHeading title="الملاحظات والإجراءات التصحيحية"
       description="سجل مشترك يربط مصدر الملاحظة بالمعالجة والتحقق والإغلاق؛ نتائج التقييم القديمة باقية كما هي."
       action={canCreate?<button className="workflow-button workflow-primary" onClick={()=>setCreateOpen(v=>!v)}>+ تسجيل ملاحظة</button>:undefined}/>
@@ -195,7 +202,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
         <label>الخطورة<select value={severityFilter} onChange={e=>setSeverityFilter(e.target.value)}><option value="all">الكل</option>
           {Object.entries(severityLabels).map(([key,value])=><option key={key} value={key}>{value}</option>)}</select></label>
       </div>
-      {Number.isSafeInteger(idFromUrl)&&idFromUrl>0&&<p className="findings-context">{hasAssessmentContext?<><Link href={`/compliance/${frameworkCode}`}>{frameworkCode}</Link> ← <Link href={`${assessmentHref}?cycle=${cycleFromUrl}`}>دورة التقييم #{cycleFromUrl}</Link> ← بند التقييم #{idFromUrl}</>:<>المصدر: {sourceLabels[sourceFromUrl]} #{idFromUrl}</>} · <Link href="/findings">عرض كل الملاحظات</Link></p>}
+      {Number.isSafeInteger(idFromUrl)&&idFromUrl>0&&<p className="findings-context">{hasAssessmentContext?<><Link href={`/compliance/${frameworkCode}`}>{frameworkCode}</Link> ← <Link href={`${assessmentHref}?cycle=${cycleFromUrl}`}>دورة التقييم #{cycleFromUrl}</Link> ← <Link href={`${assessmentHref}?cycle=${cycleFromUrl}&item=${idFromUrl}`}>العودة إلى بند التقييم #{idFromUrl} ←</Link></>:<>المصدر: {sourceLabels[sourceFromUrl]} #{idFromUrl}</>} · <Link href="/findings">عرض كل الملاحظات</Link></p>}
       <p role="status">{visible.length} ملاحظة ضمن هذه التصفية وصلاحياتك.</p>
       <div className="findings-table-wrap"><table className="workflow-table findings-table"><thead><tr>
         <th>الملاحظة</th><th>المصدر</th><th>الخطورة</th><th>الحالة</th><th>المالك</th><th>الاستحقاق</th><th>الإجراءات</th>
@@ -205,7 +212,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
         <td>{severityLabels[f.severity]}</td><td>{findingStatusLabels[f.status]}</td>
         <td>{f.owner_id===actor?'أنا':people.find(p=>p.user_id===f.owner_id)?.display_name||f.owner_id?.slice(0,8)||'غير محدد'}</td>
         <td>{formatComplianceDate(f.due_date,true)}{f.due_date&&f.due_date<todayRiyadh()&&f.status!=='closed'&&<strong className="findings-overdue"> متأخرة</strong>}</td>
-        <td><button onClick={()=>setSelectedId(f.id)}>فتح</button></td>
+        <td><button onClick={()=>selectFinding(f.id)}>فتح</button></td>
       </tr>)}</tbody></table></div>
       {visible.length===0&&<p className="workflow-empty">لا توجد ملاحظات مطابقة. تبقى نتائج التقييم القديمة متاحة في صفحات التقييم نفسها.</p>}
     </section>

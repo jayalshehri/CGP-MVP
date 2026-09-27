@@ -85,7 +85,7 @@ function FrameworkWorkspaceContent(){
    {tab==="controls"&&<ControlsCatalog key={code} fixedFramework={code}/>}
    {tab==="assessment"&&(assessmentHref?<div className="workflow-empty workspace-gap"><p>تقييم {code} متاح في صفحة التقييم المخصصة لهذا الإطار.</p><Link href={assessmentHref}>فتح تقييم {code} ←</Link></div>:<HonestGap text="لا يوجد مسار تقييم مفعّل لهذا الإطار في CGP حاليًا." note="لا يُستنتج من ذلك عدم وجود متطلبات رسمية؛ لم تُربط أداة تقييم لهذا الإطار داخل CGP بعد."/>)}
    {tab==="evidence"&&<EvidenceTab code={code} controls={controls}/>}
-   {tab==="findings"&&<div className="workflow-empty workspace-gap"><p>سجل الملاحظات والإجراءات مركزي حاليًا؛ تصفية {code} ستُضاف بعد اعتماد عرضها السياقي.</p><Link href="/findings">فتح سجل الملاحظات والإجراءات ←</Link></div>}
+   {tab==="findings"&&<div className="workflow-empty workspace-gap"><p>سجل الملاحظات والإجراءات مركزي حاليًا؛ تصفية {code} ستُضاف بعد اعتماد عرضها السياقي.</p><Link href={`/findings?from=workspace&origin=${encodeURIComponent(code)}`}>فتح سجل الملاحظات والإجراءات ←</Link></div>}
   </div>
  </main>;
 }
@@ -135,6 +135,6 @@ function EvidenceTab({code,controls}:{code:string;controls:Control[]}){
   <p className="workspace-hint">هذه مساحة إطار {code}. تبقى الأدلة وإصداراتها وقرارات مراجعتها في المستودع المركزي، ولا تُنسخ إلى مساحة الإطار.</p>
   {summary?<div className="workspace-evidence-summary"><div><span>ضوابط لها دليل حالي</span><b>{summary.withEvidence}</b></div><div><span>سجلات أدلة بانتظار المراجعة</span><b>{summary.pending}</b></div><div><span>سجلات أدلة منتهية الصلاحية</span><b>{summary.expired}</b></div></div>:<p className="workspace-hint" role="status">{summaryError?"تعذر تحميل ملخص الأدلة؛ التفاصيل متاحة في المستودع المركزي.":"جاري تحميل ملخص الأدلة…"}</p>}
   <p className="workspace-hint">الأعداد تخص سجلات المستودع الحالية التي تتيحها صلاحياتك لهذا الإطار؛ تفاصيل الإصدارات والقرارات في المستودع.</p>
-  <Link className="workflow-button" href={`/evidence?framework=${encodeURIComponent(code)}`}>فتح مستودع الأدلة ←</Link>
+  <Link className="workflow-button" href={`/evidence?framework=${encodeURIComponent(code)}&from=workspace&origin=${encodeURIComponent(code)}`}>فتح مستودع الأدلة ←</Link>
  </div>;
 }

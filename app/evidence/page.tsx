@@ -8,6 +8,7 @@ import GrcAttention from "@/components/GrcAttention";
 import StatusBadge from "@/components/StatusBadge";
 import { ResultSummary, WorkflowHeading } from "@/components/WorkflowUI";
 import { frameworkOf } from "@/lib/compliance";
+import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
 import { formatComplianceDate, isExpired } from "@/lib/grc";
 import { supabase } from "@/lib/supabase";
 import "./evidence.css";
@@ -25,15 +26,16 @@ function EvidenceContent(){
  const router=useRouter();
  const searchParams=useSearchParams();
  const requestedFramework=searchParams.get("framework")?.toUpperCase()||"all";
+ const originCode=searchParams.get("from")==="workspace"?searchParams.get("origin")?.toUpperCase():null;
+ const returnCode=originCode&&ASSESSMENT_ROUTES.some(item=>item.code===originCode)?originCode:null;
  const [loading,setLoading]=useState(true);
  const [role,setRole]=useState<UserRole>("control_owner");
  const [rows,setRows]=useState<EvidenceRow[]>([]);
  const [search,setSearch]=useState("");
  const [status,setStatus]=useState("all");
  const [scope,setScope]=useState("current");
- const [frameworkSelection,setFrameworkSelection]=useState<{routeCode:string;selected:string}|null>(null);
- const framework=frameworkSelection?.routeCode===requestedFramework?frameworkSelection.selected:requestedFramework;
- const setFramework=(selected:string)=>setFrameworkSelection({routeCode:requestedFramework,selected});
+ const framework=requestedFramework;
+ const setFramework=(selected:string)=>{const next=new URLSearchParams(searchParams.toString());if(selected==="all")next.delete("framework");else next.set("framework",selected);router.push(`/evidence${next.size?`?${next.toString()}`:""}`,{scroll:false});};
  const [error,setError]=useState("");
 
  useEffect(()=>{let active=true;
@@ -76,6 +78,7 @@ function EvidenceContent(){
  if(error)return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل البيانات</h1><p role="alert">{error}</p><button onClick={()=>window.location.reload()}>إعادة المحاولة</button></main>;
 
  return <main className="workflow-page evidence-page" dir="rtl">
+  {returnCode&&<Link className="evidence-context-return" href={`/compliance/${returnCode}?tab=evidence`}>العودة إلى أدلة {returnCode} ←</Link>}
   <WorkflowHeading title="مستودع الأدلة" description="اعرض الدليل والضابط والإطار وحالة المراجعة في قائمة واحدة، وافتح التفاصيل عند الحاجة." action={role!=="nca_external_auditor"?<Link className="workflow-button" href="/controls">اختيار ضابط لرفع دليل ←</Link>:undefined}/>
   {role!=="nca_external_auditor"&&<details className="evidence-attention"><summary>طلبات الأدلة والمراجعات المطلوبة</summary><GrcAttention/></details>}
   <div className="workflow-tabs" role="group" aria-label="نطاق الأدلة"><button aria-pressed={scope==="current"} onClick={()=>setScope("current")}>الإرسالات الحالية</button><button aria-pressed={scope==="all"} onClick={()=>setScope("all")}>جميع الإصدارات</button></div>
@@ -85,7 +88,7 @@ function EvidenceContent(){
    <label>الإطار التنظيمي<select value={framework} onChange={event=>setFramework(event.target.value)}><option value="all">جميع الأطر</option>{frameworks.map(code=><option key={code} value={code}>{code}</option>)}{framework!=="all"&&!frameworks.includes(framework)&&<option value={framework}>{framework}</option>}</select></label>
    <label>حالة الدليل<select value={status} onChange={event=>setStatus(event.target.value)}><option value="all">كل الحالات</option><option value="pending_review">بانتظار المراجعة</option><option value="under_review">قيد المراجعة</option><option value="accepted">مقبول</option><option value="rejected">مرفوض</option><option value="changes_requested">يحتاج استكمالًا</option></select></label>
   </div>
-  <ResultSummary count={filtered.length} total={scoped.length} active={!!search||status!=="all"||framework!=="all"} reset={()=>{setSearch("");setStatus("all");setFramework("all");}}/>
+  <ResultSummary count={filtered.length} total={scoped.length} active={!!search||status!=="all"||framework!=="all"} reset={()=>{setSearch("");setStatus("all");setFramework(returnCode??"all");}}/>
   <div className="evidence-table-scroll"><table className="evidence-table"><thead><tr><th>الدليل</th><th>الضابط</th><th>الإطار</th><th>المالك</th><th>الإصدار</th><th>الحالة</th><th>الصلاحية</th><th>الإجراءات</th></tr></thead><tbody>
    {filtered.length===0?<tr><td colSpan={8} className="evidence-empty">لا توجد أدلة مطابقة حاليًا.</td></tr>:filtered.map(row=>{
     const key=`${row.id}-${row.link_id??"source"}`;

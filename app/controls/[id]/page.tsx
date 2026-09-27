@@ -158,14 +158,13 @@ function ControlDetailsContent() {
     <h2>المتطلبات والمشاريع المرتبطة</h2>
     <p className="detail-hint">علاقة للقراءة فقط، مصدرها ربط المتطلبات السيبرانية الحالي — لا منطق ربط جديد ولا تكرار للبيانات.</p>
     {!requirementLinks.length?<p>لا يدعم هذا الضابط أي متطلب سيبراني مسجل حاليًا.</p>:
-    <div className="req-proj-table-wrap"><table className="req-proj-table"><thead><tr><th>معرف المطلب الداخلي</th><th>المتطلب</th><th>التغطية</th><th>جودة الربط</th><th>رمز المشروع</th><th>المشروع</th></tr></thead><tbody>
+    <div className="req-proj-table-wrap"><table className="req-proj-table"><thead><tr><th>المتطلب</th><th>التغطية</th><th>جودة الربط</th><th>رمز المشروع</th><th>المشروع</th></tr></thead><tbody>
      {requirementLinks.map(link=>{
       const requirement=single(link.cybersecurity_requirements);
       const projectLink=projectLinks.find(p=>p.requirement_id===link.requirement_id);
       const project=projectLink?single(projectLink.cybersecurity_projects):null;
       return <tr key={link.requirement_id}>
-       <td dir="ltr">{requirement?.requirement_code??'—'}</td>
-       <td>{requirement?.title_ar??'—'}</td>
+       <td>{requirement?.title_ar??'—'}{requirement?.requirement_code&&<details className="req-internal-id"><summary>تفاصيل المطلب</summary><span>المعرّف الداخلي: <b dir="ltr">{requirement.requirement_code}</b></span></details>}</td>
        <td><span className={`coverage-pill ${link.coverage_type}`}>{coverageText[link.coverage_type]??link.coverage_type}</span></td>
        <td><span className={`mapping-pill ${link.mapping_confidence}`}>{mappingConfidenceText[link.mapping_confidence]??link.mapping_confidence}</span></td>
        <td dir="ltr">{project?.project_code??'—'}</td>

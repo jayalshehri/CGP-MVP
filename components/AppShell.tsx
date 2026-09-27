@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import FeedbackWidget from "@/components/FeedbackWidget";
@@ -123,6 +123,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return <Workspace pathname={pathname}>{children}</Workspace>;
 }
 
+function ContextBreadcrumb({pathname,leaf,activeGroup,controlId,complianceCode,assessmentFramework}:{pathname:string;leaf:string;activeGroup:string;controlId?:string;complianceCode?:string;assessmentFramework?:string}){
+  const params=useSearchParams();
+  const origin=params.get("from")==="workspace"?params.get("origin")?.toUpperCase():null;
+  const workspaceCode=origin&&ASSESSMENT_ROUTES.some(route=>route.code===origin)?origin:null;
+  const cycle=Number(params.get("cycle"));
+  const item=Number(params.get("item"));
+  const sourceId=Number(params.get("source_id"));
+  const findingFramework=params.get("framework")?.toUpperCase();
+  const sourceRoute=pathname==="/findings"&&params.get("source")==="assessment"?ASSESSMENT_ROUTES.find(route=>route.code===findingFramework&&route.href):null;
+  const part=(href:string,label:string)=><><span aria-hidden="true">/</span><Link href={href}>{label}</Link></>;
+  return <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname!==""&&pathname!=="/"&&<>
+    {activeGroup&&<><span aria-hidden="true">/</span><span>{activeGroup}</span></>}
+    {controlId&&workspaceCode?<>{part("/compliance","مركز الامتثال")}{part(`/compliance/${workspaceCode}?tab=controls`,`ضوابط ${workspaceCode}`)}{leaf!=="تفاصيل الضابط"&&part(`/controls/${controlId}?from=workspace&origin=${workspaceCode}`,"تفاصيل الضابط")}</>:
+      (pathname==="/evidence"||pathname==="/findings")&&workspaceCode?<>{part("/compliance","مركز الامتثال")}{part(`/compliance/${workspaceCode}?tab=${pathname==="/evidence"?"evidence":"findings"}`,workspaceCode)}</>:
+      sourceRoute?<>{part("/compliance","مركز الامتثال")}{part(`/compliance/${sourceRoute.code}`,sourceRoute.code)}{Number.isSafeInteger(cycle)&&cycle>0&&part(`${sourceRoute.href}?cycle=${cycle}`,`دورة #${cycle}`)}{Number.isSafeInteger(cycle)&&cycle>0&&Number.isSafeInteger(sourceId)&&sourceId>0&&part(`${sourceRoute.href}?cycle=${cycle}&item=${sourceId}`,`بند #${sourceId}`)}</>:
+      controlId?<>{part("/controls","مكتبة الضوابط")}{leaf!=="تفاصيل الضابط"&&part(`/controls/${controlId}`,"تفاصيل الضابط")}</>:
+      complianceCode||assessmentFramework?<>{part("/compliance","مركز الامتثال")}{assessmentFramework&&part(`/compliance/${assessmentFramework}`,assessmentFramework)}{assessmentFramework&&Number.isSafeInteger(cycle)&&cycle>0&&part(`${pathname}?cycle=${cycle}`,`دورة #${cycle}`)}{assessmentFramework&&Number.isSafeInteger(item)&&item>0&&part(`${pathname}?cycle=${cycle}&item=${item}`,`بند #${item}`)}</>:null}
+    <span aria-hidden="true">/</span><span aria-current="page">{leaf}</span>
+  </>}</nav>;
+}
+
 function Workspace({ children, pathname }: { children: React.ReactNode; pathname: string }) {
   const router = useRouter();
   const [account, setAccount] = useState<{ name: string; role: UserRole } | null>(null);
@@ -236,7 +257,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       })}</nav><Link href="/change-password" className="cgp-nav-link cgp-account-link" aria-current={pathname === "/change-password" ? "page" : undefined}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-8H4v8a2 2 0 0 0 2 2zm1-10V8a5 5 0 0 1 10 0v3"/></svg><span>إعدادات كلمة المرور</span></Link><p className="cgp-scope">{workspace === "data" ? "سجلات وضوابط وطلبات إدارة البيانات ضمن صلاحيات حسابك." : workspace === "shared" ? "مواءمة معتمدة بين الأطر دون خلط مساحات العمل." : account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الأمن السيبراني ضمن صلاحيات حسابك."}</p></aside>
       <div className="cgp-page-column">
         <details key={pathname} className="cgp-mobile-navigation" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>القائمة <span>{current}</span></summary><nav aria-label="التنقل على الجوال">{links}<Link className="cgp-nav-link" href="/change-password">إعدادات كلمة المرور</Link></nav></details>
-        <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname !== "/" && <>{activeGroup&&<><span aria-hidden="true">/</span><span>{activeGroup}</span></>}<span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">مكتبة الضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : complianceCode || assessmentFramework ? <><Link href="/compliance">مركز الامتثال</Link><span aria-hidden="true">/</span>{assessmentFramework&&<><Link href={`/compliance/${assessmentFramework}`}>{assessmentFramework}</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>
+        <Suspense fallback={<nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link> / <span aria-current="page">{leaf}</span></nav>}><ContextBreadcrumb pathname={pathname} leaf={leaf} activeGroup={activeGroup} controlId={controlId} complianceCode={complianceCode} assessmentFramework={assessmentFramework}/></Suspense>
         {error && <p role="alert" className="cgp-shell-error">{error}</p>}
         <div id="cgp-content" tabIndex={-1} className="cgp-route">{children}</div>
         <FeedbackWidget pagePath={pathname} visible={Boolean(account)} />

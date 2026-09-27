@@ -20,7 +20,7 @@ export default function AssessmentItemEditor({item,cycle,people,projects,evidenc
  const canFollow=team||(role==='control_owner'&&finding?.owner_id===actor);
  const reviewable=actor===cycle.reviewer_id&&cycle.status==='under_review';
  return <div className="ae-detail">
- <p>{item.description_ar||item.title_ar}</p><div className="ae-links"><Link href={`/controls/${item.control_id}`}>فتح الضابط والأدلة والسجل ←</Link>{role!=='nca_external_auditor'&&<Link href={`/controls/${item.control_id}/evidence/new`}>تقديم دليل</Link>}<Link href={`/findings?${findingContext.toString()}`}>الملاحظات والإجراءات لهذا البند ←</Link></div>
+ <p>{item.description_ar||item.title_ar}</p><div className="ae-links"><Link href={`${pathname}?cycle=${cycle.id}`}>العودة إلى دورة التقييم ←</Link><Link href={`/controls/${item.control_id}`}>فتح الضابط والأدلة والسجل ←</Link>{role!=='nca_external_auditor'&&<Link href={`/controls/${item.control_id}/evidence/new`}>تقديم دليل</Link>}<Link href={`/findings?${findingContext.toString()}`}>الملاحظات والإجراءات لهذا البند ←</Link></div>
  <form onSubmit={e=>{e.preventDefault();void command('save',{item_id:item.id,revision:item.revision,...form,evidence_ids:ids});}}>
  <fieldset disabled={!editable||busy}><legend>نتيجة المتطلب</legend><div className="ae-form-grid">
  <label>النتيجة<select value={form.compliance_status} onChange={e=>setForm({...form,compliance_status:e.target.value})}><option value="">لم يُقيّم</option>{Object.entries(assessmentLabels).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>

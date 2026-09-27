@@ -7,6 +7,9 @@
 .req-proj-table td{padding:10px 12px;border-bottom:1px solid #eef2f3;vertical-align:middle}
 .req-proj-table tr:last-child td{border-bottom:0}
 .req-proj-table a{color:var(--cgp-teal);text-decoration:none;font-weight:700}
+.req-internal-id{margin-top:5px;color:#586875;font-size:11px}
+.req-internal-id summary{cursor:pointer;color:var(--cgp-teal);font-weight:700}
+.req-internal-id span{display:block;margin-top:4px}
 .coverage-pill,.mapping-pill{display:inline-block;white-space:nowrap;border-radius:20px;padding:4px 9px;font-size:11px;font-weight:800}
 .coverage-pill.full{background:#e7f6f2;color:#0f766e}
 .coverage-pill.partial{background:#fbf1dc;color:#9a640c}

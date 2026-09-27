@@ -1,4 +1,5 @@
 .evidence-page{color:var(--cgp-ink)}
+.evidence-context-return{display:inline-block;margin-bottom:12px;color:var(--cgp-teal);font-size:13px;font-weight:800;text-decoration:none}
 .evidence-attention{margin-bottom:14px;border:1px solid #dce5e8;background:#fff;border-radius:10px}
 .evidence-attention>summary{cursor:pointer;padding:11px 15px;font-weight:800;color:#234c53}
 .evidence-attention .workflow-card{margin:0;border:0;box-shadow:none}
