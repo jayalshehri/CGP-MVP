@@ -41,7 +41,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   const idFromUrl=Number(params.get('source_id'));
   const frameworkCode=params.get('framework')?.toUpperCase()??'';
   const origin=params.get('from')==='workspace'?params.get('origin')?.toUpperCase():null;
-  const originCode=origin&&ASSESSMENT_ROUTES.some(route=>route.code===origin)?origin:null;
+  const originCode=origin&&origin===frameworkCode&&(ASSESSMENT_ROUTES.some(route=>route.code===origin)||origin==='QA_SYNTH')?origin:null;
   const findingFromUrl=Number(params.get('finding'));
   const assessmentHref=assessmentHrefFor(frameworkCode);
   const cycleFromUrl=Number(params.get('cycle'));
@@ -67,20 +67,33 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   });
 
   const load=useCallback(async(team:boolean)=>{
+    // The framework parameter is a database filter, not just return context.
+    // Never fall back to the global register when a code is unknown/inaccessible.
+    let frameworkId:number|null=null;
+    if(frameworkCode){
+      const framework=await supabase.from('frameworks').select('id').eq('code',frameworkCode).eq('is_active',true).maybeSingle();
+      if(framework.error)throw framework.error;
+      frameworkId=framework.data?.id??-1;
+    }
     // Paging avoids treating Supabase's per-response row cap as a compliance total.
     const allFindings:SharedFinding[]=[];
     const allActions:CorrectiveAction[]=[];
     for(let from=0;;from+=500){
-      const result=await supabase.from('grc_findings').select('*').order('id',{ascending:false}).range(from,from+499);
+      let query=supabase.from('grc_findings').select('*').order('id',{ascending:false}).range(from,from+499);
+      if(frameworkId!==null)query=query.eq('framework_id',frameworkId);
+      const result=await query;
       if(result.error)throw result.error;
       allFindings.push(...(result.data??[]) as SharedFinding[]);
       if((result.data??[]).length<500)break;
     }
-    for(let from=0;;from+=500){
-      const result=await supabase.from('grc_corrective_actions').select('*').order('id').range(from,from+499);
-      if(result.error)throw result.error;
-      allActions.push(...(result.data??[]) as CorrectiveAction[]);
-      if((result.data??[]).length<500)break;
+    if(allFindings.length){
+      const findingIds=new Set(allFindings.map(f=>f.id));
+      for(let from=0;;from+=500){
+        const result=await supabase.from('grc_corrective_actions').select('*').order('id').range(from,from+499);
+        if(result.error)throw result.error;
+        allActions.push(...((result.data??[]) as CorrectiveAction[]).filter(action=>findingIds.has(action.finding_id)));
+        if((result.data??[]).length<500)break;
+      }
     }
     const directory=team?await supabase.from('profiles').select('user_id,display_name,role').eq('is_active',true):null;
     if(directory?.error)throw directory.error;
@@ -90,7 +103,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
     setSelectedId(previous=>Number.isSafeInteger(findingFromUrl)&&findingFromUrl>0&&allFindings.some(f=>f.id===findingFromUrl)?findingFromUrl:previous&&allFindings.some(f=>f.id===previous)?previous:
       allFindings.find(f=>f.source_type===sourceFromUrl&&f.source_record_id===idFromUrl)?.id??
       (Number.isSafeInteger(idFromUrl)&&idFromUrl>0?null:allFindings[0]?.id??null));
-  },[sourceFromUrl,idFromUrl,findingFromUrl]);
+  },[sourceFromUrl,idFromUrl,findingFromUrl,frameworkCode]);
 
   useEffect(()=>{
     let active=true;
@@ -155,8 +168,8 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل مساحة الملاحظات…</main>;
   return <main className="workflow-page findings-page" dir="rtl">
     {originCode&&<p className="findings-context"><Link href={`/compliance/${originCode}?tab=findings`}>العودة إلى ملاحظات {originCode} ←</Link></p>}
-    <WorkflowHeading title="الملاحظات والإجراءات التصحيحية"
-      description="سجل مشترك يربط مصدر الملاحظة بالمعالجة والتحقق والإغلاق؛ نتائج التقييم القديمة باقية كما هي."
+    <WorkflowHeading title={frameworkCode?`الملاحظات والإجراءات — ${frameworkCode}`:"الملاحظات والإجراءات التصحيحية"}
+      description={frameworkCode?`الملاحظات المرتبطة فعليًا بإطار ${frameworkCode} ضمن صلاحياتك. نتائج التقييم القديمة مستقلة ومحفوظة في صفحاتها.`:"السجل المشترك المصرّح به يربط مصدر الملاحظة بالمعالجة والتحقق والإغلاق؛ نتائج التقييم القديمة باقية كما هي."}
       action={canCreate?<button className="workflow-button workflow-primary" onClick={()=>setCreateOpen(v=>!v)}>+ تسجيل ملاحظة</button>:undefined}/>
     {error&&<p className="findings-error" role="alert">{error} <button onClick={()=>router.refresh()}>تحديث الصفحة</button></p>}
     {notice&&<p className="findings-success" role="status">{notice}</p>}
@@ -203,6 +216,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
           {Object.entries(severityLabels).map(([key,value])=><option key={key} value={key}>{value}</option>)}</select></label>
       </div>
       {Number.isSafeInteger(idFromUrl)&&idFromUrl>0&&<p className="findings-context">{hasAssessmentContext?<><Link href={`/compliance/${frameworkCode}`}>{frameworkCode}</Link> ← <Link href={`${assessmentHref}?cycle=${cycleFromUrl}`}>دورة التقييم #{cycleFromUrl}</Link> ← <Link href={`${assessmentHref}?cycle=${cycleFromUrl}&item=${idFromUrl}`}>العودة إلى بند التقييم #{idFromUrl} ←</Link></>:<>المصدر: {sourceLabels[sourceFromUrl]} #{idFromUrl}</>} · <Link href="/findings">عرض كل الملاحظات</Link></p>}
+      {frameworkCode&&!(Number.isSafeInteger(idFromUrl)&&idFromUrl>0)&&<p className="findings-context"><Link href="/findings">عرض السجل العام المصرّح به ←</Link></p>}
       <p role="status">{visible.length} ملاحظة ضمن هذه التصفية وصلاحياتك.</p>
       <div className="findings-table-wrap"><table className="workflow-table findings-table"><thead><tr>
         <th>الملاحظة</th><th>المصدر</th><th>الخطورة</th><th>الحالة</th><th>المالك</th><th>الاستحقاق</th><th>الإجراءات</th>
