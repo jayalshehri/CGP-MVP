@@ -3,8 +3,9 @@
 .workspace-kicker{font-size:12px;color:var(--cgp-teal);font-weight:800}
 .workspace-header h1{margin:4px 0 0;font-size:22px}
 .workspace-tabs{display:flex;gap:4px;padding:4px;background:#edf3f4;border-radius:10px;margin-bottom:18px;overflow-x:auto}
-.workspace-tabs button{border:0;background:transparent;border-radius:7px;padding:10px 16px;color:#415460;font-weight:800;cursor:pointer;white-space:nowrap}
-.workspace-tabs button.active{background:#fff;color:var(--cgp-teal);box-shadow:0 1px 4px rgba(11,31,51,.12)}
+.workspace-tabs a{display:inline-flex;align-items:center;border:0;background:transparent;border-radius:7px;padding:10px 16px;color:#415460;font-weight:800;text-decoration:none;white-space:nowrap}
+.workspace-tabs a.active{background:#fff;color:var(--cgp-teal);box-shadow:0 1px 4px rgba(11,31,51,.12)}
+.workspace-tabs a:focus-visible{outline:2px solid var(--cgp-teal);outline-offset:2px}
 .workspace-panel{min-height:200px}
 .workspace-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
 .workspace-summary-card{border:1px solid #dbe4e8;background:#fff;border-radius:12px;padding:18px;min-width:0}

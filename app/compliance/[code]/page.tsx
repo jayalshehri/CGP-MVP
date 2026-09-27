@@ -5,24 +5,18 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { isImplemented, isApplicable, percentage } from "@/lib/compliance";
-import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
+import { assessmentHrefFor } from "@/lib/compliance-frameworks";
 import { isExpired } from "@/lib/grc";
 import { cycleLabels, displayPercent } from "@/lib/assessment";
 import ControlsCatalog from "@/components/ControlsCatalog";
+import FrameworkWorkspaceShell, { type FrameworkSection } from "@/components/FrameworkWorkspaceShell";
 import "./workspace.css";
 
 type Framework = { id:number; code:string; name_ar:string; version:string };
 type Control = { id:number; control_code:string; title_ar:string; domain_ar:string; hierarchy_level:string; implementation_status:string; control_owner:string|null };
 type CycleSummary = { id:number; framework:string; scope_name:string; status:string; completion:number|null; compliance:number|null };
 type EvidenceSummaryRow = { control_id:number; is_current:boolean; status:string; valid_until:string|null };
-type Tab = "overview"|"controls"|"assessment"|"evidence"|"findings";
-const tabs:{key:Tab;label:string}[]=[
- {key:"overview",label:"نظرة عامة"},
- {key:"controls",label:"الضوابط"},
- {key:"assessment",label:"التقييم"},
- {key:"evidence",label:"الأدلة"},
- {key:"findings",label:"الملاحظات والإجراءات"},
-];
+const sections: FrameworkSection[] = ["overview", "controls", "assessment", "evidence", "findings"];
 
 export default function FrameworkWorkspacePage(){
  return <Suspense fallback={<main className="workflow-page" dir="rtl" role="status">جاري تحميل مساحة الإطار…</main>}><FrameworkWorkspaceContent/></Suspense>;
@@ -33,7 +27,7 @@ function FrameworkWorkspaceContent(){
  const params=useParams<{code:string}>();
  const searchParams=useSearchParams();
  const code=(params.code||"").toUpperCase();
- const requestedTab=searchParams.get("tab") as Tab|null;
+ const requestedTab=searchParams.get("tab");
 
  const [frameworks,setFrameworks]=useState<Framework[]>([]);
  const [controls,setControls]=useState<Control[]>([]);
@@ -41,7 +35,7 @@ function FrameworkWorkspaceContent(){
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const canAssess=role!==null&&role!=="data_governance_team";
- const tab:Tab=tabs.some(t=>t.key===requestedTab)&&!(requestedTab==="assessment"&&!canAssess)&&!(requestedTab==="findings"&&role==="data_governance_team")?(requestedTab as Tab):"overview";
+ const tab:FrameworkSection=sections.includes(requestedTab as FrameworkSection)&&!(requestedTab==="assessment"&&!canAssess)&&!(requestedTab==="findings"&&role==="data_governance_team")?(requestedTab as FrameworkSection):"overview";
 
  useEffect(()=>{let active=true;(async()=>{try{
   const {profile}=await requireProfile();
@@ -60,33 +54,22 @@ function FrameworkWorkspaceContent(){
  }finally{if(active)setLoading(false);}})();return()=>{active=false;};},[router,code]);
 
  const framework=frameworks.find(f=>f.code===code);
- const setTab=(next:Tab)=>{const p=new URLSearchParams(searchParams.toString());if(next==="overview")p.delete("tab");else p.set("tab",next);router.push(`/compliance/${code}${p.size?`?${p.toString()}`:""}`,{scroll:false});};
- const assessmentHref=ASSESSMENT_ROUTES.find(a=>a.code===code)?.href??null;
- const openTab=(next:Tab)=>{
-  if(next==="assessment"){
-   router.push(assessmentHref??`/compliance/${code}?tab=assessment`);
-   return;
-  }
-  setTab(next);
- };
+ const assessmentHref=assessmentHrefFor(code);
 
  if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل مساحة الإطار…</main>;
  if(error)return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل مساحة الإطار</h1><p className="catalog-error">{error}</p><Link href="/compliance">العودة إلى مركز الامتثال</Link></main>;
  if(!framework)return <main className="workflow-page" dir="rtl"><h1>الإطار غير متاح</h1><p>لا يوجد إطار مفعّل بهذا الرمز، أو أنه مؤرشف حاليًا.</p><Link href="/compliance">العودة إلى مركز الامتثال</Link></main>;
 
  return <main className="workflow-page workspace-page" dir="rtl">
-  <header className="workspace-header">
-   <div><span className="workspace-kicker">{code} · الإصدار {framework.version}</span><h1>{framework.name_ar}</h1></div>
-   <Link className="workflow-button" href="/compliance">مركز الامتثال ←</Link>
-  </header>
-  <div className="workspace-tabs" role="tablist" aria-label="أقسام مساحة الإطار">{tabs.filter(t=>(t.key!=="assessment"||canAssess)&&(t.key!=="findings"||role!=="data_governance_team")).map(t=><button key={t.key} type="button" role="tab" aria-selected={tab===t.key} className={tab===t.key?"active":""} onClick={()=>openTab(t.key)}>{t.label}</button>)}</div>
-  <div className="workspace-panel" role="tabpanel">
+  <FrameworkWorkspaceShell code={code} name={framework.name_ar} version={framework.version} activeSection={tab} role={role}>
+  <div className="workspace-panel">
    {tab==="overview"&&<OverviewTab key={code} code={code} controls={controls}/>}
    {tab==="controls"&&<ControlsCatalog key={code} fixedFramework={code}/>}
-   {tab==="assessment"&&(assessmentHref?<div className="workflow-empty workspace-gap"><p>تقييم {code} متاح في صفحة التقييم المخصصة لهذا الإطار.</p><Link href={assessmentHref}>فتح تقييم {code} ←</Link></div>:<HonestGap text="لا يوجد مسار تقييم مفعّل لهذا الإطار في CGP حاليًا." note="لا يُستنتج من ذلك عدم وجود متطلبات رسمية؛ لم تُربط أداة تقييم لهذا الإطار داخل CGP بعد."/>)}
+   {tab==="assessment"&&(assessmentHref?<div className="workflow-empty workspace-gap"><p>تقييم {code} متاح في صفحة التقييم المخصصة لهذا الإطار.</p><Link href={assessmentHref}>فتح تقييم {code} ←</Link></div>:<HonestGap text="التقييم غير مفعّل في CGP حاليًا" note="لا يُستنتج من ذلك عدم وجود متطلبات رسمية؛ لم تُربط أداة تقييم لهذا الإطار داخل CGP بعد."/>)}
    {tab==="evidence"&&<EvidenceTab code={code} controls={controls}/>}
    {tab==="findings"&&<div className="workflow-empty workspace-gap"><p>سجل الملاحظات والإجراءات مركزي حاليًا؛ تصفية {code} ستُضاف بعد اعتماد عرضها السياقي.</p><Link href={`/findings?from=workspace&origin=${encodeURIComponent(code)}`}>فتح سجل الملاحظات والإجراءات ←</Link></div>}
   </div>
+  </FrameworkWorkspaceShell>
  </main>;
 }
 
