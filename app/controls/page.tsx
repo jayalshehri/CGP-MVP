@@ -8,7 +8,6 @@ import Link from "next/link";
 import "./catalog.css";
 import { supabase } from "@/lib/supabase";
 import { getEccOfficialTitle } from "@/lib/ecc-strategy-example";
-import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
 
 type Control={id:number;framework_id:number;control_code:string;title_ar:string;description_ar:string|null;official_text_ar:string|null;hierarchy_level:string;parent_control_id:number|null;applicability:string|null;domain_ar:string;implementation_status:string;evidence_status:string;verification_status:string;due_date:string|null;control_owner:string|null;control_owner_id:string|null};
 type Framework={id:number;code:string;name_ar:string;version:string};
@@ -62,7 +61,7 @@ function ControlsContent(){
   if(profile.role==="control_owner")query=query.eq("control_owner_id",user.id);
   const [{data,error},{data:frameworkData,error:frameworkError}]=await Promise.all([query,supabase.from("frameworks").select("id,code,name_ar,version").eq("is_active",true).order("id")]);
   if(error||frameworkError)throw error||frameworkError;
-  if(active){setControls((data??[]) as Control[]);setFrameworks((frameworkData??[]) as Framework[]);}
+  if(active){setControls((data??[]) as Control[]);setFrameworks(((frameworkData??[]) as Framework[]).filter(item=>item.code!=="QA_SYNTH"));}
  }catch(e){if(active)setError(new Error(e instanceof Error?e.message:"تعذر تحميل الضوابط"));const {data}=await supabase.auth.getSession();if(!data.session)router.replace("/login");}
  finally{if(active)setLoading(false);}})();return()=>{active=false;};},[router]);
 
@@ -104,10 +103,6 @@ function ControlsContent(){
   <section aria-labelledby="framework-heading">
    <div className="catalog-section-heading"><div><span>الخطوة 1</span><h2 id="framework-heading">اختر الإطار التنظيمي</h2></div><small>{frameworks.length} إطارات متاحة</small></div>
    <div className="framework-grid">{frameworks.map(item=>{const rows=controls.filter(c=>c.framework_id===item.id);const done=rows.filter(c=>good(c.implementation_status)).length;return <button key={item.id} className={`framework-card ${framework===item.code?"active":""}`} onClick={()=>chooseFramework(item.code)} aria-pressed={framework===item.code}><strong dir="ltr">{item.code}</strong><span>{item.name_ar}</span><small>{item.version} · {rows.length} ضابط</small><progress max={Math.max(rows.length,1)} value={done}/></button>})}</div>
-  </section>
-  <section aria-labelledby="assessment-launcher-heading" className="assessment-launcher">
-   <div className="catalog-section-heading"><div><span>تقييم الأطر</span><h2 id="assessment-launcher-heading">أدوات التقييم لكل إطار</h2></div><small><Link href="/compliance">فتح مركز الامتثال ←</Link></small></div>
-   <div className="assessment-launcher-grid">{ASSESSMENT_ROUTES.map(item=>{const fw=frameworks.find(f=>f.code===item.code);return <div className="assessment-launcher-card" key={item.code}><strong dir="ltr">{item.code}</strong><span>{fw?.name_ar??item.code}</span><div className="assessment-launcher-links">{item.href&&<Link className="assessment-launcher-action" href={item.href}>فتح التقييم ←</Link>}<Link className="assessment-launcher-action" href={`/compliance/${item.code}`}>مساحة الإطار ←</Link></div>{!item.href&&<small className="assessment-launcher-muted">لا يوجد تقييم منفصل حاليًا</small>}</div>})}</div>
   </section>
   {selectedFramework&&<>
    <section className="framework-summary"><div><span className="catalog-kicker">{selectedFramework.code} · الإصدار {selectedFramework.version}</span><h2>{selectedFramework.name_ar}</h2><p>اختر مجالًا لعرض مكوناته وضوابطه بصورة مستقلة.</p></div><div className="view-switch" role="group" aria-label="طريقة العرض"><button className={view==="structure"?"active":""} onClick={()=>setView("structure")}>عرض الهيكل</button><button className={view==="followup"?"active":""} onClick={()=>setView("followup")}>عرض المتابعة</button></div></section>
