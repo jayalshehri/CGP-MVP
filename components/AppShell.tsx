@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import FeedbackWidget from "@/components/FeedbackWidget";
+import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
 
 // CGP v2 IA (Package P1): grouped by domain (الامتثال / المخاطر / المراجعة
 // والتدقيق / الاستراتيجية والتنفيذ), each with at most one subgroup level.
@@ -154,6 +155,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "الرئيسية");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const complianceCode = /^\/compliance\/([^/]+)/.exec(pathname)?.[1];
+  const assessmentFramework = ASSESSMENT_ROUTES.find(route => route.href === pathname)?.code;
   const leaf = pathname.endsWith("/assign") ? "تكليف المالك" : pathname.endsWith("/evidence/new") ? "رفع دليل" : controlId ? "تفاصيل الضابط" : complianceCode ? complianceCode.toUpperCase() : current;
   const linkFor = (item:typeof navigation[number]) => <Link key={item.href} href={item.href} className="cgp-nav-link" title={navCollapsed?item.label:undefined} aria-current={(item.href === "/" ? pathname === "/" : item.href === "/roadmap" ? pathname === "/roadmap" : pathname === item.href || pathname.startsWith(item.href + "/")) ? "page" : undefined}><NavIcon href={item.href}/><span>{item.label}</span></Link>;
   const links = items.map(linkFor);
@@ -238,7 +240,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       })}</nav><Link href="/change-password" className="cgp-nav-link cgp-account-link" aria-current={pathname === "/change-password" ? "page" : undefined}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-8H4v8a2 2 0 0 0 2 2zm1-10V8a5 5 0 0 1 10 0v3"/></svg><span>إعدادات كلمة المرور</span></Link><p className="cgp-scope">{workspace === "data" ? "سجلات وضوابط وطلبات إدارة البيانات ضمن صلاحيات حسابك." : workspace === "shared" ? "مواءمة معتمدة بين الأطر دون خلط مساحات العمل." : account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الأمن السيبراني ضمن صلاحيات حسابك."}</p></aside>
       <div className="cgp-page-column">
         <details key={pathname} className="cgp-mobile-navigation" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>القائمة <span>{current}</span></summary><nav aria-label="التنقل على الجوال">{links}<Link className="cgp-nav-link" href="/change-password">إعدادات كلمة المرور</Link></nav></details>
-        <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname !== "/" && <>{activeGroup&&<><span aria-hidden="true">/</span><span>{activeGroup}</span></>}<span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">الأطر والضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : complianceCode ? <><Link href="/compliance">مركز الامتثال</Link><span aria-hidden="true">/</span></> : null}<span aria-current="page">{leaf}</span></>}</nav>
+        <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname !== "/" && <>{activeGroup&&<><span aria-hidden="true">/</span><span>{activeGroup}</span></>}<span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">الأطر والضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : complianceCode || assessmentFramework ? <><Link href="/compliance">مركز الامتثال</Link><span aria-hidden="true">/</span>{assessmentFramework&&<><Link href={`/compliance/${assessmentFramework}`}>{assessmentFramework}</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>
         {error && <p role="alert" className="cgp-shell-error">{error}</p>}
         <div id="cgp-content" tabIndex={-1} className="cgp-route">{children}</div>
         <FeedbackWidget pagePath={pathname} visible={Boolean(account)} />

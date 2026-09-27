@@ -10,6 +10,7 @@ import {
   type CorrectiveAction, type FindingSource, type SharedFinding,
 } from '@/lib/findings';
 import {supabase} from '@/lib/supabase';
+import {assessmentHrefFor} from '@/lib/compliance-frameworks';
 import {WorkflowHeading, WorkflowMetric} from '@/components/WorkflowUI';
 import './findings.css';
 
@@ -36,6 +37,10 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   const router=useRouter();
   const sourceFromUrl=validSource(params.get('source'));
   const idFromUrl=Number(params.get('source_id'));
+  const frameworkCode=params.get('framework')?.toUpperCase()??'';
+  const assessmentHref=assessmentHrefFor(frameworkCode);
+  const cycleFromUrl=Number(params.get('cycle'));
+  const hasAssessmentContext=sourceFromUrl==='assessment'&&assessmentHref&&Number.isSafeInteger(cycleFromUrl)&&cycleFromUrl>0;
   const [actor,setActor]=useState('');
   const [role,setRole]=useState<UserRole>('control_owner');
   const [findings,setFindings]=useState<SharedFinding[]>([]);
@@ -190,7 +195,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
         <label>الخطورة<select value={severityFilter} onChange={e=>setSeverityFilter(e.target.value)}><option value="all">الكل</option>
           {Object.entries(severityLabels).map(([key,value])=><option key={key} value={key}>{value}</option>)}</select></label>
       </div>
-      {Number.isSafeInteger(idFromUrl)&&idFromUrl>0&&<p className="findings-context">المصدر: {sourceLabels[sourceFromUrl]} #{idFromUrl} · <Link href="/findings">عرض كل الملاحظات</Link></p>}
+      {Number.isSafeInteger(idFromUrl)&&idFromUrl>0&&<p className="findings-context">{hasAssessmentContext?<><Link href={`/compliance/${frameworkCode}`}>{frameworkCode}</Link> ← <Link href={`${assessmentHref}?cycle=${cycleFromUrl}`}>دورة التقييم #{cycleFromUrl}</Link> ← بند التقييم #{idFromUrl}</>:<>المصدر: {sourceLabels[sourceFromUrl]} #{idFromUrl}</>} · <Link href="/findings">عرض كل الملاحظات</Link></p>}
       <p role="status">{visible.length} ملاحظة ضمن هذه التصفية وصلاحياتك.</p>
       <div className="findings-table-wrap"><table className="workflow-table findings-table"><thead><tr>
         <th>الملاحظة</th><th>المصدر</th><th>الخطورة</th><th>الحالة</th><th>المالك</th><th>الاستحقاق</th><th>الإجراءات</th>

@@ -7,7 +7,6 @@ import { supabase } from "@/lib/supabase";
 import { isImplemented, isApplicable, percentage } from "@/lib/compliance";
 import { ASSESSMENT_ROUTES, isBusinessFramework } from "@/lib/compliance-frameworks";
 import { isExpired } from "@/lib/grc";
-import AssessmentWorkspace from "@/components/AssessmentWorkspace";
 import AssessmentPortfolio from "@/components/AssessmentPortfolio";
 import "./workspace.css";
 
@@ -60,6 +59,13 @@ function FrameworkWorkspaceContent(){
  const framework=frameworks.find(f=>f.code===code);
  const setTab=(next:Tab)=>{const p=new URLSearchParams(searchParams.toString());if(next==="overview")p.delete("tab");else p.set("tab",next);router.replace(`/compliance/${code}${p.size?`?${p.toString()}`:""}`,{scroll:false});};
  const assessmentHref=ASSESSMENT_ROUTES.find(a=>a.code===code)?.href??null;
+ const openTab=(next:Tab)=>{
+  if(next==="assessment"){
+   router.push(assessmentHref??`/compliance/${code}?tab=assessment`);
+   return;
+  }
+  setTab(next);
+ };
  const canReview=role==="admin"||role==="cybersecurity_team";
 
  if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل مساحة الإطار…</main>;
@@ -72,11 +78,11 @@ function FrameworkWorkspaceContent(){
    <div><span className="workspace-kicker">{code} · الإصدار {framework.version}</span><h1>{framework.name_ar}</h1></div>
    <Link className="workflow-button" href="/compliance">مركز الامتثال ←</Link>
   </header>
-  <div className="workspace-tabs" role="tablist" aria-label="أقسام مساحة الإطار">{tabs.map(t=><button key={t.key} role="tab" aria-selected={tab===t.key} className={tab===t.key?"active":""} onClick={()=>setTab(t.key)}>{t.label}</button>)}</div>
+  <div className="workspace-tabs" role="tablist" aria-label="أقسام مساحة الإطار">{tabs.map(t=><button key={t.key} role="tab" aria-selected={tab===t.key} className={tab===t.key?"active":""} onClick={()=>openTab(t.key)}>{t.label}</button>)}</div>
   <div className="workspace-panel" role="tabpanel">
-   {tab==="overview"&&<OverviewTab controls={controls} assessmentHref={assessmentHref} setTab={setTab}/>}
+   {tab==="overview"&&<OverviewTab controls={controls} assessmentHref={assessmentHref} setTab={openTab}/>}
    {tab==="controls"&&<ControlsTab code={code} controls={controls}/>}
-   {tab==="assessment"&&(assessmentHref?<AssessmentWorkspace frameworkCode={code}/>:<HonestGap text="لا يوجد مسار تقييم مفعّل لهذا الإطار في CGP حاليًا." note="سيتم تحديد منهجية وحقول التقييم بعد اعتماد وربط أداة التقييم المرجعية."/>)}
+   {tab==="assessment"&&(assessmentHref?<div className="workflow-empty workspace-gap"><p>تقييم {code} متاح في صفحة التقييم المخصصة لهذا الإطار.</p><Link href={assessmentHref}>فتح تقييم {code} ←</Link></div>:<HonestGap text="لا يوجد مسار تقييم مفعّل لهذا الإطار في CGP حاليًا." note="لا يُستنتج من ذلك عدم وجود متطلبات رسمية؛ لم تُربط أداة تقييم لهذا الإطار داخل CGP بعد."/>)}
    {tab==="evidence"&&<EvidenceTab code={code} controls={controls}/>}
    {tab==="verification"&&<VerificationTab canReview={canReview}/>}
    {tab==="findings"&&<AssessmentPortfolio framework={code}/>}

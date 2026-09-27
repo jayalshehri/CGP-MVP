@@ -1,11 +1,17 @@
 'use client';
 import {useState} from 'react';
 import Link from 'next/link';
+import {usePathname} from 'next/navigation';
 import {AssessmentCycle,AssessmentFinding,AssessmentItem,assessmentLabels,Person,reviewLabels} from '@/lib/assessment';
 import {EvidenceRecord} from '@/lib/grc';
+import {ASSESSMENT_ROUTES} from '@/lib/compliance-frameworks';
 
 type Props={item:AssessmentItem;cycle:AssessmentCycle;people:Person[];projects:{id:number;name_ar:string}[];evidence:EvidenceRecord[];evidenceIds:number[];finding?:AssessmentFinding;actor:string;role:string;busy:boolean;command:(action:string,data:Record<string,unknown>)=>Promise<boolean>};
 export default function AssessmentItemEditor({item,cycle,people,projects,evidence,evidenceIds,finding,actor,role,busy,command}:Props){
+ const pathname=usePathname();
+ const frameworkCode=ASSESSMENT_ROUTES.find(route=>route.href===pathname)?.code;
+ const findingContext=new URLSearchParams({source:'assessment',source_id:String(item.id),cycle:String(cycle.id)});
+ if(frameworkCode)findingContext.set('framework',frameworkCode);
  const [form,setForm]=useState({compliance_status:item.compliance_status??'',notes:item.notes??'',corrective_action:item.corrective_action??'',expected_compliance_date:item.expected_compliance_date??'',owner_id:item.owner_id??''});
  const [ids,setIds]=useState(evidenceIds),[reason,setReason]=useState('');
  const [gap,setGap]=useState({status:finding?.status??'open',severity:finding?.severity??'unclassified',owner_id:finding?.owner_id??'',due_date:finding?.due_date??'',action_plan:finding?.action_plan??'',project_id:finding?.project_id?.toString()??'',evidence_id:''});
@@ -14,7 +20,7 @@ export default function AssessmentItemEditor({item,cycle,people,projects,evidenc
  const canFollow=team||(role==='control_owner'&&finding?.owner_id===actor);
  const reviewable=actor===cycle.reviewer_id&&cycle.status==='under_review';
  return <div className="ae-detail">
- <p>{item.description_ar||item.title_ar}</p><div className="ae-links"><Link href={`/controls/${item.control_id}`}>فتح الضابط والأدلة والسجل ←</Link>{role!=='nca_external_auditor'&&<Link href={`/controls/${item.control_id}/evidence/new`}>تقديم دليل</Link>}<Link href={`/findings?source=assessment&source_id=${item.id}`}>الملاحظات والإجراءات لهذا البند ←</Link></div>
+ <p>{item.description_ar||item.title_ar}</p><div className="ae-links"><Link href={`/controls/${item.control_id}`}>فتح الضابط والأدلة والسجل ←</Link>{role!=='nca_external_auditor'&&<Link href={`/controls/${item.control_id}/evidence/new`}>تقديم دليل</Link>}<Link href={`/findings?${findingContext.toString()}`}>الملاحظات والإجراءات لهذا البند ←</Link></div>
  <form onSubmit={e=>{e.preventDefault();void command('save',{item_id:item.id,revision:item.revision,...form,evidence_ids:ids});}}>
  <fieldset disabled={!editable||busy}><legend>نتيجة المتطلب</legend><div className="ae-form-grid">
  <label>النتيجة<select value={form.compliance_status} onChange={e=>setForm({...form,compliance_status:e.target.value})}><option value="">لم يُقيّم</option>{Object.entries(assessmentLabels).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
