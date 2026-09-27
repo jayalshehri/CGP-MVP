@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { isImplemented, isApplicable, percentage } from "@/lib/compliance";
-import { ASSESSMENT_ROUTES, isBusinessFramework } from "@/lib/compliance-frameworks";
+import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
 import { isExpired } from "@/lib/grc";
 import AssessmentPortfolio from "@/components/AssessmentPortfolio";
 import "./workspace.css";
@@ -32,18 +32,19 @@ function FrameworkWorkspaceContent(){
  const searchParams=useSearchParams();
  const code=(params.code||"").toUpperCase();
  const requestedTab=searchParams.get("tab") as Tab|null;
- const tab:Tab=tabs.some(t=>t.key===requestedTab)?(requestedTab as Tab):"overview";
 
  const [frameworks,setFrameworks]=useState<Framework[]>([]);
  const [controls,setControls]=useState<Control[]>([]);
  const [role,setRole]=useState<UserRole|null>(null);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
+ const canAssess=role!==null&&role!=="data_governance_team";
+ const tab:Tab=tabs.some(t=>t.key===requestedTab)&&!(requestedTab==="assessment"&&!canAssess)?(requestedTab as Tab):"overview";
 
  useEffect(()=>{let active=true;(async()=>{try{
   const {profile}=await requireProfile();
   const [f,c]=await Promise.all([
-   supabase.from("frameworks").select("id,code,name_ar,version").eq("is_active",true).order("code"),
+   supabase.from("frameworks").select("id,code,name_ar,version").eq("is_active",true).eq("code",code),
    supabase.from("controls").select("id,control_code,title_ar,domain_ar,hierarchy_level,implementation_status,control_owner,frameworks!inner(code,is_active)").eq("frameworks.is_active",true).eq("frameworks.code",code),
   ]);
   if(f.error||c.error)throw f.error||c.error;
@@ -73,19 +74,18 @@ function FrameworkWorkspaceContent(){
  if(!framework)return <main className="workflow-page" dir="rtl"><h1>الإطار غير متاح</h1><p>لا يوجد إطار مفعّل بهذا الرمز، أو أنه مؤرشف حاليًا.</p><Link href="/compliance">العودة إلى مركز الامتثال</Link></main>;
 
  return <main className="workflow-page workspace-page" dir="rtl">
-  <nav className="workspace-switcher" aria-label="تبديل الإطار">{frameworks.filter(f=>isBusinessFramework(f.code)).map(f=><Link key={f.code} href={`/compliance/${f.code}`} className={f.code===code?"active":""} aria-current={f.code===code?"page":undefined}>{f.code}</Link>)}</nav>
   <header className="workspace-header">
    <div><span className="workspace-kicker">{code} · الإصدار {framework.version}</span><h1>{framework.name_ar}</h1></div>
    <Link className="workflow-button" href="/compliance">مركز الامتثال ←</Link>
   </header>
-  <div className="workspace-tabs" role="tablist" aria-label="أقسام مساحة الإطار">{tabs.map(t=><button key={t.key} role="tab" aria-selected={tab===t.key} className={tab===t.key?"active":""} onClick={()=>openTab(t.key)}>{t.label}</button>)}</div>
+  <div className="workspace-tabs" role="tablist" aria-label="أقسام مساحة الإطار">{tabs.filter(t=>t.key!=="assessment"||canAssess).map(t=><button key={t.key} role="tab" aria-selected={tab===t.key} className={tab===t.key?"active":""} onClick={()=>openTab(t.key)}>{t.label}</button>)}</div>
   <div className="workspace-panel" role="tabpanel">
-   {tab==="overview"&&<OverviewTab controls={controls} assessmentHref={assessmentHref} setTab={openTab}/>}
+   {tab==="overview"&&<OverviewTab controls={controls} assessmentHref={assessmentHref} canAssess={canAssess} setTab={openTab}/>}
    {tab==="controls"&&<ControlsTab code={code} controls={controls}/>}
    {tab==="assessment"&&(assessmentHref?<div className="workflow-empty workspace-gap"><p>تقييم {code} متاح في صفحة التقييم المخصصة لهذا الإطار.</p><Link href={assessmentHref}>فتح تقييم {code} ←</Link></div>:<HonestGap text="لا يوجد مسار تقييم مفعّل لهذا الإطار في CGP حاليًا." note="لا يُستنتج من ذلك عدم وجود متطلبات رسمية؛ لم تُربط أداة تقييم لهذا الإطار داخل CGP بعد."/>)}
    {tab==="evidence"&&<EvidenceTab code={code} controls={controls}/>}
    {tab==="verification"&&<VerificationTab canReview={canReview}/>}
-   {tab==="findings"&&<AssessmentPortfolio framework={code}/>}
+   {tab==="findings"&&<div><AssessmentPortfolio framework={code}/>{role!=="data_governance_team"&&<p className="workspace-hint">سجل الملاحظات والإجراءات التصحيحية مركزي ولا يدعم حاليًا تصفية حسب الإطار. <Link href="/findings">فتح سجل الملاحظات والإجراءات ←</Link></p>}</div>}
   </div>
   <ImportExportFoundation/>
  </main>;
@@ -95,7 +95,7 @@ function HonestGap({text,note}:{text:string;note?:string}){
  return <div className="workflow-empty workspace-gap"><p>{text}</p>{note&&<small>{note}</small>}</div>;
 }
 
-function OverviewTab({controls,assessmentHref,setTab}:{controls:Control[];assessmentHref:string|null;setTab:(t:Tab)=>void}){
+function OverviewTab({controls,assessmentHref,canAssess,setTab}:{controls:Control[];assessmentHref:string|null;canAssess:boolean;setTab:(t:Tab)=>void}){
  const parents=controls.filter(c=>c.hierarchy_level!=="sub_control");
  const subs=controls.filter(c=>c.hierarchy_level==="sub_control");
  const applicable=parents.filter(c=>isApplicable(c.implementation_status));
@@ -111,7 +111,7 @@ function OverviewTab({controls,assessmentHref,setTab}:{controls:Control[];assess
   </div>
   <div className="workspace-journey">
    <button onClick={()=>setTab("controls")}><strong>الضوابط</strong><small>استعراض الهيكل التنظيمي والنص الرسمي</small></button>
-   <button onClick={()=>setTab("assessment")}><strong>التقييم</strong><small>{assessmentHref?"التقييم متاح في CGP":"التقييم غير مفعّل في CGP حاليًا"}</small></button>
+   {canAssess&&<button onClick={()=>setTab("assessment")}><strong>التقييم</strong><small>{assessmentHref?"التقييم متاح في CGP":"التقييم غير مفعّل في CGP حاليًا"}</small></button>}
    <button onClick={()=>setTab("evidence")}><strong>الأدلة</strong><small>إدارة الأدلة من المستودع المركزي دون نسخها</small></button>
    <button onClick={()=>setTab("verification")}><strong>التحقق</strong><small>مراجعة الأدلة واعتماد القرار</small></button>
    <button onClick={()=>setTab("findings")}><strong>النتائج والإجراءات</strong><small>الفجوات المفتوحة والمعالجات</small></button>
