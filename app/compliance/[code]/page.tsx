@@ -113,8 +113,8 @@ function EvidenceTab({code}:{code:string}){
  const direct=rows?.filter(row=>row.association==="direct").length??0;
  const shared=rows?.filter(row=>row.association==="shared").length??0;
  return <div className="workspace-evidence-tab">
-  <p className="workspace-hint">الأدلة المؤهلة لضوابط {code} ضمن صلاحياتك فقط. تُعرض النسخة الحالية المقبولة والصحيحة الصلاحية، بما فيها المشاركة عبر مواءمة معتمدة. تبقى الملفات والإصدارات والتاريخ في المستودع المركزي.</p>
-  {rows?<><div className="workspace-evidence-summary"><div><span>إصدارات مؤهلة</span><b>{rows.length}</b></div><div><span>دليل مباشر</span><b>{direct}</b></div><div><span>دليل مشترك معتمد</span><b>{shared}</b></div><div><span>ضوابط لها دليل مؤهل</span><b>{new Set(rows.map(row=>row.target_control_id)).size}</b></div></div>
+  <p className="workspace-hint">الأدلة المرتبطة بضوابط {code} والمتاحة ضمن صلاحياتك.</p>
+  {rows?<>{rows.length>0&&<div className="workspace-evidence-summary"><div><span>إصدارات مؤهلة</span><b>{rows.length}</b></div><div><span>دليل مباشر</span><b>{direct}</b></div><div><span>دليل مشترك معتمد</span><b>{shared}</b></div><div><span>ضوابط لها دليل مؤهل</span><b>{new Set(rows.map(row=>row.target_control_id)).size}</b></div></div>}
    {rows.length?<div className="workspace-evidence-list">{[...rows].sort((a,b)=>(b.uploaded_at??"").localeCompare(a.uploaded_at??"")).slice(0,8).map(row=><div key={`${row.target_control_id}-${row.evidence_id}`}><b>{row.evidence_name||row.file_name||`دليل #${row.evidence_id}`}</b><span dir="ltr">{row.target_control_code}</span><span>{row.association==="direct"?"دليل مباشر":"دليل مشترك عبر مواءمة معتمدة"}</span><small>الإصدار {row.version_number} · الصلاحية {formatComplianceDate(row.valid_until,true)}</small></div>)}</div>:<p className="workflow-empty">لا توجد أدلة مؤهلة لهذا الإطار ضمن صلاحياتك حاليًا.</p>}</>:<p className="workspace-hint" role="status">{error?"تعذر تحميل الأدلة المؤهلة؛ لا يمكن تأكيد الملخص الآن.":"جاري تحميل ملخص الأدلة…"}</p>}
   {rows&&rows.length>8&&<p className="workspace-hint">تظهر آخر ثمانية إصدارات مرفوعة هنا؛ افتح المستودع لعرض جميع الأدلة المؤهلة.</p>}
   <Link className="workflow-button" href={`/evidence?framework=${encodeURIComponent(code)}&from=workspace&origin=${encodeURIComponent(code)}`}>فتح مستودع الأدلة ←</Link>
@@ -131,7 +131,7 @@ function FindingsTab({code,frameworkId}:{code:string;frameworkId:number}){
   setRows((result.data??[]) as SharedFinding[]);
  })();return()=>{active=false;};},[frameworkId]);
  return <div className="workspace-evidence-tab">
-  <p className="workspace-hint">الملاحظات والإجراءات المرتبطة فعليًا بإطار {code} ضمن صلاحياتك. نتائج التقييم القديمة محفوظة في صفحات التقييم ولا تُخلط مع سجل الملاحظات المشترك.</p>
+  <p className="workspace-hint">الملاحظات والإجراءات المرتبطة بضوابط {code} ضمن صلاحياتك.</p>
   {rows?<>{rows.length?<div className="workspace-evidence-list">{rows.map(row=><Link key={row.id} href={`/findings?framework=${encodeURIComponent(code)}&finding=${row.id}&from=workspace&origin=${encodeURIComponent(code)}`}><b>{row.title}</b><span dir="ltr">{row.reference_code}</span><span>{findingStatusLabels[row.status]}</span></Link>)}</div>:<p className="workflow-empty">لا توجد ملاحظات مرتبطة بهذا الإطار ضمن صلاحياتك حاليًا.</p>}</>:<p role="status" className="workspace-hint">{error?"تعذر تحميل ملاحظات الإطار.":"جاري تحميل ملاحظات الإطار…"}</p>}
   <Link className="workflow-button" href={`/findings?framework=${encodeURIComponent(code)}&from=workspace&origin=${encodeURIComponent(code)}`}>فتح ملاحظات {code} ←</Link>
  </div>;
