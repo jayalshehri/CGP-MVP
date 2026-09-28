@@ -14,6 +14,7 @@ const check = (condition, message) => { assert.ok(condition, message); checks++;
 const calls = [];
 let response = () => ({ data: [], error: null });
 let renderPage = 0;
+let filterPanelOpen = false;
 const client = { rpc(name) { return this.from(name); }, from(name) {
  const state = { name, filters: [], orders: [] };
  return {
@@ -33,7 +34,7 @@ function load(path) {
  const compiled = ts.transpileModule(readFileSync(new URL('../' + path, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText + (path === 'app/findings/page.tsx' ? '\nexports.ActionCardTest = CorrectiveActionCard; exports.FindingDetailTest = FindingDetail;' : '');
  const resolve = name => {
   if (name.endsWith('.css')) return {};
-  if (name === 'react') return { ...React, useEffect: () => {}, useState: initial => [typeof initial === 'number' ? renderPage : initial, () => {}] };
+  if (name === 'react') return { ...React, useEffect: () => {}, useRef: () => ({ current: null }), useId: () => 'filter-panel-test', useState: initial => [typeof initial === 'number' ? renderPage : initial === false ? filterPanelOpen : initial, value => { filterPanelOpen = typeof value === 'function' ? value(filterPanelOpen) : value; }] };
   if (name === 'next/link') return { __esModule: true, default: ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children) };
   if (name === './supabase' || name === '@/lib/supabase') return { supabase: client };
   if (name === '@/lib/auth') return { requireProfile() { throw new Error('live auth forbidden in this test'); } };
@@ -143,9 +144,12 @@ check(render([]).includes('لا توجد ضوابط مسندة إليك حالي
 check(render(rows()).includes('جميع ضوابطك محدثة') && !render(rows()).includes('عدة إجراءات'), 'assigned/no-action empty state');
 check(render(rows(), 'q=unmatched').includes('لا توجد نتائج مطابقة'), 'filtered zero is not no-assignment');
 const html = render([actionsRow]);
-check(html.includes('<summary>المزيد من الفلاتر') && !html.includes('مسح الفلاتر'), 'advanced filters behind disclosure, no inactive reset');
+check(html.includes('aria-expanded="false"') && !html.includes('مسح الكل'), 'advanced filters behind closed button, no inactive reset');
+check(!html.includes('type="checkbox"') && !html.includes('my-controls-toggles'), 'explicit closed DOM assertion: none of five advanced checkboxes or panel are rendered');
 const activeHTML = render([actionsRow], 'framework=DCC&q=2-7&evidence=1&overdue=1');
-check(activeHTML.includes('الفلاتر النشطة') && activeHTML.includes('إزالة فلتر يحتاج دليل') && activeHTML.includes('إزالة فلتر متأخر') && activeHTML.includes('مسح الفلاتر'), 'all active filters rendered as removable chips');
+check(activeHTML.includes('الفلاتر النشطة') && activeHTML.includes('إزالة فلتر يحتاج دليل') && activeHTML.includes('إزالة فلتر متأخر') && activeHTML.includes('مسح الكل'), 'active advanced filters rendered as removable chips');
+check(!activeHTML.includes('إزالة فلتر الإطار') && !activeHTML.includes('إزالة فلتر البحث') && activeHTML.includes('(2)'), 'advanced-only chips/count, primary controls keep their own values');
+check(!render([actionsRow], 'framework=DCC&q=2-7').includes('my-controls-filter-chips'), 'no reserved chip row when no advanced filter is active');
 const identityHTML = render(rows(data({ controls: [{ ...base, title_ar: 'اسم موجز - 2-7-1' }] })));
 check((identityHTML.match(/>2-7-1</g) ?? []).length === 1 && !identityHTML.includes('اسم موجز - 2-7-1'), 'one primary code/title identity, no duplicate code in tooltip');
 function treeNodes(node, predicate) {
@@ -154,14 +158,21 @@ function treeNodes(node, predicate) {
  return [...(predicate(node) ? [node] : []), ...treeNodes(node.props?.children, predicate)];
 }
 let interactiveContext = 'framework=DCC&status=implemented&q=2-7&evidence=1&overdue=1';
-const interactiveView = () => View({ rows: [actionsRow], requests: [], actor: owner, context: interactiveContext, onRefresh() {}, onReset() { interactiveContext = ''; }, onFilter(key, value) { const next = context.myControlsFilters(interactiveContext); if (value) next.set(key, value); else next.delete(key); interactiveContext = next.toString(); } });
+const Filters = load('components/MyControlsFilters.tsx').MyControlsFilters;
+const interactiveView = () => Filters({ frameworkCodes: ['DCC'], context: interactiveContext, onReset() { interactiveContext = ''; }, onFilter(key, value) { const next = context.myControlsFilters(interactiveContext); if (value) next.set(key, value); else next.delete(key); interactiveContext = next.toString(); } });
+check(treeNodes(interactiveView(), node => node.type === 'input' && node.props.type === 'checkbox').length === 0, 'closed interactive render has no checkboxes even with active URL filters');
+check(treeNodes(interactiveView(), node => ['input', 'select', 'button'].includes(node.type) && !node.props.className?.includes('chip')).filter(node => node.type !== 'button' || node.props['aria-expanded'] !== undefined).length === 4, 'default primary toolbar has exactly four controls');
 treeNodes(interactiveView(), node => node.type === 'button' && node.props['aria-label'] === 'إزالة فلتر يحتاج دليل')[0].props.onClick();
 check(!new URLSearchParams(interactiveContext).has('evidence') && ['framework','status','q','overdue'].every(key => new URLSearchParams(interactiveContext).has(key)), 'chip removes only selected URL filter');
+treeNodes(interactiveView(), node => node.type === 'button' && node.props['aria-expanded'] !== undefined)[0].props.onClick();
+check(treeNodes(interactiveView(), node => node.type === 'input' && node.props.type === 'checkbox').length === 5, 'opening renders exactly five advanced checkboxes');
 treeNodes(interactiveView(), node => node.type === 'input' && node.props.type === 'checkbox')[0].props.onChange({ target: { checked: true } });
 check(context.myControlsReturn(new URLSearchParams(context.myControlsOrigin(interactiveContext))) === context.myControlsHref(interactiveContext), 'advanced filter change keeps durable URL/return state');
 const bookmarked = interactiveContext;
+treeNodes(interactiveView(), node => node.type === 'button' && node.props.children === 'تم')[0].props.onClick();
+check(!filterPanelOpen && treeNodes(interactiveView(), node => node.type === 'input' && node.props.type === 'checkbox').length === 0, 'Done closes and unmounts panel without clearing selections');
 check(render([actionsRow], bookmarked).includes('إزالة فلتر يحتاج إجراء') && render([actionsRow], bookmarked).includes('إزالة فلتر متأخر'), 'refresh/back/forward render from URL rather than disclosure state');
-treeNodes(interactiveView(), node => node.type === 'button' && node.props.children === 'مسح الفلاتر')[0].props.onClick();
+treeNodes(interactiveView(), node => node.type === 'button' && node.props.children === 'مسح الكل')[0].props.onClick();
 check(interactiveContext === '' && !render([actionsRow], interactiveContext).includes('الفلاتر النشطة'), 'reset clears filters and chips');
 check(html.includes('عدة إجراءات مطلوبة') && html.includes('dir="rtl"') && html.includes('scope="col"'), 'compact RTL workbench, no arbitrary action');
 check(html.includes('my-controls-scroll') && html.includes('tabindex="0"'), 'keyboard-accessible mobile scroll region');
@@ -188,7 +199,9 @@ check(auditorNavigation.items.every(item => item.auditor) && !auditorNavigation.
 for (const href of ['/assessments', '/dcc-assessment', '/tcc-assessment', '/osmacc-assessment']) check(ownerNavigation.permittedItems.some(item => item.href === href), 'owner deep-link permission metadata preserved: ' + href);
 const toolbarCSS = readFileSync(new URL('../components/my-controls.css', import.meta.url), 'utf8');
 check(toolbarCSS.includes('grid-template-columns: minmax(0, 2.4fr) repeat(3, minmax(0, 1fr))') && toolbarCSS.includes('gap: 14px'), 'balanced laptop grid with 44/18/18/18 proportions and consistent gaps');
-check((toolbarCSS.match(/height: 44px/g) ?? []).length === 2 && toolbarCSS.includes('align-items: end'), 'input/select/summary same 44px height and aligned baseline');
+check((toolbarCSS.match(/height: 44px/g) ?? []).length === 2 && toolbarCSS.includes('align-items: end'), 'input/select/button same 44px height and aligned baseline');
+check(toolbarCSS.includes('position: absolute') && !toolbarCSS.includes('position: static'), 'popover overlays without resizing desktop/tablet/mobile toolbar');
+check(html.includes('my-controls-title') && html.includes('aria-label="تحديث ضوابطي"'), 'small refresh action beside page heading with accessible name');
 check(toolbarCSS.includes('@media (max-width: 1100px)') && toolbarCSS.includes('grid-template-columns: repeat(2, minmax(0, 1fr))'), 'tablet two-by-two grid');
 check(toolbarCSS.includes('.my-controls-filters > label:first-child, .my-controls-more { grid-column: 1 / -1; }'), 'mobile full search, paired dropdowns, full disclosure');
 check(!render(rows()).includes('my-controls-filter-chips') && !toolbarCSS.includes('min-height: 44px'), 'no empty chip row or artificial label spacer');

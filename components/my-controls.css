@@ -1,9 +1,12 @@
 .my-controls { max-width: 1500px; margin-inline: auto; }
-.my-controls-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-.my-controls-heading h1 { margin: 0 0 4px; font-size: 26px; }
+.my-controls-heading { margin-bottom: 16px; }
+.my-controls-title { display: flex; align-items: center; gap: 10px; }
+.my-controls-heading h1 { margin: 0; font-size: 26px; }
 .my-controls-heading p, .my-controls-table caption { color: #526474; font-size: 13px; }
 .my-controls button, .my-controls input, .my-controls select { font: inherit; }
 .my-controls button { border: 1px solid #ced9dd; padding: 7px 12px; border-radius: 7px; background: white; cursor: pointer; }
+.my-controls .my-controls-refresh { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; color: #526474; border-color: transparent; background: transparent; }
+.my-controls .my-controls-refresh:hover { background: #edf5f3; border-color: #ced9dd; }
 .my-controls-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .my-controls-summary span { background: #edf5f3; border-radius: 7px; padding: 8px 12px; font-size: 13px; }
 .my-controls-summary strong { margin-inline-start: 8px; font-size: 18px; color: #0c655b; }
@@ -11,14 +14,15 @@
 .my-controls-filters > label { display: grid; gap: 4px; min-width: 0; font-size: 12px; }
 .my-controls-filters input[type=search], .my-controls-filters select { box-sizing: border-box; width: 100%; min-width: 0; height: 44px; padding: 10px 12px; border: 1px solid #ced9dd; background: white; border-radius: 8px; font-size: 12px; }
 .my-controls-more { position: relative; min-width: 0; }
-.my-controls-more > summary { display: flex; align-items: center; justify-content: center; gap: 4px; list-style: none; box-sizing: border-box; width: 100%; height: 44px; padding: 10px 12px; border: 1px solid #ced9dd; border-radius: 8px; background: white; color: #354e53; font-size: 12px; white-space: nowrap; cursor: pointer; }
-.my-controls-more > summary::-webkit-details-marker { display: none; }
-.my-controls-more > summary::after { content: '⌄'; margin-inline-start: 8px; }
-.my-controls-more[open] > summary::after { content: '⌃'; }
-.my-controls-toggles { position: absolute; z-index: 2; inset-inline-end: 0; top: calc(100% + 6px); display: grid; gap: 6px; box-sizing: border-box; width: min(330px, calc(100vw - 80px)); padding: 10px; border: 1px solid #dce6eb; border-radius: 9px; background: white; box-shadow: 0 8px 20px #10253d12; font-size: 12px; }
+.my-controls-more > button { display: flex; align-items: center; justify-content: center; gap: 4px; box-sizing: border-box; width: 100%; height: 44px; padding: 10px 12px; border: 1px solid #ced9dd; border-radius: 8px; background: white; color: #354e53; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.my-controls-more > button::after { content: '⌄'; margin-inline-start: 8px; }
+.my-controls-more > button[aria-expanded=true]::after { content: '⌃'; }
+.my-controls-toggles { position: absolute; z-index: 5; inset-inline-end: 0; top: calc(100% + 6px); display: grid; gap: 6px; box-sizing: border-box; width: min(330px, calc(100vw - 80px)); max-height: min(360px, 60dvh); overflow-y: auto; padding: 10px; border: 1px solid #dce6eb; border-radius: 9px; background: white; box-shadow: 0 8px 20px #10253d12; font-size: 12px; }
 .my-controls-toggles label { display: flex; align-items: center; gap: 5px; min-height: 36px; box-sizing: border-box; padding: 6px 8px; border: 1px solid #dce6eb; border-radius: 7px; background: white; cursor: pointer; }
 .my-controls-toggles label:has(input:checked) { background: #e8f4ef; border-color: #8ebbae; color: #075e53; }
 .my-controls-toggles input { margin: 0; accent-color: #087d72; flex-shrink: 0; }
+.my-controls-filter-panel-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.my-controls-filter-panel-actions button { font-size: 12px; }
 .my-controls-filter-chips { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; width: 100%; min-width: 0; }
 .my-controls-filter-chips .my-controls-filter-chip { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 5px 8px; font-size: 12px; background: #e8f4ef; border-color: #bbd8cf; color: #075e53; }
 .my-controls-filter-chip > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -48,5 +52,5 @@
   .my-controls-heading h1 { font-size: 22px; }
   .my-controls-filters > label:first-child, .my-controls-more { grid-column: 1 / -1; }
   .my-controls-summary span { padding: 7px 9px; }
-  .my-controls-toggles { position: static; width: 100%; margin-top: 6px; box-shadow: none; }
+  .my-controls-toggles { width: 100%; }
 }

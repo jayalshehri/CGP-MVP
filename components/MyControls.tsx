@@ -10,10 +10,8 @@ import { deriveMyControls, filterMyControls, loadMyControls, myControlsSummary, 
 import type { QueueActor, WorkRequest } from '@/lib/grc-work-queue';
 import { GrcWorkQueue } from './GrcAttention';
 import StatusBadge from './StatusBadge';
+import { MyControlsFilters } from './MyControlsFilters';
 import './my-controls.css';
-
-const extraFilters = [['attention', 'يحتاج إجراء'], ['evidence', 'يحتاج دليل'], ['assessment', 'يحتاج استكمال تقييم'], ['findings', 'ملاحظات/إجراءات مفتوحة'], ['overdue', 'متأخر']] as const;
-const statusLabels: Record<string, string> = { implemented: 'مطبق', in_progress: 'قيد التنفيذ', not_started: 'لم يبدأ', not_applicable: 'لا ينطبق' };
 
 export default function MyControls() {
   return <Suspense fallback={<p role="status">جاري تحميل ضوابطي…</p>}><MyControlsContent/></Suspense>;
@@ -48,31 +46,16 @@ export function MyControlsView({ rows, requests, actor, context, onFilter, onRes
   rows: PersonalRow[]; requests: WorkRequest[]; actor: QueueActor; context: string;
   onFilter: (key: string, value: string) => void; onReset: () => void; onRefresh: () => void;
 }) {
-  const filters = myControlsFilters(context), summary = myControlsSummary(rows);
+  const summary = myControlsSummary(rows);
   const visible = filterMyControls(rows, context), returnContext = myControlsOrigin(context);
   const frameworkCodes = [...new Set(rows.map(row => row.control.frameworks.code))].sort();
   const metrics = [['ضوابطي', summary.total], ['تحتاج إجراء', summary.attention], ['متأخرة', summary.overdue], ['تحتاج دليل', summary.evidence], ['بانتظار المراجعة', summary.waiting]] as const;
-  const activeExtraCount = extraFilters.filter(([key]) => filters.has(key)).length;
-  const chips = [
-    ...(filters.has('q') ? [{ key: 'q', label: `البحث: ${filters.get('q')}` }] : []),
-    ...(filters.has('framework') ? [{ key: 'framework', label: `الإطار: ${filters.get('framework')}` }] : []),
-    ...(filters.has('status') ? [{ key: 'status', label: `حالة التنفيذ: ${statusLabels[filters.get('status')!]}` }] : []),
-    ...extraFilters.filter(([key]) => filters.has(key)).map(([key, label]) => ({ key, label })),
-  ];
   return <main className="workflow-page my-controls" dir="rtl">
-    <header className="my-controls-heading"><div><h1>ضوابطي</h1><p>الضوابط المسندة إليك وما يحتاج إلى إجراء.</p></div><button onClick={onRefresh}>تحديث</button></header>
+    <header className="my-controls-heading"><div><div className="my-controls-title"><h1>ضوابطي</h1><button type="button" className="my-controls-refresh" aria-label="تحديث ضوابطي" title="تحديث ضوابطي" onClick={onRefresh}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M19 12a7 7 0 0 0-12-5L4 10m1 2a7 7 0 0 0 12 5l3-3"/></svg></button></div><p>الضوابط المسندة إليك وما يحتاج إلى إجراء.</p></div></header>
     {summary.total > 0 && <div className="my-controls-summary" aria-label="ملخص الضوابط المسندة إليك">{metrics.filter(([, value]) => value > 0).map(([label, value]) => <span key={label}>{label} <strong>{value}</strong></span>)}</div>}
     {summary.total === 0 ? <p className="my-controls-empty">لا توجد ضوابط مسندة إليك حاليًا.</p> : <>
       {summary.attention === 0 && <p className="my-controls-empty">جميع ضوابطك محدثة ولا توجد إجراءات مطلوبة حاليًا.{summary.waiting > 0 && ' توجد أدلة مرسلة بانتظار المراجعة المستقلة.'}</p>}
-      <section className="my-controls-filters" aria-label="تصفية ضوابطي">
-        <label>البحث<input type="search" value={filters.get('q') ?? ''} placeholder="رمز الضابط أو عنوانه" onChange={event => onFilter('q', event.target.value)}/></label>
-        <label>الإطار<select value={filters.get('framework') ?? ''} onChange={event => onFilter('framework', event.target.value)}><option value="">كل أطر ضوابطي</option>{frameworkCodes.map(code => <option key={code}>{code}</option>)}</select></label>
-        <label>حالة التنفيذ<select value={filters.get('status') ?? ''} onChange={event => onFilter('status', event.target.value)}><option value="">الكل</option><option value="implemented">مطبق</option><option value="in_progress">قيد التنفيذ</option><option value="not_started">لم يبدأ</option><option value="not_applicable">لا ينطبق</option></select></label>
-        <details className="my-controls-more"><summary>المزيد من الفلاتر{activeExtraCount > 0 && <small> ({activeExtraCount})</small>}</summary>
-          <div className="my-controls-toggles">{extraFilters.map(([key, label]) => <label key={key}><input type="checkbox" checked={filters.get(key) === '1'} onChange={event => onFilter(key, event.target.checked ? '1' : '')}/>{label}</label>)}</div>
-        </details>
-        {chips.length > 0 && <div className="my-controls-filter-chips" aria-label="الفلاتر النشطة">{chips.map(({ key, label }) => <button type="button" key={key} className="my-controls-filter-chip" aria-label={`إزالة فلتر ${label}`} onClick={() => onFilter(key, '')}><span>{label}</span><span aria-hidden="true">×</span></button>)}<button type="button" onClick={onReset}>مسح الفلاتر</button></div>}
-      </section>
+      <MyControlsFilters context={context} frameworkCodes={frameworkCodes} onFilter={onFilter} onReset={onReset}/>
       {!visible.length ? <p className="my-controls-empty">لا توجد نتائج مطابقة للتصفية الحالية.</p> : <div className="my-controls-scroll" role="region" aria-label="قائمة ضوابطي" tabIndex={0}>
         <table className="my-controls-table"><caption>{visible.length} ضابطًا ضمن التصفية · المؤشرات تعد الضوابط، لا الملفات أو الطلبات.</caption><thead><tr>{['الإطار', 'الضابط', 'حالة التنفيذ', 'الأدلة', 'التقييم', 'الملاحظات والإجراءات', 'الاستحقاق / المراجعة القادمة', 'الإجراء التالي'].map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{visible.map(row => <tr key={row.control.id}>
           <td><span dir="ltr">{row.control.frameworks.code}</span></td>
