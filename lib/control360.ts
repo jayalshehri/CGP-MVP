@@ -1,4 +1,5 @@
 import type { UserRole } from './auth';
+import { assessmentContext } from './assessment-journey';
 
 export const controlTabs = [
   { key: 'overview', label: 'نظرة عامة' },
@@ -21,12 +22,17 @@ export function controlContext(params: URLSearchParams): URLSearchParams {
   for (const key of ['domain', 'view', 'scope', 'status', 'assignment', 'q', 'from']) {
     const value = params.get(key);
     if (!value) continue;
-    if (key === 'from' && value !== 'workspace') continue;
+    if (key === 'from' && !['workspace', 'assessment'].includes(value)) continue;
     if (key === 'view' && value !== 'followup') continue;
     if (key === 'scope' && !['provider', 'tenant'].includes(value)) continue;
     if (key === 'assignment' && !['assigned', 'unassigned'].includes(value)) continue;
     if (key === 'status' && !['implemented', 'in_progress', 'not_started', 'not_applicable'].includes(value)) continue;
     result.set(key, value);
+  }
+  if (result.get('from') === 'assessment') {
+    const context = assessmentContext(params.get('assessment_context') ?? '');
+    if (context.has('cycle') && context.has('item')) result.set('assessment_context', context.toString());
+    else result.delete('from');
   }
   return result;
 }
