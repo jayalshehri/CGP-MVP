@@ -18,3 +18,25 @@
 .ae-page .cgp-primary-button{background:#08776c;color:#fff;border-color:#08776c}
 .ae-continue{padding:10px 12px;color:#096e65;text-decoration:underline}
 @media(max-width:700px){.ae-detail{padding:15px}.ae-detail .ae-actions,.ae-detail .ae-links{gap:14px}.ae-progress{max-width:none}.ae-regulatory{font-size:15px}.ae-toolbar label{flex-basis:calc(50% - 12px);min-width:135px}}
+
+/* Task first: compact selected-cycle summary, queue, then collapsed administration. */
+.ae-cycle-current{padding:14px 18px;margin:12px 0 16px}
+.ae-cycle-current h2{font-size:19px;margin:0 0 6px}.ae-cycle-current .ae-heading{align-items:center;gap:12px}
+.ae-cycle-meta{display:flex;flex-wrap:wrap;gap:6px 18px;margin:0;color:#526675;font-size:14px}
+.ae-cycle-meta strong{color:#096e65}.ae-cycle-current .ae-actions{margin:0;flex-shrink:0;align-items:center}
+.ae-task-link{display:inline-block;padding:10px 16px;border-radius:8px;text-decoration:none;white-space:nowrap}
+.ae-cycle-progress{display:grid;grid-template-columns:auto minmax(90px,260px) auto;gap:6px 12px;align-items:center;width:fit-content;max-width:100%;margin-top:12px;font-size:14px}
+.ae-cycle-progress progress{width:100%;height:8px;accent-color:#087c71}.ae-cycle-progress small{grid-column:1/-1;font-size:12px}
+.ae-cycle-note{margin:6px 0 0;font-size:13px;color:#78521a}
+.ae-item-queue h2{font-size:20px;margin:0 0 10px}.ae-item-queue .ae-toolbar{display:grid;grid-template-columns:2fr repeat(5,minmax(100px,1fr));gap:10px;margin:10px 0}
+.ae-item-queue .ae-toolbar label{min-width:0}.ae-item-queue .ae-toolbar input,.ae-item-queue .ae-toolbar select{width:100%;padding:8px}
+.ae-item-queue>p[role=status]{margin:8px 0;font-size:13px;color:#526675}
+.ae-item-queue .ae-table{font-size:14px}.ae-item-queue .ae-table th,.ae-item-queue .ae-table td{padding:10px 12px}
+.ae-item-queue .ae-preview{-webkit-line-clamp:1;margin-top:3px;max-width:28rem}.ae-cycle-admin{margin-top:20px;padding:14px 18px}
+.ae-cycle-admin>.ae-card{padding:14px;margin:12px 0}.ae-cycle-admin .workflow-metrics{margin-top:16px}
+.ae-detail .ae-heading{align-items:start}.ae-detail .ae-heading h2{margin-bottom:6px}.ae-detail .ae-heading p{margin:6px 0}
+.ae-detail .ae-section{padding-block:12px;margin-block:10px}
+.ae-item-actions{position:sticky;bottom:12px;z-index:2;background:#fff;box-shadow:0 3px 18px #173b3120;border:1px solid #d9e7e4;border-radius:12px;padding:10px;justify-content:space-between;align-items:center}
+.ae-item-actions a{padding:10px 16px;border:1px solid #bed5d1;border-radius:8px;text-decoration:none}.ae-item-actions a:focus-visible{outline:3px solid #138b80;outline-offset:3px}
+@media(max-width:1100px){.ae-item-queue .ae-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.ae-cycle-current{padding:12px}.ae-cycle-current .ae-heading{display:flex;flex-direction:column;align-items:stretch}.ae-cycle-current .ae-actions{margin-top:6px}.ae-cycle-progress{grid-template-columns:auto minmax(60px,1fr) auto;width:100%}.ae-item-queue .ae-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}.ae-item-actions{gap:6px;bottom:6px;padding:8px}.ae-item-actions a,.ae-item-actions button{padding:8px;font-size:13px}.ae-item-actions{scroll-margin-bottom:90px}}
