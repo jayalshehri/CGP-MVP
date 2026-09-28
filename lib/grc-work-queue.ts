@@ -1,5 +1,5 @@
 import type { UserRole } from './auth';
-import { controlHref } from './control360';
+import { controlHref, controlContext } from './control360';
 import { isBusinessFramework } from './compliance-frameworks';
 import { supabase } from './supabase';
 
@@ -18,7 +18,7 @@ const submissionStatuses = ['open', 'changes_requested', 'rejected'];
 
 // Filter joined framework/cycle before pagination, under the caller's existing
 // RLS. No title heuristic, privileged API, or global controls fetch is needed.
-export async function loadWorkRequests(controlId?: number, frameworkCode?: string): Promise<WorkRequest[]> {
+export async function loadWorkRequests(controlId?: number, frameworkCode?: string, personalOwnerId?: string): Promise<WorkRequest[]> {
  const result: WorkRequest[] = [];
  const size = 500;
  for (let offset = 0; ; offset += size) {
@@ -31,6 +31,7 @@ export async function loadWorkRequests(controlId?: number, frameworkCode?: strin
    .order('due_date').order('id').range(offset, offset + size - 1);
   if (controlId !== undefined) query = query.eq('control_id', controlId);
   if (frameworkCode) query = query.eq('controls.frameworks.code', frameworkCode);
+  if (personalOwnerId) query = query.eq('controls.control_owner_id', personalOwnerId);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as unknown as RequestRow[];
@@ -50,7 +51,9 @@ export async function loadWorkRequests(controlId?: number, frameworkCode?: strin
 export function requestAction(request: WorkRequest, actor: QueueActor, context = ''): { label: string; href: string } | null {
  const team = actor.role === 'admin' || actor.role === 'cybersecurity_team';
  if (submissionStatuses.includes(request.status) && (team || (actor.role === 'control_owner' && request.control_owner_id === actor.id))) {
-  return { label: 'تقديم الدليل', href: `/controls/${request.control_id}/evidence/new?request=${request.id}` };
+  const params = controlContext(new URLSearchParams(context));
+  params.set('request', String(request.id));
+  return { label: 'تقديم الدليل', href: `/controls/${request.control_id}/evidence/new?${params}` };
  }
  if (request.status === 'submitted' && team && request.reviewer_id === actor.id && request.requested_from !== actor.id) {
   // Navigate to the existing evidence workflow; its independent-review checks

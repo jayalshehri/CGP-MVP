@@ -1,0 +1,34 @@
+.my-controls { max-width: 1500px; margin-inline: auto; }
+.my-controls-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.my-controls-heading h1 { margin: 0 0 4px; font-size: 26px; }
+.my-controls-heading p, .my-controls-table caption { color: #526474; font-size: 13px; }
+.my-controls button, .my-controls input, .my-controls select { font: inherit; }
+.my-controls button { border: 1px solid #ced9dd; padding: 7px 12px; border-radius: 7px; background: white; cursor: pointer; }
+.my-controls-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.my-controls-summary span { background: #edf5f3; border-radius: 7px; padding: 8px 12px; font-size: 13px; }
+.my-controls-summary strong { margin-inline-start: 8px; font-size: 18px; color: #0c655b; }
+.my-controls-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-bottom: 16px; }
+.my-controls-filters > label { display: grid; gap: 5px; font-size: 13px; }
+.my-controls-filters input[type=search], .my-controls-filters select { padding: 8px; border: 1px solid #ced9dd; background: white; border-radius: 7px; max-width: 100%; }
+.my-controls-toggles { display: flex; gap: 12px; flex-wrap: wrap; width: 100%; font-size: 12px; }
+.my-controls-toggles label { display: flex; align-items: center; gap: 5px; }
+.my-controls-scroll { overflow-x: auto; max-width: 100%; border: 1px solid #e0e8e7; border-radius: 9px; }
+.my-controls-table { width: 100%; min-width: 940px; border-collapse: collapse; font-size: 12px; text-align: start; }
+.my-controls-table caption { text-align: start; padding: 10px 12px; }
+.my-controls-table th { background: #f3f7f6; color: #354e53; font-weight: 600; }
+.my-controls-table td, .my-controls-table th { padding: 10px; border-bottom: 1px solid #e7eeec; vertical-align: top; }
+.my-controls-table tr:last-child td { border-bottom: 0; }
+.my-controls-table a { color: #07675e; text-decoration: none; }
+.my-controls-control { min-width: 190px; max-width: 260px; }
+.my-controls-control a { display: grid; gap: 4px; }
+.my-controls-control span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.my-controls-next { display: inline-grid; gap: 4px; padding: 6px 8px; border: 1px solid #bbd8cf; border-radius: 6px; }
+.my-controls-next small { color: #8e4c1a; }
+.my-controls-overdue { display: block; color: #b42318; margin-top: 4px; }
+.my-controls-empty { padding: 14px; background: #f4f8f7; border-radius: 8px; color: #36534e; }
+.my-controls-requests { margin-top: 16px; }
+.my-controls-requests > summary { cursor: pointer; padding: 10px 0; font-weight: 600; }
+.my-controls footer { margin-top: 18px; font-size: 13px; }
+.my-controls a:hover { text-decoration: underline; }
+.my-controls :focus-visible { outline: 2px solid #0b7467; outline-offset: 3px; }
+@media (max-width: 680px) { .my-controls-heading h1 { font-size: 22px; } .my-controls-filters > label { flex: 1 1 150px; min-width: 0; } .my-controls-filters > label:first-child { flex-basis: 100%; } .my-controls-summary span { padding: 7px 9px; } }

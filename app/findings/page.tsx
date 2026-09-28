@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { myControlsReturn } from "@/lib/my-controls-context";
 import {useRouter, useSearchParams} from 'next/navigation';
 import {FormEvent, Suspense, useCallback, useEffect, useMemo, useState} from 'react';
 import {requireProfile, type UserRole} from '@/lib/auth';
@@ -45,6 +46,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   const controlId=Number(params.get('control'));
   const hasControl=params.has('control');
   const returnToControl=params.get('from')==='control'&&Number.isSafeInteger(controlId)&&controlId>0?controlHref(controlId,params.get('return_context')??'','findings'):null;
+ const personalReturn=myControlsReturn(new URLSearchParams(params.toString()))??myControlsReturn(new URLSearchParams(params.get("return_context")??""));
   const origin=params.get('from')==='workspace'?params.get('origin')?.toUpperCase():null;
   const originCode=origin&&origin===frameworkCode&&(ASSESSMENT_ROUTES.some(route=>route.code===origin)||origin==='QA_SYNTH')?origin:null;
   const findingFromUrl=Number(params.get('finding'));
@@ -66,6 +68,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   const [statusFilter,setStatusFilter]=useState('all');
   const [severityFilter,setSeverityFilter]=useState('all');
   const [createOpen,setCreateOpen]=useState(false);
+  const [ownerSourceAllowed,setOwnerSourceAllowed]=useState<{actor:string;id:number}|null>(null);
   const [newFinding,setNewFinding]=useState({
     source_type:sourceFromUrl,source_record_id:Number.isSafeInteger(idFromUrl)&&idFromUrl>0?String(idFromUrl):'',
     title:'',description:'',severity:'unclassified',owner_id:'',due_date:'',
@@ -143,8 +146,15 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   }),[findings,search,sourceFilter,statusFilter,severityFilter,idFromUrl,sourceFromUrl]);
   const openFindings=findings.filter(f=>f.status!=='closed');
   const overdue=openFindings.filter(f=>f.due_date&&f.due_date<todayRiyadh());
-  const canCreate=roleCanWork(role)&&
-    (teamRole(role)||!Number.isSafeInteger(idFromUrl)||idFromUrl<=0||sourceFromUrl==='assessment');
+  useEffect(()=>{
+    let active=true;
+    if(role!=='control_owner'||sourceFromUrl!=='assessment'||!Number.isSafeInteger(idFromUrl)||idFromUrl<1)return;
+    void supabase.from('assessment_items').select('id,cycle:assessment_cycles!cycle_id!inner(status)')
+      .eq('id',idFromUrl).eq('owner_id',actor).in('cycle.status',['draft','in_progress','evidence_collection']).maybeSingle()
+      .then(({data,error})=>{if(active)setOwnerSourceAllowed(!error&&data?{actor,id:idFromUrl}:null);});
+    return()=>{active=false;};
+  },[role,sourceFromUrl,idFromUrl,actor]);
+  const canCreate=roleCanWork(role)&&(teamRole(role)||(sourceFromUrl==='assessment'&&ownerSourceAllowed?.actor===actor&&ownerSourceAllowed?.id===idFromUrl));
   const selectFinding=(findingId:number)=>{const next=new URLSearchParams(params.toString());next.set('finding',String(findingId));router.push(`/findings?${next.toString()}`,{scroll:false});};
 
   async function run(action:string,finding:SharedFinding|null,payload:Record<string,unknown>){
@@ -177,6 +187,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
 
   if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل مساحة الملاحظات…</main>;
   return <main className="workflow-page findings-page" dir="rtl">
+    {personalReturn&&<p><Link href={personalReturn}>العودة إلى ضوابطي ←</Link></p>}
     {returnToControl&&<p className="findings-context"><Link href={returnToControl}>العودة إلى ملاحظات الضابط ←</Link></p>}
     {originCode&&<p className="findings-context"><Link href={`/compliance/${originCode}?tab=findings`}>العودة إلى ملاحظات {originCode} ←</Link></p>}
     <WorkflowHeading title={frameworkCode?`الملاحظات والإجراءات — ${frameworkCode}`:"الملاحظات والإجراءات التصحيحية"}
@@ -241,13 +252,13 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
       </tr>)}</tbody></table></div>
       {visible.length===0&&<p className="workflow-empty">لا توجد ملاحظات مطابقة. تبقى نتائج التقييم القديمة متاحة في صفحات التقييم نفسها.</p>}
     </section>
-    {selected&&<FindingDetail key={`${selected.id}-${selected.revision}`} finding={selected}
+    {selected&&<FindingDetail key={`${selected.id}-${selected.revision}`} finding={selected} navigationContext={params.get('return_context')??params.toString()}
       actions={selectedActions} actor={actor} role={role} people={people} busy={busy} run={run}/>}
   </main>;
 }
 
-function FindingDetail({finding,actions,actor,role,people,busy,run}:{
-  finding:SharedFinding;actions:CorrectiveAction[];actor:string;role:UserRole;people:Person[];
+function FindingDetail({finding,actions,actor,role,people,busy,run,navigationContext}:{
+  finding:SharedFinding;actions:CorrectiveAction[];actor:string;role:UserRole;people:Person[];navigationContext:string;
   busy:boolean;run:(action:string,finding:SharedFinding,payload:Record<string,unknown>)=>Promise<boolean>;
 }){
   const [actionOpen,setActionOpen]=useState(false);
@@ -259,7 +270,8 @@ function FindingDetail({finding,actions,actor,role,people,busy,run}:{
   const [evidence,setEvidence]=useState<EvidenceOption[]>([]);
   const [evidenceError,setEvidenceError]=useState('');
   const canFollow=teamRole(role)||(role==='control_owner'&&finding.owner_id===actor);
-  const canVerify=teamRole(role)&&actor!==finding.created_by&&actor!==finding.owner_id;
+  const canVerify=teamRole(role)&&actor!==finding.created_by&&actor!==finding.owner_id
+    &&!actions.some(action=>action.owner_id===actor||action.completed_by===actor);
   useEffect(()=>{
     let active=true;
     if(!finding.control_id)return;
@@ -280,7 +292,7 @@ function FindingDetail({finding,actions,actor,role,people,busy,run}:{
   return <section className="findings-panel findings-detail" aria-label="تفاصيل الملاحظة">
     <header><div><small dir="ltr">{finding.reference_code}</small><h2>{finding.title}</h2>
       <p>{sourceLabels[finding.source_type]} #{finding.source_record_id} · {findingStatusLabels[finding.status]}</p></div>
-      {finding.control_id&&<Link href={`/controls/${finding.control_id}`}>فتح الضابط ←</Link>}</header>
+      {finding.control_id&&<Link href={controlHref(finding.control_id,navigationContext,'findings')}>فتح الضابط ←</Link>}</header>
     <p className="findings-description">{finding.description}</p>
     {evidenceError&&<p className="findings-error" role="alert">تعذر تحميل الأدلة المؤهلة: {evidenceError}</p>}
     {canFollow&&['open','in_treatment'].includes(finding.status)&&<details className="findings-edit">
@@ -353,9 +365,10 @@ function CorrectiveActionCard({action,finding,actor,role,busy,evidence,run}:{
   const [evidenceId,setEvidenceId]=useState('');
   const [draft,setDraft]=useState({title:action.title,description:action.description,
     due_date:action.due_date??'',status:action.status});
-  const canEdit=(teamRole(role)||action.owner_id===actor)&&['open','in_treatment'].includes(finding.status)
+  const canWork=teamRole(role)||(role==='control_owner'&&finding.owner_id===actor&&action.owner_id===actor);
+  const canEdit=canWork&&['open','in_treatment'].includes(finding.status)
     &&action.status!=='completed';
-  const canComplete=(teamRole(role)||action.owner_id===actor)&&['open','in_treatment'].includes(finding.status)&&action.status!=='completed';
+  const canComplete=canWork&&['open','in_treatment'].includes(finding.status)&&action.status!=='completed';
   const canReview=teamRole(role)&&finding.status==='pending_verification'&&action.status==='completed'
     &&action.owner_id!==actor&&action.completed_by!==actor&&finding.created_by!==actor;
   return <article className="findings-action-card"><header><div><h4>{action.title}</h4><p>{actionStatusLabels[action.status]} · التحقق: {action.verification_status==='accepted'?'مقبول':action.verification_status==='rejected'?'مرفوض':action.verification_status==='pending'?'بانتظار القرار':'لم يبدأ'}</p></div>

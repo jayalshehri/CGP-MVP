@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { myControlsReturn } from "@/lib/my-controls-context";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import EvidenceDownload from "@/components/EvidenceDownload";
@@ -34,6 +35,7 @@ function EvidenceContent(){
  const searchParams=useSearchParams();
  const controlId=positiveId(searchParams.get("control"));
  const returnToControl=searchParams.get("from")==="control"&&controlId?controlHref(controlId,searchParams.get("return_context")??"","evidence"):null;
+ const personalReturn=myControlsReturn(new URLSearchParams(searchParams.toString()))??myControlsReturn(new URLSearchParams(searchParams.get("return_context")??""));
  const requestedFramework=searchParams.get("framework")?.toUpperCase()||"all";
  const selectedFramework=requestedFramework==="ALL"?"all":requestedFramework;
  const originCode=searchParams.get("from")==="workspace"?searchParams.get("origin")?.toUpperCase():null;
@@ -112,6 +114,7 @@ function EvidenceContent(){
  if(error)return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل البيانات</h1><p role="alert">{error}</p><button onClick={()=>window.location.reload()}>إعادة المحاولة</button></main>;
 
  return <main className="workflow-page evidence-page" dir="rtl">
+    {personalReturn&&<p><Link href={personalReturn}>العودة إلى ضوابطي ←</Link></p>}
   {returnToControl&&<Link className="evidence-context-return" href={returnToControl}>العودة إلى أدلة الضابط ←</Link>}
   {returnCode&&<Link className="evidence-context-return" href={`/compliance/${returnCode}?tab=evidence`}>العودة إلى أدلة {returnCode} ←</Link>}
   <WorkflowHeading title="مستودع الأدلة" description={contextual?`الأدلة المؤهلة حاليًا لضوابط ${framework} ضمن صلاحياتك؛ يشمل الدليل المباشر والمشترك عبر مواءمة معتمدة. لعرض جميع الحالات والإصدارات اختر جميع الأطر.`:"اعرض الدليل والضابط والإطار وحالة المراجعة في قائمة واحدة، وافتح التفاصيل عند الحاجة."} action={role!=="nca_external_auditor"?<Link className="workflow-button" href="/controls">اختيار ضابط لرفع دليل ←</Link>:undefined}/>

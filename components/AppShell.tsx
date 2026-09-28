@@ -7,6 +7,7 @@ import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import FeedbackWidget from "@/components/FeedbackWidget";
 import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
+import { myControlsReturn, myControlsOrigin } from "@/lib/my-controls-context";
 
 // CGP v2 IA (Package P1): grouped by domain (الامتثال / المخاطر / المراجعة
 // والتدقيق / الاستراتيجية والتنفيذ), each with at most one subgroup level.
@@ -21,10 +22,10 @@ import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
 const navigation = [
   { href: "/", label: "الرئيسية", group: "" },
 
-  // Compliance work starts in the Center. Keep the legacy catalog entry for
-  // control owners until the dedicated My Controls journey exists.
+  // Personal owner work; retain the catalog route for existing deep links.
+  { href: "/my-controls", label: "ضوابطي", group: "الامتثال", personal: true },
   { href: "/compliance", label: "مركز الامتثال", group: "الامتثال", auditor: true },
-  { href: "/controls", label: "ضوابطي", group: "الامتثال" },
+  { href: "/controls", label: "مكتبة الضوابط", group: "الامتثال", sidebarHidden: true },
   { href: "/evidence", label: "الأدلة", group: "الامتثال", auditor: true },
   { href: "/findings", label: "الملاحظات والإجراءات", group: "الامتثال", auditor: true },
   { href: "/review", label: "التحقق", group: "الامتثال", team: true },
@@ -81,6 +82,7 @@ function NavIcon({ href }: { href: string }) {
   const paths: Record<string, string> = {
     "/": "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
     "/controls": "M5 3h14v18H5z M8 7h8 M8 12h8 M8 17h5",
+    "/my-controls": "M5 3h14v18H5z M8 7h8 M8 12h8 M8 17h5",
     "/tasks": "M5 4h14v17H5z M9 3h6v3H9z M8 13l3 3 5-6",
     "/roadmap": "M4 18V6 M4 18h16 M8 15v-3 M12 15V8 M16 15v-5 M4 6h16 M17 3l3 3-3 3",
     "/roadmap/dashboard": "M4 18V6 M4 18h16 M8 15v-3 M12 15V8 M16 15v-5 M4 6h16 M17 3l3 3-3 3",
@@ -125,6 +127,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
 function ContextBreadcrumb({pathname,leaf,activeGroup,controlId,complianceCode,assessmentFramework}:{pathname:string;leaf:string;activeGroup:string;controlId?:string;complianceCode?:string;assessmentFramework?:string}){
   const params=useSearchParams();
+  const personalReturn=myControlsReturn(new URLSearchParams(params.toString()))??myControlsReturn(new URLSearchParams(params.get('return_context')??''));
+  const personalQuery=personalReturn?'&'+myControlsOrigin(params.get('my_context')??new URLSearchParams(params.get('return_context')??'').get('my_context')??''):'';
   const origin=params.get("from")==="workspace"?params.get("origin")?.toUpperCase():null;
   const workspaceCode=origin&&ASSESSMENT_ROUTES.some(route=>route.code===origin)?origin:null;
   const cycle=Number(params.get("cycle"));
@@ -135,11 +139,12 @@ function ContextBreadcrumb({pathname,leaf,activeGroup,controlId,complianceCode,a
   const part=(href:string,label:string)=><><span aria-hidden="true">/</span><Link href={href}>{label}</Link></>;
   return <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link>{pathname!==""&&pathname!=="/"&&<>
     {activeGroup&&<><span aria-hidden="true">/</span><span>{activeGroup}</span></>}
-    {controlId&&workspaceCode?<>{part("/compliance","مركز الامتثال")}{part(`/compliance/${workspaceCode}?tab=controls`,`ضوابط ${workspaceCode}`)}{leaf!=="تفاصيل الضابط"&&part(`/controls/${controlId}?from=workspace&origin=${workspaceCode}`,"تفاصيل الضابط")}</>:
+    {personalReturn&&part(personalReturn,"ضوابطي")}
+    {controlId&&personalReturn?null:controlId&&workspaceCode?<>{part("/compliance","مركز الامتثال")}{part(`/compliance/${workspaceCode}?tab=controls`,`ضوابط ${workspaceCode}`)}{leaf!=="تفاصيل الضابط"&&part(`/controls/${controlId}?from=workspace&origin=${workspaceCode}`,"تفاصيل الضابط")}</>:
       (pathname==="/evidence"||pathname==="/findings")&&workspaceCode?<>{part("/compliance","مركز الامتثال")}{part(`/compliance/${workspaceCode}?tab=${pathname==="/evidence"?"evidence":"findings"}`,workspaceCode)}</>:
       sourceRoute?<>{part("/compliance","مركز الامتثال")}{part(`/compliance/${sourceRoute.code}`,sourceRoute.code)}{Number.isSafeInteger(cycle)&&cycle>0&&part(`${sourceRoute.href}?cycle=${cycle}`,`دورة #${cycle}`)}{Number.isSafeInteger(cycle)&&cycle>0&&Number.isSafeInteger(sourceId)&&sourceId>0&&part(`${sourceRoute.href}?cycle=${cycle}&item=${sourceId}`,`بند #${sourceId}`)}</>:
       controlId?<>{part("/controls","مكتبة الضوابط")}{leaf!=="تفاصيل الضابط"&&part(`/controls/${controlId}`,"تفاصيل الضابط")}</>:
-      complianceCode||assessmentFramework?<>{part("/compliance","مركز الامتثال")}{assessmentFramework&&part(`/compliance/${assessmentFramework}`,assessmentFramework)}{assessmentFramework&&Number.isSafeInteger(cycle)&&cycle>0&&part(`${pathname}?cycle=${cycle}`,`دورة #${cycle}`)}{assessmentFramework&&Number.isSafeInteger(item)&&item>0&&part(`${pathname}?cycle=${cycle}&item=${item}`,`بند #${item}`)}</>:null}
+      complianceCode||assessmentFramework?<>{part("/compliance","مركز الامتثال")}{assessmentFramework&&part(`/compliance/${assessmentFramework}`,assessmentFramework)}{assessmentFramework&&Number.isSafeInteger(cycle)&&cycle>0&&part(`${pathname}?cycle=${cycle}${personalQuery}`,`دورة #${cycle}`)}{assessmentFramework&&Number.isSafeInteger(item)&&item>0&&part(`${pathname}?cycle=${cycle}&item=${item}${personalQuery}`,`بند #${item}`)}</>:null}
     <span aria-hidden="true">/</span><span aria-current="page">{leaf}</span>
   </>}</nav>;
 }
@@ -168,7 +173,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const workspace = pathname === "/shared-controls" ? "shared" : pathname.startsWith("/data-governance") ? "data" : "cyber";
   const workspaceLabel = workspace === "data" ? "حوكمة البيانات" : workspace === "shared" ? "مركز المواءمة" : "الأمن السيبراني";
   const permittedItems = account ? navigation.filter(item => account.role === "data_governance_team" ? Boolean(item.data) : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];
-  const items = permittedItems.filter(item => !item.sidebarHidden && (item.href !== "/controls" || account?.role === "control_owner") && (workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls"));
+  const items = permittedItems.filter(item => (!item.personal || account?.role === "control_owner") && !item.sidebarHidden && (workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls"));
   const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "الرئيسية");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const complianceCode = /^\/compliance\/([^/]+)/.exec(pathname)?.[1];

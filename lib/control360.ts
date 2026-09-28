@@ -1,5 +1,6 @@
 import type { UserRole } from './auth';
 import { assessmentContext } from './assessment-journey';
+import { myControlsFilters } from './my-controls-context';
 
 export const controlTabs = [
   { key: 'overview', label: 'نظرة عامة' },
@@ -22,7 +23,7 @@ export function controlContext(params: URLSearchParams): URLSearchParams {
   for (const key of ['domain', 'view', 'scope', 'status', 'assignment', 'q', 'from']) {
     const value = params.get(key);
     if (!value) continue;
-    if (key === 'from' && !['workspace', 'assessment'].includes(value)) continue;
+    if (key === 'from' && !['workspace', 'assessment', 'my-controls'].includes(value)) continue;
     if (key === 'view' && value !== 'followup') continue;
     if (key === 'scope' && !['provider', 'tenant'].includes(value)) continue;
     if (key === 'assignment' && !['assigned', 'unassigned'].includes(value)) continue;
@@ -34,6 +35,7 @@ export function controlContext(params: URLSearchParams): URLSearchParams {
     if (context.has('cycle') && context.has('item')) result.set('assessment_context', context.toString());
     else result.delete('from');
   }
+  if (result.get('from') === 'my-controls') result.set('my_context', myControlsFilters(params.get('my_context') ?? '').toString());
   return result;
 }
 export function controlHref(id: number, context: string, tab: ControlTab = 'overview'): string {

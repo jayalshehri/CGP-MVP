@@ -1,16 +1,24 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, FormEvent, useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { getEccOfficialTitle } from "@/lib/ecc-strategy-example";
 import "./evidence-upload.css";
+import { controlContext, controlHref } from "@/lib/control360";
+import { myControlsReturn } from "@/lib/my-controls-context";
 
 export default function NewEvidencePage() {
+  return <Suspense fallback={<p role="status">جاري تحميل رفع الدليل…</p>}><NewEvidenceContent/></Suspense>;
+}
+function NewEvidenceContent() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const context = controlContext(new URLSearchParams(searchParams.toString())).toString();
+  const personalReturn = myControlsReturn(new URLSearchParams(context));
 
   const controlId = Number(params.id);
 
@@ -133,7 +141,7 @@ export default function NewEvidencePage() {
 
       setMessage(selectedTargets.length?"تم رفع الدليل وإرساله للمراجعة في الضوابط المختارة.":"تم رفع الدليل وربطه بالضابط بنجاح.");
 
-      router.push(`/controls/${controlId}`);
+      router.push(controlHref(controlId, context, "evidence"));
       router.refresh();
     } catch (error) {
       const message =
@@ -147,13 +155,13 @@ export default function NewEvidencePage() {
     }
   }
 
-  if(archived)return <main dir="rtl" className="evidence-upload-page"><div className="evidence-upload-container"><h1>ضابط مؤرشف</h1><p>هذا الضابط محفوظ للسجل التاريخي فقط، ولا يقبل أدلة جديدة.</p><Link href={`/controls/${controlId}`}>عرض السجل التاريخي ←</Link></div></main>;
+  if(archived)return <main dir="rtl" className="evidence-upload-page"><div className="evidence-upload-container"><h1>ضابط مؤرشف</h1><p>هذا الضابط محفوظ للسجل التاريخي فقط، ولا يقبل أدلة جديدة.</p><Link href={personalReturn??controlHref(controlId,context,"evidence")}>عرض السجل التاريخي ←</Link></div></main>;
 
   return (
     <main dir="rtl" className="evidence-upload-page">
       <div className="evidence-upload-container">
-        <Link href={`/controls/${controlId}`} className="evidence-upload-back">
-          <span aria-hidden="true">←</span> العودة إلى الضابط
+        <Link href={personalReturn??controlHref(controlId,context,"evidence")} className="evidence-upload-back">
+          <span aria-hidden="true">←</span> {personalReturn?"العودة إلى ضوابطي":"العودة إلى الضابط"}
         </Link>
 
         <header className="evidence-upload-header">
@@ -273,7 +281,7 @@ export default function NewEvidencePage() {
               <button type="submit" disabled={uploading || !ready} className="evidence-upload-submit">
                 {uploading ? "جاري الرفع..." : "رفع وإرسال للمراجعة"}
               </button>
-              <Link href={`/controls/${controlId}`} className="evidence-upload-cancel">إلغاء</Link>
+              <Link href={personalReturn??controlHref(controlId,context,"evidence")} className="evidence-upload-cancel">إلغاء</Link>
             </div>
             <p>الإرسال الجديد يحل محل الدليل الحالي للمراجعة، مع الاحتفاظ بالإرسالات السابقة في السجل.</p>
           </footer>

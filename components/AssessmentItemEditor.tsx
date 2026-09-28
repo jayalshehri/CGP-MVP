@@ -1,4 +1,5 @@
 'use client';
+import { myControlsReturn } from '@/lib/my-controls-context';
 import {useEffect,useState} from 'react';
 import Link from 'next/link';
 import {usePathname} from 'next/navigation';
@@ -15,6 +16,7 @@ export default function AssessmentItemEditor({item,cycle,people,projects,evidenc
  const findingContext=new URLSearchParams({source:'assessment',source_id:String(item.id),cycle:String(cycle.id)});
  if(frameworkCode)findingContext.set('framework',frameworkCode);
  findingContext.set('assessment_context',assessmentContext(context).toString());
+ if(myControlsReturn(assessmentContext(context))){findingContext.set('from','my-controls');findingContext.set('my_context',assessmentContext(context).get('my_context')??'');}
  const [data,setData]=useState<Awaited<ReturnType<typeof loadAssessmentItemContext>>|null>(null),[readError,setReadError]=useState(''),[reload,setReload]=useState(0),[saved,setSaved]=useState(false);
  const evidenceKey=evidenceIds.join(',');
  useEffect(()=>{let active=true;void loadAssessmentItemContext(frameworkCode??'',item.control_id,evidenceKey?evidenceKey.split(',').map(Number):[]).then(result=>{if(active){setData(result);setReadError('');}}).catch(()=>{if(active)setReadError('تعذر تحميل النص والأدلة المتاحة. أعد المحاولة قبل حفظ ارتباطات الأدلة.');});return()=>{active=false;};},[frameworkCode,item.control_id,evidenceKey,reload]);
@@ -33,7 +35,7 @@ export default function AssessmentItemEditor({item,cycle,people,projects,evidenc
  const leave=(event:React.MouseEvent<HTMLAnchorElement>)=>{if(dirty&&!window.confirm('توجد تعديلات غير محفوظة. هل تريد مغادرة البند؟'))event.preventDefault();};
  const controlContext=new URLSearchParams({from:'assessment',assessment_context:assessmentContext(context).toString()});
  return <div className="ae-detail">
- <nav className="ae-links" aria-label="مسار بند التقييم"><Link onClick={leave} href={returnHref}>{assessmentContext(context).get('from')==='review'?'العودة إلى مركز المراجعة':'العودة إلى دورة التقييم'} ←</Link><Link onClick={leave} href={assessmentItemHref(frameworkCode??'',cycle.id,null,context)??pathname}>دورة #{cycle.id} · {cycle.scope_name}</Link><b dir="ltr">{item.control_code}</b></nav>
+ <nav className="ae-links" aria-label="مسار بند التقييم"><Link onClick={leave} href={returnHref}>{myControlsReturn(assessmentContext(context))?'العودة إلى ضوابطي':assessmentContext(context).get('from')==='review'?'العودة إلى مركز المراجعة':'العودة إلى دورة التقييم'} ←</Link><Link onClick={leave} href={assessmentItemHref(frameworkCode??'',cycle.id,null,context)??pathname}>دورة #{cycle.id} · {cycle.scope_name}</Link><b dir="ltr">{item.control_code}</b></nav>
  <header className="ae-heading"><div><h2>بند التقييم <b dir="ltr">{item.control_code}</b></h2><p>{item.title_ar}</p></div><p role="status">{!editable?'عرض فقط':busy?'جاري الحفظ…':dirty?'تعديلات غير محفوظة':saved?'تم الحفظ':'محفوظ'} · {incomplete?'بيانات النتيجة غير مكتملة':'بيانات النتيجة مكتملة — الإرسال من الدورة'}</p></header>
  <section className="ae-section"><h3>المتطلب الرسمي</h3>{data?.officialText?<p className="ae-regulatory">{data.officialText}</p>:<p className="ae-muted">{data?'النص الرسمي غير متاح هنا؛ راجع صفحة الضابط.':'جاري تحميل النص الرسمي…'}</p>}
  <Link onClick={leave} href={`/controls/${item.control_id}?${controlContext}`}>فتح Control 360 ←</Link>
@@ -48,7 +50,7 @@ export default function AssessmentItemEditor({item,cycle,people,projects,evidenc
  <label>موعد المعالجة<input type="date" value={form.expected_compliance_date} onChange={e=>setForm({...form,expected_compliance_date:e.target.value})}/></label>
  </div></fieldset><fieldset disabled={!editable||busy||!data||!!readError}><legend>الأدلة</legend><p className="ae-muted">الإصدارات المتاحة لهذا الضابط ضمن صلاحياتك. تحقق الاستقلالية عند المراجعة يتم بواسطة المحرك.</p>{!data&&!readError?<p role="status">جاري تحميل الأدلة…</p>:evidence.length===0?<p>لا توجد أدلة مؤهلة متاحة حاليًا.</p>:evidence.map(e=><label className="ae-check" key={e.evidence_id}><input type="checkbox" checked={ids.includes(e.evidence_id)} onChange={ev=>setIds(v=>ev.target.checked?[...v,e.evidence_id]:v.filter(id=>id!==e.evidence_id))}/><span>{e.file_name||e.evidence_name} · الإصدار {e.version_number}<small>{e.association==='direct'?'دليل مباشر':'دليل مشترك عبر مواءمة معتمدة'}{e.valid_until?` · الصلاحية ${formatComplianceDate(e.valid_until)}`:''}</small></span></label>)}
  {evidenceIds.filter(id=>!evidence.some(e=>e.evidence_id===id)).map(id=>{const version=data?.linked.find(e=>e.id===id);return <label className="ae-check" key={id}><input type="checkbox" checked={ids.includes(id)} onChange={e=>setIds(v=>e.target.checked?[...v,id]:v.filter(value=>value!==id))}/><span>{version?.file_name||'ارتباط محفوظ في دورة التقييم'} · إصدار {version?.version_number??'غير متاح'}<small>ليس ضمن الإصدارات المؤهلة الحالية؛ لا يُعد دليلًا صالحًا بمجرد بقاء الارتباط.</small></span></label>;})}
- </fieldset><div className="ae-links"><Link onClick={leave} href={`/evidence?${new URLSearchParams({framework:frameworkCode??'',control:String(item.control_id),from:'workspace'})}`}>فتح مستودع الأدلة ←</Link>{editable&&<Link onClick={leave} href={`/controls/${item.control_id}/evidence/new`}>تقديم دليل ←</Link>}</div>
+ </fieldset><div className="ae-links"><Link onClick={leave} href={`/evidence?${new URLSearchParams({framework:frameworkCode??'',control:String(item.control_id),from:'control',return_context:controlContext.toString()})}`}>فتح مستودع الأدلة ←</Link>{editable&&<Link onClick={leave} href={`/controls/${item.control_id}/evidence/new?${controlContext}`}>تقديم دليل ←</Link>}</div>
  </form>
  <section className="ae-section"><h3>المراجعة</h3><p>{reviewLabels[item.review_status]} {item.review_reason&&`— ${item.review_reason}`}</p>{item.reviewed_at&&<p>تاريخ القرار: {formatComplianceDateTime(item.reviewed_at)} · المراجع: {people.find(p=>p.user_id===item.reviewed_by)?.display_name||'مسجّل في تاريخ القرار'}</p>}
  {(reviewable||(finding&&canFollow))&&<label>سبب القرار<textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="اشرح سبب قبول النتيجة أو إعادتها أو التحقق من المعالجة"/></label>}

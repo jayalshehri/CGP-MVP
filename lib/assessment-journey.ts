@@ -1,5 +1,6 @@
 import type { AssessmentCycle, AssessmentItem } from './assessment';
 import { assessmentHrefFor } from './compliance-frameworks';
+import { myControlsFilters } from './my-controls-context';
 
 // Presentation/context only. Validation and all transitions remain in the RPC.
 export const journeyKeys = ['cycle', 'item', 'q', 'domain', 'result', 'review', 'evidence', 'attention', 'page', 'from'] as const;
@@ -9,9 +10,10 @@ export function assessmentContext(raw: string) {
     const value = source.get(key);
     if (!value) continue;
     if (['cycle', 'item', 'page'].includes(key) && (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) < 1)) continue;
-    if (key === 'from' && value !== 'review') continue;
+    if (key === 'from' && !['review', 'my-controls'].includes(value)) continue;
     safe.set(key, value.slice(0, 300));
   }
+  if (safe.get('from') === 'my-controls') safe.set('my_context', myControlsFilters(source.get('my_context') ?? '').toString());
   return safe;
 }
 export function assessmentItemHref(code: string, cycle: number, item: number | null, context = '') {
