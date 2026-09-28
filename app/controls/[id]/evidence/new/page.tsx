@@ -9,6 +9,7 @@ import { getEccOfficialTitle } from "@/lib/ecc-strategy-example";
 import "./evidence-upload.css";
 import { controlContext, controlHref } from "@/lib/control360";
 import { myControlsReturn } from "@/lib/my-controls-context";
+import EvidenceSubmissionOptions from "@/components/EvidenceSubmissionOptions";
 
 export default function NewEvidencePage() {
   return <Suspense fallback={<p role="status">جاري تحميل رفع الدليل…</p>}><NewEvidenceContent/></Suspense>;
@@ -185,35 +186,9 @@ function NewEvidenceContent() {
         </header>
 
         <form aria-busy={uploading} onSubmit={handleSubmit} className="evidence-upload-card">
-          <section className="grc-form">
-            <label>نوع الإرسال<select disabled={uploading} value={replaceId} onChange={e=>setReplaceId(e.target.value)}><option value="">مستند جديد مستقل</option>{versions.map(v=><option key={v.id} value={v.id}>إصدار جديد من: {v.file_name} (الإصدار {v.version_number})</option>)}</select></label>
-            {requestId&&<p>مرتبط بطلب الدليل #{requestId}</p>}
-            <label>صالح حتى — إن كانت للدليل مدة صلاحية<input disabled={uploading} type="date" value={validUntil} onChange={e=>setValidUntil(e.target.value)}/></label>
-            <label>بداية فترة التغطية<input disabled={uploading} type="date" value={coverageStart} onChange={e=>setCoverageStart(e.target.value)}/></label>
-            <label>نهاية فترة التغطية<input disabled={uploading} type="date" min={coverageStart||undefined} value={coverageEnd} onChange={e=>setCoverageEnd(e.target.value)}/></label>
-          </section><section className="evidence-upload-section">
+          <section className="evidence-upload-section">
             <div className="evidence-upload-section-heading">
               <span className="evidence-upload-step">1</span>
-              <div>
-                <h2>وصف الدليل</h2>
-                <p>اختياري، ويُفضل أن يوضح محتوى الملف وفترة تغطيته.</p>
-              </div>
-            </div>
-            <FieldLabel text="وصف الدليل" htmlFor="evidence-description" />
-            <textarea
-              disabled={uploading || !ready}
-              id="evidence-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="مثال: سياسة الأمن السيبراني المعتمدة للإصدار الحالي، مع تاريخ الاعتماد."
-              rows={4}
-              className="evidence-upload-textarea"
-            />
-          </section>
-
-          <section className="evidence-upload-section evidence-upload-file-section">
-            <div className="evidence-upload-section-heading">
-              <span className="evidence-upload-step">2</span>
               <div>
                 <h2>إرفاق الملف <em>*</em></h2>
                 <p>PDF أو Word أو Excel أو صورة، بحجم لا يتجاوز 20 MB.</p>
@@ -243,7 +218,24 @@ function NewEvidenceContent() {
             <p className="evidence-upload-note">
               سيُسجل الدليل تلقائيًا تحت رقم الضابط <b dir="ltr">{controlCode}</b>.
             </p>
+            {requestId&&<p className="evidence-upload-note">مرتبط بطلب الدليل #{requestId}</p>}
           </section>
+
+          <section className="evidence-upload-section evidence-upload-file-section">
+            <div className="evidence-upload-section-heading">
+              <span className="evidence-upload-step">2</span>
+              <div><h2>وصف الدليل</h2><p>اختياري، لتوضيح محتوى الملف عند الحاجة.</p></div>
+            </div>
+            <FieldLabel text="وصف الدليل" htmlFor="evidence-description" />
+            <textarea disabled={uploading || !ready} id="evidence-description" value={description}
+              onChange={event => setDescription(event.target.value)} placeholder="وصف مختصر يساعد المراجع على فهم الدليل."
+              rows={2} className="evidence-upload-textarea"/>
+          </section>
+
+          <EvidenceSubmissionOptions disabled={uploading || !ready} versions={versions}
+            replaceId={replaceId} replacementLocked={Boolean(searchParams.get('replace'))} onReplacement={setReplaceId}
+            validUntil={validUntil} coverageStart={coverageStart} coverageEnd={coverageEnd}
+            onValidity={setValidUntil} onCoverageStart={setCoverageStart} onCoverageEnd={setCoverageEnd}/>
 
           {frameworkCode === "ECC" && mappedControls.length > 0 && (
             <details className="evidence-upload-sharing">
@@ -279,11 +271,11 @@ function NewEvidenceContent() {
           <footer className="evidence-upload-actions">
             <div>
               <button type="submit" disabled={uploading || !ready} className="evidence-upload-submit">
-                {uploading ? "جاري الرفع..." : "رفع وإرسال للمراجعة"}
+                {uploading ? "جاري الرفع..." : "تقديم الدليل"}
               </button>
               <Link href={personalReturn??controlHref(controlId,context,"evidence")} className="evidence-upload-cancel">إلغاء</Link>
             </div>
-            <p>الإرسال الجديد يحل محل الدليل الحالي للمراجعة، مع الاحتفاظ بالإرسالات السابقة في السجل.</p>
+            <p>يُسجَّل وقت الرفع تلقائيًا عند تقديم الدليل. تبقى الإصدارات السابقة محفوظة في السجل.</p>
           </footer>
         </form>
       </div>
