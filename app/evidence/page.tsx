@@ -10,6 +10,7 @@ import { ResultSummary, WorkflowHeading } from "@/components/WorkflowUI";
 import { frameworkOf } from "@/lib/compliance";
 import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
 import { loadEligibleFrameworkEvidence, type EligibleFrameworkEvidence } from "@/lib/framework-evidence";
+import { positiveId, controlHref } from "@/lib/control360";
 import { formatComplianceDate, isExpired } from "@/lib/grc";
 import { supabase } from "@/lib/supabase";
 import "./evidence.css";
@@ -25,12 +26,14 @@ export default function EvidencePage(){
 
 function EvidenceRoute(){
  const params=useSearchParams();
- return <EvidenceContent key={params.get("framework")?.toUpperCase()||"all"}/>;
+ return <EvidenceContent key={(params.get("framework")?.toUpperCase()||"all")+":"+(params.get("control")??"")}/>;
 }
 
 function EvidenceContent(){
  const router=useRouter();
  const searchParams=useSearchParams();
+ const controlId=positiveId(searchParams.get("control"));
+ const returnToControl=searchParams.get("from")==="control"&&controlId?controlHref(controlId,searchParams.get("return_context")??"","evidence"):null;
  const requestedFramework=searchParams.get("framework")?.toUpperCase()||"all";
  const selectedFramework=requestedFramework==="ALL"?"all":requestedFramework;
  const originCode=searchParams.get("from")==="workspace"?searchParams.get("origin")?.toUpperCase():null;
@@ -43,11 +46,12 @@ function EvidenceContent(){
  const [status,setStatus]=useState("all");
  const [scope,setScope]=useState("current");
  const framework=selectedFramework;
- const setFramework=(selected:string)=>{const next=new URLSearchParams(searchParams.toString());if(selected==="all")next.delete("framework");else next.set("framework",selected);router.push(`/evidence${next.size?`?${next.toString()}`:""}`,{scroll:false});};
+ const setFramework=(selected:string)=>{const next=new URLSearchParams(searchParams.toString());if(selected!==selectedFramework){next.delete("control");next.delete("return_context");if(next.get("from")==="control")next.delete("from");}if(selected==="all")next.delete("framework");else next.set("framework",selected);router.push(`/evidence${next.size?`?${next.toString()}`:""}`,{scroll:false});};
  const [error,setError]=useState("");
 
  useEffect(()=>{let active=true;
   async function load(){
+   if(searchParams.has("control")&&!controlId){if(active){setError("سياق الضابط غير صحيح.");setLoading(false);}return;}
    const {data:sessionData}=await supabase.auth.getSession();
    const session=sessionData.session;
    if(!session){router.replace("/login");return;}
@@ -57,6 +61,7 @@ function EvidenceContent(){
    if(active)setRole(userRole);
    let controlQuery=supabase.from("controls").select("id,control_code,title_ar,control_owner,control_owner_id,frameworks!inner(code,name_ar,is_active)").eq("frameworks.is_active",true).order("id");
    if(userRole==="control_owner")controlQuery=controlQuery.eq("control_owner_id",session.user.id);
+   if(controlId)controlQuery=controlQuery.eq("id",controlId);
    const {data:controlData,error:controlError}=await controlQuery;
    if(controlError){if(active){setError("تعذر تحميل الضوابط: "+controlError.message);setLoading(false);}return;}
    // Keep synthetic QA evidence reachable by its explicit test deep link, but
@@ -67,7 +72,9 @@ function EvidenceContent(){
    let eligible:EligibleFrameworkEvidence[]|null=null;
    let register:Awaited<ReturnType<typeof supabase.rpc>>;
    try{
-    const result=await Promise.all([supabase.rpc("grc_evidence_register"),selectedFramework==="all"?Promise.resolve(null):loadEligibleFrameworkEvidence(selectedFramework)]);
+    let registerQuery=supabase.rpc("grc_evidence_register");
+    if(controlId)registerQuery=registerQuery.eq("control_id",controlId);
+    const result=await Promise.all([registerQuery,selectedFramework==="all"?Promise.resolve(null):loadEligibleFrameworkEvidence(selectedFramework,controlId)]);
     register=result[0];eligible=result[1];
    }catch(cause){if(active){setError("تعذر تحميل الأدلة المؤهلة: "+(cause instanceof Error?cause.message:"خطأ غير معروف"));setLoading(false);}return;}
    if(register.error&&eligible===null){if(active){setError("تعذر تحميل الأدلة: "+register.error.message);setLoading(false);}return;}
@@ -87,7 +94,7 @@ function EvidenceContent(){
    if(active){setRows(nextRows);setLoading(false);}
   }
   void load();return()=>{active=false;};
- },[router,selectedFramework]);
+ },[router,selectedFramework,controlId,searchParams]);
 
  const frameworks=frameworkOptions.filter(code=>code!=="QA_SYNTH"||selectedFramework==="QA_SYNTH");
  const contextual=framework!=="all";
@@ -105,6 +112,7 @@ function EvidenceContent(){
  if(error)return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل البيانات</h1><p role="alert">{error}</p><button onClick={()=>window.location.reload()}>إعادة المحاولة</button></main>;
 
  return <main className="workflow-page evidence-page" dir="rtl">
+  {returnToControl&&<Link className="evidence-context-return" href={returnToControl}>العودة إلى أدلة الضابط ←</Link>}
   {returnCode&&<Link className="evidence-context-return" href={`/compliance/${returnCode}?tab=evidence`}>العودة إلى أدلة {returnCode} ←</Link>}
   <WorkflowHeading title="مستودع الأدلة" description={contextual?`الأدلة المؤهلة حاليًا لضوابط ${framework} ضمن صلاحياتك؛ يشمل الدليل المباشر والمشترك عبر مواءمة معتمدة. لعرض جميع الحالات والإصدارات اختر جميع الأطر.`:"اعرض الدليل والضابط والإطار وحالة المراجعة في قائمة واحدة، وافتح التفاصيل عند الحاجة."} action={role!=="nca_external_auditor"?<Link className="workflow-button" href="/controls">اختيار ضابط لرفع دليل ←</Link>:undefined}/>
   {role!=="nca_external_auditor"&&<details className="evidence-attention"><summary>طلبات الأدلة والمراجعات المطلوبة</summary><GrcAttention/></details>}

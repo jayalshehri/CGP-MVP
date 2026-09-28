@@ -10,6 +10,7 @@ import {
   type CorrectiveAction, type FindingSource, type SharedFinding,
 } from '@/lib/findings';
 import {supabase} from '@/lib/supabase';
+import {controlHref} from '@/lib/control360';
 import {ASSESSMENT_ROUTES, assessmentHrefFor} from '@/lib/compliance-frameworks';
 import {WorkflowHeading, WorkflowMetric} from '@/components/WorkflowUI';
 import './findings.css';
@@ -40,6 +41,9 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   const sourceFromUrl=validSource(params.get('source'));
   const idFromUrl=Number(params.get('source_id'));
   const frameworkCode=params.get('framework')?.toUpperCase()??'';
+  const controlId=Number(params.get('control'));
+  const hasControl=params.has('control');
+  const returnToControl=params.get('from')==='control'&&Number.isSafeInteger(controlId)&&controlId>0?controlHref(controlId,params.get('return_context')??'','findings'):null;
   const origin=params.get('from')==='workspace'?params.get('origin')?.toUpperCase():null;
   const originCode=origin&&origin===frameworkCode&&(ASSESSMENT_ROUTES.some(route=>route.code===origin)||origin==='QA_SYNTH')?origin:null;
   const findingFromUrl=Number(params.get('finding'));
@@ -67,6 +71,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   });
 
   const load=useCallback(async(team:boolean)=>{
+    if(hasControl&&(!Number.isSafeInteger(controlId)||controlId<1))throw new Error('سياق الضابط غير صحيح.');
     // The framework parameter is a database filter, not just return context.
     // Never fall back to the global register when a code is unknown/inaccessible.
     let frameworkId:number|null=null;
@@ -81,18 +86,21 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
     for(let from=0;;from+=500){
       let query=supabase.from('grc_findings').select('*').order('id',{ascending:false}).range(from,from+499);
       if(frameworkId!==null)query=query.eq('framework_id',frameworkId);
+      if(hasControl)query=query.eq('control_id',controlId);
       const result=await query;
       if(result.error)throw result.error;
       allFindings.push(...(result.data??[]) as SharedFinding[]);
       if((result.data??[]).length<500)break;
     }
     if(allFindings.length){
-      const findingIds=new Set(allFindings.map(f=>f.id));
-      for(let from=0;;from+=500){
-        const result=await supabase.from('grc_corrective_actions').select('*').order('id').range(from,from+499);
+      for(let offset=0;offset<allFindings.length;offset+=200){
+       const findingIds=allFindings.slice(offset,offset+200).map(f=>f.id);
+       for(let from=0;;from+=500){
+        const result=await supabase.from('grc_corrective_actions').select('*').in('finding_id',findingIds).order('id').range(from,from+499);
         if(result.error)throw result.error;
-        allActions.push(...((result.data??[]) as CorrectiveAction[]).filter(action=>findingIds.has(action.finding_id)));
+        allActions.push(...(result.data??[]) as CorrectiveAction[]);
         if((result.data??[]).length<500)break;
+       }
       }
     }
     const directory=team?await supabase.from('profiles').select('user_id,display_name,role').eq('is_active',true):null;
@@ -103,7 +111,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
     setSelectedId(previous=>Number.isSafeInteger(findingFromUrl)&&findingFromUrl>0&&allFindings.some(f=>f.id===findingFromUrl)?findingFromUrl:previous&&allFindings.some(f=>f.id===previous)?previous:
       allFindings.find(f=>f.source_type===sourceFromUrl&&f.source_record_id===idFromUrl)?.id??
       (Number.isSafeInteger(idFromUrl)&&idFromUrl>0?null:allFindings[0]?.id??null));
-  },[sourceFromUrl,idFromUrl,findingFromUrl,frameworkCode]);
+  },[sourceFromUrl,idFromUrl,findingFromUrl,frameworkCode,controlId,hasControl]);
 
   useEffect(()=>{
     let active=true;
@@ -167,6 +175,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
 
   if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل مساحة الملاحظات…</main>;
   return <main className="workflow-page findings-page" dir="rtl">
+    {returnToControl&&<p className="findings-context"><Link href={returnToControl}>العودة إلى ملاحظات الضابط ←</Link></p>}
     {originCode&&<p className="findings-context"><Link href={`/compliance/${originCode}?tab=findings`}>العودة إلى ملاحظات {originCode} ←</Link></p>}
     <WorkflowHeading title={frameworkCode?`الملاحظات والإجراءات — ${frameworkCode}`:"الملاحظات والإجراءات التصحيحية"}
       description={frameworkCode?`الملاحظات المرتبطة فعليًا بإطار ${frameworkCode} ضمن صلاحياتك. نتائج التقييم القديمة مستقلة ومحفوظة في صفحاتها.`:"السجل المشترك المصرّح به يربط مصدر الملاحظة بالمعالجة والتحقق والإغلاق؛ نتائج التقييم القديمة باقية كما هي."}

@@ -16,12 +16,12 @@ export type EligibleFrameworkEvidence = {
 
 // The RPC is the authorization and eligibility boundary. Page its result so
 // framework summaries cannot silently stop at PostgREST's row cap.
-export async function loadEligibleFrameworkEvidence(code: string): Promise<EligibleFrameworkEvidence[]> {
+export async function loadEligibleFrameworkEvidence(code: string, controlId: number | null = null): Promise<EligibleFrameworkEvidence[]> {
   const rows: EligibleFrameworkEvidence[] = [];
   for (let from = 0; ; from += 500) {
     const result = await supabase.rpc('cgp_framework_evidence_eligible', {
       p_framework_code: code,
-      p_control_id: null,
+      p_control_id: controlId,
     }).range(from, from + 499);
     if (result.error) throw result.error;
     const page = (result.data ?? []) as EligibleFrameworkEvidence[];

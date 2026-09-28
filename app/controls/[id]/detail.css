@@ -35,3 +35,26 @@
 .detail-children-list a>span:first-child{color:var(--cgp-teal);font-weight:800;min-width:96px}
 .detail-children-list a>span:nth-child(2){flex:1;line-height:1.6}
 .catalog-applicability{display:inline-block;font-size:11px;font-weight:800;color:#0d4b4d;background:#e8f3f1;border-radius:999px;padding:3px 10px;margin-inline-start:8px;white-space:nowrap}
+.control360-page{max-width:1180px}
+.control360-page .detail-hero h1{font-size:25px;line-height:1.65;max-width:760px}
+.control360-owner{display:flex;flex-wrap:wrap;gap:10px 24px;color:#586875;font-size:13px;margin-top:12px}
+.control360-owner strong{color:#0b1f33}
+.control360-panel{padding-top:20px;min-width:0}
+.control360-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:18px 24px}
+.control360-summary>div{display:grid;align-content:start;gap:5px;padding-block:8px}
+.control360-summary small{font-size:12px;color:#586875}
+.control360-text-action{display:inline-block;border:0;background:none;color:var(--cgp-teal);padding:0;font:inherit;font-weight:700;text-decoration:none;text-align:start;cursor:pointer}
+.control360-section-heading{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
+.control360-section-heading h2{margin:0}
+.control360-section-heading a,.control360-table-wrap a{color:var(--cgp-teal);font-weight:700;text-decoration:none}
+.control360-empty{padding:22px;background:#f6f9f9;border:1px dashed #d6e2e2;border-radius:10px;display:grid;gap:10px;color:#586875}
+.control360-prewrap{white-space:pre-wrap}
+.control360-table-wrap{overflow-x:auto;width:100%}
+.control360-table-wrap table{width:100%;min-width:620px;border-collapse:collapse;text-align:start}
+.control360-table-wrap th{font-size:12px;color:#586875;background:#f4f8f8}
+.control360-table-wrap td,.control360-table-wrap th{padding:12px;border-bottom:1px solid #e7edef;vertical-align:top}
+.control360-table-wrap small{display:block;color:#586875;font-size:12px}
+.control360-page details>summary{cursor:pointer;font-weight:700;color:#0b1f33}
+.control360-page .detail-hero{align-items:flex-start}
+.control360-page .detail-schedule-strip{background:none;border:0;padding:0}
+@media(max-width:680px){.control360-page .detail-hero{flex-direction:column}.control360-summary{grid-template-columns:1fr}.control360-page .detail-next{align-items:flex-start;flex-direction:column}.control360-page .detail-tabs button{padding:12px 10px}.control360-page .detail-hero h1{font-size:21px}.control360-page .detail-children-list a{flex-wrap:wrap}.control360-owner{gap:8px}.control360-page .detail-card{padding:16px}}
