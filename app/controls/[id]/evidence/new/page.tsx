@@ -43,8 +43,10 @@ function NewEvidenceContent() {
   const [selectedTargets,setSelectedTargets]=useState<number[]>([]);
   const [ready,setReady]=useState(false);
   const [archived,setArchived]=useState(false);
+  const [showAdministrativeMetadata,setShowAdministrativeMetadata]=useState(false);
   useEffect(()=>{let active=true;(async()=>{try{
     const {profile}=await requireProfile(['admin','cybersecurity_team','control_owner']);
+    if(active)setShowAdministrativeMetadata(profile.role==='admin'||profile.role==='cybersecurity_team');
     const query=new URLSearchParams(window.location.search);if(active){setRequestId(query.get('request')||'');setReplaceId(query.get('replace')||'');}
     const {data:old}=await supabase.from('evidence').select('id,file_name,version_number').eq('control_id',controlId).eq('is_current',true);
     if(active)setVersions(old??[]);
@@ -174,7 +176,7 @@ function NewEvidenceContent() {
                 {controlCode || `#${controlId}`}
               </span>
             </div>
-            <p>ارفع الملف الداعم للضابط وأضف وصفًا مختصرًا يسهل مراجعته.</p>
+            <p>{showAdministrativeMetadata ? 'ارفع الملف الداعم للضابط وأضف وصفًا مختصرًا يسهل مراجعته.' : 'اختر الملف الداعم للضابط وقدّمه للمراجعة.'}</p>
           </div>
 
           {controlRequirement && (
@@ -221,7 +223,7 @@ function NewEvidenceContent() {
             {requestId&&<p className="evidence-upload-note">مرتبط بطلب الدليل #{requestId}</p>}
           </section>
 
-          <section className="evidence-upload-section evidence-upload-file-section">
+          {showAdministrativeMetadata && <section className="evidence-upload-section evidence-upload-file-section">
             <div className="evidence-upload-section-heading">
               <span className="evidence-upload-step">2</span>
               <div><h2>وصف الدليل</h2><p>اختياري، لتوضيح محتوى الملف عند الحاجة.</p></div>
@@ -230,9 +232,9 @@ function NewEvidenceContent() {
             <textarea disabled={uploading || !ready} id="evidence-description" value={description}
               onChange={event => setDescription(event.target.value)} placeholder="وصف مختصر يساعد المراجع على فهم الدليل."
               rows={2} className="evidence-upload-textarea"/>
-          </section>
+          </section>}
 
-          <EvidenceSubmissionOptions disabled={uploading || !ready} versions={versions}
+          <EvidenceSubmissionOptions disabled={uploading || !ready} showAdministrativeMetadata={showAdministrativeMetadata} versions={versions}
             replaceId={replaceId} replacementLocked={Boolean(searchParams.get('replace'))} onReplacement={setReplaceId}
             validUntil={validUntil} coverageStart={coverageStart} coverageEnd={coverageEnd}
             onValidity={setValidUntil} onCoverageStart={setCoverageStart} onCoverageEnd={setCoverageEnd}/>

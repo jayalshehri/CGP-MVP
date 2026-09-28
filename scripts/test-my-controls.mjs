@@ -50,9 +50,20 @@ const control = load('lib/control360.ts'), journey = load('lib/assessment-journe
 const owner = { id: 'owner', role: 'control_owner' }, team = { id: 'owner', role: 'cybersecurity_team' };
 const today = '2026-09-28';
 const base = { id: 42, control_code: '2-7-1', title_ar: 'ضابط أعمال تجريبي — بيانات عرض فقط', control_owner_id: 'owner', implementation_status: 'implemented', evidence_status: 'accepted', due_date: null, next_audit_date: null, frameworks: { code: 'DCC', name_ar: 'ضوابط الأمن السيبراني للبيانات', is_active: true } };
+for (const [title, expected] of [
+  ['اسم الضابط - 2-7-1', 'اسم الضابط'], ['اسم الضابط — ٢-٧-١', 'اسم الضابط'],
+  ['2-7-1 — اسم الضابط', 'اسم الضابط'], ['اسم الضابط - 2-7', 'اسم الضابط'],
+  ['اسم الضابط - ISO 27001', 'اسم الضابط - ISO 27001'], ['اسم يتضمن 12 شهرًا', 'اسم يتضمن 12 شهرًا'],
+  ['إحالة إلى ضابط آخر - 1-8-1', 'إحالة إلى ضابط آخر - 1-8-1'],
+]) check(personal.myControlTitle({ ...base, title_ar: title }) === expected, 'display-only exact/parent code decoration cleanup: ' + title);
+const ordering = ['2-1-1', '1-10-1', '1-2-1-10', '1-2-1-2', '1-2-1', '1-11-1', '1-1-1'].map((control_code, index) => ({ ...base, id: index, control_code, frameworks: { ...base.frameworks, id: 3 } }));
+check([...ordering].sort(personal.compareMyControls).map(c => c.control_code).join('|') === '1-1-1|1-2-1|1-2-1-2|1-2-1-10|1-10-1|1-11-1|2-1-1', 'numeric regulatory hierarchy and parent before sub-controls');
+check([...ordering, { ...base, frameworks: { ...base.frameworks, id: 1, code: 'ECC' } }].sort(personal.compareMyControls)[0].frameworks.code === 'ECC', 'existing framework catalogue order precedes lexical code order');
 const empty = { controls: [], requests: [], evidence: [], findings: [], actions: [], items: [] };
 const data = (overrides = {}) => ({ ...empty, controls: [base], ...overrides });
 const rows = (model = data(), actor = owner) => personal.deriveMyControls(model, actor, today, 'framework=DCC&q=2-7');
+const sortedRows = rows(data({ controls: [{ ...base, id: 43, control_code: '1-10-1', evidence_status: 'not_uploaded', due_date: '2020-01-01' }, { ...base, id: 44, control_code: '1-2-1' }] }));
+check(sortedRows[0].control.control_code === '1-2-1' && sortedRows[1].overdue, 'official list order does not obscure unchanged overdue/action semantics');
 const request = { id: 1, control_id: 42, cycle_id: 9, requirement: 'طلب دوري تجريبي', due_date: '2026-09-27', status: 'open', requested_from: 'owner', reviewer_id: 'reviewer', control_owner_id: 'owner', control_code: '2-7-1', control_title: base.title_ar, framework_code: 'DCC' };
 const finding = { id: 5, control_id: 42, framework_id: 2, owner_id: 'owner', created_by: 'author', status: 'open', due_date: null };
 const action = { id: 6, finding_id: 5, owner_id: 'owner', status: 'open', due_date: null, verification_status: 'not_submitted' };
@@ -108,6 +119,7 @@ response = state => ({ data: state.name === 'controls' ? [base, { ...base, id: 5
 const read = await personal.loadMyControls(owner);
 check(read.controls.length === 1 && read.controls[0].id === 42, 'all assigned active base/sub controls, defensive owner/source filtering');
 const controlsRead = calls.find(c => c.name === 'controls');
+check(controlsRead.columns.includes('frameworks!inner(id,code,name_ar,is_active)'), 'read existing framework catalogue ID order without changing read scope');
 for (const [column, value] of [['control_owner_id', 'owner'], ['frameworks.is_active', true]]) check(controlsRead.filters.some(f => f[0] === 'eq' && f[1] === column && f[2] === value), 'server-side assigned scope: ' + column);
 check(controlsRead.filters.some(f => f[0] === 'neq' && f[1] === 'frameworks.code' && f[2] === 'QA_SYNTH'), 'QA_SYNTH excluded before paging');
 check(!controlsRead.filters.some(f => f[1] === 'hierarchy_level'), 'assigned sub-controls not dropped');
@@ -131,6 +143,26 @@ check(render([]).includes('لا توجد ضوابط مسندة إليك حالي
 check(render(rows()).includes('جميع ضوابطك محدثة') && !render(rows()).includes('عدة إجراءات'), 'assigned/no-action empty state');
 check(render(rows(), 'q=unmatched').includes('لا توجد نتائج مطابقة'), 'filtered zero is not no-assignment');
 const html = render([actionsRow]);
+check(html.includes('<summary>المزيد من الفلاتر') && !html.includes('مسح الفلاتر'), 'advanced filters behind disclosure, no inactive reset');
+const activeHTML = render([actionsRow], 'framework=DCC&q=2-7&evidence=1&overdue=1');
+check(activeHTML.includes('الفلاتر النشطة') && activeHTML.includes('إزالة فلتر يحتاج دليل') && activeHTML.includes('إزالة فلتر متأخر') && activeHTML.includes('مسح الفلاتر'), 'all active filters rendered as removable chips');
+const identityHTML = render(rows(data({ controls: [{ ...base, title_ar: 'اسم موجز - 2-7-1' }] })));
+check((identityHTML.match(/>2-7-1</g) ?? []).length === 1 && !identityHTML.includes('اسم موجز - 2-7-1'), 'one primary code/title identity, no duplicate code in tooltip');
+function treeNodes(node, predicate) {
+ if (!node || typeof node !== 'object') return [];
+ if (Array.isArray(node)) return node.flatMap(child => treeNodes(child, predicate));
+ return [...(predicate(node) ? [node] : []), ...treeNodes(node.props?.children, predicate)];
+}
+let interactiveContext = 'framework=DCC&status=implemented&q=2-7&evidence=1&overdue=1';
+const interactiveView = () => View({ rows: [actionsRow], requests: [], actor: owner, context: interactiveContext, onRefresh() {}, onReset() { interactiveContext = ''; }, onFilter(key, value) { const next = context.myControlsFilters(interactiveContext); if (value) next.set(key, value); else next.delete(key); interactiveContext = next.toString(); } });
+treeNodes(interactiveView(), node => node.type === 'button' && node.props['aria-label'] === 'إزالة فلتر يحتاج دليل')[0].props.onClick();
+check(!new URLSearchParams(interactiveContext).has('evidence') && ['framework','status','q','overdue'].every(key => new URLSearchParams(interactiveContext).has(key)), 'chip removes only selected URL filter');
+treeNodes(interactiveView(), node => node.type === 'input' && node.props.type === 'checkbox')[0].props.onChange({ target: { checked: true } });
+check(context.myControlsReturn(new URLSearchParams(context.myControlsOrigin(interactiveContext))) === context.myControlsHref(interactiveContext), 'advanced filter change keeps durable URL/return state');
+const bookmarked = interactiveContext;
+check(render([actionsRow], bookmarked).includes('إزالة فلتر يحتاج إجراء') && render([actionsRow], bookmarked).includes('إزالة فلتر متأخر'), 'refresh/back/forward render from URL rather than disclosure state');
+treeNodes(interactiveView(), node => node.type === 'button' && node.props.children === 'مسح الفلاتر')[0].props.onClick();
+check(interactiveContext === '' && !render([actionsRow], interactiveContext).includes('الفلاتر النشطة'), 'reset clears filters and chips');
 check(html.includes('عدة إجراءات مطلوبة') && html.includes('dir="rtl"') && html.includes('scope="col"'), 'compact RTL workbench, no arbitrary action');
 check(html.includes('my-controls-scroll') && html.includes('tabindex="0"'), 'keyboard-accessible mobile scroll region');
 check(!html.includes('نسبة الالتزام') && !html.includes('تسجيل ملاحظة') && !html.includes('قبول التحقق'), 'personal attention not compliance/inline-edit/self-review');
@@ -161,6 +193,7 @@ if (process.argv.includes('--visual')) {
   const css = readFileSync(new URL('../components/my-controls.css', import.meta.url), 'utf8');
   const visualData = data({ controls: [base, { ...base, id: 43, control_code: '2-8-1' }, { ...base, id: 44, control_code: '2-9-1' }, { ...base, id: 45, control_code: '2-10-1' }],
     requests: [request, { ...request, id: 2, control_id: 44, status: 'submitted' }], findings: [{ ...finding, control_id: 43 }], actions: [action, { ...action, id: 7 }] });
+  visualData.controls = visualData.controls.map(c => ({ ...c, title_ar: `ضابط أعمال تجريبي - ${c.control_code}`, frameworks: { ...c.frameworks, id: 3 } }));
   const server = createServer((req, res) => {
     const filters = req.url?.split('?')[1] ?? '';
     res.setHeader('Content-Type', 'text/html; charset=utf-8');

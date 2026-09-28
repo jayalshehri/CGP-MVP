@@ -12,7 +12,7 @@ import { myControlsOrigin, myControlsFilters } from './my-controls-context';
 export type PersonalControl = {
   id: number; control_code: string; title_ar: string; control_owner_id: string;
   implementation_status: string; evidence_status: string; due_date: string | null; next_audit_date: string | null;
-  frameworks: { code: string; name_ar: string; is_active: boolean };
+  frameworks: { id?: number; code: string; name_ar: string; is_active: boolean };
 };
 export type PersonalItem = AssessmentItem & { cycle: { id: number; assessor_id: string | null; status: string; due_date: string | null; imported: boolean } };
 export type PersonalData = { controls: PersonalControl[]; requests: WorkRequest[]; evidence: EvidenceRecord[]; findings: SharedFinding[]; actions: CorrectiveAction[]; items: PersonalItem[] };
@@ -38,7 +38,7 @@ async function batches<T>(ids: number[], query: (ids: number[], from: number) =>
 export async function loadMyControls(actor: QueueActor): Promise<PersonalData> {
   if (actor.role !== 'control_owner' && !isTeam(actor.role)) throw new Error('ضوابطي مخصصة لأصحاب العمل المسند، وليس لنطاق التدقيق.');
   const controls = (await pages<PersonalControl>(from => supabase.from('controls')
-    .select('id,control_code,title_ar,control_owner_id,implementation_status,evidence_status,due_date,next_audit_date,frameworks!inner(code,name_ar,is_active)')
+    .select('id,control_code,title_ar,control_owner_id,implementation_status,evidence_status,due_date,next_audit_date,frameworks!inner(id,code,name_ar,is_active)')
     .eq('control_owner_id', actor.id).eq('frameworks.is_active', true).neq('frameworks.code', 'QA_SYNTH')
     .order('id').range(from, from + 499)))
     .filter(control => control.control_owner_id === actor.id && control.frameworks.is_active && isBusinessFramework(control.frameworks.code));
@@ -62,6 +62,32 @@ export async function loadMyControls(actor: QueueActor): Promise<PersonalData> {
 
 export type PersonalAction = { label: string; href: string; due: string | null; kind: 'evidence' | 'assessment' | 'finding' | 'action' | 'periodic' | 'implementation' };
 export type PersonalRow = { control: PersonalControl; actions: PersonalAction[]; next: PersonalAction | null; evidenceNeeded: boolean; evidenceLabel: string; assessmentNeeded: boolean; findingCount: number; actionCount: number; waiting: boolean; overdue: boolean; due: string | null };
+
+const normalizeIdentifier = (value: string) => value.replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660)).replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0)).replace(/[‐-―−]/g, '-');
+// Display label only. Imported title_ar sometimes appends the same control (or
+// its parent) code. Remove only that identifiable decoration, never numbers in
+// business text or unrelated regulatory references. Full text stays in Control 360.
+export function myControlTitle(control: Pick<PersonalControl, 'title_ar' | 'control_code'>) {
+  const title = control.title_ar.trim();
+  const identifier = '[0-9٠-٩۰-۹]+(?:[-‐-―−][0-9٠-٩۰-۹]+)+';
+  const suffix = title.match(new RegExp(`\\s+[-–—:|]\\s*(${identifier})\\s*$`));
+  const prefix = title.match(new RegExp(`^(${identifier})\\s+[-–—:|]\\s+`));
+  const decoration = suffix ?? prefix;
+  if (!decoration) return title;
+  const code = normalizeIdentifier(decoration[1]), ownCode = normalizeIdentifier(control.control_code);
+  if (code !== ownCode && !ownCode.startsWith(code + '-')) return title;
+  const concise = suffix ? title.slice(0, suffix.index).trim() : title.slice(prefix![0].length).trim();
+  return concise || title;
+}
+
+// Same framework catalogue order (frameworks.id) and numeric canonical-code
+// hierarchy used by ControlsCatalog; urgency remains a per-control action, not
+// an implicit reordering of the official catalogue. Stable ID resolves ties.
+export function compareMyControls(a: PersonalControl, b: PersonalControl) {
+  return (a.frameworks.id ?? Number.MAX_SAFE_INTEGER) - (b.frameworks.id ?? Number.MAX_SAFE_INTEGER) ||
+    a.frameworks.code.localeCompare(b.frameworks.code, 'en', { numeric: true }) ||
+    normalizeIdentifier(a.control_code).localeCompare(normalizeIdentifier(b.control_code), 'en', { numeric: true }) || a.id - b.id;
+}
 export function deriveMyControls(data: PersonalData, actor: QueueActor, today: string, filters = ''): PersonalRow[] {
   const context = myControlsOrigin(filters);
   return data.controls.map(control => {
@@ -101,7 +127,7 @@ export function deriveMyControls(data: PersonalData, actor: QueueActor, today: s
     const next = actions.length === 1 ? actions[0] : urgent;
     const dates = actions.map(a => a.due).filter((date): date is string => !!date).sort();
     return { control, actions, next, evidenceNeeded, evidenceLabel: evidenceNeeded ? 'تحتاج دليلًا / استكمالًا' : waiting ? 'بانتظار المراجعة' : 'لا يوجد طلب دليل يتطلب إجراءً', assessmentNeeded: items.length > 0, findingCount: findings.length, actionCount: openActions.length, waiting: waiting || findings.some(f => f.owner_id === actor.id && f.status === 'pending_verification'), overdue: overdueActions.length > 0, due: dates[0] ?? control.next_audit_date };
-  }).sort((a, b) => Number(b.overdue) - Number(a.overdue) || (a.due ?? '9999').localeCompare(b.due ?? '9999') || a.control.control_code.localeCompare(b.control.control_code, 'en', { numeric: true }) || a.control.id - b.control.id);
+  }).sort((a, b) => compareMyControls(a.control, b.control));
 }
 export function filterMyControls(rows: PersonalRow[], raw: string) {
   const filters = myControlsFilters(raw);

@@ -11,10 +11,19 @@
 .my-controls-filters > label { display: grid; gap: 4px; min-width: 0; font-size: 12px; }
 .my-controls-filters > label:first-child { flex: 1 1 190px; }
 .my-controls-filters input[type=search], .my-controls-filters select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 36px; padding: 7px 8px; border: 1px solid #ced9dd; background: white; border-radius: 7px; }
-.my-controls-toggles { display: flex; gap: 6px; flex-wrap: wrap; min-width: 0; font-size: 12px; }
+.my-controls-more { position: relative; min-width: 0; }
+.my-controls-more > summary { display: block; list-style: none; box-sizing: border-box; min-height: 36px; padding: 8px 12px; border: 1px solid #ced9dd; border-radius: 7px; background: white; font-size: 12px; cursor: pointer; }
+.my-controls-more > summary::-webkit-details-marker { display: none; }
+.my-controls-more > summary::after { content: '⌄'; margin-inline-start: 8px; }
+.my-controls-more[open] > summary::after { content: '⌃'; }
+.my-controls-toggles { position: absolute; z-index: 2; inset-inline-end: 0; top: calc(100% + 6px); display: grid; gap: 6px; box-sizing: border-box; width: min(330px, calc(100vw - 80px)); padding: 10px; border: 1px solid #dce6eb; border-radius: 9px; background: white; box-shadow: 0 8px 20px #10253d12; font-size: 12px; }
 .my-controls-toggles label { display: flex; align-items: center; gap: 5px; min-height: 36px; box-sizing: border-box; padding: 6px 8px; border: 1px solid #dce6eb; border-radius: 7px; background: white; cursor: pointer; }
 .my-controls-toggles label:has(input:checked) { background: #e8f4ef; border-color: #8ebbae; color: #075e53; }
 .my-controls-toggles input { margin: 0; accent-color: #087d72; flex-shrink: 0; }
+.my-controls-filter-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; width: 100%; min-width: 0; }
+.my-controls-filter-chips .my-controls-filter-chip { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 5px 8px; font-size: 12px; background: #e8f4ef; border-color: #bbd8cf; color: #075e53; }
+.my-controls-filter-chip > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.my-controls-filter-chips > button:last-child { font-size: 12px; padding: 5px 8px; }
 .my-controls-scroll { overflow-x: auto; max-width: 100%; border: 1px solid #e0e8e7; border-radius: 9px; }
 .my-controls-table { width: 100%; min-width: 940px; border-collapse: collapse; font-size: 12px; text-align: start; }
 .my-controls-table caption { text-align: start; padding: 10px 12px; }
@@ -23,8 +32,9 @@
 .my-controls-table tr:last-child td { border-bottom: 0; }
 .my-controls-table a { color: #07675e; text-decoration: none; }
 .my-controls-control { min-width: 190px; max-width: 260px; }
-.my-controls-control a { display: grid; gap: 4px; }
-.my-controls-control span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.my-controls-control a { display: block; line-height: 1.7; }
+.my-controls-code { font-weight: 700; white-space: nowrap; }
+.my-controls-control-title { overflow-wrap: anywhere; }
 .my-controls-next { display: inline-grid; gap: 4px; padding: 6px 8px; border: 1px solid #bbd8cf; border-radius: 6px; }
 .my-controls-next small { color: #8e4c1a; }
 .my-controls-overdue { display: block; color: #b42318; margin-top: 4px; }
@@ -35,3 +45,4 @@
 .my-controls a:hover { text-decoration: underline; }
 .my-controls :focus-visible { outline: 2px solid #0b7467; outline-offset: 3px; }
 @media (max-width: 680px) { .my-controls-heading h1 { font-size: 22px; } .my-controls-filters > label { flex: 1 1 150px; min-width: 0; } .my-controls-filters > label:first-child { flex-basis: 100%; } .my-controls-summary span { padding: 7px 9px; } }
+@media (max-width: 680px) { .my-controls-more { flex: 1 1 100%; } .my-controls-toggles { position: static; width: 100%; margin-top: 6px; box-shadow: none; } }

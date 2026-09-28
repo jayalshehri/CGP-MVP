@@ -21,7 +21,7 @@ const Options = loadedModule.exports.default;
 let props;
 function reset(extra = {}) {
   state = [];
-  props = { disabled: false, versions: [], replaceId: '', replacementLocked: false, validUntil: '', coverageStart: '', coverageEnd: '',
+  props = { disabled: false, showAdministrativeMetadata: true, versions: [], replaceId: '', replacementLocked: false, validUntil: '', coverageStart: '', coverageEnd: '',
     onReplacement(value) { props.replaceId = value; }, onValidity(value) { props.validUntil = value; },
     onCoverageStart(value) { props.coverageStart = value; }, onCoverageEnd(value) { props.coverageEnd = value; }, ...extra };
 }
@@ -62,6 +62,13 @@ for (const role of ['control_owner', 'admin']) {
   check(inputs('checkbox').every(node => node.props.disabled), 'busy/not-ready fields disabled: ' + role);
 }
 
+reset({ showAdministrativeMetadata: false });
+check(render() === null, 'owner sees no properties heading/section when no meaningful version choice exists');
+reset({ showAdministrativeMetadata: false, versions: [{ id: 12, file_name: 'current.pdf', version_number: 3 }] });
+check(!html().includes('خصائص اختيارية') && !html().includes('انتهاء صلاحية') && !html().includes('فترة زمنية'), 'owner administrative metadata hidden');
+check(html().includes('إصدار الدليل') && html().includes('<details'), 'owner retains only the meaningful optional version operation behind disclosure');
+check(inputs('checkbox').length === 0 && inputs('date').length === 0, 'owner cannot fill optional administrative dates');
+
 const pagePath = 'app/controls/[id]/evidence/new/page.tsx';
 const page = readFileSync(pagePath, 'utf8');
 const before = execFileSync('git', ['show', '2c49e4bc19a1008cdf4860374ea25e161de56fd8:' + pagePath], { encoding: 'utf8' });
@@ -75,10 +82,11 @@ const trigger = readFileSync('supabase/migrations/20260916101814_grc_review_life
 check(trigger.includes('new.uploaded_at:=now(); new.submitted_at:=now();'), 'existing system-generated creation timestamps');
 check(page.includes('personalReturn??controlHref(controlId,context,"evidence")'), 'durable MyControls/Control360 return preserved');
 check(!source.includes('new Date(') && !source.includes('today'), 'properties do not infer dates');
+const roleViews = new Map();
 
 // Exercise the real page under both approved roles with in-memory Auth/Storage/
 // RPC doubles. No credentials or remote request are available to this harness.
-for (const role of ['control_owner', 'admin']) {
+for (const role of ['control_owner', 'admin', 'cybersecurity_team']) {
   let values = [], position = 0, effect;
   const commands = [], uploads = [], authCalls = [], navigations = [];
   const pageHooks = { ...React, useState(initial) { const index = position++; if (!(index in values)) values[index] = initial; return [values[index], value => { values[index] = value; }]; }, useEffect(callback) { effect ??= callback; } };
@@ -103,17 +111,23 @@ for (const role of ['control_owner', 'admin']) {
   pageRender(); effect();
   for (let step = 0; step < 5; step++) await new Promise(resolve => setImmediate(resolve));
   let tree = pageRender();
+  state = []; cursor = 0;
+  roleViews.set(role, renderToStaticMarkup(tree));
   check(authCalls[0].join('|') === 'admin|cybersecurity_team|control_owner', 'actual page preserves entry roles: ' + role);
-  check(commands.some(call => call.name === 'grc_control_mappings') === (role === 'admin'), 'actual page preserves sharing read role split: ' + role);
+  check(commands.some(call => call.name === 'grc_control_mappings') === (role !== 'control_owner'), 'actual page preserves sharing read role split: ' + role);
   const optionNode = nodes(tree, node => node.type === Options)[0];
   check(optionNode.props.replacementLocked && optionNode.props.replaceId === '12' && !optionNode.props.disabled, 'actual page honors deterministic version context and ready state: ' + role);
+  check(optionNode.props.showAdministrativeMetadata === (role !== 'control_owner'), 'actual page uses verified profile for metadata visibility: ' + role);
   const mockFile = { name: 'test.pdf', size: 1024, type: 'application/pdf' };
   nodes(tree, node => node.type === 'input' && node.props.type === 'file')[0].props.onChange({ target: { files: [mockFile] } });
-  nodes(tree, node => node.type === 'textarea')[0].props.onChange({ target: { value: 'local synthetic description' } });
+  const descriptions = nodes(tree, node => node.type === 'textarea');
+  check(descriptions.length === (role === 'control_owner' ? 0 : 1), 'actual page owner minimum form/team optional description: ' + role);
+  if (descriptions.length) descriptions[0].props.onChange({ target: { value: 'local synthetic description' } });
   tree = pageRender();
   await nodes(tree, node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
   const submitCall = commands.find(call => call.name === 'cgp_grc_command');
   check(submitCall.args.p_action === 'submit' && submitCall.args.p_control_id === 42 && submitCall.args.p_data.replaces_id === 12, 'actual page preserves command and version target: ' + role);
+  check(submitCall.args.p_data.description === (role === 'control_owner' ? null : 'local synthetic description'), 'owner does not fabricate optional description, team retains existing field: ' + role);
   check(submitCall.args.p_data.valid_until === null && submitCall.args.p_data.coverage_start === null && submitCall.args.p_data.coverage_end === null, 'actual submission defaults all optional dates to null: ' + role);
   check(!('uploaded_at' in submitCall.args.p_data) && !('submitted_at' in submitCall.args.p_data), 'actual submission leaves timestamps system-generated: ' + role);
   check(uploads.length === 1 && uploads[0].bucket === 'evidence-files' && !uploads[0].options.upsert, 'actual upload uses unchanged non-overwrite contract: ' + role);
@@ -126,9 +140,10 @@ if (process.argv.includes('--visual')) {
   const css = readFileSync('app/controls/[id]/evidence/new/evidence-upload.css', 'utf8');
   createServer((req, res) => {
     const query = new URL(req.url, 'http://127.0.0.1:4189').searchParams;
-    reset({ versions: query.has('versions') ? [{ id: 12, file_name: 'example.pdf', version_number: 3 }] : [] });
+    reset({ showAdministrativeMetadata: query.get('role') !== 'control_owner', versions: query.has('versions') ? [{ id: 12, file_name: 'example.pdf', version_number: 3 }] : [] });
     state = [query.has('validity'), query.has('coverage')];
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.end(`<!doctype html><html lang="ar" dir="rtl"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Local synthetic evidence UX</title><style>body{font-family:Arial,sans-serif;margin:0;background:#f7f9f8}${css}</style><main class="evidence-upload-container"><p>عرض محلي اصطناعي فقط — بلا اتصال أو حفظ</p><div class="evidence-upload-card">${html()}</div></main></html>`);
+    const view = query.has('full') ? roleViews.get(query.get('role') || 'control_owner') : `<div class="evidence-upload-card">${html()}</div>`;
+    res.end(`<!doctype html><html lang="ar" dir="rtl"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Local synthetic evidence UX</title><style>body{font-family:Arial,sans-serif;margin:0;background:#f7f9f8}${css}</style><p>عرض محلي اصطناعي فقط — بلا اتصال أو حفظ</p>${view}</html>`);
   }).listen(4189, '127.0.0.1', () => console.log('LOCAL SYNTHETIC EVIDENCE: http://127.0.0.1:4189'));
 }
