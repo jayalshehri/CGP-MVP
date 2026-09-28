@@ -168,6 +168,30 @@ check(html.includes('my-controls-scroll') && html.includes('tabindex="0"'), 'key
 check(!html.includes('نسبة الالتزام') && !html.includes('تسجيل ملاحظة') && !html.includes('قبول التحقق'), 'personal attention not compliance/inline-edit/self-review');
 const shell = readFileSync(new URL('../components/AppShell.tsx', import.meta.url), 'utf8');
 check(shell.includes('personal: true') && shell.includes('!item.personal || account?.role === "control_owner"') && shell.includes('href: "/controls", label: "مكتبة الضوابط"') && shell.includes('sidebarHidden: true'), 'owner nav migrated without global/auditor duplicate');
+// Evaluate the actual shell arrays/filters, not a separate imitation of RBAC.
+const navSource = shell.slice(shell.indexOf('const navigation ='), shell.indexOf('const roleLabels:'));
+const navFilters = shell.split('\n').filter(line => /^  const (permittedItems|items) =/.test(line)).join('\n');
+const navigationFor = role => vm.runInNewContext(`${navSource}\n${navFilters}\n({permittedItems, items})`, { account: { role }, workspace: 'cyber' });
+const ownerNavigation = navigationFor('control_owner');
+check(ownerNavigation.permittedItems.some(item => item.href === '/compliance') && !ownerNavigation.items.some(item => item.href === '/compliance'), 'owner presentation hides Compliance Center without removing authorized deep route');
+check(ownerNavigation.items.find(item => item.group === 'الامتثال').href === '/my-controls', 'My Controls is first owner compliance entry');
+check(shell.includes('navigationResults') && shell.includes('items.filter(item => item.label') && shell.includes('const links = items.map(linkFor)') && shell.includes('const topBlocks = blocksBy(items)'), 'desktop/mobile/search share the same owner navigation visibility');
+check(shell.includes('تعرض المنصة الضوابط المكلف بها فقط.'), 'owner scope explanation retained');
+check(!render(rows()).includes('استكشاف الأطر في مركز الامتثال'), 'owner personal work does not advertise organizational catalog');
+for (const role of ['admin', 'cybersecurity_team']) {
+ const nav = navigationFor(role);
+ check(nav.items.some(item => item.href === '/compliance') && nav.items.some(item => item.href === '/review'), role + ' organizational navigation unchanged');
+ check(renderToStaticMarkup(React.createElement(View, { rows: rows(), requests: [], actor: { id: 'owner', role }, context: '', onFilter() {}, onReset() {}, onRefresh() {} })).includes('استكشاف الأطر في مركز الامتثال'), role + ' personal catalog link preserved');
+}
+const auditorNavigation = navigationFor('nca_external_auditor');
+check(auditorNavigation.items.every(item => item.auditor) && !auditorNavigation.items.some(item => ['/my-controls', '/review', '/users', '/mappings'].includes(item.href)), 'auditor read-oriented navigation unchanged');
+for (const href of ['/assessments', '/dcc-assessment', '/tcc-assessment', '/osmacc-assessment']) check(ownerNavigation.permittedItems.some(item => item.href === href), 'owner deep-link permission metadata preserved: ' + href);
+const toolbarCSS = readFileSync(new URL('../components/my-controls.css', import.meta.url), 'utf8');
+check(toolbarCSS.includes('grid-template-columns: minmax(0, 2.4fr) repeat(3, minmax(0, 1fr))') && toolbarCSS.includes('gap: 14px'), 'balanced laptop grid with 44/18/18/18 proportions and consistent gaps');
+check((toolbarCSS.match(/height: 44px/g) ?? []).length === 2 && toolbarCSS.includes('align-items: end'), 'input/select/summary same 44px height and aligned baseline');
+check(toolbarCSS.includes('@media (max-width: 1100px)') && toolbarCSS.includes('grid-template-columns: repeat(2, minmax(0, 1fr))'), 'tablet two-by-two grid');
+check(toolbarCSS.includes('.my-controls-filters > label:first-child, .my-controls-more { grid-column: 1 / -1; }'), 'mobile full search, paired dropdowns, full disclosure');
+check(!render(rows()).includes('my-controls-filter-chips') && !toolbarCSS.includes('min-height: 44px'), 'no empty chip row or artificial label spacer');
 const home = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
 check(home.indexOf("if (profile.role === 'control_owner') return;") < home.indexOf('const [controlResult,evidenceResult]') && home.includes("if (userRole === 'control_owner') return <MyControls/>"), 'owner landing short-circuits global dashboard reads');
 for (const file of ['app/controls/[id]/page.tsx', 'app/evidence/page.tsx', 'app/findings/page.tsx', 'app/controls/[id]/evidence/new/page.tsx', 'components/AssessmentItemEditor.tsx']) check(readFileSync(new URL('../' + file, import.meta.url), 'utf8').includes('العودة إلى ضوابطي'), 'visible durable personal return: ' + file);

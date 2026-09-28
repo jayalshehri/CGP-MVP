@@ -24,7 +24,7 @@ const navigation = [
 
   // Personal owner work; retain the catalog route for existing deep links.
   { href: "/my-controls", label: "ضوابطي", group: "الامتثال", personal: true },
-  { href: "/compliance", label: "مركز الامتثال", group: "الامتثال", auditor: true },
+  { href: "/compliance", label: "مركز الامتثال", group: "الامتثال", auditor: true, ownerHidden: true },
   { href: "/controls", label: "مكتبة الضوابط", group: "الامتثال", sidebarHidden: true },
   { href: "/evidence", label: "الأدلة", group: "الامتثال", auditor: true },
   { href: "/findings", label: "الملاحظات والإجراءات", group: "الامتثال", auditor: true },
@@ -173,7 +173,9 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const workspace = pathname === "/shared-controls" ? "shared" : pathname.startsWith("/data-governance") ? "data" : "cyber";
   const workspaceLabel = workspace === "data" ? "حوكمة البيانات" : workspace === "shared" ? "مركز المواءمة" : "الأمن السيبراني";
   const permittedItems = account ? navigation.filter(item => account.role === "data_governance_team" ? Boolean(item.data) : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];
-  const items = permittedItems.filter(item => (!item.personal || account?.role === "control_owner") && !item.sidebarHidden && (workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls"));
+  // Presentation only: permittedItems and page authorization still allow valid
+  // deep links. Sidebar, mobile navigation and navigation search share items.
+  const items = permittedItems.filter(item => (!item.personal || account?.role === "control_owner") && (!item.ownerHidden || account?.role !== "control_owner") && !item.sidebarHidden && (workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls"));
   const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "الرئيسية");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const complianceCode = /^\/compliance\/([^/]+)/.exec(pathname)?.[1];

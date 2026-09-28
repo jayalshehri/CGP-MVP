@@ -7,12 +7,11 @@
 .my-controls-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .my-controls-summary span { background: #edf5f3; border-radius: 7px; padding: 8px 12px; font-size: 13px; }
 .my-controls-summary strong { margin-inline-start: 8px; font-size: 18px; color: #0c655b; }
-.my-controls-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-bottom: 14px; padding: 10px; border: 1px solid #dce6eb; border-radius: 10px; background: #fbfcfd; }
+.my-controls-filters { display: grid; grid-template-columns: minmax(0, 2.4fr) repeat(3, minmax(0, 1fr)); align-items: end; gap: 14px; margin-bottom: 14px; padding: 12px; border: 1px solid #dce6eb; border-radius: 10px; background: #fbfcfd; }
 .my-controls-filters > label { display: grid; gap: 4px; min-width: 0; font-size: 12px; }
-.my-controls-filters > label:first-child { flex: 1 1 190px; }
-.my-controls-filters input[type=search], .my-controls-filters select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 36px; padding: 7px 8px; border: 1px solid #ced9dd; background: white; border-radius: 7px; }
+.my-controls-filters input[type=search], .my-controls-filters select { box-sizing: border-box; width: 100%; min-width: 0; height: 44px; padding: 10px 12px; border: 1px solid #ced9dd; background: white; border-radius: 8px; font-size: 12px; }
 .my-controls-more { position: relative; min-width: 0; }
-.my-controls-more > summary { display: block; list-style: none; box-sizing: border-box; min-height: 36px; padding: 8px 12px; border: 1px solid #ced9dd; border-radius: 7px; background: white; font-size: 12px; cursor: pointer; }
+.my-controls-more > summary { display: flex; align-items: center; justify-content: center; gap: 4px; list-style: none; box-sizing: border-box; width: 100%; height: 44px; padding: 10px 12px; border: 1px solid #ced9dd; border-radius: 8px; background: white; color: #354e53; font-size: 12px; white-space: nowrap; cursor: pointer; }
 .my-controls-more > summary::-webkit-details-marker { display: none; }
 .my-controls-more > summary::after { content: '⌄'; margin-inline-start: 8px; }
 .my-controls-more[open] > summary::after { content: '⌃'; }
@@ -20,7 +19,7 @@
 .my-controls-toggles label { display: flex; align-items: center; gap: 5px; min-height: 36px; box-sizing: border-box; padding: 6px 8px; border: 1px solid #dce6eb; border-radius: 7px; background: white; cursor: pointer; }
 .my-controls-toggles label:has(input:checked) { background: #e8f4ef; border-color: #8ebbae; color: #075e53; }
 .my-controls-toggles input { margin: 0; accent-color: #087d72; flex-shrink: 0; }
-.my-controls-filter-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; width: 100%; min-width: 0; }
+.my-controls-filter-chips { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; width: 100%; min-width: 0; }
 .my-controls-filter-chips .my-controls-filter-chip { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 5px 8px; font-size: 12px; background: #e8f4ef; border-color: #bbd8cf; color: #075e53; }
 .my-controls-filter-chip > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .my-controls-filter-chips > button:last-child { font-size: 12px; padding: 5px 8px; }
@@ -44,5 +43,10 @@
 .my-controls footer { margin-top: 18px; font-size: 13px; }
 .my-controls a:hover { text-decoration: underline; }
 .my-controls :focus-visible { outline: 2px solid #0b7467; outline-offset: 3px; }
-@media (max-width: 680px) { .my-controls-heading h1 { font-size: 22px; } .my-controls-filters > label { flex: 1 1 150px; min-width: 0; } .my-controls-filters > label:first-child { flex-basis: 100%; } .my-controls-summary span { padding: 7px 9px; } }
-@media (max-width: 680px) { .my-controls-more { flex: 1 1 100%; } .my-controls-toggles { position: static; width: 100%; margin-top: 6px; box-shadow: none; } }
+@media (max-width: 1100px) { .my-controls-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) {
+  .my-controls-heading h1 { font-size: 22px; }
+  .my-controls-filters > label:first-child, .my-controls-more { grid-column: 1 / -1; }
+  .my-controls-summary span { padding: 7px 9px; }
+  .my-controls-toggles { position: static; width: 100%; margin-top: 6px; box-shadow: none; }
+}

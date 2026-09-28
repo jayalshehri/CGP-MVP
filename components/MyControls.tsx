@@ -86,6 +86,6 @@ export function MyControlsView({ rows, requests, actor, context, onFilter, onRes
       </div>}
       {requests.length > 0 && <details className="my-controls-requests"><summary>طلبات الأدلة والمراجعات الدورية ({requests.length})</summary><GrcWorkQueue requests={requests} actor={actor} returnContext={returnContext} compact/></details>}
     </>}
-    <footer><Link href="/compliance">استكشاف الأطر في مركز الامتثال ←</Link></footer>
+    {actor.role !== 'control_owner' && <footer><Link href="/compliance">استكشاف الأطر في مركز الامتثال ←</Link></footer>}
   </main>;
 }
