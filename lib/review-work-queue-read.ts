@@ -32,6 +32,7 @@ export async function readReviewBatches<T>(ids: number[], query: (ids: number[],
 const emptySnapshot = (): ReviewSnapshot => ({ frameworks: [], controls: [], evidence: [], cycles: [], items: [], itemLinks: [], mappings: [], findings: [], actions: [], periodic: [], errors: {} });
 const itemColumns = 'id,cycle_id,control_id,control_code,title_ar,description_ar,domain_ar,subdomain_code,is_scoring,compliance_status,notes,owner_id,expected_compliance_date,corrective_action,review_status,revision';
 const sourceLabels: Record<ReadSource, string> = { frameworks: 'الأطر', controls: 'الضوابط', evidence: 'سجل الأدلة', cycles: 'دورات التقييم', items: 'بنود التقييم', itemLinks: 'ارتباطات أدلة التقييم', mappings: 'المواءمات المعتمدة', findings: 'الملاحظات المشتركة', actions: 'الإجراءات التصحيحية', periodic: 'المراجعات الدورية' };
+export type ReviewEvidenceControl = ReviewControl & { description_ar: string | null; frameworks: ReviewFramework & { name_ar: string; version: string } };
 export async function loadReviewWorkSnapshot(actor: ReviewActor): Promise<ReviewSnapshot> {
   // No queries for excluded roles. UI checks do not broaden the /review gate.
   const snapshot = emptySnapshot();
@@ -60,8 +61,8 @@ export async function loadReviewWorkSnapshot(actor: ReviewActor): Promise<Review
   return snapshot;
 }
 
-// The existing evidence decision workspace/history reads the same register;
-// its RPC decision handlers remain separate from the navigation-only queue.
+// Both the record workspace and context-verified inline dialog use the same
+// authorized register. Mutation handlers remain in the existing audited RPC.
 export async function loadReviewEvidenceContext(id: number | null, linkId: number | null) {
   const rows = await readReviewPages<EvidenceRecord>((from, to) => {
     let query = supabase.rpc('grc_evidence_register', {}, { count: 'exact' }).select('*').order('id').order('control_id').order('link_id', { nullsFirst: true });
@@ -69,8 +70,22 @@ export async function loadReviewEvidenceContext(id: number | null, linkId: numbe
     if (id !== null) query = linkId === null ? query.is('link_id', null) : query.eq('link_id', linkId);
     return query.range(from, to);
   });
-  const controls = await readReviewBatches<ReviewControl & { frameworks: ReviewFramework }>(rows.map(e => e.control_id), (ids, from, to) => supabase.from('controls')
-    .select('id,framework_id,control_code,title_ar,frameworks!inner(id,code,is_active)', { count: 'exact' }).in('id', ids).order('id').range(from, to));
+  const controls = await readReviewBatches<ReviewEvidenceControl>(rows.map(e => e.control_id), (ids, from, to) => supabase.from('controls')
+    .select('id,framework_id,control_code,title_ar,description_ar,frameworks!inner(id,code,name_ar,version,is_active)', { count: 'exact' }).in('id', ids).order('id').range(from, to));
   const allowed = new Set(controls.filter(c => c.frameworks.is_active && c.frameworks.code !== 'QA_SYNTH').map(c => c.id));
   return { rows: rows.filter(e => allowed.has(e.control_id)), controls };
+}
+
+// Evidence decisions can affect assessment/finding readiness as well as the
+// evidence category. Refresh the shared input, then rebuild dependent projections.
+// No per-row reads and no unrelated assessment/finding reloads.
+export async function refreshReviewEvidenceSnapshot(previous: ReviewSnapshot, actor: ReviewActor): Promise<ReviewSnapshot> {
+  if (!isReviewTeam(actor.role)) throw new Error('Reviewer role required');
+  const next = { ...previous, errors: { ...previous.errors } };
+  try {
+    next.evidence = await readReviewPages<EvidenceRecord>((from, to) => supabase.rpc('grc_evidence_register', {}, { count: 'exact' }).select('*')
+      .eq('is_current', true).order('id').order('control_id').order('link_id', { nullsFirst: true }).range(from, to));
+    delete next.errors.evidence;
+  } catch { next.evidence = []; next.errors.evidence = 'تعذر تحديث الأدلة؛ المؤشرات المرتبطة غير متاحة. افتح السجل قبل أي إعادة للقرار.'; }
+  return next;
 }
