@@ -1,5 +1,6 @@
 "use client";
 import { myControlsReturn } from '@/lib/my-controls-context';
+import { reviewContextReturn } from '@/lib/review-context';
 import { Suspense, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
@@ -138,15 +139,16 @@ function ControlDetailsContent({id}:{id:string}) {
  const assessmentReturn=assessmentContext(searchParams.get('assessment_context')??'');
  const assessmentBack=searchParams.get('from')==='assessment'&&assessmentReturn.has('cycle')&&assessmentReturn.has('item')?assessmentItemHref(frameworkCode.toUpperCase(),Number(assessmentReturn.get('cycle')),Number(assessmentReturn.get('item')),assessmentReturn.toString()):null;
  const personalBack=myControlsReturn(new URLSearchParams(searchParams.toString()));
- const backHref=personalBack??assessmentBack??(fromWorkspace?`/compliance/${frameworkCode.toUpperCase()}?tab=controls${returnParams.size?`&${returnParams.toString()}`:''}`:`/controls?framework=${frameworkCode.toUpperCase()}${returnParams.size?`&${returnParams.toString()}`:''}`);
+ const reviewBack=reviewContextReturn(new URLSearchParams(searchParams.toString()));
+ const backHref=reviewBack??personalBack??assessmentBack??(fromWorkspace?`/compliance/${frameworkCode.toUpperCase()}?tab=controls${returnParams.size?`&${returnParams.toString()}`:''}`:`/controls?framework=${frameworkCode.toUpperCase()}${returnParams.size?`&${returnParams.toString()}`:''}`);
  const context=controlContext(new URLSearchParams(searchParams.toString())).toString();
  const evidenceHref=controlRegisterHref('evidence',frameworkCode.toUpperCase(),control.id,context);
  const findingsHref=controlRegisterHref('findings',frameworkCode.toUpperCase(),control.id,context);
  const nextAction=controlNextAction(canUpload||canReview?role:null,archived,!!(control.control_owner_id||control.control_owner?.trim()),control.evidence_status,issues.evidence?null:eligible.length);
  const latest=assessments[0];
  return <main className="detail-page control360-page" dir="rtl">
-  <Link className="detail-back" href={backHref}>{personalBack?'العودة إلى ضوابطي':assessmentBack?'العودة إلى بند التقييم':`العودة إلى ضوابط ${frameworkCode.toUpperCase()}`} ←</Link>
-  <nav className="detail-breadcrumb" aria-label="مسار الضابط"><Link href="/compliance">مركز الامتثال</Link><span aria-hidden="true">←</span><Link href={'/compliance/'+frameworkCode.toUpperCase()}>{frameworkCode.toUpperCase()}</Link><span aria-hidden="true">←</span><Link href={backHref}>{personalBack?"ضوابطي":"الضوابط"}</Link><span aria-hidden="true">←</span><span aria-current="page" dir="ltr">{control.control_code}</span></nav>
+  <Link className="detail-back" href={backHref}>{reviewBack?'العودة إلى قائمة المراجعة والقرار':personalBack?'العودة إلى ضوابطي':assessmentBack?'العودة إلى بند التقييم':`العودة إلى ضوابط ${frameworkCode.toUpperCase()}`} ←</Link>
+  <nav className="detail-breadcrumb" aria-label="مسار الضابط"><Link href="/compliance">مركز الامتثال</Link><span aria-hidden="true">←</span><Link href={'/compliance/'+frameworkCode.toUpperCase()}>{frameworkCode.toUpperCase()}</Link><span aria-hidden="true">←</span><Link href={backHref}>{reviewBack?'المراجعة والقرار':personalBack?"ضوابطي":"الضوابط"}</Link><span aria-hidden="true">←</span><span aria-current="page" dir="ltr">{control.control_code}</span></nav>
   {archived&&<section className="detail-card" role="status"><h2>ضابط مؤرشف</h2><p>ينتمي إلى إصدار تنظيمي سابق، ومحفوظ للتتبع التاريخي فقط. لا يسمح بأي نشاط تشغيلي جديد.</p></section>}
   <header className="detail-hero"><div><span className="detail-code" dir="ltr">{control.control_code}</span><span className="detail-framework-tag" dir="ltr">{control.frameworks?.code} {control.frameworks?.version}</span><span className="detail-hierarchy-tag">{control.hierarchy_level==='sub_control'?'ضابط فرعي':'ضابط أساسي'}</span>{applicability&&<span className="catalog-applicability">{applicability}</span>}<h1>{cleanTitle(control.title_ar)||control.control_code}</h1><p>{control.frameworks?.name_ar} · {control.domain_ar}</p><div className="control360-owner"><span>المالك: <strong>{control.control_owner||(control.control_owner_id?'اسم المالك غير مسجل':'غير معيّن')}</strong></span>{control.due_date&&<span>الاستحقاق: {formatComplianceDate(control.due_date)}</span>}</div></div><div className="detail-hero-actions"><StatusBadge status={control.implementation_status}/>{canReview&&nextAction!=='assign'&&<Link className="detail-assign-owner" href={'/controls/'+control.id+'/assign'}>تغيير المالك ←</Link>}</div></header>
   {nextAction&&<section className="detail-next"><div><span>الإجراء التالي</span><strong>{nextAction==='assign'?'تعيين مسؤول للضابط':'رفع دليل للضابط'}</strong></div><Link className="detail-button" href={'/controls/'+control.id+'/'+(nextAction==='assign'?'assign':'evidence/new')+'?'+context}>{nextAction==='assign'?'تعيين المالك':'رفع دليل'} ←</Link></section>}

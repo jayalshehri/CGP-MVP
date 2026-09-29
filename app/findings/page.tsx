@@ -16,6 +16,7 @@ import {ASSESSMENT_ROUTES, assessmentHrefFor} from '@/lib/compliance-frameworks'
 import {assessmentItemHref} from '@/lib/assessment-journey';
 import {WorkflowHeading, WorkflowMetric} from '@/components/WorkflowUI';
 import './findings.css';
+import { reviewContextReturn } from '@/lib/review-context';
 
 type Person = {user_id:string;display_name:string|null;role:string};
 type EvidenceOption = {id:number;file_name:string|null;evidence_name:string|null;version_number:number;valid_until:string|null;uploaded_by:string;association:'direct'|'shared'};
@@ -187,6 +188,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
 
   if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل مساحة الملاحظات…</main>;
   return <main className="workflow-page findings-page" dir="rtl">
+    {reviewContextReturn(new URLSearchParams(params.toString()))&&<p><Link href={reviewContextReturn(new URLSearchParams(params.toString()))!}>العودة إلى قائمة المراجعة والقرار ←</Link></p>}
     {personalReturn&&<p><Link href={personalReturn}>العودة إلى ضوابطي ←</Link></p>}
     {returnToControl&&<p className="findings-context"><Link href={returnToControl}>العودة إلى ملاحظات الضابط ←</Link></p>}
     {originCode&&<p className="findings-context"><Link href={`/compliance/${originCode}?tab=findings`}>العودة إلى ملاحظات {originCode} ←</Link></p>}
