@@ -7,6 +7,7 @@ import vm from 'node:vm';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
+import { createClient } from '@supabase/supabase-js';
 const require = createRequire(import.meta.url), cache = new Map(), calls = [];
 let checks = 0, response = () => ({ data: [], count: 0, error: null });
 const check = (value, message) => { assert.ok(value, message); checks++; };
@@ -198,4 +199,56 @@ for (const file of ['components/ReviewWorkQueue.tsx', 'lib/review-work-queue.ts'
 for (const file of ['app/findings/page.tsx', 'components/AssessmentWorkspace.tsx', 'app/controls/[id]/page.tsx']) check(source(file).includes('reviewContextReturn'), 'existing surface has explicit queue return: ' + file);
 check(source('components/EvidenceReviewContext.tsx').includes("requireProfile(['admin','cybersecurity_team'])"), 'existing evidence decision authorization preserved');
 check(source('app/review/page.tsx').includes('redirectLegacyEvidence') && source('app/review/page.tsx').includes("next.set('evidence', String(legacyId))"), 'legacy evidence hash links still resolve to the decision workspace');
+
+// Exercise the real installed SDK and the actual application query, not just
+// a permissive chain mock. Simulate PostgREST's SETOF-record projection: an
+// ORDER BY field absent from select must produce the original 42703 failure.
+const httpCalls = [], mappingDependent = ['ASSESSMENT_REVIEW_COMPLETION', 'ASSESSMENT_APPROVAL', 'CORRECTIVE_ACTION_VERIFICATION', 'FINDING_VERIFICATION', 'FINDING_CLOSURE'];
+let httpRows = [], rpcFailure = false;
+const rpcClient = createClient('https://local-contract.invalid', 'local-test-key', {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  global: { fetch: async (input, options) => {
+    const url = new URL(String(input)), params = url.searchParams, headers = new Headers(options.headers);
+    const columns = params.get('select').split(','), orders = params.get('order').split(',');
+    const call = { url, headers, method: options.method, offset: Number(params.get('offset')), limit: Number(params.get('limit')) };
+    httpCalls.push(call);
+    assert.equal(url.hostname, 'local-contract.invalid', 'all HTTP calls intercepted locally'); checks++;
+    assert.equal(url.pathname, '/rest/v1/rpc/cgp_crosswalk'); checks++;
+    const unavailableOrder = orders.some(order => !columns.includes(order.split('.')[0]));
+    if (rpcFailure || unavailableOrder) return new Response(JSON.stringify({ code: '42703', message: 'column record.id does not exist' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    assert.equal(params.get('validation_status'), 'eq.approved'); checks++;
+    assert.equal(params.get('order'), 'id.asc'); checks++;
+    assert.equal(params.get('select'), 'id,source_id,target_id,validation_status'); checks++;
+    assert.ok(headers.get('Prefer').includes('count=exact')); checks++;
+    const approved = httpRows.filter(row => row.validation_status === 'approved').sort((a, b) => a.id - b.id);
+    // Model a server cap smaller than the requested 500-row page.
+    const page = approved.slice(call.offset, call.offset + Math.min(call.limit, 97));
+    const range = page.length ? `${call.offset}-${call.offset + page.length - 1}/${approved.length}` : `*/${approved.length}`;
+    return new Response(JSON.stringify(page), { status: 200, headers: { 'Content-Type': 'application/json', 'Content-Range': range } });
+  } },
+});
+const originalRpc = client.rpc;
+client.rpc = (name, args, options) => name === 'cgp_crosswalk' ? rpcClient.rpc(name, args, options) : originalRpc(name, args, options);
+response = () => ({ data: [], count: 0, error: null });
+const zeroHttp = await read.loadReviewWorkSnapshot(actor);
+check(!zeroHttp.errors.mappings && zeroHttp.mappings.length === 0, 'HTTP 200/count zero stays zero, not unavailable');
+for (const type of mappingDependent) check(classify(zeroHttp).find(category => category.type === type).status === 'ready', type + ' available with zero approved mappings');
+
+httpCalls.length = 0;
+httpRows = Array.from({ length: 1003 }, (_, i) => ({ id: 1003 - i, source_id: 2, target_id: 1, validation_status: 'approved' }));
+httpRows.push({ id: 0, source_id: 2, target_id: 1, validation_status: 'pending' });
+const populatedHttp = await read.loadReviewWorkSnapshot(actor);
+check(!populatedHttp.errors.mappings && populatedHttp.mappings.length === 1003, 'approved crosswalk HTTP reads succeed across server-capped pages');
+check(populatedHttp.mappings.every((row, i) => row.id === i + 1), 'numeric id ordering stable with no gaps/duplicates/unapproved mappings');
+check(httpCalls.length === 11 && httpCalls.every((call, i) => call.offset === i * 97 && call.limit === 500), 'paging advances by actual returned rows and retains 500-row request size');
+for (const type of mappingDependent) check(classify(populatedHttp).find(category => category.type === type).status === 'ready', type + ' no longer unavailable due to projection/order mismatch');
+
+// Prove this regression test would reject the exact old query shape.
+const badShape = await rpcClient.rpc('cgp_crosswalk', {}, { count: 'exact' }).select('source_id,target_id,validation_status').eq('validation_status', 'approved').order('id').range(0, 499);
+check(badShape.error?.code === '42703', 'HTTP contract catches the original unavailable ordering field');
+rpcFailure = true;
+const realHttpFailure = await read.loadReviewWorkSnapshot(actor);
+check(!!realHttpFailure.errors.mappings, 'real HTTP error remains unavailable, never mislabeled zero');
+for (const type of mappingDependent) check(classify(realHttpFailure).find(category => category.type === type).status === 'unavailable', type + ' still fail-closed on real mapping read failure');
+client.rpc = originalRpc;
 console.log(`PASS: ${checks} P2-B5.1 classification, SoD, role, source separation, navigation, render, paging/batching and error-vs-zero assertions; no live DB/RPC writes.`);

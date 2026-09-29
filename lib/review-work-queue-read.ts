@@ -46,7 +46,7 @@ export async function loadReviewWorkSnapshot(actor: ReviewActor): Promise<Review
     capture('evidence', () => readReviewPages<EvidenceRecord>((from, to) => supabase.rpc('grc_evidence_register', {}, { count: 'exact' }).select('*').eq('is_current', true).order('id').order('control_id').order('link_id', { nullsFirst: true }).range(from, to))),
     capture('cycles', () => readReviewPages<ReviewCycleRecord>((from, to) => supabase.from('assessment_cycles').select(cycleColumns, { count: 'exact' })
       .in('status', ['under_review', 'completed']).or(`reviewer_id.eq.${actor.id},approver_id.eq.${actor.id}`).order('id').range(from, to))),
-    capture('mappings', () => readReviewPages<ReviewMapping>((from, to) => supabase.rpc('cgp_crosswalk', {}, { count: 'exact' }).select('source_id,target_id,validation_status').eq('validation_status', 'approved').order('id').range(from, to))),
+    capture('mappings', () => readReviewPages<ReviewMapping>((from, to) => supabase.rpc('cgp_crosswalk', {}, { count: 'exact' }).select('id,source_id,target_id,validation_status').eq('validation_status', 'approved').order('id').range(from, to))),
     capture('findings', () => readReviewPages<SharedFinding>((from, to) => supabase.from('grc_findings').select('*', { count: 'exact' }).eq('status', 'pending_verification').order('id').range(from, to))),
     capture('periodic', () => readReviewPages<ReviewCycle>((from, to) => supabase.from('control_review_cycles').select('id,control_id,owner_id,reviewer_id,due_date,status,frequency,completed_at,notes', { count: 'exact' }).eq('status', 'open').order('id').range(from, to))),
   ]);
