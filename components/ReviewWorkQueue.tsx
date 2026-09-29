@@ -13,7 +13,7 @@ import type { ReviewActor, ReviewSnapshot, ReviewWorkItem } from '@/lib/review-w
 import { buildReviewWorkQueue, filterReviewWork, responsibilityLabels, reviewFilters, reviewWorkHref, reviewWorkPage, reviewWorkSummary, sortReviewWork, workTypeLabels, type CategoryResult } from '@/lib/review-work-queue';
 
 const stateLabels: Record<string, string> = { ...cycleLabels, ...reviewLabels, open: 'مفتوحة', pending: 'بانتظار التحقق', pending_review: 'بانتظار مراجعة الدليل', under_review: 'قيد المراجعة', accepted: 'مقبول — ينتظر الإغلاق' };
-export function ReviewQueueView({ categories, raw, update, actor, onReview }: { categories: CategoryResult[]; raw: string; update: (key: string, value: string) => void; actor?: ReviewActor; onReview?: (item: ReviewWorkItem) => void }) {
+export function ReviewQueueView({ categories, raw, update, actor, onReview, certificationMode = false }: { categories: CategoryResult[]; raw: string; update: (key: string, value: string) => void; actor?: ReviewActor; onReview?: (item: ReviewWorkItem) => void; certificationMode?: boolean }) {
   const today = todayRiyadh(), params = reviewFilters(raw);
   const items = sortReviewWork(categories.flatMap(c => c.items), today);
   const summary = reviewWorkSummary(categories, today);
@@ -41,13 +41,13 @@ export function ReviewQueueView({ categories, raw, update, actor, onReview }: { 
         <td>{workTypeLabels[item.type]}</td><td>{item.type === 'ASSESSMENT_ITEM_REVIEW' ? reviewLabels[item.state] ?? item.state : stateLabels[item.state] ?? item.state}</td>
         <td><span className={`review-responsibility ${item.responsibility}`}>{responsibilityLabels[item.responsibility]}</span><small>{item.reason}</small></td>
         <td>{item.dueDate ? <><time dateTime={item.dueDate}>{formatComplianceDate(item.dueDate, true)}</time>{item.dueDate < today && <small className="review-overdue">متأخر</small>}</> : <span className="review-quiet">—</span>}</td>
-        <td><div className="review-row-actions">{actor && onReview && canOfferInlineEvidence(item, actor.role) ? <><button className="review-inline-primary" onClick={() => onReview(item)}>فحص الدليل والقرار</button><Link className="review-record-secondary" href={reviewWorkHref(item, raw)}>فتح السجل ←</Link></> : <Link className="review-next-action" href={reviewWorkHref(item, raw)}>{item.type === 'ASSESSMENT_APPROVAL' ? 'فتح دورة التقييم للاعتماد' : item.actionLabel} ←</Link>}</div></td>
+        <td><div className="review-row-actions">{actor && onReview && canOfferInlineEvidence(item, actor.role) ? <><button className="review-inline-primary" onClick={() => onReview(item)}>فحص الدليل والقرار</button>{!certificationMode && <Link className="review-record-secondary" href={reviewWorkHref(item, raw)}>فتح السجل ←</Link>}</> : certificationMode ? <span>يتطلب مراجعًا مستقلًا</span> : <Link className="review-next-action" href={reviewWorkHref(item, raw)}>{item.type === 'ASSESSMENT_APPROVAL' ? 'فتح دورة التقييم للاعتماد' : item.actionLabel} ←</Link>}</div></td>
       </tr>)}</tbody></table>
     </div>}
     {visible.length > 0 && <nav className="review-queue-pages" aria-label="صفحات قائمة العمل"><button disabled={paged.page === 1} onClick={() => update('page', String(paged.page - 1))}>السابق</button><span>صفحة {paged.page} من {paged.pages} · {visible.length} عملًا</span><button disabled={paged.page === paged.pages} onClick={() => update('page', String(paged.page + 1))}>التالي</button></nav>}
   </>;
 }
-export default function ReviewWorkQueue() {
+export default function ReviewWorkQueue({ certificationMode = false }: { certificationMode?: boolean }) {
   const params = useSearchParams(), router = useRouter();
   const [categories, setCategories] = useState<CategoryResult[] | null>(null), [error, setError] = useState(''), [reload, setReload] = useState(0);
   const [context, setContext] = useState<{ actor: ReviewActor; snapshot: ReviewSnapshot } | null>(null), [selected, setSelected] = useState<ReviewWorkItem | null>(null), [notice, setNotice] = useState('');
@@ -58,11 +58,11 @@ export default function ReviewWorkQueue() {
         const { user, profile } = await requireProfile(['admin', 'cybersecurity_team']);
         const actor = { id: user.id, role: profile.role };
         const snapshot = await loadReviewWorkSnapshot(actor);
-        if (live) { setCategories(buildReviewWorkQueue(snapshot, actor, todayRiyadh())); setContext({ actor, snapshot }); setError(''); }
+        if (live) { setCategories(buildReviewWorkQueue(snapshot, actor, todayRiyadh(), certificationMode)); setContext({ actor, snapshot }); setError(''); }
       } catch { if (live) { setCategories(null); setContext(null); setError('تعذر تحميل قائمة العمل. يتطلب مركز التحقق حسابًا مخولًا من فريق الأمن السيبراني أو الإدارة.'); } }
     })();
     return () => { live = false; };
-  }, [reload]);
+  }, [reload, certificationMode]);
   async function settled(result: DecisionResult) {
     setNotice(result.ok ? 'تم حفظ قرار الدليل عبر مسار المراجعة الحالي؛ جاري تحديث القائمة.' : 'لم يتم تأكيد قرار جديد. جاري تحديث الحالة؛ لن نعيد القرار تلقائيًا.');
     if (!context) return;
@@ -70,7 +70,7 @@ export default function ReviewWorkQueue() {
       const { user, profile } = await requireProfile(['admin', 'cybersecurity_team']);
       if (user.id !== context.actor.id) throw new Error('Session changed');
       const actor = { id: user.id, role: profile.role }, snapshot = await refreshReviewEvidenceSnapshot(context.snapshot, actor);
-      setContext({ actor, snapshot }); setCategories(buildReviewWorkQueue(snapshot, actor, todayRiyadh()));
+      setContext({ actor, snapshot }); setCategories(buildReviewWorkQueue(snapshot, actor, todayRiyadh(), certificationMode));
       setNotice(result.ok ? (snapshot.errors.evidence ? 'حُفظ القرار، لكن تحديث الأدلة غير متاح. افتح السجل قبل أي إعادة.' : 'حُفظ القرار وحُدثت القائمة والمؤشرات المرتبطة به.') : 'حدّثت الحالة المتاحة. افتح السجل أو راجع السياق مجددًا؛ لا توجد إعادة تلقائية.');
     } catch {
       setCategories(null); setContext(null); setSelected(null); setError('تعذر تحديث قائمة العمل ضمن الجلسة الحالية. حدّث الصفحة للتحقق من الحالة.');
@@ -81,12 +81,12 @@ export default function ReviewWorkQueue() {
     const next = reviewFilters(params.toString());
     if (key !== 'page') next.delete('page');
     if (value) next.set(key, value); else next.delete(key);
-    router.push('/review' + (next.size ? '?' + next : ''), { scroll: false });
+    router.push((certificationMode ? '/review/qa-certification' : '/review') + (next.size ? '?' + next : ''), { scroll: false });
   };
-  return <main className="workflow-page review-workspace" dir="rtl"><header className="review-queue-heading"><div><h1>مركز المراجعة والقرار</h1><p>ما الذي ينتظر مراجعتي أو قراري الآن؟</p></div><button aria-label="تحديث قائمة العمل" title="تحديث" onClick={() => { setCategories(null); setError(''); setReload(v => v + 1); }}>↻</button></header>
-    <div className="review-queue-links"><Link href="/review?view=evidence-history">سجل مراجعة الأدلة ←</Link></div>
+  return <main className="workflow-page review-workspace" dir="rtl">{certificationMode && <div role="status" className="review-qa-cert-banner">QA CERTIFICATION MODE — بيانات اختبار QA_SYNTH فقط</div>}<header className="review-queue-heading"><div><h1>{certificationMode ? 'شهادة مراجعة الأدلة التجريبية' : 'مركز المراجعة والقرار'}</h1><p>{certificationMode ? 'مسار معزول لضابط QA-C-01 ولا يظهر في واجهة الأعمال.' : 'ما الذي ينتظر مراجعتي أو قراري الآن؟'}</p></div><button aria-label="تحديث قائمة العمل" title="تحديث" onClick={() => { setCategories(null); setError(''); setReload(v => v + 1); }}>↻</button></header>
+    {!certificationMode && <div className="review-queue-links"><Link href="/review?view=evidence-history">سجل مراجعة الأدلة ←</Link></div>}
     {notice && <p role="status" className="review-decision-notice">{notice}</p>}
-    {error ? <p role="alert" className="cgp-shell-error">{error} <Link href="/my-controls">العودة إلى ضوابطي ←</Link></p> : categories === null ? <p role="status">جاري تحميل العمل؛ المؤشرات غير متاحة حتى تكتمل القراءة.</p> : <ReviewQueueView categories={categories} raw={params.toString()} update={update} actor={context?.actor} onReview={setSelected}/>}
-    {selected && context && <ReviewEvidenceDecision key={selected.key} work={selected} actor={context.actor} raw={params.toString()} onClose={() => setSelected(null)} onSettled={settled}/>}
+    {error ? <p role="alert" className="cgp-shell-error">{error} <Link href="/my-controls">العودة إلى ضوابطي ←</Link></p> : categories === null ? <p role="status">جاري تحميل العمل؛ المؤشرات غير متاحة حتى تكتمل القراءة.</p> : <ReviewQueueView categories={categories} raw={params.toString()} update={update} actor={context?.actor} onReview={setSelected} certificationMode={certificationMode}/>}
+    {selected && context && <ReviewEvidenceDecision key={selected.key} work={selected} actor={context.actor} raw={params.toString()} onClose={() => setSelected(null)} onSettled={settled} certificationMode={certificationMode}/>}
   </main>;
 }

@@ -46,7 +46,7 @@ function load(path) {
     }
     return require(name);
   };
-  vm.runInNewContext(js, { exports: mod.exports, module: mod, require: resolve, Date, Intl, URLSearchParams, Map, Set, console }, { filename: path });
+  vm.runInNewContext(js, { exports: mod.exports, module: mod, require: resolve, Date, Intl, URL, URLSearchParams, Map, Set, console }, { filename: path });
   return mod.exports;
 }
 const safety = load('lib/review-decision-safety.ts'), decision = load('lib/review-evidence-decision.ts');
@@ -187,4 +187,46 @@ check(lifecycleSQL.includes('Approval of a document never overwrites a control a
 check(source('components/ReviewWorkQueue.tsx').includes('refreshReviewEvidenceSnapshot(context.snapshot, actor)'), 'affected reads wired to result callback');
 check(source('components/ReviewEvidenceDecision.tsx').includes('submitting.current') && source('components/ReviewEvidenceDecision.tsx').includes('if (busy) event.preventDefault()'), 'duplicate-submit and in-flight close guards');
 check(source('components/review-work-queue.css').includes('100dvh') && source('components/review-work-queue.css').includes('focus-visible'), 'bounded responsive dialog and keyboard focus');
+const cert = load('lib/qa-review-certification.ts');
+const qaUrl = 'https://lkozjnpfufdpzqtzdxhe.supabase.co';
+const certEnv = { VERCEL_ENV: 'preview', CGP_QA_CERT_MODE: 'true', NEXT_PUBLIC_SUPABASE_URL: qaUrl };
+check(cert.qaReviewCertificationEnabled(certEnv), 'QA Preview and explicit flag enable certification');
+for (const badEnv of [
+  { ...certEnv, CGP_QA_CERT_MODE: undefined },
+  { ...certEnv, CGP_QA_CERT_MODE: 'TRUE' },
+  { ...certEnv, VERCEL_ENV: 'production' },
+  { ...certEnv, VERCEL_ENV: 'development' },
+  { ...certEnv, NEXT_PUBLIC_SUPABASE_URL: 'https://wrong.supabase.co' },
+  { ...certEnv, NEXT_PUBLIC_SUPABASE_URL: 'https://lkozjnpfufdpzqtzdxhe.supabase.co.evil.example' },
+  { ...certEnv, NEXT_PUBLIC_SUPABASE_URL: 'https://prod.supabase.co' },
+]) check(!cert.qaReviewCertificationEnabled(badEnv), 'fail-closed certification gate ' + JSON.stringify(badEnv));
+const qaMaterial = material();
+qaMaterial.control.control_code = 'QA-C-01';
+qaMaterial.control.frameworks.code = 'QA_SYNTH';
+const qaSnapshot = { ...snapshot, frameworks: [{ id: 1, code: 'QA_SYNTH', is_active: true }], controls: [qaMaterial.control], evidence: [qaMaterial.record] };
+check(queue.buildReviewWorkQueue(qaSnapshot, actor, today).every(category => !category.items.length), 'normal business queue still excludes QA_SYNTH');
+const qaCategories = queue.buildReviewWorkQueue(qaSnapshot, actor, today, true);
+check(qaCategories.flatMap(category => category.items).length === 1 && qaCategories[0].items[0].sourceRoute === '/review/qa-certification', 'certification queue scoped to QA-C-01');
+check(queue.buildReviewWorkQueue({ ...qaSnapshot, controls: [{ ...qaMaterial.control, control_code: 'QA-C-02' }] }, actor, today, true).every(category => !category.items.length), 'other QA controls excluded');
+check(decision.materialFailure(qaMaterial, actor)?.kind === 'validation' && decision.materialFailure(qaMaterial, actor, true) === null, 'QA_SYNTH opt-in only for certified control');
+for (const role of ['control_owner', 'nca_external_auditor']) {
+  check(decision.materialFailure(qaMaterial, { ...actor, role }, true)?.kind === 'authorization', role + ' no certification decision rights');
+}
+const ownQa = structuredClone(qaMaterial); ownQa.record.uploaded_by = actor.id;
+check(decision.materialFailure(ownQa, actor, true)?.kind === 'sod', 'certification cannot bypass independent review');
+const qaWork = qaCategories[0].items[0];
+const qaDeps = dependencies({ material: async () => qaMaterial });
+check((await decision.loadInlineEvidenceMaterial(qaWork, actor, qaDeps.deps, true)).record.id === qaMaterial.record.id, 'certification uses normal inline material loading');
+check((await decision.submitInlineEvidenceDecision(qaMaterial, actor, 'accepted', 'سبب شهادة', true, qaDeps.deps, true)).ok && qaDeps.executions.length === 1, 'certification uses same decision pipeline');
+const staleQa = structuredClone(qaMaterial); staleQa.record.status = 'accepted';
+const staleDeps = dependencies({ material: async () => staleQa });
+check((await decision.submitInlineEvidenceDecision(qaMaterial, actor, 'accepted', 'سبب شهادة', true, staleDeps.deps, true)).failure.kind === 'stale' && !staleDeps.executions.length, 'certification stale-state blocks RPC');
+response = call => call.name === 'grc_evidence_register' ? { data: [qaMaterial.record], count: 1, error: null } : call.name === 'controls' ? { data: [qaMaterial.control], count: 1, error: null } : { data: null, error: null };
+check((await read.loadReviewEvidenceContext(qaMaterial.record.id, null)).rows.length === 0, 'normal context hides QA_SYNTH');
+check((await read.loadReviewEvidenceContext(qaMaterial.record.id, null, true)).rows.length === 1, 'certification context sees only certified control');
+calls.length = 0;
+check((await decision.submitInlineEvidenceDecision(qaMaterial, actor, 'rejected', 'سبب شهادة', true, undefined, true)).ok, 'certification production adapter succeeds through existing command');
+check(calls.filter(call => call.name === 'cgp_review_evidence').length === 1, 'certification has exactly one authoritative RPC path');
+check(source('app/review/qa-certification/page.tsx').includes('CGP_QA_CERT_MODE: process.env.CGP_QA_CERT_MODE') && source('app/review/qa-certification/page.tsx').includes('notFound()'), 'server route denied unless gate passes');
+check(!source('app/review/page.tsx').includes('certificationMode'), 'normal Review Center cannot opt in via query');
 console.log(`P2-B5.2 local decision/render/read/audit contracts: PASS (${checks} assertions; mocked only; zero QA mutations).`);

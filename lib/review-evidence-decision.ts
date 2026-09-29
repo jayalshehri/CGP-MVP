@@ -4,6 +4,7 @@ import { todayRiyadh, type EvidenceRecord } from './grc';
 import { isReviewTeam, type ReviewActor, type ReviewWorkItem } from './review-work-queue';
 import { canOfferInlineEvidence } from './review-decision-safety';
 import { loadReviewEvidenceContext, type ReviewEvidenceControl } from './review-work-queue-read';
+import { QA_CERTIFICATION_CONTROL } from './qa-review-certification';
 
 export const evidenceDecisionLabels = { accepted: 'قبول الدليل', changes_requested: 'طلب استكمال', rejected: 'رفض الدليل' } as const;
 export type EvidenceDecision = keyof typeof evidenceDecisionLabels;
@@ -45,13 +46,16 @@ export function evidenceMaterialFingerprint({ record: e, control: c }: EvidenceR
     e.status, e.assigned_reviewer, e.valid_until, c.id, c.framework_id, c.control_code, c.title_ar,
     c.description_ar, c.frameworks.code, c.frameworks.version, c.frameworks.is_active]);
 }
-export function materialFailure(material: EvidenceReviewMaterial, actor: ReviewActor): DecisionFailure | null {
+export function materialFailure(material: EvidenceReviewMaterial, actor: ReviewActor, certificationMode = false): DecisionFailure | null {
   const { record: e, control: c } = material;
   if (!isReviewTeam(actor.role)) return decisionFailure('authorization');
   if (e.uploaded_by === actor.id) return decisionFailure('sod');
   if (!e.uploaded_by || (e.assigned_reviewer && e.assigned_reviewer !== actor.id)) return decisionFailure('authorization');
   if (!e.is_current || !['pending_review', 'under_review'].includes(e.status)) return decisionFailure('stale');
-  if (e.link_id !== null || e.source_control_id !== e.control_id || c.id !== e.control_id || !c.frameworks.is_active || c.frameworks.code === 'QA_SYNTH' || !e.file_path || !e.file_name || !c.title_ar) return decisionFailure('validation');
+  const permittedFramework = certificationMode
+    ? c.frameworks.code === 'QA_SYNTH' && c.control_code === QA_CERTIFICATION_CONTROL
+    : c.frameworks.code !== 'QA_SYNTH';
+  if (e.link_id !== null || e.source_control_id !== e.control_id || c.id !== e.control_id || !c.frameworks.is_active || !permittedFramework || !e.file_path || !e.file_name || !c.title_ar) return decisionFailure('validation');
   return null;
 }
 const defaultDependencies: EvidenceDecisionDependencies = {
@@ -66,28 +70,37 @@ const defaultDependencies: EvidenceDecisionDependencies = {
   execute: async (id, decision, reason) => supabase.rpc('cgp_review_evidence', { p_evidence_id: id, p_decision: decision, p_notes: reason }),
   today: todayRiyadh,
 };
-export async function loadInlineEvidenceMaterial(work: ReviewWorkItem, actor: ReviewActor, deps = defaultDependencies) {
+function certificationDependencies(certificationMode: boolean): EvidenceDecisionDependencies {
+  if (!certificationMode) return defaultDependencies;
+  return { ...defaultDependencies, material: async id => {
+    const context = await loadReviewEvidenceContext(id, null, true);
+    if (context.rows.length !== 1) return null;
+    const record = context.rows[0], control = context.controls.find(c => c.id === record.control_id);
+    return control ? { record, control } : null;
+  } };
+}
+export async function loadInlineEvidenceMaterial(work: ReviewWorkItem, actor: ReviewActor, deps = defaultDependencies, certificationMode = false) {
   if (!canOfferInlineEvidence(work, actor.role)) throw decisionFailure('authorization');
   let freshActor: ReviewActor;
   try { freshActor = await deps.actor(); } catch (error) { const failure = sanitizeDecisionError(error); throw failure.kind === 'backend' ? decisionFailure('authorization') : failure; }
   if (freshActor.id !== actor.id || !isReviewTeam(freshActor.role)) throw decisionFailure('authorization');
-  const material = await deps.material(work.sourceId);
+  const material = await (certificationMode && deps === defaultDependencies ? certificationDependencies(true) : deps).material(work.sourceId);
   if (!material || material.record.control_id !== work.controlId || material.record.id !== work.sourceId || material.control.frameworks.code !== work.framework || material.record.status !== work.state || material.record.assigned_reviewer !== work.assignee) throw decisionFailure('stale');
-  const invalid = materialFailure(material, freshActor);
+  const invalid = materialFailure(material, freshActor, certificationMode);
   if (invalid) throw invalid;
   return material;
 }
-export async function submitInlineEvidenceDecision(expected: EvidenceReviewMaterial, actor: ReviewActor, decision: EvidenceDecision, reason: string, inspected: boolean, deps = defaultDependencies): Promise<DecisionResult> {
+export async function submitInlineEvidenceDecision(expected: EvidenceReviewMaterial, actor: ReviewActor, decision: EvidenceDecision, reason: string, inspected: boolean, deps = defaultDependencies, certificationMode = false): Promise<DecisionResult> {
   if (!Object.hasOwn(evidenceDecisionLabels, decision) || !reason.trim() || !inspected) return { ok: false, failure: decisionFailure('validation') };
-  const invalid = materialFailure(expected, actor);
+  const invalid = materialFailure(expected, actor, certificationMode);
   if (invalid) return { ok: false, failure: invalid };
   let freshActor: ReviewActor;
   try { freshActor = await deps.actor(); } catch (error) { const failure = sanitizeDecisionError(error); return { ok: false, failure: failure.kind === 'backend' ? decisionFailure('authorization') : failure }; }
   if (freshActor.id !== actor.id || !isReviewTeam(freshActor.role)) return { ok: false, failure: decisionFailure('authorization') };
   try {
-    const current = await deps.material(expected.record.id);
+    const current = await (certificationMode && deps === defaultDependencies ? certificationDependencies(true) : deps).material(expected.record.id);
     if (!current || evidenceMaterialFingerprint(current) !== evidenceMaterialFingerprint(expected)) return { ok: false, failure: decisionFailure('stale') };
-    const currentFailure = materialFailure(current, freshActor);
+    const currentFailure = materialFailure(current, freshActor, certificationMode);
     if (currentFailure) return { ok: false, failure: currentFailure };
     if (decision === 'accepted' && current.record.valid_until && current.record.valid_until < deps.today()) return { ok: false, failure: decisionFailure('validation') };
     // The RPC locks/rechecks pending/currentness; the trigger rechecks active

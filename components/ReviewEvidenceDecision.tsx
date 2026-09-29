@@ -19,8 +19,8 @@ export function EvidenceDecisionMaterial({ material, work }: { material: Evidenc
     <EvidenceDownload path={e.file_path} name={e.file_name}/>
   </section>;
 }
-export default function ReviewEvidenceDecision({ work, actor, raw, onClose, onSettled }: {
-  work: ReviewWorkItem; actor: ReviewActor; raw: string; onClose: () => void; onSettled: (result: DecisionResult) => Promise<void>;
+export default function ReviewEvidenceDecision({ work, actor, raw, onClose, onSettled, certificationMode = false }: {
+  work: ReviewWorkItem; actor: ReviewActor; raw: string; onClose: () => void; onSettled: (result: DecisionResult) => Promise<void>; certificationMode?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null), submitting = useRef(false);
   const [material, setMaterial] = useState<EvidenceReviewMaterial | null>(null), [loading, setLoading] = useState(true);
@@ -33,16 +33,16 @@ export default function ReviewEvidenceDecision({ work, actor, raw, onClose, onSe
   }, []);
   useEffect(() => {
     let live = true;
-    void loadInlineEvidenceMaterial(work, actor).then(value => { if (live) setMaterial(value); })
+    void loadInlineEvidenceMaterial(work, actor, undefined, certificationMode).then(value => { if (live) setMaterial(value); })
       .catch(cause => { if (live) { setError(sanitizeDecisionError(cause).message); setBlocked(true); } })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [work, actor]);
+  }, [work, actor, certificationMode]);
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!material || blocked || submitting.current) return;
     submitting.current = true; setBusy(true); setError('');
-    const result = await submitInlineEvidenceDecision(material, actor, decision, reason, inspected);
+    const result = await submitInlineEvidenceDecision(material, actor, decision, reason, inspected, undefined, certificationMode);
     if (!result.ok) { setError(result.failure.message); if (result.failure.refresh) setBlocked(true); }
     // A successful mutation is never relabeled as failed just because refreshing
     // the queue fails. The parent owns explicit saved/unavailable feedback.
@@ -63,6 +63,6 @@ export default function ReviewEvidenceDecision({ work, actor, raw, onClose, onSe
       <section className="review-decision-consequence" aria-label="تأكيد أثر القرار"><strong>تأكيد {evidenceDecisionLabels[decision]} للدليل #{material.record.id} — إصدار {material.record.version_number}</strong><p>{evidenceStateLabels[material.record.status]} ← {evidenceDecisionLabels[decision]}</p><p>سيسجل القرار وسببه في تاريخ مراجعة الدليل، وقد يحدّث حالة طلبه وملخص الأدلة. لا يعتمد امتثال الضابط ولا يغلق دورة تقييم أو ملاحظة.</p></section>
       <button type="submit" className="review-inline-primary" disabled={busy || !inspected || !reason.trim() || (decision === 'accepted' && expired)}>{busy ? 'جاري تأكيد القرار…' : 'تأكيد القرار وتسجيله'}</button>
     </form>}
-    <footer><Link href={reviewWorkHref(work, raw)} aria-disabled={busy} onClick={event => { if (busy) event.preventDefault(); }}>فتح السجل الكامل ←</Link><button type="button" disabled={busy} onClick={onClose}>إلغاء / العودة إلى القائمة</button></footer>
+    <footer>{!certificationMode && <Link href={reviewWorkHref(work, raw)} aria-disabled={busy} onClick={event => { if (busy) event.preventDefault(); }}>فتح السجل الكامل ←</Link>}<button type="button" disabled={busy} onClick={onClose}>إلغاء / العودة إلى القائمة</button></footer>
   </dialog>;
 }

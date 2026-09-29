@@ -4,6 +4,7 @@ import type { AssessmentItem } from './assessment';
 import type { SharedFinding, CorrectiveAction } from './findings';
 import type { EvidenceRecord, ReviewCycle } from './grc';
 import { isReviewTeam, type ReadSource, type ReviewActor, type ReviewControl, type ReviewCycleRecord, type ReviewFramework, type ReviewMapping, type ReviewSnapshot } from './review-work-queue';
+import { QA_CERTIFICATION_CONTROL } from './qa-review-certification';
 
 type ReadResult = { data: unknown; error: unknown; count?: number | null };
 // Exact count detects silent truncation even when the server row cap is below
@@ -63,7 +64,7 @@ export async function loadReviewWorkSnapshot(actor: ReviewActor): Promise<Review
 
 // Both the record workspace and context-verified inline dialog use the same
 // authorized register. Mutation handlers remain in the existing audited RPC.
-export async function loadReviewEvidenceContext(id: number | null, linkId: number | null) {
+export async function loadReviewEvidenceContext(id: number | null, linkId: number | null, certificationMode = false) {
   const rows = await readReviewPages<EvidenceRecord>((from, to) => {
     let query = supabase.rpc('grc_evidence_register', {}, { count: 'exact' }).select('*').order('id').order('control_id').order('link_id', { nullsFirst: true });
     if (id !== null) query = query.eq('id', id);
@@ -72,7 +73,9 @@ export async function loadReviewEvidenceContext(id: number | null, linkId: numbe
   });
   const controls = await readReviewBatches<ReviewEvidenceControl>(rows.map(e => e.control_id), (ids, from, to) => supabase.from('controls')
     .select('id,framework_id,control_code,title_ar,description_ar,frameworks!inner(id,code,name_ar,version,is_active)', { count: 'exact' }).in('id', ids).order('id').range(from, to));
-  const allowed = new Set(controls.filter(c => c.frameworks.is_active && c.frameworks.code !== 'QA_SYNTH').map(c => c.id));
+  const allowed = new Set(controls.filter(c => c.frameworks.is_active && (certificationMode
+    ? c.frameworks.code === 'QA_SYNTH' && c.control_code === QA_CERTIFICATION_CONTROL
+    : c.frameworks.code !== 'QA_SYNTH')).map(c => c.id));
   return { rows: rows.filter(e => allowed.has(e.control_id)), controls };
 }
 

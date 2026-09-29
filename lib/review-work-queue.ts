@@ -4,6 +4,7 @@ import type { SharedFinding, CorrectiveAction } from './findings';
 import type { EvidenceRecord, ReviewCycle } from './grc';
 import { assessmentItemHref, itemNeedsInput } from './assessment-journey';
 import { isBusinessFramework } from './compliance-frameworks';
+import { QA_CERTIFICATION_CONTROL } from './qa-review-certification';
 
 export const workTypeLabels = {
   EVIDENCE_REVIEW: 'مراجعة دليل',
@@ -79,7 +80,7 @@ export function reviewWorkHref(item: ReviewWorkItem, raw = '') {
 
 // Read projection only, never a replacement for the RPC's locked revalidation.
 // Each row retains its authoritative source identity/state; no persisted task state.
-export function buildReviewWorkQueue(snapshot: ReviewSnapshot, actor: ReviewActor, today: string): CategoryResult[] {
+export function buildReviewWorkQueue(snapshot: ReviewSnapshot, actor: ReviewActor, today: string, certificationMode = false): CategoryResult[] {
   const categories: CategoryResult[] = (Object.keys(workTypeLabels) as WorkType[]).map(type => {
     const error = dependencies[type].find(source => snapshot.errors[source]);
     return { type, status: error ? 'unavailable' : 'ready', error: error ? snapshot.errors[error]! : null, items: [] };
@@ -88,8 +89,9 @@ export function buildReviewWorkQueue(snapshot: ReviewSnapshot, actor: ReviewActo
   const catalog = new Map(snapshot.frameworks.map(f => [f.id, f]));
   const controls = new Map(snapshot.controls.map(c => [c.id, c]));
   const framework = (id: number | null) => id === null ? null : catalog.get(id);
-  const activeFramework = (id: number) => { const f = framework(id); return !!f?.is_active && isBusinessFramework(f.code); };
-  const activeControl = (id: number | null) => id !== null && !!controls.get(id) && activeFramework(controls.get(id)!.framework_id);
+  const activeFramework = (id: number) => { const f = framework(id); return !!f?.is_active && (certificationMode ? f.code === 'QA_SYNTH' : isBusinessFramework(f.code)); };
+  const activeControl = (id: number | null) => id !== null && !!controls.get(id) && activeFramework(controls.get(id)!.framework_id) &&
+    (!certificationMode || controls.get(id)!.control_code === QA_CERTIFICATION_CONTROL);
   const controlContext = (id: number | null) => {
     const c = id === null ? null : controls.get(id);
     return { framework: c ? framework(c.framework_id)?.code ?? null : null, controlId: id, controlCode: c?.control_code ?? null };
@@ -117,11 +119,13 @@ export function buildReviewWorkQueue(snapshot: ReviewSnapshot, actor: ReviewActo
     const item = base('EVIDENCE_REVIEW', e.id, e.evidence_name || e.file_name || `دليل #${e.id}`, e.status, e.control_id, e.assigned_reviewer, null);
     item.key += `:${e.link_id ?? 'direct'}`;
     item.sourceModel = 'evidence';
-    item.sourceRoute = `/review?evidence=${e.id}${e.link_id ? `&link=${e.link_id}` : ''}`;
+    item.sourceRoute = certificationMode ? '/review/qa-certification' : `/review?evidence=${e.id}${e.link_id ? `&link=${e.link_id}` : ''}`;
     item.actionLabel = 'فتح مراجعة الدليل';
     item.reason = e.assigned_reviewer ? 'أنت المراجع المكلّف، ولست مقدم الدليل.' : 'دليل غير مسند؛ متاح لمراجع مستقل مخول.';
     add(item);
   }
+  if (certificationMode) return categories.map(category => category.type === 'EVIDENCE_REVIEW'
+    ? category : { ...category, status: 'ready', error: null, items: [] });
   const cycleItems = new Map<number, AssessmentItem[]>();
   for (const item of snapshot.items) cycleItems.set(item.cycle_id, [...(cycleItems.get(item.cycle_id) ?? []), item]);
   const links = new Map<number, number[]>();
