@@ -1,6 +1,6 @@
 import type { UserRole } from './auth';
 import type { AssessmentCycle, AssessmentItem } from './assessment';
-import type { SharedFinding, CorrectiveAction } from './findings';
+import { severityLabels, type SharedFinding, type CorrectiveAction } from './findings';
 import type { EvidenceRecord, ReviewCycle } from './grc';
 import { assessmentItemHref, itemNeedsInput } from './assessment-journey';
 import { isBusinessFramework } from './compliance-frameworks';
@@ -17,6 +17,16 @@ export const workTypeLabels = {
   PERIODIC_REVIEW_FOLLOWUP: 'متابعة مراجعة دورية',
 } as const;
 export type WorkType = keyof typeof workTypeLabels;
+export const workDecisionModes: Record<WorkType, 'INLINE_EVIDENCE' | 'OPEN_RECORD_REQUIRED' | 'NAVIGATION_ONLY'> = {
+  EVIDENCE_REVIEW: 'INLINE_EVIDENCE',
+  ASSESSMENT_ITEM_REVIEW: 'OPEN_RECORD_REQUIRED',
+  ASSESSMENT_REVIEW_COMPLETION: 'OPEN_RECORD_REQUIRED',
+  ASSESSMENT_APPROVAL: 'OPEN_RECORD_REQUIRED',
+  CORRECTIVE_ACTION_VERIFICATION: 'OPEN_RECORD_REQUIRED',
+  FINDING_VERIFICATION: 'OPEN_RECORD_REQUIRED',
+  FINDING_CLOSURE: 'OPEN_RECORD_REQUIRED',
+  PERIODIC_REVIEW_FOLLOWUP: 'NAVIGATION_ONLY',
+};
 export type Responsibility = 'assigned' | 'independent_team';
 export const responsibilityLabels = { assigned: 'مسند إليّ', independent_team: 'متاح للفريق المستقل' };
 export type ReviewActor = { id: string; role: UserRole };
@@ -24,11 +34,12 @@ export type ReviewFramework = { id: number; code: string; is_active: boolean };
 export type ReviewControl = { id: number; framework_id: number; control_code: string; title_ar: string };
 export type ReviewCycleRecord = AssessmentCycle;
 export type ReviewMapping = { source_id: number; target_id: number; validation_status: string };
-export type ReadSource = 'frameworks' | 'controls' | 'evidence' | 'cycles' | 'items' | 'itemLinks' | 'mappings' | 'findings' | 'actions' | 'periodic';
+export type ReadSource = 'frameworks' | 'controls' | 'evidence' | 'cycles' | 'items' | 'itemLinks' | 'mappings' | 'findings' | 'actions' | 'periodic' | 'people';
+export type ReviewPerson = { user_id: string; display_name: string | null };
 export type ReviewSnapshot = {
   frameworks: ReviewFramework[]; controls: ReviewControl[]; evidence: EvidenceRecord[];
   cycles: ReviewCycleRecord[]; items: AssessmentItem[]; itemLinks: { item_id: number; evidence_id: number }[];
-  mappings: ReviewMapping[]; findings: SharedFinding[]; actions: CorrectiveAction[]; periodic: ReviewCycle[];
+  mappings: ReviewMapping[]; findings: SharedFinding[]; actions: CorrectiveAction[]; periodic: ReviewCycle[]; people: ReviewPerson[];
   errors: Partial<Record<ReadSource, string>>;
 };
 export type ReviewWorkItem = {
@@ -37,6 +48,7 @@ export type ReviewWorkItem = {
   framework: string | null; controlId: number | null; controlCode: string | null;
   itemId: number | null; cycleId: number | null; title: string; state: string;
   responsibility: Responsibility; assignee: string | null; dueDate: string | null;
+  ownerLabel?: string; reviewerLabel?: string; severityLabel?: string;
   sourceRoute: string; returnContext: string; actionLabel: string; reason: string;
 };
 export type CategoryResult = { type: WorkType; status: 'ready' | 'unavailable'; error: string | null; items: ReviewWorkItem[] };
@@ -46,10 +58,10 @@ const dependencies: Record<WorkType, ReadSource[]> = {
   ASSESSMENT_ITEM_REVIEW: ['frameworks', 'controls', 'cycles', 'items'],
   ASSESSMENT_REVIEW_COMPLETION: ['frameworks', 'controls', 'cycles', 'items', 'itemLinks', 'evidence', 'mappings'],
   ASSESSMENT_APPROVAL: ['frameworks', 'controls', 'cycles', 'items', 'itemLinks', 'evidence', 'mappings'],
-  CORRECTIVE_ACTION_VERIFICATION: ['frameworks', 'controls', 'findings', 'actions', 'evidence', 'mappings'],
-  FINDING_VERIFICATION: ['frameworks', 'controls', 'findings', 'actions', 'evidence', 'mappings'],
-  FINDING_CLOSURE: ['frameworks', 'controls', 'findings', 'actions', 'evidence', 'mappings'],
-  PERIODIC_REVIEW_FOLLOWUP: ['frameworks', 'controls', 'periodic'],
+  CORRECTIVE_ACTION_VERIFICATION: ['frameworks', 'controls', 'findings', 'actions', 'evidence', 'mappings', 'people'],
+  FINDING_VERIFICATION: ['frameworks', 'controls', 'findings', 'actions', 'evidence', 'mappings', 'people'],
+  FINDING_CLOSURE: ['frameworks', 'controls', 'findings', 'actions', 'evidence', 'mappings', 'people'],
+  PERIODIC_REVIEW_FOLLOWUP: ['frameworks', 'controls', 'periodic', 'people'],
 };
 
 // A bounded, internal-only return URL. Never accept arbitrary redirect URLs.
@@ -88,6 +100,8 @@ export function buildReviewWorkQueue(snapshot: ReviewSnapshot, actor: ReviewActo
   if (!isReviewTeam(actor.role)) return categories.map(category => ({ ...category, status: 'unavailable', error: 'هذا الدور ليس مخولًا بأعمال المراجعة والقرار.', items: [] }));
   const catalog = new Map(snapshot.frameworks.map(f => [f.id, f]));
   const controls = new Map(snapshot.controls.map(c => [c.id, c]));
+  const people = new Map((snapshot.people ?? []).map(person => [person.user_id, person.display_name?.trim() || null]));
+  const personLabel = (id: string | null) => !id ? 'غير محدد' : id === actor.id ? 'أنت' : people.get(id) ?? 'الاسم غير متاح';
   const framework = (id: number | null) => id === null ? null : catalog.get(id);
   const activeFramework = (id: number) => { const f = framework(id); return !!f?.is_active && (certificationMode ? f.code === 'QA_SYNTH' : isBusinessFramework(f.code)); };
   const activeControl = (id: number | null) => id !== null && !!controls.get(id) && activeFramework(controls.get(id)!.framework_id) &&
@@ -173,17 +187,22 @@ export function buildReviewWorkQueue(snapshot: ReviewSnapshot, actor: ReviewActo
       if (action.status !== 'completed' || action.verification_status !== 'pending' || action.owner_id === actor.id || action.completed_by === actor.id || finding.created_by === actor.id) continue;
       const work = findingBase('CORRECTIVE_ACTION_VERIFICATION', action.id, `${finding.reference_code} — ${action.title}`, action.verification_status, null, action.due_date);
       work.sourceModel = 'grc_corrective_actions'; work.sourceRoute += `&action=${action.id}`;
+      work.ownerLabel = personLabel(action.owner_id); work.reviewerLabel = 'فريق تحقق مستقل'; work.severityLabel = severityLabels[finding.severity];
       work.actionLabel = 'فتح تحقق الإجراء'; work.reason = validEvidence(action.verification_evidence_id, finding.control_id, actor.id) ? 'إجراء مكتمل؛ أنت مخول بالتحقق ومستقل عن المنشئ والمالك والمنفذ.' : 'دليل الإجراء يحتاج استكمالًا؛ القرار المستقل داخل مساحة الإجراء.'; add(work);
     }
     const independent = finding.created_by !== actor.id && finding.owner_id !== actor.id && !actions.some(a => a.owner_id === actor.id || a.completed_by === actor.id);
     const actionsAccepted = actions.every(a => a.status === 'completed' && a.verification_status === 'accepted');
     if (finding.verification_status === 'pending' && independent && actionsAccepted) {
       const work = findingBase('FINDING_VERIFICATION', finding.id, `${finding.reference_code} — ${finding.title}`, finding.verification_status, null, finding.due_date);
+      work.sourceRoute += '&decision=verification';
+      work.ownerLabel = personLabel(finding.owner_id); work.reviewerLabel = 'فريق تحقق مستقل'; work.severityLabel = severityLabels[finding.severity];
       work.actionLabel = 'فتح تحقق الملاحظة'; work.reason = 'الإجراءات مقبولة؛ متاح لفريق تحقق مستقل، وليس تكليفًا شخصيًا.'; add(work);
     }
     if (finding.verification_status === 'accepted' && finding.verified_by === actor.id && actionsAccepted &&
       validEvidence(finding.verification_evidence_id, finding.control_id, actor.id) && actions.every(a => validEvidence(a.verification_evidence_id, finding.control_id, actor.id))) {
       const work = findingBase('FINDING_CLOSURE', finding.id, `${finding.reference_code} — ${finding.title}`, finding.verification_status, finding.verified_by, finding.due_date);
+      work.sourceRoute += '&decision=closure';
+      work.ownerLabel = personLabel(finding.owner_id); work.reviewerLabel = personLabel(finding.verified_by); work.severityLabel = severityLabels[finding.severity];
       work.actionLabel = 'فتح قرار الإغلاق'; work.reason = 'أنت المتحقق المسجل؛ الإغلاق يتطلب قرارًا صريحًا منفصلًا.'; add(work);
     }
   }
@@ -192,6 +211,7 @@ export function buildReviewWorkQueue(snapshot: ReviewSnapshot, actor: ReviewActo
     const work = base('PERIODIC_REVIEW_FOLLOWUP', cycle.id, `مراجعة دورية #${cycle.id}`, cycle.status, cycle.control_id, cycle.reviewer_id, cycle.due_date);
     work.sourceModel = 'control_review_cycles'; work.cycleId = cycle.id;
     work.sourceRoute = `/controls/${cycle.control_id}?tab=overview&review_cycle=${cycle.id}`;
+    work.ownerLabel = personLabel(cycle.owner_id); work.reviewerLabel = personLabel(cycle.reviewer_id);
     work.actionLabel = 'متابعة المراجعة الدورية'; work.reason = 'أنت مراجع الدورة المستحقة؛ استكمال الطلبات والقرار داخل Control 360.'; add(work);
   }
   return categories;

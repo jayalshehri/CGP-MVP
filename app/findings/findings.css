@@ -32,6 +32,7 @@
 .findings-section-heading { align-items:center; border-top:1px solid var(--cgp-line); padding-top:18px; margin-top:18px; }
 .findings-actions { display:grid; gap:12px; margin:14px 0; }
 .findings-action-card { border:1px solid var(--cgp-line); border-radius:10px; padding:16px; }
+.findings-action-card[id],.findings-lifecycle[id] { scroll-margin-top:24px; }
 .findings-action-card h4 { font-size:15px; }
 .findings-action-card small { color:var(--cgp-muted); }
 .findings-action-controls,.findings-lifecycle { display:grid; gap:10px; border-top:1px solid var(--cgp-line); margin-top:14px; padding-top:14px; }

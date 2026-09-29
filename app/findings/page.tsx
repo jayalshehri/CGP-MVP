@@ -51,6 +51,9 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   const origin=params.get('from')==='workspace'?params.get('origin')?.toUpperCase():null;
   const originCode=origin&&origin===frameworkCode&&(ASSESSMENT_ROUTES.some(route=>route.code===origin)||origin==='QA_SYNTH')?origin:null;
   const findingFromUrl=Number(params.get('finding'));
+  const hasRequestedFinding=params.has('finding');
+  const actionFromUrl=Number(params.get('action'));
+  const decisionFromUrl=params.get('decision');
   const assessmentHref=assessmentHrefFor(frameworkCode);
   const cycleFromUrl=Number(params.get('cycle'));
   const hasAssessmentContext=sourceFromUrl==='assessment'&&assessmentHref&&Number.isSafeInteger(cycleFromUrl)&&cycleFromUrl>0;
@@ -114,10 +117,10 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
     setFindings(allFindings);
     setActions(allActions);
     setPeople((directory?.data??[]) as Person[]);
-    setSelectedId(previous=>Number.isSafeInteger(findingFromUrl)&&findingFromUrl>0&&allFindings.some(f=>f.id===findingFromUrl)?findingFromUrl:previous&&allFindings.some(f=>f.id===previous)?previous:
+    setSelectedId(previous=>hasRequestedFinding?(Number.isSafeInteger(findingFromUrl)&&findingFromUrl>0&&allFindings.some(f=>f.id===findingFromUrl)?findingFromUrl:null):previous&&allFindings.some(f=>f.id===previous)?previous:
       allFindings.find(f=>f.source_type===sourceFromUrl&&f.source_record_id===idFromUrl)?.id??
       (Number.isSafeInteger(idFromUrl)&&idFromUrl>0?null:allFindings[0]?.id??null));
-  },[sourceFromUrl,idFromUrl,findingFromUrl,frameworkCode,controlId,hasControl]);
+  },[sourceFromUrl,idFromUrl,findingFromUrl,hasRequestedFinding,frameworkCode,controlId,hasControl]);
 
   useEffect(()=>{
     let active=true;
@@ -136,6 +139,14 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
 
   const selected=findings.find(f=>f.id===selectedId)??null;
   const selectedActions=actions.filter(a=>a.finding_id===selectedId);
+  const exactAction=Number.isSafeInteger(actionFromUrl)&&actionFromUrl>0&&selectedActions.some(a=>a.id===actionFromUrl);
+  useEffect(()=>{
+    if(!selected||!hasRequestedFinding)return;
+    const target=exactAction?`finding-action-${actionFromUrl}`:decisionFromUrl==='verification'||decisionFromUrl==='closure'?'finding-decision':null;
+    if(!target)return;
+    const frame=requestAnimationFrame(()=>document.getElementById(target)?.scrollIntoView({block:'start'}));
+    return()=>cancelAnimationFrame(frame);
+  },[selected,exactAction,actionFromUrl,decisionFromUrl,hasRequestedFinding]);
   const visible=useMemo(()=>findings.filter(f=>{
     const query=search.trim().toLocaleLowerCase();
     return (!query||`${f.reference_code} ${f.title} ${f.description}`.toLocaleLowerCase().includes(query))
@@ -156,7 +167,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
     return()=>{active=false;};
   },[role,sourceFromUrl,idFromUrl,actor]);
   const canCreate=roleCanWork(role)&&(teamRole(role)||(sourceFromUrl==='assessment'&&ownerSourceAllowed?.actor===actor&&ownerSourceAllowed?.id===idFromUrl));
-  const selectFinding=(findingId:number)=>{const next=new URLSearchParams(params.toString());next.set('finding',String(findingId));router.push(`/findings?${next.toString()}`,{scroll:false});};
+  const selectFinding=(findingId:number)=>{const next=new URLSearchParams(params.toString());next.set('finding',String(findingId));next.delete('action');next.delete('decision');router.push(`/findings?${next.toString()}`,{scroll:false});};
 
   async function run(action:string,finding:SharedFinding|null,payload:Record<string,unknown>){
     if(busy)return false;
@@ -254,6 +265,10 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
       </tr>)}</tbody></table></div>
       {visible.length===0&&<p className="workflow-empty">لا توجد ملاحظات مطابقة. تبقى نتائج التقييم القديمة متاحة في صفحات التقييم نفسها.</p>}
     </section>
+    {params.has('finding')&&!selected&&!loading&&<p role="alert" className="findings-error">السجل المطلوب غير متاح أو تغيرت حالته ضمن صلاحياتك. <Link href={reviewContextReturn(new URLSearchParams(params.toString()))??'/findings'}>العودة إلى القائمة ←</Link></p>}
+    {selected&&params.has('action')&&!exactAction&&<p role="alert" className="findings-error">الإجراء المطلوب غير متاح داخل هذه الملاحظة. تحقق من حالة السجل قبل اتخاذ قرار.</p>}
+    {selected&&decisionFromUrl==='verification'&&selected.verification_status!=='pending'&&<p role="status" className="findings-context">حالة الملاحظة تغيرت منذ إضافتها لقائمة التحقق. راجع السجل الحالي قبل أي قرار.</p>}
+    {selected&&decisionFromUrl==='closure'&&(selected.status!=='pending_verification'||selected.verification_status!=='accepted')&&<p role="status" className="findings-context">لم تعد هذه الملاحظة في حالة انتظار الإغلاق. يعرض السجل حالتها المعتمدة الحالية.</p>}
     {selected&&<FindingDetail key={`${selected.id}-${selected.revision}`} finding={selected} navigationContext={params.get('return_context')??params.toString()}
       actions={selectedActions} actor={actor} role={role} people={people} busy={busy} run={run}/>}
   </main>;
@@ -336,7 +351,7 @@ function FindingDetail({finding,actions,actor,role,people,busy,run,navigationCon
       <div className="findings-actions">{actions.map(action=><CorrectiveActionCard key={`${action.id}-${action.revision}`}
         action={action} finding={finding} actor={actor} role={role} busy={busy}
         evidence={evidence} run={run}/>)}</div>}
-    {canFollow&&finding.status!=='closed'&&<div className="findings-lifecycle">
+    {canFollow&&finding.status!=='closed'&&<div id="finding-decision" className="findings-lifecycle">
       <h3>دورة الملاحظة</h3>
       <label>سبب القرار<textarea value={reason} onChange={e=>setReason(e.target.value)}/></label>
       {finding.status==='open'&&<button disabled={busy} onClick={()=>void run('start_treatment',finding,{})}>بدء المعالجة</button>}
@@ -373,7 +388,7 @@ function CorrectiveActionCard({action,finding,actor,role,busy,evidence,run}:{
   const canComplete=canWork&&['open','in_treatment'].includes(finding.status)&&action.status!=='completed';
   const canReview=teamRole(role)&&finding.status==='pending_verification'&&action.status==='completed'
     &&action.owner_id!==actor&&action.completed_by!==actor&&finding.created_by!==actor;
-  return <article className="findings-action-card"><header><div><h4>{action.title}</h4><p>{actionStatusLabels[action.status]} · التحقق: {action.verification_status==='accepted'?'مقبول':action.verification_status==='rejected'?'مرفوض':action.verification_status==='pending'?'بانتظار القرار':'لم يبدأ'}</p></div>
+  return <article id={`finding-action-${action.id}`} className="findings-action-card"><header><div><h4>{action.title}</h4><p>{actionStatusLabels[action.status]} · التحقق: {action.verification_status==='accepted'?'مقبول':action.verification_status==='rejected'?'مرفوض':action.verification_status==='pending'?'بانتظار القرار':'لم يبدأ'}</p></div>
     <span>#{action.id}</span></header><p>{action.description}</p>
     <small>الاستحقاق: {formatComplianceDate(action.due_date)}{action.completed_at&&` · أُكمل ${formatComplianceDate(action.completed_at)}`}</small>
     {action.completion_note&&<p>إفادة الإكمال: {action.completion_note}</p>}

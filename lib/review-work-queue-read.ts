@@ -3,7 +3,7 @@ import { cycleColumns } from './assessment';
 import type { AssessmentItem } from './assessment';
 import type { SharedFinding, CorrectiveAction } from './findings';
 import type { EvidenceRecord, ReviewCycle } from './grc';
-import { isReviewTeam, type ReadSource, type ReviewActor, type ReviewControl, type ReviewCycleRecord, type ReviewFramework, type ReviewMapping, type ReviewSnapshot } from './review-work-queue';
+import { isReviewTeam, type ReadSource, type ReviewActor, type ReviewControl, type ReviewCycleRecord, type ReviewFramework, type ReviewMapping, type ReviewPerson, type ReviewSnapshot } from './review-work-queue';
 import { QA_CERTIFICATION_CONTROL } from './qa-review-certification';
 
 type ReadResult = { data: unknown; error: unknown; count?: number | null };
@@ -30,9 +30,9 @@ export async function readReviewBatches<T>(ids: number[], query: (ids: number[],
   }
   return rows;
 }
-const emptySnapshot = (): ReviewSnapshot => ({ frameworks: [], controls: [], evidence: [], cycles: [], items: [], itemLinks: [], mappings: [], findings: [], actions: [], periodic: [], errors: {} });
+const emptySnapshot = (): ReviewSnapshot => ({ frameworks: [], controls: [], evidence: [], cycles: [], items: [], itemLinks: [], mappings: [], findings: [], actions: [], periodic: [], people: [], errors: {} });
 const itemColumns = 'id,cycle_id,control_id,control_code,title_ar,description_ar,domain_ar,subdomain_code,is_scoring,compliance_status,notes,owner_id,expected_compliance_date,corrective_action,review_status,revision';
-const sourceLabels: Record<ReadSource, string> = { frameworks: 'الأطر', controls: 'الضوابط', evidence: 'سجل الأدلة', cycles: 'دورات التقييم', items: 'بنود التقييم', itemLinks: 'ارتباطات أدلة التقييم', mappings: 'المواءمات المعتمدة', findings: 'الملاحظات المشتركة', actions: 'الإجراءات التصحيحية', periodic: 'المراجعات الدورية' };
+const sourceLabels: Record<ReadSource, string> = { frameworks: 'الأطر', controls: 'الضوابط', evidence: 'سجل الأدلة', cycles: 'دورات التقييم', items: 'بنود التقييم', itemLinks: 'ارتباطات أدلة التقييم', mappings: 'المواءمات المعتمدة', findings: 'الملاحظات المشتركة', actions: 'الإجراءات التصحيحية', periodic: 'المراجعات الدورية', people: 'أسماء المسؤولين' };
 export type ReviewEvidenceControl = ReviewControl & { description_ar: string | null; frameworks: ReviewFramework & { name_ar: string; version: string } };
 export async function loadReviewWorkSnapshot(actor: ReviewActor): Promise<ReviewSnapshot> {
   // No queries for excluded roles. UI checks do not broaden the /review gate.
@@ -41,7 +41,7 @@ export async function loadReviewWorkSnapshot(actor: ReviewActor): Promise<Review
   async function capture<T>(source: ReadSource, query: () => Promise<T[]>) {
     try { return await query(); } catch { snapshot.errors[source] = `تعذر تحميل ${sourceLabels[source]} ضمن صلاحياتك؛ مؤشرات الفئات المرتبطة غير متاحة.`; return []; }
   }
-  const [frameworks, controls, evidence, cycles, mappings, findings, periodic] = await Promise.all([
+  const [frameworks, controls, evidence, cycles, mappings, findings, periodic, people] = await Promise.all([
     capture('frameworks', () => readReviewPages<ReviewFramework>((from, to) => supabase.from('frameworks').select('id,code,is_active', { count: 'exact' }).order('id').range(from, to))),
     capture('controls', () => readReviewPages<ReviewControl>((from, to) => supabase.from('controls').select('id,framework_id,control_code,title_ar', { count: 'exact' }).order('id').range(from, to))),
     capture('evidence', () => readReviewPages<EvidenceRecord>((from, to) => supabase.rpc('grc_evidence_register', {}, { count: 'exact' }).select('*').eq('is_current', true).order('id').order('control_id').order('link_id', { nullsFirst: true }).range(from, to))),
@@ -50,8 +50,9 @@ export async function loadReviewWorkSnapshot(actor: ReviewActor): Promise<Review
     capture('mappings', () => readReviewPages<ReviewMapping>((from, to) => supabase.rpc('cgp_crosswalk', {}, { count: 'exact' }).select('id,source_id,target_id,validation_status').eq('validation_status', 'approved').order('id').range(from, to))),
     capture('findings', () => readReviewPages<SharedFinding>((from, to) => supabase.from('grc_findings').select('*', { count: 'exact' }).eq('status', 'pending_verification').order('id').range(from, to))),
     capture('periodic', () => readReviewPages<ReviewCycle>((from, to) => supabase.from('control_review_cycles').select('id,control_id,owner_id,reviewer_id,due_date,status,frequency,completed_at,notes', { count: 'exact' }).eq('status', 'open').order('id').range(from, to))),
+    capture('people', () => readReviewPages<ReviewPerson>((from, to) => supabase.from('profiles').select('user_id,display_name', { count: 'exact' }).eq('is_active', true).order('user_id').range(from, to))),
   ]);
-  Object.assign(snapshot, { frameworks, controls, evidence, cycles, mappings, findings, periodic });
+  Object.assign(snapshot, { frameworks, controls, evidence, cycles, mappings, findings, periodic, people });
   const [items, actions] = await Promise.all([
     capture('items', () => readReviewBatches<AssessmentItem>(cycles.map(c => c.id), (ids, from, to) => supabase.from('assessment_items').select(itemColumns, { count: 'exact' }).in('cycle_id', ids).order('id').range(from, to))),
     capture('actions', () => readReviewBatches<CorrectiveAction>(findings.map(f => f.id), (ids, from, to) => supabase.from('grc_corrective_actions').select('*', { count: 'exact' }).in('finding_id', ids).order('id').range(from, to))),

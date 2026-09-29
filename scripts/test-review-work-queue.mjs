@@ -54,11 +54,12 @@ const view = load('components/ReviewWorkQueue.tsx').ReviewQueueView;
 const actor = { id: 'reviewer', role: 'cybersecurity_team' }, today = '2026-09-29';
 const empty = () => ({ frameworks: [{ id: 1, code: 'DCC', is_active: true }, { id: 2, code: 'QA_SYNTH', is_active: true }, { id: 3, code: 'OLD_ECC', is_active: false }], controls: [
   { id: 1, framework_id: 1, control_code: '1-1-1', title_ar: 'ضابط اصطناعي' }, { id: 2, framework_id: 1, control_code: '2-1-1', title_ar: 'مصدر مشاركة' },
-  { id: 3, framework_id: 2, control_code: 'QA-1', title_ar: 'اختبار' }, { id: 4, framework_id: 3, control_code: 'OLD-1', title_ar: 'مؤرشف' }], evidence: [], cycles: [], items: [], itemLinks: [], mappings: [], findings: [], actions: [], periodic: [], errors: {} });
+  { id: 3, framework_id: 2, control_code: 'QA-1', title_ar: 'اختبار' }, { id: 4, framework_id: 3, control_code: 'OLD-1', title_ar: 'مؤرشف' }], evidence: [], cycles: [], items: [], itemLinks: [], mappings: [], findings: [], actions: [], periodic: [], people: [
+    { user_id: 'owner', display_name: 'مالك الاختبار' }, { user_id: actor.id, display_name: 'المراجع الحالي' }], errors: {} });
 const cycle = (id, state, extra = {}) => ({ id, framework_id: 1, status: state, scope_name: 'نطاق اختبار', reviewer_id: actor.id, assessor_id: 'assessor', approver_id: actor.id, due_date: '2026-09-30', ...extra });
 const item = (id, cycleId, extra = {}) => ({ id, cycle_id: cycleId, control_id: 1, title_ar: 'متطلب اصطناعي', is_scoring: true, review_status: 'accepted', compliance_status: 'not_implemented', notes: 'مبرر', owner_id: 'owner', expected_compliance_date: '2026-10-01', corrective_action: 'معالجة', ...extra });
 const evidence = (id, extra = {}) => ({ id, control_id: 1, source_control_id: 1, link_id: null, is_current: true, uploaded_by: 'owner', assigned_reviewer: null, status: 'pending_review', valid_until: null, file_name: 'test.pdf', ...extra });
-const finding = (id, extra = {}) => ({ id, framework_id: 1, control_id: 1, source_type: 'assessment', assessment_item_id: 20, assessment_cycle_id: 10, reference_code: 'TEST-' + id, title: 'ملاحظة اصطناعية', created_by: 'creator', owner_id: 'owner', status: 'pending_verification', verification_status: 'pending', verification_evidence_id: null, due_date: null, ...extra });
+const finding = (id, extra = {}) => ({ id, framework_id: 1, control_id: 1, source_type: 'assessment', assessment_item_id: 20, assessment_cycle_id: 10, reference_code: 'TEST-' + id, title: 'ملاحظة اصطناعية', severity: 'unclassified', created_by: 'creator', owner_id: 'owner', status: 'pending_verification', verification_status: 'pending', verification_evidence_id: null, due_date: null, ...extra });
 const action = (id, parent, extra = {}) => ({ id, finding_id: parent, title: 'إجراء اصطناعي', owner_id: 'owner', completed_by: 'owner', status: 'completed', verification_status: 'pending', verification_evidence_id: null, due_date: null, ...extra });
 const all = results => results.flatMap(category => category.items);
 const classify = data => work.buildReviewWorkQueue(data, actor, today);
@@ -72,11 +73,16 @@ data.findings = [finding(30), finding(31), finding(32, { verification_status: 'a
 data.actions = [action(40, 30)];
 data.periodic = [{ id: 50, control_id: 1, reviewer_id: actor.id, owner_id: 'owner', status: 'open', due_date: today }];
 const results = classify(data), rows = all(results);
+for (const type of ['CORRECTIVE_ACTION_VERIFICATION', 'FINDING_VERIFICATION', 'FINDING_CLOSURE']) check(work.workDecisionModes[type] === 'OPEN_RECORD_REQUIRED', type + ' decision remains in authoritative record');
+check(work.workDecisionModes.PERIODIC_REVIEW_FOLLOWUP === 'NAVIGATION_ONLY', 'periodic review is navigation-only from queue');
 for (const type of Object.keys(work.workTypeLabels)) check(rows.some(row => row.type === type), 'classifies ' + type);
 check(rows.find(row => row.type === 'EVIDENCE_REVIEW' && row.sourceId === 1).responsibility === 'independent_team', 'unassigned evidence is team eligible, never personal');
 check(rows.find(row => row.type === 'EVIDENCE_REVIEW' && row.sourceId === 2).assignee === actor.id, 'authoritative evidence assignment');
 for (const type of ['CORRECTIVE_ACTION_VERIFICATION', 'FINDING_VERIFICATION']) check(rows.filter(row => row.type === type).every(row => row.responsibility === 'independent_team' && row.assignee === null), type + ' does not fabricate verifier assignment');
 check(rows.find(row => row.type === 'FINDING_CLOSURE').assignee === actor.id, 'closure responsibility comes from recorded verifier');
+check(rows.find(row => row.type === 'CORRECTIVE_ACTION_VERIFICATION').ownerLabel === 'مالك الاختبار', 'action owner comes from active profile directory');
+check(rows.find(row => row.type === 'FINDING_VERIFICATION').severityLabel === 'غير مصنفة', 'finding severity uses authoritative value');
+check(rows.find(row => row.type === 'FINDING_CLOSURE').reviewerLabel === 'أنت', 'recorded verifier shown as current reviewer');
 check(rows.find(row => row.type === 'EVIDENCE_REVIEW').dueDate === null, 'does not turn validity into a due date');
 for (const role of ['control_owner', 'nca_external_auditor', 'data_governance_team']) {
   const denied = work.buildReviewWorkQueue(data, { ...actor, role }, today);
@@ -163,6 +169,9 @@ for (const row of rows) {
   check(!href.includes('bad.test'), 'no arbitrary return URL ' + row.type);
 }
 check(rows.find(i => i.type === 'CORRECTIVE_ACTION_VERIFICATION').sourceRoute.includes('action=40'), 'action record navigation');
+check(rows.find(i => i.type === 'FINDING_VERIFICATION').sourceRoute.includes('finding=31') && rows.find(i => i.type === 'FINDING_VERIFICATION').sourceRoute.includes('decision=verification'), 'exact finding verification navigation');
+check(rows.find(i => i.type === 'FINDING_CLOSURE').sourceRoute.includes('finding=32') && rows.find(i => i.type === 'FINDING_CLOSURE').sourceRoute.includes('decision=closure'), 'exact finding closure navigation');
+check(rows.find(i => i.type === 'PERIODIC_REVIEW_FOLLOWUP').sourceRoute === '/controls/1?tab=overview&review_cycle=50', 'exact periodic cycle navigation');
 check(rows.find(i => i.type === 'ASSESSMENT_ITEM_REVIEW').sourceRoute.includes('cycle=10&item=21'), 'exact assessment item/cycle navigation');
 for (const dependency of ['evidence', 'actions', 'frameworks', 'cycles']) {
   const state = { ...data, errors: { [dependency]: 'Read unavailable' } }, categories = classify(state), summary = work.reviewWorkSummary(categories, today);
@@ -187,16 +196,23 @@ let batchSizes = [];
 await read.readReviewBatches(Array.from({ length: 451 }, (_, id) => id), ids => { batchSizes.push(ids.length); return Promise.resolve({ data: ids.map(id => ({ id })), count: ids.length, error: null }); });
 check(batchSizes.join('|') === '200|200|51', 'bounded batching, not query-per-record');
 calls.length = 0; await read.loadReviewWorkSnapshot(actor);
-check(calls.length === 7, 'empty sources need only seven parallel source reads, no N+1');
+check(calls.length === 8, 'empty sources need only eight parallel source reads, no N+1');
 check(calls.every(c => c.options?.count === 'exact' || c.selectOptions?.count === 'exact'), 'every source read asks exact count');
 check(!calls.some(c => c.columns.includes('approved_snapshot') || c.name === 'assessment_findings'), 'protected snapshots/legacy model not fetched');
+check(calls.some(c => c.name === 'profiles' && c.columns === 'user_id,display_name'), 'display names use existing active profile read, no raw UUID in queue');
 check(calls.find(c => c.name === 'assessment_cycles').filters.some(f => f[0] === 'or' && f[1].includes(actor.id)), 'cycle read scoped by authoritative assignments');
 response = call => call.name === 'grc_findings' ? { data: null, error: { message: 'permission denied' }, count: null } : { data: [], error: null, count: 0 };
 const failed = await read.loadReviewWorkSnapshot(actor);
 check(!!failed.errors.findings, 'authorization failure captured explicitly');
 check(work.reviewWorkSummary(classify(failed), today).verification === null, 'failed findings query cannot become zero');
+const peopleFailure = { ...data, errors: { people: 'Read unavailable' } };
+check(classify(peopleFailure).find(c => c.type === 'CORRECTIVE_ACTION_VERIFICATION').status === 'unavailable', 'owner directory failure is unavailable, not false zero');
+check(classify(peopleFailure).find(c => c.type === 'EVIDENCE_REVIEW').status === 'ready', 'unrelated evidence category remains available');
 for (const file of ['components/ReviewWorkQueue.tsx', 'lib/review-work-queue.ts', 'lib/review-work-queue-read.ts']) check(!/\.(insert|update|upsert)\(|\.delete\(\s*\)|cgp_\w+_command|cgp_review_evidence/.test(source(file)), 'navigation-only file has no mutation: ' + file);
 for (const file of ['app/findings/page.tsx', 'components/AssessmentWorkspace.tsx', 'app/controls/[id]/page.tsx']) check(source(file).includes('reviewContextReturn'), 'existing surface has explicit queue return: ' + file);
+check(source('app/findings/page.tsx').includes('finding-action-${action.id}') && source('app/findings/page.tsx').includes('finding-decision'), 'source record has exact action/decision anchors');
+check(source('app/findings/page.tsx').includes('hasRequestedFinding?') && source('app/findings/page.tsx').includes('السجل المطلوب غير متاح'), 'missing exact finding fails safely without selecting another');
+check(source('components/ControlReviewPanel.tsx').includes('c.id===targetCycleId&&c.status===\'open\'') && source('components/ControlReviewPanel.tsx').includes('لم نفتح دورة أخرى'), 'stale periodic link never opens a different cycle');
 check(source('components/EvidenceReviewContext.tsx').includes("requireProfile(['admin','cybersecurity_team'])"), 'existing evidence decision authorization preserved');
 check(source('app/review/page.tsx').includes('redirectLegacyEvidence') && source('app/review/page.tsx').includes("next.set('evidence', String(legacyId))"), 'legacy evidence hash links still resolve to the decision workspace');
 

@@ -60,6 +60,8 @@ function ControlDetailsContent({id}:{id:string}) {
  const [control,setControl]=useState<Control|null>(null),[evidence,setEvidence]=useState<Evidence[]>([]);
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[role,setRole]=useState<UserRole|null>(null);
  const tab:ControlTab=controlTabs.find(item=>item.key===searchParams.get('tab'))?.key??'overview';
+ const requestedReviewCycle=Number(searchParams.get('review_cycle'));
+ const targetReviewCycleId=searchParams.has('review_cycle')?(Number.isSafeInteger(requestedReviewCycle)&&requestedReviewCycle>0?requestedReviewCycle:-1):null;
  const setTab=(next:ControlTab)=>{const query=new URLSearchParams(searchParams.toString());query.set('tab',next);router.push('/controls/'+id+'?'+query,{scroll:false});};
  const [actor,setActor]=useState('');
  const [eligible,setEligible]=useState<EligibleFrameworkEvidence[]>([]);
@@ -68,6 +70,7 @@ function ControlDetailsContent({id}:{id:string}) {
  const [activity,setActivity]=useState<ControlAuditEvent[]>([]);
  const [issues,setIssues]=useState<Record<string,string>>({});
  const [reviewExpanded,setReviewExpanded]=useState(false);
+ const reviewShown=reviewExpanded||targetReviewCycleId!==null;
 
 
  const [reflections,setReflections]=useState<AssessmentReflection[]>([]);
@@ -116,6 +119,7 @@ function ControlDetailsContent({id}:{id:string}) {
  }catch(e){if(active)setError(e instanceof Error?e.message:'تعذر التحميل');const {data}=await supabase.auth.getSession();if(!data.session)router.replace('/login');}
  finally{if(active)setLoading(false);}})();return()=>{active=false;};},[id,router]);
  const archived=control?.frameworks?.is_active===false;
+ useEffect(()=>{if(!control||targetReviewCycleId===null||tab!=='overview')return;const frame=requestAnimationFrame(()=>document.getElementById('periodic-review')?.scrollIntoView({block:'start'}));return()=>cancelAnimationFrame(frame);},[control,targetReviewCycleId,tab]);
  const canViewAudit=role==='admin'||role==='cybersecurity_team';
  const canReview=!archived&&canViewAudit;
  const canUpload=!archived&&(canReview||(role==='control_owner'&&control?.control_owner_id===actor));
@@ -162,7 +166,7 @@ function ControlDetailsContent({id}:{id:string}) {
      {issues.assessment?<div role="alert">تعذر تحميل التقييمات.</div>:latest&&<div><small>أحدث بند تقييم — {latest.cycle?.scope_name??'النطاق غير متاح'}</small><strong>{assessmentLabels[latest.compliance_status??'']??'لم يُقيّم'}</strong>{latest.cycle&&!['approved','closed'].includes(latest.cycle.status)&&<small>نتيجة غير معتمدة</small>}<button className="control360-text-action" onClick={()=>setTab('assessment')}>عرض الدورات والنطاقات ←</button></div>}
      {issues.findings?<div role="alert">تعذر تحميل الملاحظات.</div>:findings.length>0&&<div><small>ملاحظات غير مغلقة ضمن صلاحياتك</small><button className="control360-text-action" onClick={()=>setTab('findings')}>{findings.filter(f=>f.status!=='closed').length} من {findings.length} ←</button></div>}
     </div>{!latest&&!findings.length&&!issues.assessment&&!issues.findings&&<p className="detail-hint">لا توجد بنود تقييم أو ملاحظات مرتبطة متاحة ضمن صلاحياتك حاليًا.</p>}{control.implementation_notes&&<details><summary>ملاحظات التطبيق</summary><p className="control360-prewrap">{control.implementation_notes}</p></details>}</section>
-    <section className="detail-card"><h2>المراجعة الدورية للضابط</h2>{issues.review?<p role="alert">{issues.review}</p>:<div className="detail-schedule-strip"><div><small>التكرار</small><strong>{frequencyLabels[control.audit_frequency]??control.audit_frequency}</strong></div><div><small>آخر مراجعة</small><strong>{formatComplianceDate(control.last_review_date)}</strong></div><div><small>المراجعة القادمة</small><strong>{formatComplianceDate(control.next_audit_date)}</strong><span>{scheduleStateLabels[scheduleState(control.next_audit_date)]}</span></div><div><small>الدورة الحالية</small><strong>{cycleStageLabels[cycleStage(!!openCycleId,latestRequestStatus)]}</strong>{openCycleDue&&<small>الاستحقاق: {formatComplianceDate(openCycleDue)}</small>}{reviewerName&&<small>المراجع: {reviewerName}</small>}</div></div>}<p className="detail-hint">مراجعة تشغيلية دورية مستقلة عن دورة تقييم الإطار.</p><details onToggle={event=>setReviewExpanded(event.currentTarget.open)}><summary>{archived?'تاريخ المراجعة الدورية':'تفاصيل المراجعة والطلبات'}</summary>{reviewExpanded&&<ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload} returnContext={context}/>}</details>{canReview&&<Link className="control360-text-action" href={'/audit-schedule?control='+control.id}>فتح جدول المراجعة الدورية ←</Link>}</section>
+    <section id="periodic-review" className="detail-card"><h2>المراجعة الدورية للضابط</h2>{issues.review?<p role="alert">{issues.review}</p>:<div className="detail-schedule-strip"><div><small>التكرار</small><strong>{frequencyLabels[control.audit_frequency]??control.audit_frequency}</strong></div><div><small>آخر مراجعة</small><strong>{formatComplianceDate(control.last_review_date)}</strong></div><div><small>المراجعة القادمة</small><strong>{formatComplianceDate(control.next_audit_date)}</strong><span>{scheduleStateLabels[scheduleState(control.next_audit_date)]}</span></div><div><small>الدورة الحالية</small><strong>{cycleStageLabels[cycleStage(!!openCycleId,latestRequestStatus)]}</strong>{openCycleDue&&<small>الاستحقاق: {formatComplianceDate(openCycleDue)}</small>}{reviewerName&&<small>المراجع: {reviewerName}</small>}</div></div>}<p className="detail-hint">مراجعة تشغيلية دورية مستقلة عن دورة تقييم الإطار.</p><details open={reviewShown} onToggle={event=>setReviewExpanded(event.currentTarget.open)}><summary>{archived?'تاريخ المراجعة الدورية':'تفاصيل المراجعة والطلبات'}</summary>{reviewShown&&<ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload} returnContext={context} targetCycleId={targetReviewCycleId}/>}</details>{canReview&&<Link className="control360-text-action" href={'/audit-schedule?control='+control.id}>فتح جدول المراجعة الدورية ←</Link>}</section>
        <details className="detail-card requirements-projects-card"><summary>المتطلبات والمشاريع المرتبطة</summary>
 
     <p className="detail-hint">علاقة للقراءة فقط، مصدرها ربط المتطلبات السيبرانية الحالي — لا منطق ربط جديد ولا تكرار للبيانات.</p>
