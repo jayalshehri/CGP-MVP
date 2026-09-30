@@ -1,0 +1,56 @@
+.my-controls { max-width: 1500px; margin-inline: auto; }
+.my-controls-heading { margin-bottom: 16px; }
+.my-controls-title { display: flex; align-items: center; gap: 10px; }
+.my-controls-heading h1 { margin: 0; font-size: 26px; }
+.my-controls-heading p, .my-controls-table caption { color: #526474; font-size: 13px; }
+.my-controls button, .my-controls input, .my-controls select { font: inherit; }
+.my-controls button { border: 1px solid #ced9dd; padding: 7px 12px; border-radius: 7px; background: white; cursor: pointer; }
+.my-controls .my-controls-refresh { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; color: #526474; border-color: transparent; background: transparent; }
+.my-controls .my-controls-refresh:hover { background: #edf5f3; border-color: #ced9dd; }
+.my-controls-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.my-controls-summary span { background: #edf5f3; border-radius: 7px; padding: 8px 12px; font-size: 13px; }
+.my-controls-summary strong { margin-inline-start: 8px; font-size: 18px; color: #0c655b; }
+.my-controls-filters { display: grid; grid-template-columns: minmax(0, 2.4fr) repeat(3, minmax(0, 1fr)); align-items: end; gap: 14px; margin-bottom: 14px; padding: 12px; border: 1px solid #dce6eb; border-radius: 10px; background: #fbfcfd; }
+.my-controls-filters > label { display: grid; gap: 4px; min-width: 0; font-size: 12px; }
+.my-controls-filters input[type=search], .my-controls-filters select { box-sizing: border-box; width: 100%; min-width: 0; height: 44px; padding: 10px 12px; border: 1px solid #ced9dd; background: white; border-radius: 8px; font-size: 12px; }
+.my-controls-more { position: relative; min-width: 0; }
+.my-controls-more > button { display: flex; align-items: center; justify-content: center; gap: 4px; box-sizing: border-box; width: 100%; height: 44px; padding: 10px 12px; border: 1px solid #ced9dd; border-radius: 8px; background: white; color: #354e53; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.my-controls-more > button::after { content: '⌄'; margin-inline-start: 8px; }
+.my-controls-more > button[aria-expanded=true]::after { content: '⌃'; }
+.my-controls-toggles { position: absolute; z-index: 5; inset-inline-end: 0; top: calc(100% + 6px); display: grid; gap: 6px; box-sizing: border-box; width: min(330px, calc(100vw - 80px)); max-height: min(360px, 60dvh); overflow-y: auto; padding: 10px; border: 1px solid #dce6eb; border-radius: 9px; background: white; box-shadow: 0 8px 20px #10253d12; font-size: 12px; }
+.my-controls-toggles label { display: flex; align-items: center; gap: 5px; min-height: 36px; box-sizing: border-box; padding: 6px 8px; border: 1px solid #dce6eb; border-radius: 7px; background: white; cursor: pointer; }
+.my-controls-toggles label:has(input:checked) { background: #e8f4ef; border-color: #8ebbae; color: #075e53; }
+.my-controls-toggles input { margin: 0; accent-color: #087d72; flex-shrink: 0; }
+.my-controls-filter-panel-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.my-controls-filter-panel-actions button { font-size: 12px; }
+.my-controls-filter-chips { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; width: 100%; min-width: 0; }
+.my-controls-filter-chips .my-controls-filter-chip { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 5px 8px; font-size: 12px; background: #e8f4ef; border-color: #bbd8cf; color: #075e53; }
+.my-controls-filter-chip > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.my-controls-filter-chips > button:last-child { font-size: 12px; padding: 5px 8px; }
+.my-controls-scroll { overflow-x: auto; max-width: 100%; border: 1px solid #e0e8e7; border-radius: 9px; }
+.my-controls-table { width: 100%; min-width: 940px; border-collapse: collapse; font-size: 12px; text-align: start; }
+.my-controls-table caption { text-align: start; padding: 10px 12px; }
+.my-controls-table th { background: #f3f7f6; color: #354e53; font-weight: 600; }
+.my-controls-table td, .my-controls-table th { padding: 10px; border-bottom: 1px solid #e7eeec; vertical-align: top; }
+.my-controls-table tr:last-child td { border-bottom: 0; }
+.my-controls-table a { color: #07675e; text-decoration: none; }
+.my-controls-control { min-width: 190px; max-width: 260px; }
+.my-controls-control a { display: block; line-height: 1.7; }
+.my-controls-code { font-weight: 700; white-space: nowrap; }
+.my-controls-control-title { overflow-wrap: anywhere; }
+.my-controls-next { display: inline-grid; gap: 4px; padding: 6px 8px; border: 1px solid #bbd8cf; border-radius: 6px; }
+.my-controls-next small { color: #8e4c1a; }
+.my-controls-overdue { display: block; color: #b42318; margin-top: 4px; }
+.my-controls-empty { padding: 14px; background: #f4f8f7; border-radius: 8px; color: #36534e; }
+.my-controls-requests { margin-top: 16px; }
+.my-controls-requests > summary { cursor: pointer; padding: 10px 0; font-weight: 600; }
+.my-controls footer { margin-top: 18px; font-size: 13px; }
+.my-controls a:hover { text-decoration: underline; }
+.my-controls :focus-visible { outline: 2px solid #0b7467; outline-offset: 3px; }
+@media (max-width: 1100px) { .my-controls-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) {
+  .my-controls-heading h1 { font-size: 22px; }
+  .my-controls-filters > label:first-child, .my-controls-more { grid-column: 1 / -1; }
+  .my-controls-summary span { padding: 7px 9px; }
+  .my-controls-toggles { width: 100%; }
+}

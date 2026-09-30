@@ -1,0 +1,15 @@
+.compliance-center-page{max-width:1200px}
+.compliance-framework-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px;margin-top:20px}
+.compliance-framework-card{display:flex;flex-direction:column;gap:10px;border:1px solid #dbe4e8;background:#fff;border-radius:16px;padding:20px;color:#0b1f33;min-height:190px}
+.compliance-framework-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#647682;font-size:12px}
+.compliance-framework-heading>strong{font-size:20px;color:var(--cgp-teal)}
+.compliance-framework-heading b{font-weight:800;color:#415460}
+.compliance-framework-card h2{font-size:17px;line-height:1.55;margin:0}
+.compliance-framework-card p{font-size:13px;color:#526675;margin:0}
+.compliance-framework-card .compliance-cycle-state{font-size:12px;color:#0d4b4d}
+.compliance-framework-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:auto;padding-top:10px}
+.compliance-framework-actions>a:not(.workflow-button){color:var(--cgp-teal);font-size:13px;font-weight:800;text-decoration:none}
+.compliance-framework-actions>a:hover{text-decoration:underline}
+.compliance-framework-actions span{color:#647682;font-size:12px}
+.compliance-framework-actions a:focus-visible{outline:3px solid #138b80;outline-offset:3px}
+@media(max-width:640px){.compliance-framework-grid{grid-template-columns:1fr}.compliance-framework-card{min-height:0}}

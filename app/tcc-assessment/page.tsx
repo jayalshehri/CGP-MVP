@@ -1,2 +1,2 @@
-import AssessmentWorkspace from "@/components/AssessmentWorkspace";
-export default function Page() { return <AssessmentWorkspace frameworkCode="TCC"/>; }
+import FrameworkAssessmentRoute from "@/components/FrameworkAssessmentRoute";
+export default function Page() { return <FrameworkAssessmentRoute frameworkCode="TCC"/>; }

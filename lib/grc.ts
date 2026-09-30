@@ -42,6 +42,32 @@ export function cycleStage(hasOpenCycle:boolean,latestRequestStatus:string|undef
  return 'awaiting_evidence';
 }
 export function formatGrcDate(value:string|null){return value?new Intl.DateTimeFormat('ar-SA',{dateStyle:'medium',timeZone:'Asia/Riyadh'}).format(new Date(value.length===10?`${value}T12:00:00+03:00`:value)):'—';}
+// Presentation-only Gregorian dates for compliance surfaces. Date-only values
+// are anchored at Riyadh noon so browser time zones cannot shift the day.
+export function formatComplianceDate(value:string|null,compact=false){
+ if(!value)return '—';
+ const date=new Date(value.length===10?`${value}T12:00:00+03:00`:value);
+ if(Number.isNaN(date.getTime()))return '—';
+ const formatter=new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn',compact?{day:'2-digit',month:'2-digit',year:'numeric',timeZone:'Asia/Riyadh'}:{day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Riyadh'});
+ if(!compact)return formatter.format(date);
+ const parts=Object.fromEntries(formatter.formatToParts(date).filter(part=>part.type==='day'||part.type==='month'||part.type==='year').map(part=>[part.type,part.value]));
+ return `${parts.day}/${parts.month}/${parts.year}`;
+}
+export function parseComplianceDateInput(value:string):string|null{
+ const match=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value.trim());
+ if(!match)return null;
+ const day=Number(match[1]),month=Number(match[2]),year=Number(match[3]);
+ if(year<1000)return null;
+ const date=new Date(Date.UTC(year,month-1,day));
+ if(date.getUTCFullYear()!==year||date.getUTCMonth()!==month-1||date.getUTCDate()!==day)return null;
+ return `${match[3]}-${match[2]}-${match[1]}`;
+}
+export function formatComplianceDateTime(value:string|null){
+ if(!value)return '—';
+ const date=new Date(value);
+ if(Number.isNaN(date.getTime()))return '—';
+ return `${formatComplianceDate(value)} · ${new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Riyadh'}).format(date)}`;
+}
 export function csvDownload(name:string,rows:(string|number)[][]){
  const quote=(value:string|number)=>{let text=String(value);if(/^[=+@\-]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"';};
  const url=URL.createObjectURL(new Blob(['\ufeff'+rows.map(row=>row.map(quote).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));

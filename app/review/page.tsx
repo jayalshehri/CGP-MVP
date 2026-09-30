@@ -1,22 +1,35 @@
 'use client';
-import Link from 'next/link';
-import {useCallback,useEffect,useState} from 'react';
-import {supabase} from '@/lib/supabase';
-import {requireProfile} from '@/lib/auth';
-import {type EvidenceRecord,formatGrcDate,isExpired} from '@/lib/grc';
-import {WorkflowHeading,WorkflowMetric} from '@/components/WorkflowUI';
-import EvidenceDownload from '@/components/EvidenceDownload';
-import StatusBadge from '@/components/StatusBadge';
-type Control={id:number;control_code:string;title_ar:string};
-export default function ReviewPage(){
- const [rows,setRows]=useState<EvidenceRecord[]>([]),[controls,setControls]=useState<Control[]>([]),[user,setUser]=useState(''),[search,setSearch]=useState(''),[scope,setScope]=useState('pending'),[notes,setNotes]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[error,setError]=useState(''),[loading,setLoading]=useState(true),[message,setMessage]=useState('');
- const load=useCallback(async()=>{try{const auth=await requireProfile(['admin','cybersecurity_team']);setUser(auth.user.id);const [e,c]=await Promise.all([supabase.rpc('grc_evidence_register'),supabase.from('controls').select('id,control_code,title_ar,frameworks!inner(is_active)').eq('frameworks.is_active',true)]);if(e.error||c.error)throw e.error||c.error;const activeIds=new Set((c.data??[]).map(row=>row.id));setRows(((e.data??[]) as EvidenceRecord[]).filter(row=>activeIds.has(row.control_id)));setControls(c.data??[]);}catch(e){setError(e instanceof Error?e.message:'تعذر تحميل المراجعات');}finally{setLoading(false);}},[]);
- useEffect(()=>{const t=setTimeout(()=>{void load();},0);return()=>clearTimeout(t);},[load]);
- const key=(e:EvidenceRecord)=>`${e.id}-${e.link_id??'source'}`;
- const pending=rows.filter(e=>e.is_current&&['pending_review','under_review'].includes(e.status));
- const visible=rows.filter(e=>{const c=controls.find(c=>c.id===e.control_id);return (scope==='all'||(scope==='pending'?e.is_current&&['pending_review','under_review'].includes(e.status):e.is_current&&['pending_review','under_review'].includes(e.status)&&e.assigned_reviewer===user))&&`${e.file_name} ${c?.control_code} ${c?.title_ar}`.toLowerCase().includes(search.toLowerCase());});
- async function start(row:EvidenceRecord){setBusy(true);const r=await supabase.rpc('cgp_grc_command',{p_action:'start_review',p_control_id:row.control_id,p_data:{evidence_id:row.id}});setError(r.error?.message??'');if(!r.error)await load();setBusy(false);}
- async function decide(row:EvidenceRecord,decision:string){if(busy)return;const reason=notes[key(row)]?.trim();if(!reason){setError('اكتب سبب القرار، بما فيه القبول.');return;}setBusy(true);setError('');const r=row.link_id?await supabase.rpc('cgp_review_shared_evidence_link',{p_link_id:row.link_id,p_decision:decision,p_notes:reason}):await supabase.rpc('cgp_review_evidence',{p_evidence_id:row.id,p_decision:decision,p_notes:reason});if(r.error)setError(r.error.message);else{setMessage('تم حفظ القرار وتاريخه. اعتماد امتثال الضابط يتم من دورة المراجعة.');await load();}setBusy(false);}
- if(loading)return <main role="status">جاري تحميل المراجعات…</main>;
- return <main className="workflow-page" dir="rtl"><WorkflowHeading title="مراجعة الأدلة" description="قائمة موحدة للأدلة الأصلية والمشتركة؛ قرار مستقل لكل ضابط مع الحفاظ على الإصدارات السابقة."/>{error&&<p className="cgp-shell-error" role="alert">{error}</p>}{message&&<p role="status">{message}</p>}<div className="workflow-metrics"><WorkflowMetric label="بانتظار القرار" value={pending.length}/><WorkflowMetric label="مسند إليّ" value={pending.filter(e=>e.assigned_reviewer===user).length}/><WorkflowMetric label="تحتاج استكمالًا" value={rows.filter(e=>e.is_current&&e.status==='changes_requested').length}/></div><div className="workflow-filter"><label>بحث<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="اسم الملف أو الضابط"/></label><label>العرض<select value={scope} onChange={e=>setScope(e.target.value)}><option value="pending">بانتظار القرار</option><option value="mine">مسند إليّ</option><option value="all">القرارات والإصدارات السابقة</option></select></label></div><div className="grc-cards">{!visible.length&&<p>لا توجد أدلة ضمن هذا العرض.</p>}{visible.map(row=>{const c=controls.find(c=>c.id===row.control_id);const canDecide=row.is_current&&['pending_review','under_review'].includes(row.status)&&row.uploaded_by!==user&&(!row.assigned_reviewer||row.assigned_reviewer===user);return <article id={`evidence-${row.id}`} key={key(row)}><div className="grc-inline-actions"><h2>{c?.control_code} · {row.file_name}</h2><StatusBadge status={row.status}/></div><p>{c?.title_ar}</p><p>{row.link_id?'دليل مشترك · ':''}الإصدار {row.version_number} · {row.is_current?'حالي':'سابق'} · الرفع: {formatGrcDate(row.uploaded_at)} · الرافع: {row.uploader_name??'غير موثق بالاسم في السجل القديم'}</p>{row.description&&<p>{row.description}</p>}{row.valid_until&&<p className={isExpired(row.valid_until)?'grc-warning':''}>صالح حتى {formatGrcDate(row.valid_until)}</p>}<EvidenceDownload path={row.file_path} name={row.file_name}/><Link className="workflow-button" href={`/controls/${row.control_id}`}>الضابط والدورة</Link>{row.reviewed_at&&<p>القرار: {formatGrcDate(row.reviewed_at)} · المراجع: {row.reviewer_display_name??'مسجل في تاريخ القرار'} · {row.review_notes}</p>}{canDecide?<div className="grc-form">{row.status==='pending_review'&&!row.link_id&&<button disabled={busy} onClick={()=>start(row)}>بدء المراجعة وتولي الطلب</button>}<label>سبب القرار<textarea value={notes[key(row)]??''} onChange={e=>setNotes(prev=>({...prev,[key(row)]:e.target.value}))} rows={3}/></label><div className="grc-inline-actions"><button className="workflow-button" disabled={busy||isExpired(row.valid_until)} onClick={()=>decide(row,'accepted')}>قبول الدليل</button><button className="workflow-button" disabled={busy} onClick={()=>decide(row,'changes_requested')}>طلب استكمال</button><button className="workflow-button" disabled={busy} onClick={()=>decide(row,'rejected')}>رفض</button></div></div>:row.is_current&&['pending_review','under_review'].includes(row.status)&&<p className="grc-warning">يتطلب القرار مراجعًا مخولًا مستقلًا عن مقدم الدليل.</p>}</article>;})}</div></main>;
+import { Suspense, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import ReviewWorkQueue from '@/components/ReviewWorkQueue';
+import EvidenceReviewContext from '@/components/EvidenceReviewContext';
+import { reviewContextReturn } from '@/lib/review-context';
+import '@/components/review-work-queue.css';
+
+function ReviewSurface() {
+  const params = useSearchParams();
+  const router = useRouter();
+  useEffect(() => {
+    const redirectLegacyEvidence = () => {
+      const legacy = /^#evidence-(\d+)$/.exec(window.location.hash);
+      if (!legacy || params.has('evidence')) return;
+      const legacyId = Number(legacy[1]);
+      if (!Number.isSafeInteger(legacyId) || legacyId < 1) return;
+      const next = new URLSearchParams(params.toString());
+      next.set('evidence', String(legacyId));
+      router.replace(`/review?${next}`, { scroll: false });
+    };
+    redirectLegacyEvidence();
+    window.addEventListener('hashchange', redirectLegacyEvidence);
+    return () => window.removeEventListener('hashchange', redirectLegacyEvidence);
+  }, [params, router]);
+  const id = Number(params.get('evidence')), link = Number(params.get('link'));
+  const evidenceId = Number.isSafeInteger(id) && id > 0 ? id : null;
+  const linkId = Number.isSafeInteger(link) && link > 0 ? link : null;
+  if ((params.has('evidence') && evidenceId === null) || (params.has('link') && linkId === null)) return <p role="alert">رابط الدليل غير صحيح.</p>;
+  if (evidenceId !== null || params.get('view') === 'evidence-history') return <EvidenceReviewContext key={`${evidenceId}-${linkId}`} evidenceId={evidenceId} linkId={linkId} returnHref={reviewContextReturn(new URLSearchParams(params.toString())) ?? '/review'}/>;
+  return <ReviewWorkQueue/>;
+}
+export default function ReviewPage() {
+  return <Suspense fallback={<p role="status">جاري تحميل مركز المراجعة…</p>}><ReviewSurface/></Suspense>;
 }

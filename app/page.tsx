@@ -1,5 +1,6 @@
 "use client";
 import GrcAttention from "@/components/GrcAttention";
+import MyControls from "@/components/MyControls";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -40,6 +41,8 @@ export default function Home() {
         setUserRole(profile.role);
 
         setAuthReady(true);
+        // Owners start with scoped personal work, without global dashboard reads.
+        if (profile.role === 'control_owner') return;
         const [controlResult,evidenceResult] = await Promise.all([
           supabase.from("controls").select("id,domain_ar,implementation_status,evidence_status,verification_status,due_date,frameworks!inner(code,name_ar,is_active)").eq("frameworks.is_active",true).eq("hierarchy_level","control"),
           supabase.from("evidence").select("id,controls!inner(frameworks!inner(is_active))",{count:"exact",head:true}).eq("controls.frameworks.is_active",true).eq("is_current",true).in("status",["pending_review","under_review"]),
@@ -78,12 +81,13 @@ export default function Home() {
     return <main dir="rtl" className="cgp-loading-screen" aria-busy="true" aria-label="جاري تحميل لوحة المتابعة"><span className="cgp-skeleton title"/><span className="cgp-skeleton" style={{width:"min(580px,90%)"}}/><div className="cgp-loading-metrics"><span className="cgp-skeleton metric"/><span className="cgp-skeleton metric"/><span className="cgp-skeleton metric"/><span className="cgp-skeleton metric"/></div></main>;
   }
 
+  if (userRole === 'control_owner') return <MyControls/>;
   return (
     <main dir="rtl" className="cgp-ops-page">
       <div className="cgp-page-body" style={{display:"flex",minHeight:"calc(100vh - 86px)"}}>
         <section className="cgp-content cgp-ops-content">
           <header className="cgp-dashboard-hero">
-            <div className="cgp-dashboard-hero-copy"><span className="cgp-dashboard-eyebrow"><i aria-hidden="true"/>متابعة تشغيلية مباشرة</span><h1>لوحة المتابعة التشغيلية</h1><p>رؤية يومية للقرارات المطلوبة، الأدلة الناقصة، وحالة الالتزام.</p><small>{userRole==="control_owner"?"الضوابط المسندة إليك فقط":"جميع الضوابط ضمن نطاقك"}{updatedAt&&` · آخر تحديث ${updatedAt}`}</small></div>
+            <div className="cgp-dashboard-hero-copy"><span className="cgp-dashboard-eyebrow"><i aria-hidden="true"/>بيانات حية</span><h1>الرئيسية</h1><p>رؤية يومية للقرارات المطلوبة، الأدلة الناقصة، وحالة الالتزام.</p><small>{userRole==="nca_external_auditor"?"الضوابط المتاحة لمراجعتك فقط":"جميع الضوابط ضمن نطاقك"}{updatedAt&&` · آخر تحديث ${updatedAt}`}</small></div>
             <div className="cgp-dashboard-hero-score"><span>نسبة الالتزام</span><strong>{stats ? `${stats.compliance}%` : "—"}</strong><progress value={stats?.compliance ?? 0} max="100" aria-label="نسبة الالتزام الحالية"/><button type="button" disabled={refreshing} onClick={()=>setRefreshKey(k=>k+1)}>{refreshing?"جاري التحديث...":"تحديث البيانات"}</button></div>
           </header>
           {error&&<div role="alert" style={{background:"#fff2f0",color:"#b42318",padding:16,marginBottom:18,borderRadius:9}}>{error}</div>}
@@ -101,9 +105,9 @@ export default function Home() {
             </article>
           </section>
           <GrcAttention key={refreshKey} compact/><div className="cgp-ops-actions">
-            <Link href="/tasks" className="primary">فتح مهامي / التكليفات ←</Link>
+            <Link href="/tasks" className="primary">فتح مهامي ←</Link>
             <Link href="/controls" className="secondary">عرض جميع الضوابط</Link>
-            {userRole==="control_owner"&&<Link href="/evidence" className="secondary">مركز الأدلة</Link>}
+            {(userRole==="admin"||userRole==="cybersecurity_team")&&<Link href="/executive" className="secondary">العرض التنفيذي ←</Link>}
           </div>
         </section>
       </div>
@@ -112,7 +116,7 @@ export default function Home() {
 }
 
 function NextDecision({stats,role}:{stats:Dashboard;role:UserRole}) {
- const reviewAllowed=role!=="control_owner";
+ const reviewAllowed=role==="admin"||role==="cybersecurity_team";
  const decision=stats.overdue>0?{href:"/tasks?filter=overdue",count:stats.overdue,title:"عالج المهام المتأخرة",detail:"تجاوزت موعدها وتحتاج متابعة فورية.",tone:"danger"}:reviewAllowed&&stats.pending_review>0?{href:"/review",count:stats.pending_review,title:"اتخذ قرار مراجعة الأدلة",detail:"أدلة جاهزة تنتظر القبول أو الإرجاع.",tone:"info"}:stats.waiting_evidence>0?{href:"/tasks?filter=evidence",count:stats.waiting_evidence,title:"اطلب الأدلة الناقصة",detail:"ابدأ بالضوابط التي لم يرفع لها دليل بعد.",tone:"warning"}:{href:"/controls",count:stats.verified,title:"راجع نطاق الضوابط",detail:"لا توجد عناصر عاجلة ضمن نطاقك الآن.",tone:"success"};
  return <Link href={decision.href} className={`cgp-next-decision ${decision.tone}`}><span className="cgp-next-decision-count">{decision.count}</span><span><strong>{decision.title}</strong><small>{decision.detail}</small></span><b>فتح الإجراء ←</b></Link>;
 }

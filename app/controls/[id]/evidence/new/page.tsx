@@ -1,16 +1,25 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, FormEvent, useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { getEccOfficialTitle } from "@/lib/ecc-strategy-example";
 import "./evidence-upload.css";
+import { controlContext, controlHref } from "@/lib/control360";
+import { myControlsReturn } from "@/lib/my-controls-context";
+import EvidenceSubmissionOptions from "@/components/EvidenceSubmissionOptions";
 
 export default function NewEvidencePage() {
+  return <Suspense fallback={<p role="status">جاري تحميل رفع الدليل…</p>}><NewEvidenceContent/></Suspense>;
+}
+function NewEvidenceContent() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const context = controlContext(new URLSearchParams(searchParams.toString())).toString();
+  const personalReturn = myControlsReturn(new URLSearchParams(context));
 
   const controlId = Number(params.id);
 
@@ -34,8 +43,10 @@ export default function NewEvidencePage() {
   const [selectedTargets,setSelectedTargets]=useState<number[]>([]);
   const [ready,setReady]=useState(false);
   const [archived,setArchived]=useState(false);
+  const [showAdministrativeMetadata,setShowAdministrativeMetadata]=useState(false);
   useEffect(()=>{let active=true;(async()=>{try{
     const {profile}=await requireProfile(['admin','cybersecurity_team','control_owner']);
+    if(active)setShowAdministrativeMetadata(profile.role==='admin'||profile.role==='cybersecurity_team');
     const query=new URLSearchParams(window.location.search);if(active){setRequestId(query.get('request')||'');setReplaceId(query.get('replace')||'');}
     const {data:old}=await supabase.from('evidence').select('id,file_name,version_number').eq('control_id',controlId).eq('is_current',true);
     if(active)setVersions(old??[]);
@@ -133,7 +144,7 @@ export default function NewEvidencePage() {
 
       setMessage(selectedTargets.length?"تم رفع الدليل وإرساله للمراجعة في الضوابط المختارة.":"تم رفع الدليل وربطه بالضابط بنجاح.");
 
-      router.push(`/controls/${controlId}`);
+      router.push(controlHref(controlId, context, "evidence"));
       router.refresh();
     } catch (error) {
       const message =
@@ -147,13 +158,13 @@ export default function NewEvidencePage() {
     }
   }
 
-  if(archived)return <main dir="rtl" className="evidence-upload-page"><div className="evidence-upload-container"><h1>ضابط مؤرشف</h1><p>هذا الضابط محفوظ للسجل التاريخي فقط، ولا يقبل أدلة جديدة.</p><Link href={`/controls/${controlId}`}>عرض السجل التاريخي ←</Link></div></main>;
+  if(archived)return <main dir="rtl" className="evidence-upload-page"><div className="evidence-upload-container"><h1>ضابط مؤرشف</h1><p>هذا الضابط محفوظ للسجل التاريخي فقط، ولا يقبل أدلة جديدة.</p><Link href={personalReturn??controlHref(controlId,context,"evidence")}>عرض السجل التاريخي ←</Link></div></main>;
 
   return (
     <main dir="rtl" className="evidence-upload-page">
       <div className="evidence-upload-container">
-        <Link href={`/controls/${controlId}`} className="evidence-upload-back">
-          <span aria-hidden="true">←</span> العودة إلى الضابط
+        <Link href={personalReturn??controlHref(controlId,context,"evidence")} className="evidence-upload-back">
+          <span aria-hidden="true">←</span> {personalReturn?"العودة إلى ضوابطي":"العودة إلى الضابط"}
         </Link>
 
         <header className="evidence-upload-header">
@@ -165,7 +176,7 @@ export default function NewEvidencePage() {
                 {controlCode || `#${controlId}`}
               </span>
             </div>
-            <p>ارفع الملف الداعم للضابط وأضف وصفًا مختصرًا يسهل مراجعته.</p>
+            <p>{showAdministrativeMetadata ? 'ارفع الملف الداعم للضابط وأضف وصفًا مختصرًا يسهل مراجعته.' : 'اختر الملف الداعم للضابط وقدّمه للمراجعة.'}</p>
           </div>
 
           {controlRequirement && (
@@ -177,35 +188,9 @@ export default function NewEvidencePage() {
         </header>
 
         <form aria-busy={uploading} onSubmit={handleSubmit} className="evidence-upload-card">
-          <section className="grc-form">
-            <label>نوع الإرسال<select disabled={uploading} value={replaceId} onChange={e=>setReplaceId(e.target.value)}><option value="">مستند جديد مستقل</option>{versions.map(v=><option key={v.id} value={v.id}>إصدار جديد من: {v.file_name} (الإصدار {v.version_number})</option>)}</select></label>
-            {requestId&&<p>مرتبط بطلب الدليل #{requestId}</p>}
-            <label>صالح حتى — إن كانت للدليل مدة صلاحية<input disabled={uploading} type="date" value={validUntil} onChange={e=>setValidUntil(e.target.value)}/></label>
-            <label>بداية فترة التغطية<input disabled={uploading} type="date" value={coverageStart} onChange={e=>setCoverageStart(e.target.value)}/></label>
-            <label>نهاية فترة التغطية<input disabled={uploading} type="date" min={coverageStart||undefined} value={coverageEnd} onChange={e=>setCoverageEnd(e.target.value)}/></label>
-          </section><section className="evidence-upload-section">
+          <section className="evidence-upload-section">
             <div className="evidence-upload-section-heading">
               <span className="evidence-upload-step">1</span>
-              <div>
-                <h2>وصف الدليل</h2>
-                <p>اختياري، ويُفضل أن يوضح محتوى الملف وفترة تغطيته.</p>
-              </div>
-            </div>
-            <FieldLabel text="وصف الدليل" htmlFor="evidence-description" />
-            <textarea
-              disabled={uploading || !ready}
-              id="evidence-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="مثال: سياسة الأمن السيبراني المعتمدة للإصدار الحالي، مع تاريخ الاعتماد."
-              rows={4}
-              className="evidence-upload-textarea"
-            />
-          </section>
-
-          <section className="evidence-upload-section evidence-upload-file-section">
-            <div className="evidence-upload-section-heading">
-              <span className="evidence-upload-step">2</span>
               <div>
                 <h2>إرفاق الملف <em>*</em></h2>
                 <p>PDF أو Word أو Excel أو صورة، بحجم لا يتجاوز 20 MB.</p>
@@ -235,7 +220,24 @@ export default function NewEvidencePage() {
             <p className="evidence-upload-note">
               سيُسجل الدليل تلقائيًا تحت رقم الضابط <b dir="ltr">{controlCode}</b>.
             </p>
+            {requestId&&<p className="evidence-upload-note">مرتبط بطلب الدليل #{requestId}</p>}
           </section>
+
+          {showAdministrativeMetadata && <section className="evidence-upload-section evidence-upload-file-section">
+            <div className="evidence-upload-section-heading">
+              <span className="evidence-upload-step">2</span>
+              <div><h2>وصف الدليل</h2><p>اختياري، لتوضيح محتوى الملف عند الحاجة.</p></div>
+            </div>
+            <FieldLabel text="وصف الدليل" htmlFor="evidence-description" />
+            <textarea disabled={uploading || !ready} id="evidence-description" value={description}
+              onChange={event => setDescription(event.target.value)} placeholder="وصف مختصر يساعد المراجع على فهم الدليل."
+              rows={2} className="evidence-upload-textarea"/>
+          </section>}
+
+          <EvidenceSubmissionOptions disabled={uploading || !ready} showAdministrativeMetadata={showAdministrativeMetadata} versions={versions}
+            replaceId={replaceId} replacementLocked={Boolean(searchParams.get('replace'))} onReplacement={setReplaceId}
+            validUntil={validUntil} coverageStart={coverageStart} coverageEnd={coverageEnd}
+            onValidity={setValidUntil} onCoverageStart={setCoverageStart} onCoverageEnd={setCoverageEnd}/>
 
           {frameworkCode === "ECC" && mappedControls.length > 0 && (
             <details className="evidence-upload-sharing">
@@ -271,11 +273,11 @@ export default function NewEvidencePage() {
           <footer className="evidence-upload-actions">
             <div>
               <button type="submit" disabled={uploading || !ready} className="evidence-upload-submit">
-                {uploading ? "جاري الرفع..." : "رفع وإرسال للمراجعة"}
+                {uploading ? "جاري الرفع..." : "تقديم الدليل"}
               </button>
-              <Link href={`/controls/${controlId}`} className="evidence-upload-cancel">إلغاء</Link>
+              <Link href={personalReturn??controlHref(controlId,context,"evidence")} className="evidence-upload-cancel">إلغاء</Link>
             </div>
-            <p>الإرسال الجديد يحل محل الدليل الحالي للمراجعة، مع الاحتفاظ بالإرسالات السابقة في السجل.</p>
+            <p>يُسجَّل وقت الرفع تلقائيًا عند تقديم الدليل. تبقى الإصدارات السابقة محفوظة في السجل.</p>
           </footer>
         </form>
       </div>

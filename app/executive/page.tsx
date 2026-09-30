@@ -59,6 +59,7 @@ export default function ExecutivePage() {
   const pending = scopedControls.filter(c=>["pending_review","under_review"].includes((c.evidence_status||"").toLowerCase())).length;
 
   return <main dir="rtl" className="exec-page cgp-visual-exec" aria-busy={loading}>
+    <Link className="exec-text-link" href="/">← الرئيسية</Link>
     <header className="exec-heading cgp-exec-hero">
       <div><span className="exec-eyebrow">ملخص الإدارة · بيانات حية</span><h1>اللوحة التنفيذية</h1><p>صورة واضحة للتنفيذ والتحقق، والأولويات التي تحتاج قرارًا.</p></div>
       <div className="exec-tools cgp-print-action"><button onClick={refresh} disabled={loading} aria-label="تحديث بيانات اللوحة">↻ <span>{loading ? "جاري التحديث…" : "تحديث"}</span></button><details className="exec-more"><summary aria-label="إجراءات إضافية">•••</summary><button onClick={() => window.print()} disabled={!updated || loading || Boolean(error)}>طباعة الملخص</button></details></div>
