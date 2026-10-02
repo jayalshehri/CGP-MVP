@@ -277,12 +277,14 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
     {selected&&decisionFromUrl==='verification'&&selected.verification_status!=='pending'&&<p role="status" className="findings-context">حالة الملاحظة تغيرت منذ إضافتها لقائمة التحقق. راجع السجل الحالي قبل أي قرار.</p>}
     {selected&&decisionFromUrl==='closure'&&(selected.status!=='pending_verification'||selected.verification_status!=='accepted')&&<p role="status" className="findings-context">لم تعد هذه الملاحظة في حالة انتظار الإغلاق. يعرض السجل حالتها المعتمدة الحالية.</p>}
     {selected&&<FindingDetail key={`${selected.id}-${selected.revision}`} finding={selected} navigationContext={params.get('return_context')??params.toString()}
+      focusedActionId={exactAction?actionFromUrl:null}
       actions={selectedActions} actor={actor} role={role} people={people} busy={busy} run={run}/>}
   </main>;
 }
 
-function FindingDetail({finding,actions,actor,role,people,busy,run,navigationContext}:{
+function FindingDetail({finding,actions,actor,role,people,busy,run,navigationContext,focusedActionId=null}:{
   finding:SharedFinding;actions:CorrectiveAction[];actor:string;role:UserRole;people:Person[];navigationContext:string;
+  focusedActionId?:number|null;
   busy:boolean;run:(action:string,finding:SharedFinding,payload:Record<string,unknown>)=>Promise<boolean>;
 }){
   const [actionOpen,setActionOpen]=useState(false);
@@ -409,8 +411,9 @@ function FindingDetail({finding,actions,actor,role,people,busy,run,navigationCon
       <button className="workflow-button workflow-primary" disabled={busy}>حفظ الإجراء</button>
     </form>}
     {actions.length===0?<p className="workflow-empty">لا توجد إجراءات مرتبطة. يمكن التحقق من الملاحظة بلا إجراء فقط بقرار صريح ومبرر.</p>:
-      <div className="findings-actions">{actions.map(action=><CorrectiveActionCard key={`${action.id}-${action.revision}`}
+      <div className="findings-actions">{actions.map(action=><CorrectiveActionCard key={`${action.id}-${action.revision}-${focusedActionId===action.id}`}
         action={action} finding={finding} actor={actor} role={role} busy={busy}
+        initiallyExpanded={focusedActionId===action.id}
         people={people} evidence={evidence} linkedEvidenceLabel={linkedEvidenceLabel} run={run}/>)}</div>}
     <section className="findings-subsection" aria-label="أدلة المعالجة والتحقق">
       <h3>الأدلة المرتبطة</h3>
@@ -453,14 +456,16 @@ function FindingDetail({finding,actions,actor,role,people,busy,run,navigationCon
   </section>;
 }
 
-function CorrectiveActionCard({action,finding,actor,role,people=[],busy,evidence,linkedEvidenceLabel=()=>'',run}:{
+function CorrectiveActionCard({action,finding,actor,role,people=[],busy,evidence,linkedEvidenceLabel=()=>'',run,initiallyExpanded=false}:{
   action:CorrectiveAction;finding:SharedFinding;actor:string;role:UserRole;busy:boolean;
+  initiallyExpanded?:boolean;
   people:Person[];linkedEvidenceLabel:(id:number)=>string;
   evidence:EvidenceOption[];run:(command:string,finding:SharedFinding,payload:Record<string,unknown>)=>Promise<boolean>;
 }){
   const [note,setNote]=useState('');
   const [reason,setReason]=useState('');
   const [evidenceId,setEvidenceId]=useState('');
+  const [expanded,setExpanded]=useState(initiallyExpanded);
   const [draft,setDraft]=useState({title:action.title,description:action.description,
     due_date:action.due_date??'',status:action.status});
   const canWork=teamRole(role)||(role==='control_owner'&&finding.owner_id===actor&&action.owner_id===actor);
@@ -473,9 +478,13 @@ function CorrectiveActionCard({action,finding,actor,role,people=[],busy,evidence
   const ownerLabel=action.owner_id===actor?'أنا':people.find(person=>person.user_id===action.owner_id)?.display_name??'مالك مسجل';
   const nextStep=action.status!=='completed'?'العمل التصحيحي لم يكتمل بعد':action.verification_status==='accepted'?'تم التحقق من الإجراء؛ حالة الملاحظة مستقلة':action.verification_status==='rejected'?'أُعيد الإجراء بعد التحقق':'بانتظار تحقق مستقل';
   return <article id={`finding-action-${action.id}`} className="findings-action-card"><header><div><h4>{action.title}</h4><p className="findings-context">إجراء تصحيحي تابع للملاحظة · <span dir="ltr">#{action.id}</span></p></div>
-    <span className="findings-status">{action.status==='completed'?'مكتمل':actionStatusLabels[action.status]}</span></header><p>{action.description}</p>
+    <span className="findings-status">{action.status==='completed'?'مكتمل':actionStatusLabels[action.status]}</span></header>
     <dl className="findings-action-facts"><div><dt>المالك</dt><dd>{ownerLabel}</dd></div><div><dt>الاستحقاق</dt><dd>{formatComplianceDate(action.due_date)}</dd></div><div><dt>الإكمال</dt><dd>{action.completed_at?formatComplianceDate(action.completed_at):'لم يكتمل'}</dd></div><div><dt>التحقق</dt><dd>{verificationLabel}</dd></div></dl>
     <p className="findings-next-step">الخطوة التالية: {nextStep}</p>
+    <details className="findings-action-details" open={expanded} onToggle={event=>setExpanded(event.currentTarget.open)}>
+      <summary aria-label={`${expanded?'إخفاء':'عرض'} تفاصيل الإجراء: ${action.title}`}>{expanded?'إخفاء التفاصيل':'عرض التفاصيل'}</summary>
+      <div className="findings-action-detail-content">
+    <p>{action.description}</p>
     {action.completion_note&&<p>إفادة الإكمال: {action.completion_note}</p>}
     {action.verification_reason&&<p>قرار التحقق: {action.verification_reason}</p>}
     {action.verification_evidence_id&&<p>الدليل المرتبط بهذا الإجراء: {linkedEvidenceLabel(action.verification_evidence_id)}</p>}
@@ -503,5 +512,7 @@ function CorrectiveActionCard({action,finding,actor,role,people=[],busy,evidence
       <div className="findings-buttons"><button disabled={busy||!reason.trim()} onClick={()=>void run('verify_action',finding,{action_id:action.id,action_revision:action.revision,reason})}>قبول الإجراء</button>
         <button disabled={busy||!reason.trim()} onClick={()=>void run('reject_action',finding,{action_id:action.id,action_revision:action.revision,reason})}>إعادة الإجراء</button></div>
     </div>}
+      </div>
+    </details>
   </article>;
 }

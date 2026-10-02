@@ -39,12 +39,16 @@
 .findings-unavailable { padding:11px 13px; border-radius:8px; background:#f5f6f6; color:var(--cgp-muted); }
 .findings-section-heading { align-items:center; border-top:1px solid var(--cgp-line); padding-top:18px; margin-top:18px; }
 .findings-actions { display:grid; gap:12px; margin:14px 0; }
-.findings-action-card { border:1px solid var(--cgp-line); border-radius:10px; padding:16px; }
-.findings-action-facts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:12px 0; }
-.findings-action-facts>div { min-width:0; padding:8px 10px; border-radius:8px; background:#f7faf9; }
+.findings-action-card { border:1px solid var(--cgp-line); border-radius:10px; padding:14px 16px; }
+.findings-action-facts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:8px 0; }
+.findings-action-facts>div { min-width:0; padding:6px 10px; border-radius:8px; background:#f7faf9; }
 .findings-action-facts dt { color:var(--cgp-muted); font-size:12px; }
 .findings-action-facts dd { margin:3px 0 0; font-size:13px; font-weight:700; }
 .findings-next-step { font-weight:700; color:var(--cgp-teal-dark); }
+.findings-action-details { margin-top:8px; }
+.findings-action-details summary { width:max-content; max-width:100%; padding:6px 8px; border-radius:6px; color:var(--cgp-teal-dark); font-size:13px; font-weight:700; cursor:pointer; }
+.findings-action-details summary:focus-visible { outline:2px solid var(--cgp-teal); outline-offset:2px; }
+.findings-action-detail-content { margin-top:8px; padding-top:10px; border-top:1px solid var(--cgp-line); }
 .findings-action-card[id],.findings-lifecycle[id] { scroll-margin-top:24px; }
 .findings-action-card h4 { font-size:15px; }
 .findings-action-card small { color:var(--cgp-muted); }
@@ -55,4 +59,4 @@
 .findings-edit summary { cursor:pointer; color:var(--cgp-teal-dark); font-weight:700; }
 .findings-edit form { margin-top:12px; }
 @media(max-width:900px) { .findings-filter { grid-template-columns:repeat(2,minmax(0,1fr)); } .findings-facts,.findings-action-facts { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media(max-width:600px) { .findings-panel { padding:16px; } .findings-form-grid,.findings-filter,.findings-facts,.findings-action-facts { grid-template-columns:1fr; } .findings-detail>header,.findings-action-card>header,.findings-section-heading { flex-wrap:wrap; } }
+@media(max-width:600px) { .findings-panel { padding:16px; } .findings-form-grid,.findings-filter,.findings-facts { grid-template-columns:1fr; } .findings-detail>header,.findings-action-card>header,.findings-section-heading { flex-wrap:wrap; } .findings-action-facts { grid-template-columns:repeat(2,minmax(0,1fr)); } }

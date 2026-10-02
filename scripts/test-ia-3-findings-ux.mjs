@@ -47,9 +47,10 @@ const action={id:74,finding_id:41,title:'إصلاح السبب',description:'ا�
 function renderDetail(record=finding,actions=[action],role='cybersecurity_team',actor='reviewer',context,evidenceRows=[
   {id:501,version_number:3,file_name:'finding.pdf',evidence_name:'دليل الملاحظة',link_id:null},
   {id:502,version_number:2,file_name:'action.pdf',evidence_name:'دليل الإجراء',link_id:7},
-]){
+],focusedActionId=null){
   const component=load('app/findings/page.tsx',context,evidenceRows);
   return renderToStaticMarkup(React.createElement(component.FindingDetailTest,{finding:record,actions,role,actor,
+    focusedActionId,
     people:[{user_id:'owner',display_name:'مالك الضابط',role:'control_owner'}],busy:false,
     navigationContext:'from=review&framework=DCC&control=12&my_context=attention%3D1',run(){throw new Error('no mutation in render');}}));
 }
@@ -57,6 +58,23 @@ const available={state:'available',frameworkCode:'DCC',controlCode:'DCC-1',contr
 const html=renderDetail(finding,[action,{...action,id:75,title:'إجراء ثان',status:'open',completed_at:null,verification_status:'not_submitted'}],'cybersecurity_team','reviewer',available);
 check(html.includes('FND-41')&&html.includes('المصدر والسياق')&&html.includes('الإجراءات التصحيحية (2)'), 'Finding remains parent of two independent actions');
 check(html.includes('إصلاح السبب')&&html.includes('إجراء ثان')&&html.includes('بانتظار تحقق مستقل'), 'multiple action states are individually legible');
+const action74=html.slice(html.indexOf('id="finding-action-74"'),html.indexOf('id="finding-action-75"'));
+const action75=html.slice(html.indexOf('id="finding-action-75"'),html.indexOf('class="findings-subsection"',html.indexOf('id="finding-action-75"')));
+check((html.match(/<details class="findings-action-details"/g)??[]).length===2
+  &&!action74.includes('<details class="findings-action-details" open')
+  &&!action75.includes('<details class="findings-action-details" open'), 'each corrective action starts compact and independently expandable');
+check([action74,action75].every(section=>section.includes('المالك')&&section.includes('الاستحقاق')&&section.includes('الإكمال')
+  &&section.includes('التحقق')&&section.includes('الخطوة التالية:')&&section.includes('<summary')&&section.includes('عرض التفاصيل')),
+  'compact summary retains all decision-useful facts and a native keyboard-accessible disclosure');
+check(action74.indexOf('الخطوة التالية:')<action74.indexOf('<details class="findings-action-details"')
+  &&action74.indexOf('إفادة الإكمال:')>action74.indexOf('<summary')
+  &&action74.indexOf('الدليل المرتبط بهذا الإجراء:')>action74.indexOf('<summary'),
+  'exact evidence, completion and review detail stays inside disclosure without changing identity');
+const focused=renderDetail(finding,[action,{...action,id:75,title:'إجراء ثان'}],'cybersecurity_team','reviewer',available,undefined,75);
+const focused74=focused.slice(focused.indexOf('id="finding-action-74"'),focused.indexOf('id="finding-action-75"'));
+const focused75=focused.slice(focused.indexOf('id="finding-action-75"'),focused.indexOf('class="findings-subsection"',focused.indexOf('id="finding-action-75"')));
+check(!focused74.includes('<details class="findings-action-details" open')
+  &&focused75.includes('<details class="findings-action-details" open'), 'exact action deep link opens only its own detail');
 check(html.includes('فتح بند التقييم المحدد')&&html.includes('cycle=7')&&html.includes('item=91')&&html.includes('DCC-1'), 'exact authorized source and control context');
 check(html.includes('دليل تحقق الملاحظة')&&html.includes('الإصدار 3 · مباشر · #501')&&html.includes('الإصدار 2 · مشترك · #502'), 'exact historical version IDs and direct/shared association');
 check(html.includes('id="finding-decision"')&&html.includes('id="finding-closure"')&&html.includes('التحقق المستقل')&&html.includes('الإغلاق'), 'verification and closure remain separate destinations');
