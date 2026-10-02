@@ -23,6 +23,12 @@
 .review-center-tabs a:hover { background: #e2e8f0; color: #0f172a; }
 .review-center-tabs a[aria-current="page"] { background: #fff; color: #0f172a; box-shadow: 0 1px 3px #0f172a1a; }
 .review-center-tabs a:focus-visible { outline: 2px solid #0369a1; outline-offset: 2px; }
+.review-queue-tools { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.review-queue-tools button { width: 36px; height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155; font-size: 21px; cursor: pointer; }
+.review-queue-tools button:focus-visible { outline: 2px solid #0369a1; outline-offset: 2px; }
+.review-evidence-section-heading { margin: 0 0 14px; }
+.review-evidence-section-heading h2 { margin: 0; color: #0f172a; font-size: 18px; line-height: 1.5; }
+.review-evidence-section-heading p { margin: 4px 0 0; color: #64748b; font-size: 13px; line-height: 1.6; }
 .review-summary-panel {
   border: 1px solid #dbe4ee;
   border-radius: 12px;

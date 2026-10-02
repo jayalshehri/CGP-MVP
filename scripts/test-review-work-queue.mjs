@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { createClient } from '@supabase/supabase-js';
 const require = createRequire(import.meta.url), cache = new Map(), calls = [];
-let checks = 0, response = () => ({ data: [], count: 0, error: null });
+let checks = 0, response = () => ({ data: [], count: 0, error: null }), activeSearchParams = new URLSearchParams();
 const check = (value, message) => { assert.ok(value, message); checks++; };
 const source = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 function query(name, args, options) {
@@ -37,7 +37,7 @@ function load(path) {
     if (name.endsWith('.css')) return {};
     if (name === 'react') return { ...React, useEffect: () => {} };
     if (name === 'next/link') return { __esModule: true, default: ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children) };
-    if (name === 'next/navigation') return { useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push() {} }) };
+    if (name === 'next/navigation') return { useSearchParams: () => activeSearchParams, useRouter: () => ({ push() {}, replace() {} }) };
     if (name === '@/lib/supabase' || name === './supabase') return { supabase: client };
     if (name === '@/lib/auth') return { requireProfile() { throw new Error('Live authentication forbidden in test'); } };
     if (name.startsWith('@/') || name.startsWith('.')) {
@@ -211,9 +211,16 @@ const evidenceTabs = renderToStaticMarkup(React.createElement(tabs, { active: 'e
 check(queueTabs.includes('aria-current="page">قائمة العمل') && !queueTabs.includes('aria-current="page">مراجعة الأدلة والإصدارات'), 'work queue is the default active review tab');
 check(evidenceTabs.includes('aria-current="page">مراجعة الأدلة والإصدارات') && evidenceTabs.includes('evidence=51') && evidenceTabs.includes('link=100'), 'evidence tab preserves exact evidence and shared-link context');
 check(queueTabs.includes('عروض مركز المراجعة والقرار') && !queueTabs.includes('Decision History'), 'integrated two-view navigation has no history/future tab');
-check(source('components/ReviewWorkQueue.tsx').includes("evidenceParams.set('review_context', queueContext)") && source('components/EvidenceReviewContext.tsx').includes('queueHref={returnHref}'), 'switching back to queue preserves its URL filter context');
-check(source('app/review/page.tsx').includes("params.get('view') === 'evidence-history'") && source('app/review/page.tsx').includes("evidenceHref={'/review?' + params.toString()}"), 'refresh/back/forward select evidence view directly from existing URL');
-check(source('components/EvidenceReviewContext.tsx').includes('title="مراجعة الأدلة والإصدارات"'), 'evidence view keeps approved operational terminology');
+const reviewPage = load('app/review/page.tsx').default;
+const renderReviewPage = raw => { activeSearchParams = new URLSearchParams(raw); return renderToStaticMarkup(React.createElement(reviewPage)); };
+const queuePageHtml = renderReviewPage('');
+const evidencePageHtml = renderReviewPage('view=evidence-history&evidence=51&link=100&from=review&review_context=framework%3DDCC');
+check(queuePageHtml.indexOf('مركز المراجعة والقرار</h1>') < queuePageHtml.indexOf('ما الذي ينتظر مراجعتي أو قراري الآن؟') && queuePageHtml.indexOf('ما الذي ينتظر مراجعتي أو قراري الآن؟') < queuePageHtml.indexOf('قائمة العمل</a>'), 'persistent Review Center heading precedes both tabs');
+check((queuePageHtml.match(/مركز المراجعة والقرار<\/h1>/g) ?? []).length === 1 && (evidencePageHtml.match(/مركز المراجعة والقرار<\/h1>/g) ?? []).length === 1, 'both views render exactly one shared Review Center hero');
+check(evidencePageHtml.includes('aria-current="page">مراجعة الأدلة والإصدارات') && evidencePageHtml.includes('/review?framework=DCC'), 'evidence view selects its tab and preserves queue return context');
+check(source('app/review/page.tsx').includes("evidenceHref = evidenceView ? '/review?' + params.toString()") && source('app/review/page.tsx').includes("evidenceParams.set('review_context', queueContext)"), 'refresh/back/forward preserve evidence identity and queue filters in URL');
+check(source('components/EvidenceReviewContext.tsx').includes('<h2>مراجعة الأدلة والإصدارات</h2>') && source('components/EvidenceReviewContext.tsx').includes('راجع إصدارات الأدلة واتخذ قرار القبول أو طلب الاستكمال. قبول الدليل لا يعني اعتماد امتثال الضابط.'), 'evidence content uses approved smaller section heading and copy');
+check(!source('components/EvidenceReviewContext.tsx').includes('WorkflowHeading') && !source('components/ReviewWorkQueue.tsx').includes('<ReviewCenterTabs'), 'neither tab duplicates the shared hero or navigation');
 check(source('components/ReviewWorkQueue.tsx').includes("requireProfile(['admin', 'cybersecurity_team'])"), 'owner and external auditor do not gain Review Center decision access');
 
 let offsets = [];

@@ -8,11 +8,9 @@ import { cycleLabels, reviewLabels } from '@/lib/assessment';
 import { loadReviewWorkSnapshot, refreshReviewEvidenceSnapshot } from '@/lib/review-work-queue-read';
 import { canOfferInlineEvidence } from '@/lib/review-decision-safety';
 import ReviewEvidenceDecision from './ReviewEvidenceDecision';
-import ReviewCenterTabs from './ReviewCenterTabs';
 import type { DecisionResult } from '@/lib/review-evidence-decision';
 import type { ReviewActor, ReviewSnapshot, ReviewWorkItem } from '@/lib/review-work-queue';
 import { buildReviewWorkQueue, filterReviewWork, responsibilityLabels, reviewFilters, reviewWorkHref, reviewWorkPage, reviewWorkSummary, sortReviewWork, workDecisionModes, workTypeLabels, type CategoryResult } from '@/lib/review-work-queue';
-import { reviewQueueContext } from '@/lib/review-context';
 import './review-work-queue-refinement.css';
 
 const stateLabels: Record<string, string> = { ...cycleLabels, ...reviewLabels, open: 'مفتوحة', pending: 'بانتظار التحقق', pending_review: 'بانتظار مراجعة الدليل', under_review: 'قيد المراجعة', accepted: 'مقبول — ينتظر الإغلاق' };
@@ -60,7 +58,7 @@ export function ReviewQueueView({ categories, raw, update, actor, onReview, cert
     {visible.length > 0 && <nav className="review-queue-pages" aria-label="صفحات قائمة العمل"><button disabled={paged.page === 1} onClick={() => update('page', String(paged.page - 1))}>السابق</button><span>صفحة {paged.page} من {paged.pages} · {visible.length} عملًا</span><button disabled={paged.page === paged.pages} onClick={() => update('page', String(paged.page + 1))}>التالي</button></nav>}
   </>;
 }
-export default function ReviewWorkQueue({ certificationMode = false }: { certificationMode?: boolean }) {
+export default function ReviewWorkQueue({ certificationMode = false, embedded = false }: { certificationMode?: boolean; embedded?: boolean }) {
   const params = useSearchParams(), router = useRouter();
   const [categories, setCategories] = useState<CategoryResult[] | null>(null), [error, setError] = useState(''), [reload, setReload] = useState(0);
   const [context, setContext] = useState<{ actor: ReviewActor; snapshot: ReviewSnapshot } | null>(null), [selected, setSelected] = useState<ReviewWorkItem | null>(null), [notice, setNotice] = useState('');
@@ -96,13 +94,11 @@ export default function ReviewWorkQueue({ certificationMode = false }: { certifi
     if (value) next.set(key, value); else next.delete(key);
     router.push((certificationMode ? '/review/qa-certification' : '/review') + (next.size ? '?' + next : ''), { scroll: false });
   };
-  const queueContext = reviewQueueContext(params.toString());
-  const evidenceParams = new URLSearchParams({ view: 'evidence-history' });
-  if (queueContext) { evidenceParams.set('from', 'review'); evidenceParams.set('review_context', queueContext); }
-  return <main className="workflow-page review-workspace" dir="rtl">{certificationMode && <div role="status" className="review-qa-cert-banner">QA CERTIFICATION MODE — بيانات اختبار QA_SYNTH فقط</div>}<header className="review-queue-heading"><div><h1>{certificationMode ? 'شهادة مراجعة الأدلة التجريبية' : 'مركز المراجعة والقرار'}</h1><p>{certificationMode ? 'مسار معزول لضابط QA-C-01 ولا يظهر في واجهة الأعمال.' : 'ما الذي ينتظر مراجعتي أو قراري الآن؟'}</p></div><button aria-label="تحديث قائمة العمل" title="تحديث" onClick={() => { setCategories(null); setError(''); setReload(v => v + 1); }}>↻</button></header>
-    {!certificationMode && <ReviewCenterTabs active="queue" queueHref={'/review' + (params.size ? '?' + params.toString() : '')} evidenceHref={'/review?' + evidenceParams.toString()}/>}
+  const Root = embedded ? 'section' : 'main';
+  const refreshButton = <button aria-label="تحديث قائمة العمل" title="تحديث" onClick={() => { setCategories(null); setError(''); setReload(v => v + 1); }}>↻</button>;
+  return <Root className={embedded ? 'review-queue-content' : 'workflow-page review-workspace'} dir="rtl">{certificationMode && <div role="status" className="review-qa-cert-banner">QA CERTIFICATION MODE — بيانات اختبار QA_SYNTH فقط</div>}{embedded ? <div className="review-queue-tools">{refreshButton}</div> : <header className="review-queue-heading"><div><h1>{certificationMode ? 'شهادة مراجعة الأدلة التجريبية' : 'مركز المراجعة والقرار'}</h1><p>{certificationMode ? 'مسار معزول لضابط QA-C-01 ولا يظهر في واجهة الأعمال.' : 'ما الذي ينتظر مراجعتي أو قراري الآن؟'}</p></div>{refreshButton}</header>}
     {notice && <p role="status" className="review-decision-notice">{notice}</p>}
     {error ? <p role="alert" className="cgp-shell-error">{error} <Link href="/my-controls">العودة إلى ضوابطي ←</Link></p> : categories === null ? <p role="status">جاري تحميل العمل؛ المؤشرات غير متاحة حتى تكتمل القراءة.</p> : <ReviewQueueView categories={categories} raw={params.toString()} update={update} actor={context?.actor} onReview={setSelected} certificationMode={certificationMode}/>}
     {selected && context && <ReviewEvidenceDecision key={selected.key} work={selected} actor={context.actor} raw={params.toString()} onClose={() => setSelected(null)} onSettled={settled} certificationMode={certificationMode}/>}
-  </main>;
+  </Root>;
 }
