@@ -20,8 +20,11 @@ import { reviewContextReturn } from '@/lib/review-context';
 
 type Person = {user_id:string;display_name:string|null;role:string};
 type EvidenceOption = {id:number;file_name:string|null;evidence_name:string|null;version_number:number;valid_until:string|null;uploaded_by:string;association:'direct'|'shared'};
+type LinkedEvidence = {id:number;version_number:number;file_name:string|null;evidence_name:string|null;link_id:number|null};
+type SourceContext = {state:'loading'|'available'|'unavailable';frameworkCode:string|null;controlCode:string|null;controlTitle:string|null;controlAvailable:boolean};
 const roleCanWork = (role:UserRole) => role==='admin'||role==='cybersecurity_team'||role==='control_owner';
 const teamRole = (role:UserRole) => role==='admin'||role==='cybersecurity_team';
+const findingDisplayStatus = (finding:SharedFinding) => finding.status==='pending_verification'&&finding.verification_status==='accepted'?'بانتظار الإغلاق':findingStatusLabels[finding.status];
 const validSource = (value:string|null):FindingSource =>
   value==='assessment'||value==='risk'||value==='vulnerability' ? value : 'assessment';
 const errorMessage = (value:unknown) => value instanceof Error ? value.message : 'تعذر إكمال العملية. أعد المحاولة.';
@@ -142,7 +145,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   const exactAction=Number.isSafeInteger(actionFromUrl)&&actionFromUrl>0&&selectedActions.some(a=>a.id===actionFromUrl);
   useEffect(()=>{
     if(!selected||!hasRequestedFinding)return;
-    const target=exactAction?`finding-action-${actionFromUrl}`:decisionFromUrl==='verification'||decisionFromUrl==='closure'?'finding-decision':null;
+    const target=exactAction?`finding-action-${actionFromUrl}`:decisionFromUrl==='closure'?'finding-closure':decisionFromUrl==='verification'?'finding-decision':null;
     if(!target)return;
     const frame=requestAnimationFrame(()=>document.getElementById(target)?.scrollIntoView({block:'start'}));
     return()=>cancelAnimationFrame(frame);
@@ -158,6 +161,9 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   }),[findings,search,sourceFilter,statusFilter,severityFilter,idFromUrl,sourceFromUrl]);
   const openFindings=findings.filter(f=>f.status!=='closed');
   const overdue=openFindings.filter(f=>f.due_date&&f.due_date<todayRiyadh());
+  const inTreatment=findings.filter(f=>f.status==='in_treatment');
+  const awaitingVerification=findings.filter(f=>f.status==='pending_verification'&&f.verification_status!=='accepted');
+  const closedFindings=findings.filter(f=>f.status==='closed');
   useEffect(()=>{
     let active=true;
     if(role!=='control_owner'||sourceFromUrl!=='assessment'||!Number.isSafeInteger(idFromUrl)||idFromUrl<1)return;
@@ -208,12 +214,13 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
       action={canCreate?<button className="workflow-button workflow-primary" onClick={()=>setCreateOpen(v=>!v)}>+ تسجيل ملاحظة</button>:undefined}/>
     {error&&<p className="findings-error" role="alert">{error} <button onClick={()=>router.refresh()}>تحديث الصفحة</button></p>}
     {notice&&<p className="findings-success" role="status">{notice}</p>}
-    <div className="workflow-metrics">
+    <div className="workflow-metrics" aria-label="ملخص الملاحظات">
       <WorkflowMetric label="مفتوحة ضمن نطاقك" value={openFindings.length}/>
-      <WorkflowMetric label="متأخرة" value={overdue.length} tone={overdue.length?'danger':'neutral'}/>
-      <WorkflowMetric label="بانتظار التحقق" value={findings.filter(f=>f.status==='pending_verification').length}/>
-      <WorkflowMetric label="إجراءات مكتملة" value={actions.filter(a=>a.status==='completed').length}/>
+      <WorkflowMetric label="قيد المعالجة" value={inTreatment.length}/>
+      <WorkflowMetric label="بانتظار التحقق" value={awaitingVerification.length}/>
+      <WorkflowMetric label="مغلقة" value={closedFindings.length}/>
     </div>
+    {overdue.length>0&&<p className="findings-overdue findings-overdue-summary" role="status">{overdue.length} ملاحظة متأخرة ضمن الملاحظات غير المغلقة؛ التأخر ليس مرحلة منفصلة من دورة الملاحظة.</p>}
     {createOpen&&canCreate&&<form className="findings-panel findings-create" onSubmit={createFinding}>
       <h2>ملاحظة جديدة</h2><p>لا تُنشأ الملاحظة تلقائيًا من درجة الامتثال؛ يلزم قرار بشري صريح.</p>
       <div className="findings-form-grid">
@@ -257,9 +264,9 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
         <th>الملاحظة</th><th>المصدر</th><th>الخطورة</th><th>الحالة</th><th>المالك</th><th>الاستحقاق</th><th>الإجراءات</th>
       </tr></thead><tbody>{visible.map(f=><tr key={f.id} className={selectedId===f.id?'findings-selected':''}>
         <td><b dir="ltr">{f.reference_code}</b><span>{f.title}</span></td>
-        <td>{sourceLabels[f.source_type]} #{f.source_record_id}</td>
-        <td>{severityLabels[f.severity]}</td><td>{findingStatusLabels[f.status]}</td>
-        <td>{f.owner_id===actor?'أنا':people.find(p=>p.user_id===f.owner_id)?.display_name||f.owner_id?.slice(0,8)||'غير محدد'}</td>
+        <td>{sourceLabels[f.source_type]}</td>
+        <td>{severityLabels[f.severity]}</td><td>{findingDisplayStatus(f)}</td>
+        <td>{f.owner_id===actor?'أنا':people.find(p=>p.user_id===f.owner_id)?.display_name||(f.owner_id?'مالك مسجل':'غير محدد')}</td>
         <td>{formatComplianceDate(f.due_date,true)}{f.due_date&&f.due_date<todayRiyadh()&&f.status!=='closed'&&<strong className="findings-overdue"> متأخرة</strong>}</td>
         <td><button onClick={()=>selectFinding(f.id)}>فتح</button></td>
       </tr>)}</tbody></table></div>
@@ -283,12 +290,17 @@ function FindingDetail({finding,actions,actor,role,people,busy,run,navigationCon
     severity:finding.severity,due_date:finding.due_date??''});
   const [newAction,setNewAction]=useState({title:'',description:'',owner_id:teamRole(role)?'':actor,due_date:'',reference_note:''});
   const [reason,setReason]=useState('');
+  const [closureReason,setClosureReason]=useState('');
   const [findingEvidence,setFindingEvidence]=useState('');
   const [evidence,setEvidence]=useState<EvidenceOption[]>([]);
   const [evidenceError,setEvidenceError]=useState('');
+  const [linkedEvidence,setLinkedEvidence]=useState<{state:'loading'|'ready';rows:LinkedEvidence[]}>({state:'loading',rows:[]});
+  const [sourceContext,setSourceContext]=useState<SourceContext>({state:'loading',frameworkCode:null,controlCode:null,controlTitle:null,controlAvailable:false});
   const canFollow=teamRole(role)||(role==='control_owner'&&finding.owner_id===actor);
   const canVerify=teamRole(role)&&actor!==finding.created_by&&actor!==finding.owner_id
     &&!actions.some(action=>action.owner_id===actor||action.completed_by===actor);
+  const sourceIsResolvable=finding.source_type!=='internal_audit'&&Number.isSafeInteger(finding.source_record_id)&&finding.source_record_id>0;
+  const sourceState=sourceIsResolvable?sourceContext.state:'unavailable';
   useEffect(()=>{
     let active=true;
     if(!finding.control_id)return;
@@ -300,18 +312,63 @@ function FindingDetail({finding,actions,actor,role,people,busy,run,navigationCon
       });
     return()=>{active=false;};
   },[finding.id,finding.control_id,finding.revision]);
+  const linkedEvidenceIds=[...new Set([finding.verification_evidence_id,...actions.map(action=>action.verification_evidence_id)].filter((id):id is number=>id!==null))];
+  const linkedEvidenceKey=linkedEvidenceIds.join(',');
+  useEffect(()=>{
+    let active=true;
+    const ids=linkedEvidenceKey.split(',').filter(Boolean).map(Number);
+    if(!ids.length)return;
+    void (async()=>{
+      try{
+        let query=supabase.rpc('grc_evidence_register').select('id,control_id,link_id,version_number,file_name,evidence_name').in('id',ids);
+        if(finding.control_id)query=query.eq('control_id',finding.control_id);
+        const result=await query;
+        if(active)setLinkedEvidence({state:'ready',rows:result.error?[]:(result.data??[]) as LinkedEvidence[]});
+      }catch{if(active)setLinkedEvidence({state:'ready',rows:[]});}
+    })();
+    return()=>{active=false;};
+  },[linkedEvidenceKey,finding.control_id]);
+  useEffect(()=>{
+    let active=true;
+    const sourceTable:Record<FindingSource,string|null>={assessment:'assessment_items',risk:'cyber_risks',vulnerability:'vulnerabilities',internal_audit:null};
+    const table=sourceTable[finding.source_type];
+    if(!table||!Number.isSafeInteger(finding.source_record_id)||finding.source_record_id<1)return;
+    void (async()=>{
+      try{
+        const [source,control,framework]=await Promise.all([
+          supabase.from(table).select('id').eq('id',finding.source_record_id).maybeSingle(),
+          finding.control_id?supabase.from('controls').select('id,control_code,title_ar').eq('id',finding.control_id).maybeSingle():Promise.resolve({data:null,error:null}),
+          finding.framework_id?supabase.from('frameworks').select('id,code').eq('id',finding.framework_id).maybeSingle():Promise.resolve({data:null,error:null}),
+        ]);
+        if(!active)return;
+        const controlData=control.error?null:control.data;
+        const frameworkData=framework.error?null:framework.data;
+        setSourceContext({state:source.error||!source.data?'unavailable':'available',
+          frameworkCode:frameworkData?.code??null,controlCode:controlData?.control_code??null,
+          controlTitle:controlData?.title_ar??null,controlAvailable:!!controlData});
+      }catch{if(active)setSourceContext({state:'unavailable',frameworkCode:null,controlCode:null,controlTitle:null,controlAvailable:false});}
+    })();
+    return()=>{active=false;};
+  },[finding.id,finding.source_type,finding.source_record_id,finding.control_id,finding.framework_id]);
   const verifierEvidence=evidence.filter(e=>e.uploaded_by!==actor);
   const evidenceLabel=(item:EvidenceOption)=>`${item.file_name||item.evidence_name||`دليل #${item.id}`} · v${item.version_number} · ${item.association==='direct'?'دليل مباشر':'دليل مشترك عبر مواءمة معتمدة'}`;
+  const sourceHref=sourceState==='available'&&finding.source_type==='assessment'&&sourceContext.frameworkCode&&finding.assessment_cycle_id?
+    assessmentItemHref(sourceContext.frameworkCode,finding.assessment_cycle_id,finding.source_record_id,navigationContext):null;
+  const ownerName=(userId:string|null)=>userId===actor?'أنا':people.find(person=>person.user_id===userId)?.display_name??(userId?'مالك مسجل':'غير محدد');
+  const linkedEvidenceLabel=(id:number)=>{
+    const row=linkedEvidence.rows.find(item=>item.id===id);
+    if(!row)return linkedEvidence.state==='loading'?'جاري التحقق من الدليل…':'الدليل المرتبط غير متاح ضمن صلاحياتك.';
+    return `${row.evidence_name||row.file_name||'دليل'} · الإصدار ${row.version_number} · ${row.link_id===null?'مباشر':'مشترك'} · #${row.id}`;
+  };
   async function addAction(event:FormEvent){event.preventDefault();
     const saved=await run('add_action',finding,{...newAction,due_date:newAction.due_date||null});
     if(saved){setActionOpen(false);setNewAction({title:'',description:'',owner_id:teamRole(role)?'':actor,due_date:'',reference_note:''});}
   }
   return <section className="findings-panel findings-detail" aria-label="تفاصيل الملاحظة">
     <header><div><small dir="ltr">{finding.reference_code}</small><h2>{finding.title}</h2>
-      <p>{sourceLabels[finding.source_type]} #{finding.source_record_id} · {findingStatusLabels[finding.status]}</p></div>
-      {finding.control_id&&<Link href={controlHref(finding.control_id,navigationContext,'findings')}>فتح الضابط ←</Link>}</header>
+      <p className="findings-context">الملاحظة هي السجل الرئيسي؛ الإجراءات أدناه تعالجها، ولا يغلقها اكتمال الإجراء تلقائيًا.</p></div>
+      <span className="findings-status">{findingDisplayStatus(finding)}</span></header>
     <p className="findings-description">{finding.description}</p>
-    {evidenceError&&<p className="findings-error" role="alert">تعذر تحميل الأدلة المؤهلة: {evidenceError}</p>}
     {canFollow&&['open','in_treatment'].includes(finding.status)&&<details className="findings-edit">
       <summary>تعديل تفاصيل الملاحظة</summary>
       <form className="findings-form-grid" onSubmit={event=>{event.preventDefault();void run('update_finding',finding,
@@ -328,15 +385,19 @@ function FindingDetail({finding,actions,actor,role,people,busy,run,navigationCon
         <button className="workflow-button" disabled={busy}>حفظ التعديل</button>
       </form>
     </details>}
-    <dl className="findings-facts"><div><dt>تاريخ التحديد</dt><dd>{formatComplianceDate(finding.identified_date)}</dd></div>
-      <div><dt>الخطورة</dt><dd>{severityLabels[finding.severity]}</dd></div>
-      <div><dt>الاستحقاق</dt><dd>{formatComplianceDate(finding.due_date)}</dd></div>
-      <div><dt>التحقق</dt><dd>{finding.verification_status==='accepted'?'مقبول':finding.verification_status==='rejected'?'مرفوض':finding.verification_status==='pending'?'بانتظار القرار':'لم يُقدم'}</dd></div></dl>
-    {finding.verification_reason&&<p>قرار التحقق: {finding.verification_reason} {finding.verified_at&&`· ${formatComplianceDate(finding.verified_at)}`}</p>}
-    {finding.closure_reason&&<p>قرار الإغلاق: {finding.closure_reason} · {formatComplianceDate(finding.closed_at)}</p>}
-    {teamRole(role)&&<Link href="/audit">عرض سجل النشاط والتغييرات الكامل ←</Link>}
+    <dl className="findings-facts"><div><dt>الخطورة</dt><dd>{severityLabels[finding.severity]}</dd></div>
+      <div><dt>المالك</dt><dd>{ownerName(finding.owner_id)}</dd></div>
+      <div><dt>الاستحقاق</dt><dd>{formatComplianceDate(finding.due_date)}{finding.due_date&&finding.due_date<todayRiyadh()&&finding.status!=='closed'&&<span className="findings-overdue"> · متأخرة</span>}</dd></div>
+      <div><dt>الحالة</dt><dd>{findingDisplayStatus(finding)}</dd></div></dl>
+    <section className="findings-subsection" aria-label="مصدر الملاحظة وسياقها">
+      <h3>المصدر والسياق</h3>
+      {sourceState==='loading'?<p role="status">جاري التحقق من المصدر…</p>:sourceState==='unavailable'?<p className="findings-unavailable" role="status">سجل المصدر غير متاح أو خارج صلاحياتك. لا يمكن فتح مصدر بديل.</p>:<p>{sourceLabels[finding.source_type]} · السجل <b dir="ltr">#{finding.source_record_id}</b>{sourceHref&&<> · <Link href={sourceHref}>فتح بند التقييم المحدد ←</Link></>}{!sourceHref&&finding.source_type==='assessment'&&<span className="findings-context"> · لا يتوفر رابط دقيق لبند التقييم في هذا السياق.</span>}</p>}
+      {(sourceContext.frameworkCode||finding.control_id)&&<p className="findings-context">{sourceContext.frameworkCode&&<>الإطار: {sourceContext.frameworkCode}</>}{finding.control_id&&sourceState==='loading'&&<> · <Link href={controlHref(finding.control_id,navigationContext,'findings')}>فتح الضابط المرتبط ←</Link></>}{finding.control_id&&sourceState!=='loading'&&sourceContext.controlAvailable&&<> · الضابط: <Link href={controlHref(finding.control_id,navigationContext,'findings')}>{sourceContext.controlCode} — {sourceContext.controlTitle}</Link></>}{finding.control_id&&sourceState!=='loading'&&!sourceContext.controlAvailable&&<> · الضابط المرتبط غير متاح ضمن صلاحياتك.</>}</p>}
+      <small className="findings-context">تاريخ تحديد الملاحظة: {formatComplianceDate(finding.identified_date)}</small>
+    </section>
     <div className="findings-section-heading"><h3>الإجراءات التصحيحية ({actions.length})</h3>
       {canFollow&&['open','in_treatment'].includes(finding.status)&&<button onClick={()=>setActionOpen(v=>!v)}>+ إضافة إجراء</button>}</div>
+    <p className="findings-context">كل إجراء جزء من معالجة هذه الملاحظة؛ الإكمال لا يعني التحقق المستقل أو إغلاق الملاحظة.</p>
     {actionOpen&&<form onSubmit={addAction} className="findings-action-form findings-form-grid">
       <label>عنوان الإجراء<input required minLength={2} value={newAction.title} onChange={e=>setNewAction({...newAction,title:e.target.value})}/></label>
       <label>المالك<select required value={newAction.owner_id} disabled={!teamRole(role)} onChange={e=>setNewAction({...newAction,owner_id:e.target.value})}>
@@ -350,10 +411,21 @@ function FindingDetail({finding,actions,actor,role,people,busy,run,navigationCon
     {actions.length===0?<p className="workflow-empty">لا توجد إجراءات مرتبطة. يمكن التحقق من الملاحظة بلا إجراء فقط بقرار صريح ومبرر.</p>:
       <div className="findings-actions">{actions.map(action=><CorrectiveActionCard key={`${action.id}-${action.revision}`}
         action={action} finding={finding} actor={actor} role={role} busy={busy}
-        evidence={evidence} run={run}/>)}</div>}
-    {canFollow&&finding.status!=='closed'&&<div id="finding-decision" className="findings-lifecycle">
-      <h3>دورة الملاحظة</h3>
-      <label>سبب القرار<textarea value={reason} onChange={e=>setReason(e.target.value)}/></label>
+        people={people} evidence={evidence} linkedEvidenceLabel={linkedEvidenceLabel} run={run}/>)}</div>}
+    <section className="findings-subsection" aria-label="أدلة المعالجة والتحقق">
+      <h3>الأدلة المرتبطة</h3>
+      {finding.verification_evidence_id?<p>دليل تحقق الملاحظة: {linkedEvidenceLabel(finding.verification_evidence_id)}</p>:<p className="findings-context">لا يوجد دليل تحقق مرتبط بالملاحظة.</p>}
+      {actions.some(action=>action.verification_evidence_id)&&<p className="findings-context">تظهر أدلة الإجراءات داخل كل إجراء مرتبط بها.</p>}
+      <p className="findings-context">يُعرض الإصدار المرتبط بهذا القرار تحديدًا؛ لا يُستبدل بالإصدار الحالي عند وجود إصدار أحدث.</p>
+      {evidenceError&&<p className="findings-unavailable">الأدلة المؤهلة غير متاحة الآن.</p>}
+    </section>
+    <section id="finding-decision" className="findings-subsection findings-verification" aria-label="التحقق المستقل">
+      <h3>التحقق المستقل</h3>
+      <p>حالة التحقق: <strong>{finding.verification_status==='accepted'?'مقبول':finding.verification_status==='rejected'?'مرفوض':finding.verification_status==='pending'?'بانتظار القرار':'لم يُقدم'}</strong></p>
+      {finding.verified_by&&<p>المتحقق: {ownerName(finding.verified_by)}{finding.verified_at&&` · ${formatComplianceDate(finding.verified_at)}`}</p>}
+      {finding.verification_reason&&<p>سبب قرار التحقق: {finding.verification_reason}</p>}
+      {canFollow&&(finding.status==='open'||finding.status==='in_treatment'||finding.status==='pending_verification'&&canVerify&&finding.verification_status!=='accepted')&&<div className="findings-lifecycle">
+      {(finding.status!=='pending_verification'||finding.verification_status!=='accepted')&&<label>سبب القرار<textarea value={reason} onChange={e=>setReason(e.target.value)}/></label>}
       {finding.status==='open'&&<button disabled={busy} onClick={()=>void run('start_treatment',finding,{})}>بدء المعالجة</button>}
       {['open','in_treatment'].includes(finding.status)&&<button disabled={busy||!reason.trim()||actions.some(a=>a.status!=='completed')}
         onClick={()=>void run('submit_verification',finding,{reason})}>إرسال للتحقق</button>}
@@ -364,17 +436,26 @@ function FindingDetail({finding,actions,actor,role,people,busy,run,navigationCon
           onClick={()=>void run('verify_finding',finding,{reason,evidence_id:findingEvidence||null})}>قبول التحقق</button>
           <button disabled={busy||!reason.trim()} onClick={()=>void run('reject_finding',finding,{reason})}>إعادة للمعالجة</button></>}
       </>}
-      {finding.status==='pending_verification'&&finding.verification_status==='accepted'&&finding.verified_by===actor&&
-        <button className="workflow-button workflow-primary" disabled={busy||!reason.trim()}
-          onClick={()=>void run('close_finding',finding,{reason})}>إغلاق بقرار مستقل</button>}
-      <p className="findings-hint">اكتمال الإجراءات لا يغلق الملاحظة. يلزم تحقق مستقل ثم قرار إغلاق منفصل.</p>
-    </div>}
+      </div>}
+    </section>
+    <section id="finding-closure" className="findings-subsection findings-closure" aria-label="إغلاق الملاحظة">
+      <h3>الإغلاق</h3>
+      {finding.status==='closed'?<p>أُغلقت الملاحظة بقرار منفصل{finding.closed_at&&` · ${formatComplianceDate(finding.closed_at)}`}{finding.closed_by&&` · بواسطة ${ownerName(finding.closed_by)}`}.</p>:<p className="findings-context">لا تُغلق الملاحظة تلقائيًا بعد إكمال الإجراءات أو اعتماد التحقق.</p>}
+      {finding.closure_reason&&<p>سبب قرار الإغلاق: {finding.closure_reason}</p>}
+      {canFollow&&finding.status==='pending_verification'&&finding.verification_status==='accepted'&&finding.verified_by===actor&&<div className="findings-lifecycle">
+        <label>سبب قرار الإغلاق<textarea value={closureReason} onChange={e=>setClosureReason(e.target.value)}/></label>
+        <button className="workflow-button workflow-primary" disabled={busy||!closureReason.trim()}
+          onClick={()=>void run('close_finding',finding,{reason:closureReason})}>إغلاق بقرار مستقل</button>
+      </div>}
+    </section>
+    {teamRole(role)&&<Link href="/audit">عرض سجل النشاط والتغييرات الكامل ←</Link>}
     {role==='nca_external_auditor'&&<p className="findings-hint">عرض تاريخي فقط ضمن نطاق التدقيق المصرّح به.</p>}
   </section>;
 }
 
-function CorrectiveActionCard({action,finding,actor,role,busy,evidence,run}:{
+function CorrectiveActionCard({action,finding,actor,role,people=[],busy,evidence,linkedEvidenceLabel=()=>'',run}:{
   action:CorrectiveAction;finding:SharedFinding;actor:string;role:UserRole;busy:boolean;
+  people:Person[];linkedEvidenceLabel:(id:number)=>string;
   evidence:EvidenceOption[];run:(command:string,finding:SharedFinding,payload:Record<string,unknown>)=>Promise<boolean>;
 }){
   const [note,setNote]=useState('');
@@ -388,12 +469,16 @@ function CorrectiveActionCard({action,finding,actor,role,busy,evidence,run}:{
   const canComplete=canWork&&['open','in_treatment'].includes(finding.status)&&action.status!=='completed';
   const canReview=teamRole(role)&&finding.status==='pending_verification'&&action.status==='completed'
     &&action.owner_id!==actor&&action.completed_by!==actor&&finding.created_by!==actor;
-  return <article id={`finding-action-${action.id}`} className="findings-action-card"><header><div><h4>{action.title}</h4><p>{actionStatusLabels[action.status]} · التحقق: {action.verification_status==='accepted'?'مقبول':action.verification_status==='rejected'?'مرفوض':action.verification_status==='pending'?'بانتظار القرار':'لم يبدأ'}</p></div>
-    <span>#{action.id}</span></header><p>{action.description}</p>
-    <small>الاستحقاق: {formatComplianceDate(action.due_date)}{action.completed_at&&` · أُكمل ${formatComplianceDate(action.completed_at)}`}</small>
+  const verificationLabel=action.verification_status==='accepted'?'مقبول':action.verification_status==='rejected'?'مرفوض':action.verification_status==='pending'?'بانتظار القرار':'لم يبدأ';
+  const ownerLabel=action.owner_id===actor?'أنا':people.find(person=>person.user_id===action.owner_id)?.display_name??'مالك مسجل';
+  const nextStep=action.status!=='completed'?'العمل التصحيحي لم يكتمل بعد':action.verification_status==='accepted'?'تم التحقق من الإجراء؛ حالة الملاحظة مستقلة':action.verification_status==='rejected'?'أُعيد الإجراء بعد التحقق':'بانتظار تحقق مستقل';
+  return <article id={`finding-action-${action.id}`} className="findings-action-card"><header><div><h4>{action.title}</h4><p className="findings-context">إجراء تصحيحي تابع للملاحظة · <span dir="ltr">#{action.id}</span></p></div>
+    <span className="findings-status">{action.status==='completed'?'مكتمل':actionStatusLabels[action.status]}</span></header><p>{action.description}</p>
+    <dl className="findings-action-facts"><div><dt>المالك</dt><dd>{ownerLabel}</dd></div><div><dt>الاستحقاق</dt><dd>{formatComplianceDate(action.due_date)}</dd></div><div><dt>الإكمال</dt><dd>{action.completed_at?formatComplianceDate(action.completed_at):'لم يكتمل'}</dd></div><div><dt>التحقق</dt><dd>{verificationLabel}</dd></div></dl>
+    <p className="findings-next-step">الخطوة التالية: {nextStep}</p>
     {action.completion_note&&<p>إفادة الإكمال: {action.completion_note}</p>}
     {action.verification_reason&&<p>قرار التحقق: {action.verification_reason}</p>}
-    {action.verification_evidence_id&&<Link href="/evidence">دليل التحقق #{action.verification_evidence_id} في المستودع المركزي</Link>}
+    {action.verification_evidence_id&&<p>الدليل المرتبط بهذا الإجراء: {linkedEvidenceLabel(action.verification_evidence_id)}</p>}
     {canEdit&&<details className="findings-edit"><summary>تعديل الإجراء</summary>
       <form className="findings-form-grid" onSubmit={event=>{event.preventDefault();void run('update_action',finding,
         {...draft,due_date:draft.due_date||null,action_id:action.id,action_revision:action.revision});}}>
@@ -411,6 +496,7 @@ function CorrectiveActionCard({action,finding,actor,role,busy,evidence,run}:{
     {canComplete&&<div className="findings-action-controls"><label>إفادة الإكمال<textarea value={note} onChange={e=>setNote(e.target.value)}/></label>
       <label>دليل مرتبط بالضابط، إن وجد<select value={evidenceId} onChange={e=>setEvidenceId(e.target.value)}><option value="">بدون دليل</option>
         {evidence.map(e=><option key={e.id} value={e.id}>{e.file_name||e.evidence_name||`دليل #${e.id}`} · v{e.version_number} · {e.association==='direct'?'دليل مباشر':'دليل مشترك عبر مواءمة معتمدة'}</option>)}</select></label>
+      <p className="findings-context">يعرض الخيار الإصدار المؤهل الآن؛ يحفظ القرار معرّف هذا الإصدار المحدد.</p>
       <button disabled={busy||!note.trim()} onClick={()=>void run('complete_action',finding,{action_id:action.id,action_revision:action.revision,completion_note:note,evidence_id:evidenceId||null})}>إكمال الإجراء</button>
     </div>}
     {canReview&&action.verification_status!=='accepted'&&<div className="findings-action-controls"><label>سبب التحقق<textarea value={reason} onChange={e=>setReason(e.target.value)}/></label>
