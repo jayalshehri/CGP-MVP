@@ -139,7 +139,7 @@ function renderLanding(role, status, rows = items, shared = [], cycleOverrides =
 }
 const landing = renderLanding('admin', 'in_progress');
 check(landing.includes('نطاق تجريبي') && landing.includes('تم تقييم 1 من 2') && landing.includes('50%'), 'selected scope and X/Y completion');
-check(landing.includes('اكتمال الإدخال ليس نسبة امتثال') && landing.includes('الالتزام المعتمد — دورة #4'), 'completion separate from approved cycle compliance');
+check(landing.includes('اكتمال التقييم ليس نسبة امتثال') && landing.includes('الالتزام المعتمد — دورة #4'), 'completion separate from approved cycle compliance');
 check(landing.includes('class="ae-preview"') && landing.includes('النتيجة') && landing.includes('<th>الأدلة</th>'), 'compact item queue');
 check(landing.indexOf('aria-label="الدورة الحالية"') < landing.indexOf('قائمة عمل بنود التقييم') && landing.indexOf('قائمة عمل بنود التقييم') < landing.indexOf('إدارة الدورة والمزيد'), 'current cycle then queue then administration');
 check(landing.includes('<details class="ae-card ae-cycle-admin ae-no-print">') && !landing.includes('ae-cycle-admin ae-no-print" open'), 'administration collapsed by default');

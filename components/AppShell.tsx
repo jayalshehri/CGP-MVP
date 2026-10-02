@@ -9,8 +9,8 @@ import FeedbackWidget from "@/components/FeedbackWidget";
 import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
 import { myControlsReturn, myControlsOrigin } from "@/lib/my-controls-context";
 
-// CGP v2 IA (Package P1): grouped by domain (الامتثال / المخاطر / المراجعة
-// والتدقيق / الاستراتيجية والتنفيذ), each with at most one subgroup level.
+// CGP v2 IA (Package P1): grouped by domain (الامتثال / المخاطر /
+// الاستراتيجية والتنفيذ), each with at most one subgroup level.
 // Items sharing a `group` (or `subgroup`) must stay adjacent in this array --
 // the sidebar renderer below groups them by walking the array in order, not
 // by a separate lookup table, so array order IS visual order.
@@ -26,10 +26,11 @@ const navigation = [
   { href: "/my-controls", label: "ضوابطي", group: "الامتثال", personal: true },
   { href: "/compliance", label: "مركز الامتثال", group: "الامتثال", auditor: true, ownerHidden: true },
   { href: "/controls", label: "مكتبة الضوابط", group: "الامتثال", sidebarHidden: true },
-  { href: "/evidence", label: "الأدلة", group: "الامتثال", auditor: true },
-  { href: "/findings", label: "الملاحظات والإجراءات", group: "الامتثال", auditor: true },
-  { href: "/review", label: "التحقق", group: "الامتثال", team: true },
-  { href: "/mappings", label: "المواءمة", group: "الامتثال", team: true },
+  { href: "/evidence", label: "مستودع الأدلة", group: "الامتثال", auditor: true },
+  { href: "/findings", label: "الملاحظات والإجراءات التصحيحية", group: "الامتثال", auditor: true },
+  { href: "/review", label: "مركز المراجعة والقرار", group: "الامتثال", team: true },
+  { href: "/mappings", label: "مواءمة الضوابط", group: "الامتثال", team: true },
+  { href: "/audit-schedule", label: "المراجعات الدورية للضوابط", group: "الامتثال", auditor: true },
   // P1.1 removed these four from the Sidebar (still fully functional --
   // reachable via the P1.2 assessment launcher on /controls, or by direct
   // URL). Kept here only so the Header/breadcrumb can resolve a real title
@@ -46,17 +47,13 @@ const navigation = [
   { href: "/vulnerabilities", label: "الثغرات", group: "المخاطر" },
   { href: "/third-parties", label: "الأطراف الثالثة", group: "المخاطر", team: true },
 
-  // المراجعة والتدقيق (Full Audit Management is P4 -- only the periodic
-  // control-review schedule, which already exists, is exposed in P1)
-  { href: "/audit-schedule", label: "المراجعات الدورية للضوابط", group: "المراجعة والتدقيق", auditor: true },
-
   // الاستراتيجية والتنفيذ
   { href: "/roadmap/analysis", label: "المحفظة السيبرانية", group: "الاستراتيجية والتنفيذ", team: true },
   { href: "/roadmap/dashboard", label: "خارطة الطريق", group: "الاستراتيجية والتنفيذ", team: true },
   { href: "/roadmap", label: "المشاريع والمبادرات", group: "الاستراتيجية والتنفيذ", team: true },
 
   { href: "/reports", label: "التقارير", group: "", team: true },
-  { href: "/tasks", label: "مهامي", group: "", separatorBefore: true },
+  { href: "/tasks", label: "متابعة الضوابط", group: "", separatorBefore: true },
 
   // مساحات العمل (data governance / shared workspaces) -- untouched by P1,
   // this IA package only restructures the cybersecurity workspace above.
@@ -75,7 +72,7 @@ const navigation = [
   { href: "/feedback", label: "نتائج الاختبارات", group: "الإدارة والإعدادات", admin: true },
   { href: "/audit", label: "سجل النشاط والتغييرات", group: "الإدارة والإعدادات", team: true },
 ];
-const roleLabels: Record<UserRole, string> = { admin: "مدير النظام", cybersecurity_team: "مدير الامتثال والمراجعة", data_governance_team: "فريق إدارة البيانات", control_owner: "مالك الضابط", nca_external_auditor: "مراجع خارجي — NCA" };
+const roleLabels: Record<UserRole, string> = { admin: "مدير النظام", cybersecurity_team: "فريق الأمن السيبراني", data_governance_team: "فريق إدارة البيانات", control_owner: "مالك الضابط", nca_external_auditor: "مراجع خارجي — NCA" };
 type SearchResult = { id:number; control_code:string; title_ar:string };
 
 function NavIcon({ href }: { href: string }) {
@@ -185,7 +182,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const links = items.map(linkFor);
   // Blocks preserve array order: adjacent items sharing a `group` (or, inside
   // a group, a `subgroup`) become one visual block. This is what lets the new
-  // IA interleave standalone links (التقارير, مهامي) between domain groups
+  // IA interleave standalone links (التقارير, متابعة الضوابط) between domain groups
   // instead of forcing every ungrouped item to the very top.
   function blocksBy<T extends { group?: string }>(list: T[]): { key: string; items: T[] }[] {
     const blocks: { key: string; items: T[] }[] = [];

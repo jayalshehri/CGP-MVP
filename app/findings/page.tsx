@@ -203,7 +203,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
     {personalReturn&&<p><Link href={personalReturn}>العودة إلى ضوابطي ←</Link></p>}
     {returnToControl&&<p className="findings-context"><Link href={returnToControl}>العودة إلى ملاحظات الضابط ←</Link></p>}
     {originCode&&<p className="findings-context"><Link href={`/compliance/${originCode}?tab=findings`}>العودة إلى ملاحظات {originCode} ←</Link></p>}
-    <WorkflowHeading title={frameworkCode?`الملاحظات والإجراءات — ${frameworkCode}`:"الملاحظات والإجراءات التصحيحية"}
+    <WorkflowHeading title={frameworkCode?`الملاحظات والإجراءات التصحيحية — ${frameworkCode}`:"الملاحظات والإجراءات التصحيحية"}
       description={frameworkCode?`الملاحظات المرتبطة فعليًا بإطار ${frameworkCode} ضمن صلاحياتك. نتائج التقييم القديمة مستقلة ومحفوظة في صفحاتها.`:"السجل المشترك المصرّح به يربط مصدر الملاحظة بالمعالجة والتحقق والإغلاق؛ نتائج التقييم القديمة باقية كما هي."}
       action={canCreate?<button className="workflow-button workflow-primary" onClick={()=>setCreateOpen(v=>!v)}>+ تسجيل ملاحظة</button>:undefined}/>
     {error&&<p className="findings-error" role="alert">{error} <button onClick={()=>router.refresh()}>تحديث الصفحة</button></p>}

@@ -88,24 +88,24 @@ export default function Home() {
         <section className="cgp-content cgp-ops-content">
           <header className="cgp-dashboard-hero">
             <div className="cgp-dashboard-hero-copy"><span className="cgp-dashboard-eyebrow"><i aria-hidden="true"/>بيانات حية</span><h1>الرئيسية</h1><p>رؤية يومية للقرارات المطلوبة، الأدلة الناقصة، وحالة الالتزام.</p><small>{userRole==="nca_external_auditor"?"الضوابط المتاحة لمراجعتك فقط":"جميع الضوابط ضمن نطاقك"}{updatedAt&&` · آخر تحديث ${updatedAt}`}</small></div>
-            <div className="cgp-dashboard-hero-score"><span>نسبة الالتزام</span><strong>{stats ? `${stats.compliance}%` : "—"}</strong><progress value={stats?.compliance ?? 0} max="100" aria-label="نسبة الالتزام الحالية"/><button type="button" disabled={refreshing} onClick={()=>setRefreshKey(k=>k+1)}>{refreshing?"جاري التحديث...":"تحديث البيانات"}</button></div>
+            <div className="cgp-dashboard-hero-score"><span>نسبة التطبيق</span><strong>{stats ? `${stats.compliance}%` : "—"}</strong><progress value={stats?.compliance ?? 0} max="100" aria-label="نسبة التطبيق الحالية"/><button type="button" disabled={refreshing} onClick={()=>setRefreshKey(k=>k+1)}>{refreshing?"جاري التحديث...":"تحديث البيانات"}</button></div>
           </header>
           {error&&<div role="alert" style={{background:"#fff2f0",color:"#b42318",padding:16,marginBottom:18,borderRadius:9}}>{error}</div>}
           {stats?.total===0&&<p>لا توجد ضوابط ضمن نطاق صلاحيتك حاليًا.</p>}
           <div className="workflow-metrics cgp-ops-metrics"><WorkflowMetric label="مهام متأخرة" value={stats ? stats.overdue : "—"} tone={stats?.overdue?"danger":"neutral"} icon={<MetricIcon name="clock"/>}/><WorkflowMetric label="تحتاج دليلًا" value={stats ? stats.waiting_evidence : "—"} tone={stats?.waiting_evidence?"warning":"neutral"} icon={<MetricIcon name="evidence"/>}/><WorkflowMetric label="بانتظار قرار مراجعة" value={stats ? stats.pending_review : "—"} tone={stats?.pending_review?"warning":"neutral"} icon={<MetricIcon name="review"/>}/><WorkflowMetric label="تم التحقق" value={stats ? stats.verified : "—"} tone="success" icon={<MetricIcon name="verified"/>}/></div>
           <section className="cgp-priority-card cgp-ops-priority"><div><span className="cgp-card-eyebrow">القرار التالي</span><h2>إجراء واحد واضح</h2><p>رتّبنا الأولوية حسب التأخير، ثم قرار المراجعة، ثم الأدلة الناقصة.</p></div>{stats&&<NextDecision stats={stats} role={userRole}/>}</section>
-          <section className="cgp-ops-insight-grid" aria-label="ملخص الالتزام">
+          <section className="cgp-ops-insight-grid" aria-label="ملخص التطبيق">
             <article className="cgp-ops-insight-card cgp-compliance-score">
-              <div className="cgp-ops-insight-heading"><div><span>صورة الالتزام</span><h2>مؤشر الالتزام الحالي</h2></div><Link href="/reports">التقارير ←</Link></div>
-              <div className="cgp-compliance-score-body"><strong>{stats ? `${stats.compliance}%` : "—"}</strong><div><progress value={stats?.compliance ?? 0} max="100" aria-label="نسبة الالتزام الحالية"/><p>{stats ? `${stats.verified} ضابطاً تم التحقق منه من أصل ${stats.total} ضمن نطاقك.` : "جاري احتساب مؤشر الالتزام."}</p></div></div>
+              <div className="cgp-ops-insight-heading"><div><span>صورة التطبيق</span><h2>مؤشر التطبيق الحالي</h2></div><Link href="/reports">التقارير ←</Link></div>
+              <div className="cgp-compliance-score-body"><strong>{stats ? `${stats.compliance}%` : "—"}</strong><div><progress value={stats?.compliance ?? 0} max="100" aria-label="نسبة التطبيق الحالية"/><p>{stats ? `${stats.verified} ضابطاً تم التحقق منه من أصل ${stats.total} ضمن نطاقك.` : "جاري احتساب مؤشر التطبيق."}</p></div></div>
             </article>
             <article className="cgp-ops-insight-card">
               <div className="cgp-ops-insight-heading"><div><span>التغطية التنظيمية</span><h2>حالة الأطر</h2></div><Link href="/controls">عرض الضوابط ←</Link></div>
-              <div className="cgp-framework-bars">{stats?.domains.length ? stats.domains.slice(0, 5).map(domain=><div key={domain.name}><div><b>{domain.name}</b><strong>{domain.percentage}%</strong></div><progress value={domain.percentage} max="100" aria-label={`نسبة الالتزام في ${domain.name}`}/><small>{domain.done} من {domain.total} ضابط مطبق</small></div>) : <p className="cgp-ops-empty">لا توجد بيانات كافية لعرض الأطر التنظيمية.</p>}</div>
+              <div className="cgp-framework-bars">{stats?.domains.length ? stats.domains.slice(0, 5).map(domain=><div key={domain.name}><div><b>{domain.name}</b><strong>{domain.percentage}%</strong></div><progress value={domain.percentage} max="100" aria-label={`نسبة التطبيق في ${domain.name}`}/><small>{domain.done} من {domain.total} ضابط مطبق</small></div>) : <p className="cgp-ops-empty">لا توجد بيانات كافية لعرض الأطر التنظيمية.</p>}</div>
             </article>
           </section>
           <GrcAttention key={refreshKey} compact/><div className="cgp-ops-actions">
-            <Link href="/tasks" className="primary">فتح مهامي ←</Link>
+            <Link href="/tasks" className="primary">متابعة الضوابط ←</Link>
             <Link href="/controls" className="secondary">عرض جميع الضوابط</Link>
             {(userRole==="admin"||userRole==="cybersecurity_team")&&<Link href="/executive" className="secondary">العرض التنفيذي ←</Link>}
           </div>

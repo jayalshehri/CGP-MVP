@@ -18,7 +18,7 @@ export default function MappingsPage(){
  const visible=rows.filter(r=>(!source||r.source_framework===source)&&(!target||r.target_framework===target)&&(!status||r.validation_status===status)&&(!type||r.coverage_type===type)&&`${r.source_framework} ${r.source_code} ${r.source_title} ${r.target_framework} ${r.target_code} ${r.target_title}`.toLowerCase().includes(search.toLowerCase()));
  const frameworks=[...new Set(rows.flatMap(r=>[r.source_framework,r.target_framework]))];
  const change=(set:(s:string)=>void,v:string)=>{set(v);setPage(0);};
- return <main className="workflow-page ae-page" dir="rtl"><WorkflowHeading title="خريطة مواءمة الضوابط" description="علاقات موثقة بين المتطلبات. الإشارة المرجعية لا تعني تكافؤ المتطلبات أو انتقال الالتزام تلقائيًا."/>
+ return <main className="workflow-page ae-page" dir="rtl"><WorkflowHeading title="مواءمة الضوابط" description="علاقات موثقة بين المتطلبات. الإشارة المرجعية لا تعني تكافؤ المتطلبات أو انتقال الالتزام تلقائيًا."/>
  {error&&<p className="ae-error" role="alert">{error} <button onClick={()=>setRefresh(v=>v+1)}>إعادة المحاولة</button></p>}
  <NewMapping choices={choices} refresh={()=>setRefresh(v=>v+1)}/><div className="workflow-metrics"><WorkflowMetric label="علاقات مسجلة" value={rows.length}/><WorkflowMetric label="علاقات معتمدة" value={rows.filter(r=>r.validation_status==='approved').length} tone="success"/><WorkflowMetric label="بحاجة إلى مراجعة" value={rows.filter(r=>r.validation_status==='pending').length} tone="warning"/></div>
  <p className="ae-warning">الروابط المستوردة سابقًا محفوظة للمراجعة. راجع رقم المتطلب الكامل وإصدار الوثيقة وحدود التغطية قبل الاعتماد. مشاركة ملف تتطلب مراجعة مستقلة لكل ضابط.</p>
