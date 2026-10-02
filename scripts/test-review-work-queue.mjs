@@ -185,6 +185,26 @@ check(html.includes('مسند إليّ') && html.includes('متاح للفريق
 check(html.includes('<table') && html.includes('الإجراء التالي'), 'compact actionable queue');
 check(!html.includes('قبول الدليل') && !html.includes('رفض') && !html.includes('إغلاق بقرار مستقل'), 'queue has navigation, no duplicate decision buttons');
 check(!html.includes('QA_SYNTH'), 'business queue hides synthetic framework');
+check(html.includes('aria-label="ملخص الأعمال المؤهلة قبل الفلاتر"') && html.includes('أنواع قرارات مستقلة'), 'summary explicitly represents pre-filter independent decision responsibilities');
+check(['مراجعة', 'اعتماد', 'تحقق', 'إغلاق'].every(label => html.includes(`<span>${label}</span>`)), 'four decision types rendered in the primary summary');
+check(html.includes('<aside class="review-overdue-summary"') && html.includes('حالة عابرة لأنواع العمل'), 'overdue is separate from decision stages');
+check(html.includes(`نتائج القائمة: ${rows.length}`), 'unfiltered list count is stated separately from summary');
+check(html.includes('class="review-work-type review-periodic"') && html.includes('مراجعة دورية #50'), 'periodic control review has distinct presentation and cycle context');
+check(html.includes('class="review-row-details"') && html.includes('سبب الظهور:'), 'secondary row metadata is progressively disclosed');
+check(html.includes('class="review-responsibility assigned"') && html.includes('class="review-responsibility independent_team"'), 'personal assignment and independent team remain visibly distinct');
+const filteredHtml = renderToStaticMarkup(React.createElement(view, { categories: results, raw: 'framework=ZZ', update() {} }));
+check(filteredHtml.includes('نتائج القائمة: 0') && filteredHtml.includes(`من ${rows.length} عملًا مؤهلًا قبل الفلاتر`), 'filtered zero is labeled against pre-filter eligible count');
+check(filteredHtml.includes('لا توجد أعمال تطابق الفلاتر الحالية') && filteredHtml.includes('مراجعة</span>'), 'filtered-out work is not described as absent');
+const zeroHtml = renderToStaticMarkup(React.createElement(view, { categories: classify(empty()), raw: '', update() {} }));
+check(zeroHtml.includes('لا توجد أعمال مراجعة أو قرار مؤهلة ضمن صلاحياتك حاليًا') && zeroHtml.includes('نتائج القائمة: 0'), 'genuine zero remains distinct from filtering');
+const unavailableHtml = renderToStaticMarkup(React.createElement(view, { categories: results.map(c => ({ ...c, status: 'unavailable', error: 'قراءة غير متاحة', items: [] })), raw: '', update() {} }));
+check(unavailableHtml.includes('نتائج القائمة غير متاحة') && !unavailableHtml.includes('نتائج القائمة: 0'), 'unavailable read never becomes a false zero');
+const recordOnly = results.map(category => ({ ...category, items: category.items.filter(item => item.type === 'FINDING_CLOSURE' || item.type === 'PERIODIC_REVIEW_FOLLOWUP') }));
+const recordHtml = renderToStaticMarkup(React.createElement(view, { categories: recordOnly, raw: '', update() {}, actor, onReview() {} }));
+check(!recordHtml.includes('review-inline-primary') && recordHtml.includes('فتح قرار الإغلاق') && recordHtml.includes('finding=32'), 'finding closure stays open-record-only with exact source link');
+check(recordHtml.includes('review_cycle=50') && recordHtml.includes('مراجعة دورية #50'), 'periodic review stays navigation-only with exact cycle link');
+check(source('components/ReviewWorkQueue.tsx').includes('مراجعة الأدلة والإصدارات ←') && source('components/EvidenceReviewContext.tsx').includes('title="مراجعة الأدلة والإصدارات"'), 'evidence versions entry uses approved operational terminology');
+check(source('components/ReviewWorkQueue.tsx').includes("requireProfile(['admin', 'cybersecurity_team'])"), 'owner and external auditor do not gain Review Center decision access');
 
 let offsets = [];
 const pagedRows = await read.readReviewPages((from, to) => { offsets.push([from, to]); return Promise.resolve({ data: Array.from({ length: Math.min(100, 1250 - from) }, (_, id) => ({ id: from + id })), count: 1250, error: null }); });
