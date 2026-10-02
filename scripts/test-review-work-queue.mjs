@@ -203,7 +203,17 @@ const recordOnly = results.map(category => ({ ...category, items: category.items
 const recordHtml = renderToStaticMarkup(React.createElement(view, { categories: recordOnly, raw: '', update() {}, actor, onReview() {} }));
 check(!recordHtml.includes('review-inline-primary') && recordHtml.includes('فتح قرار الإغلاق') && recordHtml.includes('finding=32'), 'finding closure stays open-record-only with exact source link');
 check(recordHtml.includes('review_cycle=50') && recordHtml.includes('مراجعة دورية #50'), 'periodic review stays navigation-only with exact cycle link');
-check(source('components/ReviewWorkQueue.tsx').includes('مراجعة الأدلة والإصدارات ←') && source('components/EvidenceReviewContext.tsx').includes('title="مراجعة الأدلة والإصدارات"'), 'evidence versions entry uses approved operational terminology');
+check(html.includes('ملخص أعمال المراجعة') && html.includes('الأعمال التي يمكنك مراجعتها أو اتخاذ قرار بشأنها وفق صلاحياتك الحالية.'), 'approved review summary heading and supporting copy');
+const tabs = load('components/ReviewCenterTabs.tsx').default;
+const evidenceContext = new URLSearchParams({ view: 'evidence-history', evidence: '51', link: '100', from: 'review', review_context: 'type=EVIDENCE_REVIEW%26framework=DCC' });
+const queueTabs = renderToStaticMarkup(React.createElement(tabs, { active: 'queue', queueHref: '/review?framework=DCC', evidenceHref: '/review?view=evidence-history' }));
+const evidenceTabs = renderToStaticMarkup(React.createElement(tabs, { active: 'evidence', queueHref: '/review?framework=DCC', evidenceHref: '/review?' + evidenceContext.toString() }));
+check(queueTabs.includes('aria-current="page">قائمة العمل') && !queueTabs.includes('aria-current="page">مراجعة الأدلة والإصدارات'), 'work queue is the default active review tab');
+check(evidenceTabs.includes('aria-current="page">مراجعة الأدلة والإصدارات') && evidenceTabs.includes('evidence=51') && evidenceTabs.includes('link=100'), 'evidence tab preserves exact evidence and shared-link context');
+check(queueTabs.includes('عروض مركز المراجعة والقرار') && !queueTabs.includes('Decision History'), 'integrated two-view navigation has no history/future tab');
+check(source('components/ReviewWorkQueue.tsx').includes("evidenceParams.set('review_context', queueContext)") && source('components/EvidenceReviewContext.tsx').includes('queueHref={returnHref}'), 'switching back to queue preserves its URL filter context');
+check(source('app/review/page.tsx').includes("params.get('view') === 'evidence-history'") && source('app/review/page.tsx').includes("evidenceHref={'/review?' + params.toString()}"), 'refresh/back/forward select evidence view directly from existing URL');
+check(source('components/EvidenceReviewContext.tsx').includes('title="مراجعة الأدلة والإصدارات"'), 'evidence view keeps approved operational terminology');
 check(source('components/ReviewWorkQueue.tsx').includes("requireProfile(['admin', 'cybersecurity_team'])"), 'owner and external auditor do not gain Review Center decision access');
 
 let offsets = [];

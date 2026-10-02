@@ -27,7 +27,7 @@ function ReviewSurface() {
   const evidenceId = Number.isSafeInteger(id) && id > 0 ? id : null;
   const linkId = Number.isSafeInteger(link) && link > 0 ? link : null;
   if ((params.has('evidence') && evidenceId === null) || (params.has('link') && linkId === null)) return <p role="alert">رابط الدليل غير صحيح.</p>;
-  if (evidenceId !== null || params.get('view') === 'evidence-history') return <EvidenceReviewContext key={`${evidenceId}-${linkId}`} evidenceId={evidenceId} linkId={linkId} returnHref={reviewContextReturn(new URLSearchParams(params.toString())) ?? '/review'}/>;
+  if (evidenceId !== null || params.get('view') === 'evidence-history') return <EvidenceReviewContext key={`${evidenceId}-${linkId}`} evidenceId={evidenceId} linkId={linkId} returnHref={reviewContextReturn(new URLSearchParams(params.toString())) ?? '/review'} evidenceHref={'/review?' + params.toString()}/>;
   return <ReviewWorkQueue/>;
 }
 export default function ReviewPage() {

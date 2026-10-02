@@ -1,3 +1,28 @@
+.review-center-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 16px;
+  padding: 4px;
+  border: 1px solid #dbe4ee;
+  border-radius: 10px;
+  background: #f1f5f9;
+}
+.review-center-tabs a {
+  border-radius: 7px;
+  padding: 9px 16px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+  text-decoration: none;
+}
+.review-center-tabs a:hover { background: #e2e8f0; color: #0f172a; }
+.review-center-tabs a[aria-current="page"] { background: #fff; color: #0f172a; box-shadow: 0 1px 3px #0f172a1a; }
+.review-center-tabs a:focus-visible { outline: 2px solid #0369a1; outline-offset: 2px; }
 .review-summary-panel {
   border: 1px solid #dbe4ee;
   border-radius: 12px;
@@ -44,6 +69,8 @@
   .review-overdue-summary small { width: 100%; }
 }
 @media (max-width: 700px) {
+  .review-center-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; box-sizing: border-box; }
+  .review-center-tabs a { min-width: 0; padding-inline: 8px; }
   .review-summary-panel { padding: 12px; }
   .review-summary-panel .review-queue-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .review-workspace .review-queue-scroll { overflow: visible; border: 0; background: transparent; }

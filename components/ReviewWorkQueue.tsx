@@ -8,9 +8,11 @@ import { cycleLabels, reviewLabels } from '@/lib/assessment';
 import { loadReviewWorkSnapshot, refreshReviewEvidenceSnapshot } from '@/lib/review-work-queue-read';
 import { canOfferInlineEvidence } from '@/lib/review-decision-safety';
 import ReviewEvidenceDecision from './ReviewEvidenceDecision';
+import ReviewCenterTabs from './ReviewCenterTabs';
 import type { DecisionResult } from '@/lib/review-evidence-decision';
 import type { ReviewActor, ReviewSnapshot, ReviewWorkItem } from '@/lib/review-work-queue';
 import { buildReviewWorkQueue, filterReviewWork, responsibilityLabels, reviewFilters, reviewWorkHref, reviewWorkPage, reviewWorkSummary, sortReviewWork, workDecisionModes, workTypeLabels, type CategoryResult } from '@/lib/review-work-queue';
+import { reviewQueueContext } from '@/lib/review-context';
 import './review-work-queue-refinement.css';
 
 const stateLabels: Record<string, string> = { ...cycleLabels, ...reviewLabels, open: 'مفتوحة', pending: 'بانتظار التحقق', pending_review: 'بانتظار مراجعة الدليل', under_review: 'قيد المراجعة', accepted: 'مقبول — ينتظر الإغلاق' };
@@ -31,7 +33,7 @@ export function ReviewQueueView({ categories, raw, update, actor, onReview, cert
   ];
   return <>
     <section className="review-summary-panel" aria-label="ملخص الأعمال المؤهلة قبل الفلاتر">
-      <div className="review-summary-heading"><h2>الأعمال المؤهلة ضمن صلاحياتك</h2><p>الملخص قبل فلاتر القائمة. هذه أنواع قرارات مستقلة، وليست مراحل تمر بها كل السجلات.</p></div>
+      <div className="review-summary-heading"><h2>ملخص أعمال المراجعة</h2><p>الأعمال التي يمكنك مراجعتها أو اتخاذ قرار بشأنها وفق صلاحياتك الحالية.</p><p>الملخص قبل فلاتر القائمة. هذه أنواع قرارات مستقلة، وليست مراحل تمر بها كل السجلات.</p></div>
       <div className="review-summary-layout"><div className="review-queue-summary" role="group" aria-label="أنواع أعمال المراجعة والقرار">
         {metrics.map(({ label, detail, value }) => <div key={label}><span>{label}</span><strong>{value === null ? '—' : value}</strong><small className={value === null ? 'review-summary-unavailable' : undefined}>{value === null ? 'غير متاح' : detail}</small></div>)}
       </div><aside className="review-overdue-summary" aria-label="الأعمال المتأخرة عبر الأنواع"><span>متأخر</span><strong>{summary.overdue === null ? '—' : summary.overdue}</strong><small>{summary.overdue === null ? 'غير متاح' : 'حالة عابرة لأنواع العمل، وليست مرحلة قرار'}</small></aside></div>
@@ -94,8 +96,11 @@ export default function ReviewWorkQueue({ certificationMode = false }: { certifi
     if (value) next.set(key, value); else next.delete(key);
     router.push((certificationMode ? '/review/qa-certification' : '/review') + (next.size ? '?' + next : ''), { scroll: false });
   };
+  const queueContext = reviewQueueContext(params.toString());
+  const evidenceParams = new URLSearchParams({ view: 'evidence-history' });
+  if (queueContext) { evidenceParams.set('from', 'review'); evidenceParams.set('review_context', queueContext); }
   return <main className="workflow-page review-workspace" dir="rtl">{certificationMode && <div role="status" className="review-qa-cert-banner">QA CERTIFICATION MODE — بيانات اختبار QA_SYNTH فقط</div>}<header className="review-queue-heading"><div><h1>{certificationMode ? 'شهادة مراجعة الأدلة التجريبية' : 'مركز المراجعة والقرار'}</h1><p>{certificationMode ? 'مسار معزول لضابط QA-C-01 ولا يظهر في واجهة الأعمال.' : 'ما الذي ينتظر مراجعتي أو قراري الآن؟'}</p></div><button aria-label="تحديث قائمة العمل" title="تحديث" onClick={() => { setCategories(null); setError(''); setReload(v => v + 1); }}>↻</button></header>
-    {!certificationMode && <div className="review-queue-links"><Link href="/review?view=evidence-history">مراجعة الأدلة والإصدارات ←</Link></div>}
+    {!certificationMode && <ReviewCenterTabs active="queue" queueHref={'/review' + (params.size ? '?' + params.toString() : '')} evidenceHref={'/review?' + evidenceParams.toString()}/>}
     {notice && <p role="status" className="review-decision-notice">{notice}</p>}
     {error ? <p role="alert" className="cgp-shell-error">{error} <Link href="/my-controls">العودة إلى ضوابطي ←</Link></p> : categories === null ? <p role="status">جاري تحميل العمل؛ المؤشرات غير متاحة حتى تكتمل القراءة.</p> : <ReviewQueueView categories={categories} raw={params.toString()} update={update} actor={context?.actor} onReview={setSelected} certificationMode={certificationMode}/>}
     {selected && context && <ReviewEvidenceDecision key={selected.key} work={selected} actor={context.actor} raw={params.toString()} onClose={() => setSelected(null)} onSettled={settled} certificationMode={certificationMode}/>}
