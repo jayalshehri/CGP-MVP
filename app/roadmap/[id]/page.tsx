@@ -326,7 +326,7 @@ export default function ProjectDetailPage() {
   }, [projectRequirements, uniqueControls, derivedControls, requirementsWithStats]);
 
   if (loading) return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading">جاري تحميل المشروع…</p></main>;
-  if (error || !project) return <main className="roadmap-page" dir="rtl"><p role="alert">{error}</p><Link href="/roadmap">العودة إلى سجل المشاريع</Link></main>;
+  if (error || !project) return <main className="roadmap-page" dir="rtl"><p role="alert">{error}</p><Link href="/roadmap">العودة إلى سجل المشاريع السيبرانية</Link></main>;
 
   const clampedProgress = Math.max(0, Math.min(100, Number(project.progress_percent) || 0));
   const coverageTotal = rollup.full + rollup.partial + rollup.supporting;
@@ -335,7 +335,7 @@ export default function ProjectDetailPage() {
   return (
     <main className="roadmap-page" dir="rtl">
       <section className="roadmap-shell">
-        <Link className="detail-back" href="/roadmap">← العودة إلى سجل المشاريع</Link>
+        <Link className="detail-back" href="/roadmap">← العودة إلى سجل المشاريع السيبرانية</Link>
 
         {actionError && <p className="roadmap-alert" role="alert">{actionError}</p>}
         {message && <p className="roadmap-message" role="status">{message}</p>}
@@ -365,17 +365,17 @@ export default function ProjectDetailPage() {
             <strong>{rollup.confirmedMappings}</strong>
           </article>
           <article className="project-kpi">
-            <span>جاهزة للتحقق</span>
+            <span>ضوابط بأدلة مقبولة ولم تُتحقق</span>
             <strong>{rollup.readyForVerification}</strong>
           </article>
           <article className="project-kpi project-kpi-contribution">
-            <span>مساهمة الامتثال</span>
+            <span>نسبة الضوابط المرتبطة التي حالتها متحققة</span>
             <strong>{rollup.contribution === null ? "—" : `${rollup.contribution}%`}</strong>
             <small>{rollup.verified} من {rollup.totalControls} ضوابط متحققة</small>
             <div className="project-kpi-progress"><i style={{ width: `${rollup.contribution ?? 0}%` }} /></div>
           </article>
         </section>
-        <p className="detail-hint">نسبة المساهمة محسوبة لحظيًا من حالة التحقق الفعلية للضوابط المرتبطة — إنجاز المشروع لا يعني امتثال الضابط.</p>
+        <p className="detail-hint">النسبة هي الضوابط التي حالتها متحققة من إجمالي الضوابط المميزة المرتبطة عبر المتطلبات؛ لا تثبت أثر المشروع أو امتثال الضابط بسبب إنجاز المشروع. الأدلة المقبولة وحدها لا تثبت أهلية أمر التحقق.</p>
 
         <section className="project-summary-grid">
           <article className="coverage-summary-card">
@@ -449,7 +449,7 @@ export default function ProjectDetailPage() {
                         </header>
                         {item.mappingStatus === "unresolved" ? (
                           <p className="requirement-warning">
-                            <StatusBadge status="needs_control_mapping" /> لا يوجد ضابط رسمي موثوق مرتبط بهذا المتطلب بعد — غير محسوب ضمن الضوابط المُتحقَّقة أو نسبة المساهمة أو تغطية الضوابط.
+                            <StatusBadge status="needs_control_mapping" /> لا يوجد ضابط رسمي موثوق مرتبط بهذا المتطلب بعد — غير محسوب ضمن الضوابط المُتحقَّقة أو نسبة الضوابط المرتبطة التي حالتها متحققة أو تغطية الضوابط.
                           </p>
                         ) : (
                           <p className="requirement-stats">

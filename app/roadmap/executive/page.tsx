@@ -91,7 +91,7 @@ export default function ExecutiveRoadmapPage() {
     if (missingHighPriorityDates.length) attention.push({ key: "baseline", title: "اعتماد خط الأساس الزمني", detail: `${missingHighPriorityDates.length} مشروعًا عالي الأولوية بلا تاريخ مستهدف، ولذلك لا يمكن قياس التأخير.`, count: missingHighPriorityDates.length, level: "decision" });
     if (delayedHighPriority.length) attention.push({ key: "delayed", title: "خطة استرداد للمشاريع المتأخرة", detail: `${delayedHighPriority.length} مشروعًا عالي الأولوية تجاوز التاريخ المستهدف.`, count: delayedHighPriority.length, level: "risk" });
     if (stopped.length) attention.push({ key: "stopped", title: "حسم المشاريع المتوقفة", detail: `${stopped.length} مشروعًا متوقفًا يحتاج قرار استئناف أو إعادة تخطيط.`, count: stopped.length, level: "decision" });
-    if (highTreatmentsWithoutControlLinks.size) attention.push({ key: "mapping", title: "استكمال مواءمة المعالجات والضوابط", detail: `${highTreatmentsWithoutControlLinks.size} مشروعًا لديه معالجة عالية بلا رابط ضابط فعلي.`, count: highTreatmentsWithoutControlLinks.size, level: "data" });
+    if (highTreatmentsWithoutControlLinks.size) attention.push({ key: "mapping", title: "استكمال مواءمة المعالجات والضوابط", detail: `${highTreatmentsWithoutControlLinks.size} مشروعًا لديه معالجة عالية بلا رابط مباشر مسجّل بضابط.`, count: highTreatmentsWithoutControlLinks.size, level: "data" });
     return {
       years,
       high: projects.filter((project) => project.priority === "high").length,
@@ -110,24 +110,24 @@ export default function ExecutiveRoadmapPage() {
   return (
     <main className="roadmap-page executive-board" dir="rtl">
       <section className="roadmap-shell">
-        <header className="executive-hero"><div><span>عرض الإدارة العليا · 2027–2029</span><h1>محفظة التحول السيبراني</h1><p>وضع التنفيذ، تقدم خارطة الطريق، وما يحتاج انتباه الإدارة الآن.</p></div><aside><button type="button" onClick={() => window.print()}>تصدير PDF</button><Link href="/roadmap/dashboard">العودة للخارطة ←</Link></aside></header>
+        <header className="executive-hero"><div><span>عرض الإدارة العليا · 2027–2029</span><h1>ملخص محفظة المشاريع السيبرانية</h1><p>الحالات والتقدم المسجّل للمشاريع وفئات التنبيه الإداري الحالية.</p></div><aside><button type="button" onClick={() => window.print()}>تصدير PDF</button><Link href="/roadmap/dashboard">العودة إلى خارطة طريق المشاريع ←</Link></aside></header>
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
 
         <section className="executive-kpis">
-          <Kpi label="المبادرات الاستراتيجية" value={projects.length} detail="ضمن الخطة الثلاثية" />
-          <Kpi label="تقدم التنفيذ" value={`${data.average}%`} detail="متوسط غير مرجح من المشاريع" tone="teal" />
+          <Kpi label="المشاريع السيبرانية" value={projects.length} detail="ضمن الخطة الثلاثية" />
+          <Kpi label="متوسط تقدم المشاريع المسجّل" value={`${data.average}%`} detail="متوسط غير مرجح من المشاريع" tone="teal" />
           <Kpi label="المشاريع المتأخرة" value={data.hasSchedule ? data.delayed : "غير متاح"} detail={data.hasSchedule ? `حتى ${getRiyadhDate()}` : "التواريخ المستهدفة غير مكتملة"} tone="amber" />
-          <Kpi label="انتباه الإدارة" value={data.attention.length} detail="قواعد فعلية ظاهرة أدناه" tone="blue" />
+          <Kpi label="فئات التنبيه الإداري" value={data.attention.length} detail="عدد فئات القواعد المتحققة، لا عدد المشاريع أو القرارات" tone="blue" />
         </section>
 
-        <section className="executive-section"><header><span>تقدم خارطة الطريق</span><h2>المسار السنوي للمبادرات</h2><p>يعرض الحالة الحالية من سجل المشاريع، ولا يعتبر ربط الضابط تحققًا للالتزام.</p></header><div className="executive-timeline">{data.years.map((year) => <article key={year.year}><header><b>{year.year}</b><span>{year.items.length} مبادرات</span></header><div className="executive-progress"><i style={{ width: `${year.progress}%` }} /></div><small>{year.progress}% تقدم · {year.high} عالية الأولوية</small><ul>{year.items.slice(0, 5).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><span>{project.name_ar}</span><em className={project.priority}>{priorityText[project.priority]}</em></li>)}</ul></article>)}</div></section>
+        <section className="executive-section"><header><span>التقدم المسجّل بحسب السنة</span><h2>توزيع المشاريع بحسب السنة</h2><p>يعرض الحالة الحالية من سجل المشاريع، ولا يعتبر ربط الضابط تحققًا للالتزام.</p></header><div className="executive-timeline">{data.years.map((year) => <article key={year.year}><header><b>{year.year}</b><span>{year.items.length} مشاريع</span></header><div className="executive-progress"><i style={{ width: `${year.progress}%` }} /></div><small>{year.progress}% متوسط تقدم المشاريع المسجّل · {year.high} عالية الأولوية</small><ul>{year.items.slice(0, 5).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><span>{project.name_ar}</span><em className={project.priority}>{priorityText[project.priority]}</em></li>)}</ul></article>)}</div></section>
 
         <section className="executive-focus-grid">
-          <article className="executive-section"><header><span>المبادرات الاستراتيجية</span><h2>أعلى الأولويات الحالية</h2><p>تعكس الأولوية الإدارية المسجلة، وليس درجة Portfolio Score.</p></header><ol>{projects.filter((project) => project.priority === "high").slice(0, 5).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><span>{project.name_ar}</span><small>{project.planned_year} · {project.planned_quarter}</small></li>)}</ol></article>
-          <article className="executive-section"><header><span>NCA والضوابط</span><h2>الضوابط المستهدفة</h2><p>ضوابط لها رابط فعلي بمشروع معالجة. لا تعني الامتثال أو إغلاق الفجوة.</p></header><strong className="executive-big-number">{data.controls}</strong><Link href="/roadmap">مراجعة الروابط ←</Link></article>
+          <article className="executive-section"><header><span>المشاريع السيبرانية</span><h2>أعلى الأولويات الحالية</h2><p>تعكس الأولوية الإدارية المسجلة، وليس درجة Portfolio Score.</p></header><ol>{projects.filter((project) => project.priority === "high").slice(0, 5).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><span>{project.name_ar}</span><small>{project.planned_year} · {project.planned_quarter}</small></li>)}</ol></article>
+          <article className="executive-section"><header><span>NCA والضوابط</span><h2>ضوابط ذات ربط مباشر مسجّل</h2><p>ضوابط من سجل الربط المباشر بالمشاريع، دون دمج علاقات المتطلبات. الربط لا يعني الامتثال أو إغلاق الفجوة.</p></header><strong className="executive-big-number">{data.controls}</strong><Link href="/roadmap">مراجعة الروابط ←</Link></article>
         </section>
 
-        <section className="executive-decisions dynamic-attention"><header><span>Dynamic Management Attention</span><h2>ما الذي يحتاج انتباه الإدارة؟</h2><p>تظهر العناصر من قواعد بيانات قابلة للتتبع؛ لا توجد قيمة دنيا مصطنعة.</p></header>{data.attention.length ? data.attention.map((item, index) => <article key={item.key} className={item.level}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{item.title}</strong><p>{item.detail}</p></div><em>{item.count}</em></article>) : <article className="attention-empty"><div><strong>لا توجد عناصر انتباه وفق القواعد الحالية</strong><p>سيظهر هنا أي تأخير أو توقف أو نقص في خط الأساس عند تسجيله.</p></div></article>}</section>
+        <section className="executive-decisions dynamic-attention"><header><span>Dynamic Management Attention</span><h2>ما الذي يحتاج انتباه الإدارة؟</h2><p>تظهر العناصر من قواعد بيانات قابلة للتتبع؛ لا توجد قيمة دنيا مصطنعة.</p></header>{data.attention.length ? data.attention.map((item, index) => <article key={item.key} className={item.level}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{item.title}</strong><p>{item.detail}</p></div><em>{item.count}</em></article>) : <article className="attention-empty"><div><strong>لا توجد فئات تنبيه وفق القواعد الحالية</strong><p>سيظهر هنا أي تأخير أو توقف أو نقص في خط الأساس عند تسجيله.</p></div></article>}</section>
       </section>
     </main>
   );

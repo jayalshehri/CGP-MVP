@@ -57,7 +57,7 @@ export default function RoadmapDashboard() {
         }
       } catch (cause) {
         if (!live) return;
-        const detail = cause instanceof Error ? cause.message : "تعذر تحميل خارطة الطريق.";
+        const detail = cause instanceof Error ? cause.message : "تعذر تحميل خارطة طريق المشاريع.";
         if (detail.includes("تسجيل الدخول")) {
           router.replace("/login");
           return;
@@ -88,46 +88,46 @@ export default function RoadmapDashboard() {
   const exportExcel = () => {
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const rows = [
-      ["رمز المشروع", "المشروع", "السنة", "الربع", "الحالة", "الأولوية", "نسبة الإنجاز", "المالك", "بداية الخطة", "التاريخ المستهدف", "التاريخ المتوقع", "الضوابط المرتبطة"],
+      ["رمز المشروع", "المشروع", "السنة", "الربع", "الحالة", "الأولوية", "نسبة الإنجاز", "المالك", "بداية الخطة", "التاريخ المستهدف", "التاريخ المتوقع", "الضوابط ذات الربط المباشر المسجّل"],
       ...projects.map((project) => [project.project_code, project.name_ar, project.planned_year, project.planned_quarter, statusText[project.status], priorityText[project.priority], `${project.progress_percent}%`, project.executive_owner, project.planned_start_date, project.target_end_date, project.forecast_end_date, links.filter((link) => link.project_id === project.id).length]),
     ];
     const url = URL.createObjectURL(new Blob(["\ufeff" + rows.map((row) => row.map(quote).join(",")).join("\n")], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "خارطة-الطريق-السيبرانية-2027-2029.csv";
+    anchor.download = "خارطة-طريق-المشاريع-2027-2029.csv";
     anchor.click();
     URL.revokeObjectURL(url);
   };
 
   if (loading) {
-    return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading">جاري تحميل خارطة الطريق…</p></main>;
+    return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading">جاري تحميل خارطة طريق المشاريع…</p></main>;
   }
 
   return (
     <main className="roadmap-page roadmap-executive" dir="rtl">
       <section className="roadmap-shell">
         <nav className="roadmap-view-tabs" aria-label="إدارة محفظة الأمن السيبراني">
-          <Link href="/roadmap">سجل المشاريع</Link>
-          <Link href="/roadmap/analysis">تحليل المحفظة</Link>
-          <Link className="active" href="/roadmap/dashboard">خارطة الطريق</Link>
+          <Link href="/roadmap">سجل المشاريع السيبرانية</Link>
+          <Link href="/roadmap/analysis">تحليل المحفظة السيبرانية</Link>
+          <Link className="active" href="/roadmap/dashboard">خارطة طريق المشاريع</Link>
         </nav>
 
         <header className="roadmap-exec-hero">
-          <div><span>خطة التنفيذ · 2027–2029</span><h1>خارطة طريق الأمن السيبراني</h1><p>متى تبدأ المبادرات، وما تسلسلها، وأين توجد استثناءات الجدول الزمني.</p></div>
+          <div><span>خطة التنفيذ · 2027–2029</span><h1>خارطة طريق المشاريع</h1><p>توزيع المشاريع بحسب السنة والربع المسجّلين واستثناءات التواريخ المستهدفة؛ لا يمثل اعتماديات أو تسلسل تنفيذ.</p></div>
           <div className="roadmap-export-actions"><button type="button" onClick={() => window.print()}>تصدير PDF</button><button type="button" onClick={exportExcel}>تصدير Excel</button><Link href="/roadmap/executive" className="roadmap-primary">عرض الإدارة العليا ←</Link><Link href="/roadmap" className="roadmap-secondary">تحديث المشاريع</Link></div>
         </header>
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
 
-        <section className="roadmap-exec-kpis roadmap-snapshot" aria-label="ملخص خارطة الطريق">
+        <section className="roadmap-exec-kpis roadmap-snapshot" aria-label="ملخص خارطة طريق المشاريع">
           <Kpi label="المشاريع" value={projects.length} detail={`${data.active} قيد التنفيذ · ${data.complete} مكتمل`} />
-          <Kpi label="تقدم الخطة" value={`${data.average}%`} detail="متوسط غير مرجح من المشاريع" tone="teal" />
+          <Kpi label="متوسط تقدم المشاريع المسجّل" value={`${data.average}%`} detail="متوسط غير مرجح من المشاريع" tone="teal" />
           <Kpi label="المشاريع المتأخرة" value={data.schedule.value ?? "غير متاح"} detail={data.schedule.value === null ? "أدخل التواريخ المستهدفة أولًا" : `حتى ${getRiyadhDate()}`} tone="amber" />
           <Kpi label="بلا تاريخ مستهدف" value={data.schedule.missingDates} detail="لا تدخل في حساب التأخير" tone="amber" />
-          <Kpi label="ضوابط مرتبطة بمشروع معالجة" value={data.controls} detail="لا تعني تحقق الالتزام" tone="blue" />
+          <Kpi label="ضوابط ذات ربط مباشر مسجّل" value={data.controls} detail="من سجل الربط المباشر؛ لا تعني تحقق الالتزام" tone="blue" />
         </section>
 
         <section className="quarterly-roadmap" aria-labelledby="quarterly-roadmap-title">
-          <header><div><span>العرض التشغيلي</span><h2 id="quarterly-roadmap-title">التسلسل الربعي للمبادرات</h2><p>اللون يوضح حالة التنفيذ، والشارة توضح الأولوية الإدارية.</p></div><small>As of {getRiyadhDate()}</small></header>
+          <header><div><span>العرض التشغيلي</span><h2 id="quarterly-roadmap-title">توزيع المشاريع حسب السنة والربع</h2><p>اللون يوضح حالة التنفيذ، والشارة توضح الأولوية الإدارية.</p></div><small>As of {getRiyadhDate()}</small></header>
           <div className="quarterly-roadmap-grid">
             <div className="quarterly-head"><span>السنة</span>{quarters.map((quarter) => <b key={quarter}>{quarter}</b>)}</div>
             {[2027, 2028, 2029].map((year) => <div className="quarterly-row" key={year}><b>{year}</b>{quarters.map((quarter) => <section key={quarter}>{projects.filter((project) => project.planned_year === year && project.planned_quarter === quarter).map((project) => <Link href="/roadmap" key={project.id} className={`quarterly-project ${project.status}`} title={`${project.project_code} — ${project.name_ar}`}><div><b dir="ltr">{project.project_code}</b><span className={`register-priority ${project.priority}`}>{priorityText[project.priority]}</span></div><strong>{project.name_ar}</strong><small>{project.executive_owner || "مالك غير محدد"} · {project.progress_percent}%</small></Link>)}</section>)}</div>)}

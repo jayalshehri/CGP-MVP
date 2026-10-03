@@ -48,9 +48,9 @@ const navigation = [
   { href: "/third-parties", label: "الأطراف الثالثة", group: "المخاطر", team: true },
 
   // الاستراتيجية والتنفيذ
-  { href: "/roadmap/analysis", label: "المحفظة السيبرانية", group: "الاستراتيجية والتنفيذ", team: true },
-  { href: "/roadmap/dashboard", label: "خارطة الطريق", group: "الاستراتيجية والتنفيذ", team: true },
-  { href: "/roadmap", label: "المشاريع والمبادرات", group: "الاستراتيجية والتنفيذ", team: true },
+  { href: "/roadmap/analysis", label: "تحليل المحفظة السيبرانية", group: "الاستراتيجية والتنفيذ", team: true },
+  { href: "/roadmap/dashboard", label: "خارطة طريق المشاريع", group: "الاستراتيجية والتنفيذ", team: true },
+  { href: "/roadmap", label: "سجل المشاريع السيبرانية", group: "الاستراتيجية والتنفيذ", team: true },
 
   { href: "/reports", label: "التقارير", group: "", team: true },
   { href: "/tasks", label: "متابعة الضوابط", group: "", separatorBefore: true },
