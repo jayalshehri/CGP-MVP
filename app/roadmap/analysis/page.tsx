@@ -124,16 +124,12 @@ export default function PortfolioAnalysisPage() {
           <Kpi label="أولوية إدارية عالية" value={analysis.highPriority} detail="تصنيف إداري، وليس Portfolio Score" tone="amber" />
         </section>
 
-        <section className="portfolio-layout">
-          <article className="portfolio-card portfolio-decision-readiness">
-            <header><div><span>جاهزية دعم القرار</span><h2>Portfolio Prioritization غير مفعّل بعد</h2></div><small>لا توجد درجة مصطنعة</small></header>
-            <p>المنصة لا تملك حاليًا مدخلات موثقة للقيمة الاستراتيجية، خفض المخاطر، الإلزام التنظيمي، الأثر، الجهد، التعقيد ومخاطر التسليم. لذلك لا يمكن تصنيف المشاريع بأمان إلى Must Do أو Quick Wins أو Defer.</p>
-            <div className="decision-data-grid">
-              <section><strong>متاح الآن</strong><span>الأولوية الإدارية</span><span>الحالة والتقدم</span><span>المالك والناتج</span><span>معالجات الفجوات</span></section>
-              <section><strong>مطلوب للحساب</strong><span>Strategic Alignment</span><span>Risk Reduction</span><span>Compliance Criticality</span><span>Effort / Complexity</span></section>
-            </div>
-          </article>
+        <aside className="portfolio-prioritization-note" aria-labelledby="prioritization-note-title">
+          <header><h2 id="prioritization-note-title">دعم تحديد الأولويات</h2><span>غير متاح حاليًا</span></header>
+          <p>تتوفر حاليًا بيانات الحالة والأولوية الإدارية والتقدم وبعض روابط الامتثال. يتطلب دعم تحديد الأولويات مستقبلًا بيانات معتمدة إضافية قبل تقديم توصيات أو تصنيف تحليلي للمشاريع.</p>
+        </aside>
 
+        <section className="portfolio-layout">
           <article className="portfolio-card portfolio-readiness">
             <header><div><span>تعريف المؤشر</span><h2>عناصر التخطيط المحتسبة</h2></div><small>ليس مؤشر التزام أو صحة محفظة</small></header>
             <p>تُحسب النسبة بالتساوي من المالك، الناتج المستهدف، التاريخ المستهدف، حقل المعالجة أو التقنية، ورابط مباشر مسجّل بضابط. لا يدخل الربط عبر المتطلبات في هذا المؤشر.</p><Link className="detail-back" href="/roadmap">فتح سجل المشاريع السيبرانية ←</Link>

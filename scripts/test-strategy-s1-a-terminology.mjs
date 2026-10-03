@@ -94,6 +94,16 @@ equal((read(analysis).match(/analysis\.readiness/g) ?? []).length, 1, 'aggregate
 includes(analysis, 'missing.map((item) => item.label).join(" · ")');
 includes(analysis, '<em>{readiness}%</em>');
 includes(analysis, 'analysis.incomplete.map');
+includes(analysis, '<aside className="portfolio-prioritization-note" aria-labelledby="prioritization-note-title">');
+includes(analysis, '<h2 id="prioritization-note-title">دعم تحديد الأولويات</h2><span>غير متاح حاليًا</span>');
+includes(analysis, 'تتوفر حاليًا بيانات الحالة والأولوية الإدارية والتقدم وبعض روابط الامتثال. يتطلب دعم تحديد الأولويات مستقبلًا بيانات معتمدة إضافية قبل تقديم توصيات أو تصنيف تحليلي للمشاريع.');
+for (const removed of ['Portfolio Prioritization', 'Must Do', 'Quick Wins', 'Defer', 'Strategic Alignment', 'Risk Reduction', 'Compliance Criticality', 'Effort / Complexity', 'decision-data-grid', 'portfolio-decision-readiness']) {
+  equal(read(analysis).includes(removed), false, `unapproved future framework removed: ${removed}`);
+}
+const note = read(analysis).match(/<aside className="portfolio-prioritization-note"[\s\S]*?<\/aside>/)?.[0];
+assert.ok(note);
+equal(/<button|<Link|<input|\{/.test(note), false, 'informational callout only: no action, calculation or recommendation');
+includes('app/roadmap/roadmap.css', '.portfolio-prioritization-note>header{display:flex;flex-wrap:wrap;');
 for (const path of [registry, analysis, dashboard, executive, detail]) {
   for (const obsolete of ['مساهمة الامتثال', 'نسبة المساهمة', 'المبادرات الاستراتيجية', 'التسلسل الربعي للمبادرات', 'الأولوية والقيمة والمخاطر', 'ضوابط مرتبطة بمشروع معالجة', 'جاهزة للتحقق']) {
     equal(read(path).includes(obsolete), false, `${path}: no misleading ${obsolete}`);
