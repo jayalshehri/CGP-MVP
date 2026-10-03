@@ -10,6 +10,7 @@ import { ReadNotice, ReadSection } from "../read-state";
 import StatusBadge from "@/components/StatusBadge";
 import GrcAuditTrail from "@/components/GrcAuditTrail";
 import { formatDateAr } from "../portfolio-metrics";
+import { projectDateLabels } from "@/lib/strategy-project-fields";
 import "../roadmap.css";
 import "@/app/controls/[id]/detail.css";
 
@@ -26,6 +27,12 @@ type Project = {
   planned_year: number;
   planned_quarter: string;
   target_end_date: string | null;
+  planned_start_date: string | null;
+  actual_start_date: string | null;
+  forecast_end_date: string | null;
+  actual_end_date: string | null;
+  target_outcome: string | null;
+  updated_at: string | null;
   recommended_technologies: string | null;
 };
 
@@ -386,7 +393,7 @@ function ProjectDetailContent({ id }: { id: string }) {
             <span dir="ltr">{project.project_code}</span> · {initiativeTypeText[project.initiative_type] ?? project.initiative_type} · {statusText[project.status] ?? project.status} · أولوية {priorityText[project.priority] ?? project.priority}
           </p>
           <p className="project-detail-line">
-            {project.planned_year} · {project.planned_quarter} <span className="sep">|</span> المالك: {project.executive_owner || "غير محدد"} <span className="sep">|</span> الإنجاز: {clampedProgress}%
+            {project.planned_year} · {project.planned_quarter} <span className="sep">|</span> المالك: {project.executive_owner?.trim() || "لا يوجد مالك مسجل"} <span className="sep">|</span> الإنجاز: {clampedProgress}%
           </p>
           <div className="project-detail-progress"><i style={{ width: `${clampedProgress}%` }} /></div>
         </header>
@@ -469,9 +476,22 @@ function ProjectDetailContent({ id }: { id: string }) {
               <section className="detail-card">
                 <h2>نظرة عامة</h2>
                 <p>الحالة: {statusText[project.status] ?? project.status} · الأولوية: {priorityText[project.priority] ?? project.priority}</p>
-                <p>المالك التنفيذي: {project.executive_owner || "غير محدد"}</p>
-                <p>نسبة الإنجاز: {clampedProgress}% · الموعد المستهدف: <span dir="ltr">{formatDateAr(project.target_end_date)}</span></p>
+                <p>نوع العمل: {initiativeTypeText[project.initiative_type] ?? project.initiative_type} · نسبة الإنجاز: {clampedProgress}%</p>
+                <p>المالك التنفيذي: {project.executive_owner?.trim() || "لا يوجد مالك مسجل"}{project.executive_owner?.trim() && <small className="detail-hint"> — مالك مسجل نصيًا؛ لا يثبت إسنادًا لحساب مستخدم.</small>}</p>
+                <h3>وصف المشروع</h3>
                 <p>{project.description_ar || "لا يوجد وصف مسجل."}</p>
+                <h3>النتيجة المستهدفة</h3>
+                <p className="project-outcome">{project.target_outcome?.trim() || "لا توجد نتيجة مستهدفة مسجلة."}</p>
+                <p className="detail-hint">النتيجة المتوقع تحقيقها عند اكتمال المشروع؛ ليست إثباتًا لتحقق النتيجة.</p>
+                <h3>التواريخ المسجلة</h3>
+                <dl className="project-facts">
+                  {Object.entries(projectDateLabels).map(([field, label]) => {
+                    const value = project[field as keyof typeof projectDateLabels];
+                    return <div key={field}><dt>{label}</dt><dd>{value ? <time dateTime={value} dir="ltr">{formatDateAr(value)}</time> : field === "target_end_date" ? "لا يوجد تاريخ انتهاء مستهدف" : field === "forecast_end_date" ? "غير مقدم — اختياري" : "غير مسجل"}</dd></div>;
+                  })}
+                </dl>
+                <p className="detail-hint">المتوقع تقدير حالي مستقل عن المستهدف، والفعلي يسجل ما حدث. لا تُستنتج التواريخ من الحالة أو نسبة الإنجاز.</p>
+                <p>آخر تعديل: {project.updated_at && Number.isFinite(Date.parse(project.updated_at)) ? <time dateTime={project.updated_at}>{new Date(project.updated_at).toLocaleString("ar-SA", { calendar: "gregory", timeZone: "Asia/Riyadh" })} (الرياض)</time> : "غير مسجل"}</p>
               </section>
             )}
 

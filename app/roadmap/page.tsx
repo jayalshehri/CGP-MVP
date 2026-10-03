@@ -9,6 +9,7 @@ import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { readStrategyRows, createReadEpoch, unavailable, noRelationship, type ReadStatus } from "@/lib/strategy-read";
 import { ReadNotice } from "./read-state";
+import { projectToForm, projectWriteFields, projectDateLabels, type ProjectForm as Form } from "@/lib/strategy-project-fields";
 import { getRiyadhDate, isDelayed, requirementRollup, formatDateAr, type CoverageType, type RequirementControlLink, type ProjectRequirementRow } from "./portfolio-metrics";
 import "./roadmap.css";
 
@@ -26,28 +27,13 @@ type Project = {
   planned_start_date: string | null;
   actual_start_date: string | null;
   target_end_date: string | null;
+  forecast_end_date: string | null;
+  target_outcome: string | null;
   actual_end_date: string | null;
   progress_percent: number;
 };
 
 type LinkRow = { project_id: number; control_id: number };
-
-type Form = {
-  project_code: string;
-  name_ar: string;
-  initiative_type: string;
-  status: Project["status"];
-  priority: Project["priority"];
-  planned_year: number;
-  planned_quarter: string;
-  executive_owner: string;
-  planned_start_date: string;
-  target_end_date: string;
-  actual_start_date: string;
-  actual_end_date: string;
-  progress_percent: number;
-  description_ar: string;
-};
 
 const emptyForm: Form = {
   project_code: "",
@@ -60,6 +46,8 @@ const emptyForm: Form = {
   executive_owner: "",
   planned_start_date: "",
   target_end_date: "",
+  forecast_end_date: "",
+  target_outcome: "",
   actual_start_date: "",
   actual_end_date: "",
   progress_percent: 0,
@@ -256,22 +244,7 @@ function ProjectRegisterContent() {
 
   function openProject(project: Project) {
     setSelected(project);
-    setForm({
-      project_code: project.project_code,
-      name_ar: project.name_ar,
-      initiative_type: project.initiative_type,
-      status: project.status,
-      priority: project.priority,
-      planned_year: project.planned_year,
-      planned_quarter: project.planned_quarter,
-      executive_owner: project.executive_owner ?? "",
-      planned_start_date: project.planned_start_date ?? "",
-      target_end_date: project.target_end_date ?? "",
-      actual_start_date: project.actual_start_date ?? "",
-      actual_end_date: project.actual_end_date ?? "",
-      progress_percent: Number(project.progress_percent) || 0,
-      description_ar: project.description_ar ?? "",
-    });
+    setForm(projectToForm(project));
     setOpen(true);
     setMessage("");
     setError("");
@@ -285,20 +258,7 @@ function ProjectRegisterContent() {
     try {
       const { user } = await requireProfile(["admin", "cybersecurity_team"]);
       const payload = {
-        project_code: form.project_code,
-        name_ar: form.name_ar,
-        initiative_type: form.initiative_type,
-        status: form.status,
-        priority: form.priority,
-        planned_year: form.planned_year,
-        planned_quarter: form.planned_quarter,
-        executive_owner: form.executive_owner || null,
-        planned_start_date: form.planned_start_date || null,
-        target_end_date: form.target_end_date || null,
-        actual_start_date: form.actual_start_date || null,
-        actual_end_date: form.actual_end_date || null,
-        progress_percent: Number(form.progress_percent),
-        description_ar: form.description_ar || null,
+        ...projectWriteFields(form, selected ?? undefined),
         updated_at: new Date().toISOString(),
       };
       if (selected) {
@@ -438,18 +398,21 @@ function ProjectRegisterContent() {
               <label>المالك التنفيذي<input value={form.executive_owner} onChange={(event) => setForm({ ...form, executive_owner: event.target.value })} /></label>
 
               <h3 className="roadmap-form-section">التخطيط</h3>
-              <label>تاريخ البداية المستهدف<input dir="ltr" type="date" value={form.planned_start_date} onChange={(event) => setForm({ ...form, planned_start_date: event.target.value })} /></label>
-              <label>تاريخ الإنجاز المستهدف<input dir="ltr" type="date" value={form.target_end_date} onChange={(event) => setForm({ ...form, target_end_date: event.target.value })} /></label>
               <label>نسبة الإنجاز<input type="number" min="0" max="100" value={form.progress_percent} onChange={(event) => setForm({ ...form, progress_percent: Number(event.target.value) })} /></label>
+              <h3 className="roadmap-form-section">التواريخ</h3>
+              <label>{projectDateLabels.planned_start_date}<input dir="ltr" type="date" value={form.planned_start_date} onChange={(event) => setForm({ ...form, planned_start_date: event.target.value })} /></label>
+              <label>{projectDateLabels.target_end_date}<input dir="ltr" type="date" value={form.target_end_date} onChange={(event) => setForm({ ...form, target_end_date: event.target.value })} /></label>
+              <label>{projectDateLabels.forecast_end_date}<input dir="ltr" type="date" value={form.forecast_end_date} onChange={(event) => setForm({ ...form, forecast_end_date: event.target.value })} /><small>تقدير حالي مستقل عن التاريخ المستهدف؛ اختياري ولا يُعبّأ تلقائيًا.</small></label>
               {showActualStart && (
-                <label>تاريخ البدء الفعلي<input dir="ltr" type="date" value={form.actual_start_date} onChange={(event) => setForm({ ...form, actual_start_date: event.target.value })} /></label>
+                <label>{projectDateLabels.actual_start_date}<input dir="ltr" type="date" value={form.actual_start_date} onChange={(event) => setForm({ ...form, actual_start_date: event.target.value })} /></label>
               )}
               {showActualEnd && (
-                <label>تاريخ الإنجاز الفعلي<input dir="ltr" type="date" value={form.actual_end_date} onChange={(event) => setForm({ ...form, actual_end_date: event.target.value })} /></label>
+                <label>{projectDateLabels.actual_end_date}<input dir="ltr" type="date" value={form.actual_end_date} onChange={(event) => setForm({ ...form, actual_end_date: event.target.value })} /></label>
               )}
 
               <h3 className="roadmap-form-section">وصف المشروع</h3>
               <label className="wide">وصف/هدف مختصر<textarea rows={2} value={form.description_ar} onChange={(event) => setForm({ ...form, description_ar: event.target.value })} /></label>
+              <label className="wide">النتيجة المستهدفة<textarea rows={2} value={form.target_outcome} onChange={(event) => setForm({ ...form, target_outcome: event.target.value })} /><small>النتيجة المتوقع تحقيقها عند اكتمال المشروع. حقل اختياري، وليس إثباتًا لتحقق النتيجة.</small></label>
 
               <footer>
                 <button type="button" onClick={() => setOpen(false)}>إلغاء</button>

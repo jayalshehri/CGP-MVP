@@ -8,6 +8,7 @@ import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-read";
 import { ReadNotice, ReadSection } from "../read-state";
+import { PlanningInformationSummary } from "../planning-information";
 import { planningReadiness, planningReadinessItems } from "../portfolio-metrics";
 import "../roadmap.css";
 
@@ -22,6 +23,7 @@ type Project = {
   executive_owner: string | null;
   target_outcome: string | null;
   target_end_date: string | null;
+  forecast_end_date: string | null;
   recommended_technologies: string | null;
   progress_percent: number;
 };
@@ -47,7 +49,7 @@ export default function PortfolioAnalysisPage() {
       try {
         await requireProfile();
         const [projectResult, linkResult, treatmentResult, activeControlResult] = await Promise.all([
-          readStrategyRows((from, to) => supabase.from("cybersecurity_projects").select("id,project_code,name_ar,planned_year,planned_quarter,status,priority,executive_owner,target_outcome,target_end_date,recommended_technologies,progress_percent", { count: "exact" }).order("planned_year").order("planned_quarter").order("id").range(from, to), row => row.id),
+          readStrategyRows((from, to) => supabase.from("cybersecurity_projects").select("id,project_code,name_ar,planned_year,planned_quarter,status,priority,executive_owner,target_outcome,target_end_date,forecast_end_date,recommended_technologies,progress_percent", { count: "exact" }).order("planned_year").order("planned_quarter").order("id").range(from, to), row => row.id),
           readStrategyRows((from, to) => supabase.from("cybersecurity_project_controls").select("project_id,control_id", { count: "exact" }).order("project_id").order("control_id").range(from, to), row => `${row.project_id}:${row.control_id}`),
           readStrategyRows((from, to) => supabase.from("cybersecurity_project_gap_treatments").select("id,project_id,priority", { count: "exact" }).order("id").range(from, to), row => row.id),
           readStrategyRows((from, to) => supabase.from("controls").select("id,frameworks!inner(is_active)", { count: "exact" }).eq("frameworks.is_active",true).order("id").range(from, to), row => row.id),
@@ -138,7 +140,8 @@ export default function PortfolioAnalysisPage() {
         <section className="portfolio-layout">
           <article className="portfolio-card portfolio-readiness">
             <header><div><span>تعريف المؤشر</span><h2>عناصر التخطيط المحتسبة</h2></div><small>ليس مؤشر التزام أو صحة محفظة</small></header>
-            <p>تُحسب النسبة بالتساوي من المالك، الناتج المستهدف، التاريخ المستهدف، حقل المعالجة أو التقنية، ورابط مباشر مسجّل بضابط. لا يدخل الربط عبر المتطلبات في هذا المؤشر.</p><Link className="detail-back" href="/roadmap">فتح سجل المشاريع السيبرانية ←</Link>
+            <p>تُحسب النسبة بالتساوي من المالك، النتيجة المستهدفة، تاريخ الانتهاء المستهدف، حقل المعالجة أو التقنية، ورابط مباشر مسجّل بضابط. لا يدخل الربط عبر المتطلبات في هذا المؤشر.</p>
+            <p className="detail-hint">هذا وصف للعناصر الخمسة الحالية، وليس حكمًا على ملاءمة نوع العمل. غياب التقنية لا يعني عيبًا في كل مشروع، وتاريخ الانتهاء المتوقع ليس عنصرًا إضافيًا في النسبة.</p><Link className="detail-back" href="/roadmap">فتح سجل المشاريع السيبرانية ←</Link>
           </article>
 
           <article className="portfolio-card portfolio-decision">
@@ -151,14 +154,16 @@ export default function PortfolioAnalysisPage() {
           </article>
 
           <ReadSection available={planningReady}><article className="portfolio-card portfolio-data-gaps">
-            <header><div><span>جودة البيانات</span><h2>المشاريع التي تحتاج استكمالًا</h2></div><small>{analysis.incomplete.length} مشروع</small></header>
+            <header><div><span>اكتمال عناصر التخطيط الخمسة الحالية</span><h2>العناصر غير المسجلة حسب المؤشر الحالي</h2></div><small>{analysis.incomplete.length} مشروع</small></header>
+            <p className="detail-hint">للمراجعة بحسب نوع العمل، لا تمثل هذه القائمة متطلبات إلزامية. التقنية اختيارية وقد لا تنطبق على السياسة أو التقييم أو التوعية أو النشاط المستمر.</p>
             <div className="portfolio-gap-table">
               <div><span>المشروع</span><span>العناصر الناقصة</span><span>الاكتمال</span></div>
-              {analysis.incomplete.map(({ project, missing, readiness }) => <article key={project.id}><div><b dir="ltr">{project.project_code}</b><strong><Link className="strategy-project-link" href={projectHref(project.id, "analysis")}>{project.name_ar}</Link></strong></div><span>{missing.map((item) => item.label).join(" · ")}</span><em>{readiness}%</em></article>)}
+              {analysis.incomplete.map(({ project, missing, readiness }) => <article key={project.id}><div><b dir="ltr">{project.project_code}</b><strong><Link className="strategy-project-link" href={projectHref(project.id, "analysis")}>{project.name_ar}</Link></strong></div><span>{missing.map((item) => item.key === "technology" ? "المعالجة أو التقنية — اختياري بحسب نوع العمل" : item.key === "outcome" ? "النتيجة المستهدفة" : item.key === "targetDate" ? "تاريخ الانتهاء المستهدف" : item.label).join(" · ")}</span><em>{readiness}%</em></article>)}
               {!analysis.incomplete.length && <p className="portfolio-empty">{projects.length ? "عناصر التخطيط الخمسة الحالية مكتملة لجميع المشاريع المعروضة." : "لا توجد مشاريع ضمن النطاق المقروء."}</p>}
             </div>
           </article></ReadSection>
         </section>
+        <PlanningInformationSummary projects={projects} status={reads.projects} />
       </section>
     </main>
   );
