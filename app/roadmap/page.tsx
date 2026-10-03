@@ -1,9 +1,10 @@
 "use client";
 import AssessmentFindingLinks from "@/components/AssessmentFindingLinks";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { projectHref, registerState, updateStrategyQuery } from "@/lib/strategy-navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { getRiyadhDate, isDelayed, requirementRollup, formatDateAr, type CoverageType, type RequirementControlLink, type ProjectRequirementRow } from "./portfolio-metrics";
@@ -81,7 +82,12 @@ const initiativeTypeText: Record<string, string> = {
 };
 
 export default function ProjectRegisterPage() {
+  return <Suspense fallback={<p>جاري التحميل...</p>}><ProjectRegisterContent /></Suspense>;
+}
+
+function ProjectRegisterContent() {
   const router = useRouter();
+  const params = useSearchParams();
   const [role, setRole] = useState<UserRole>("control_owner");
   const [projects, setProjects] = useState<Project[]>([]);
   const [links, setLinks] = useState<LinkRow[]>([]);
@@ -94,10 +100,11 @@ export default function ProjectRegisterPage() {
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Project | null>(null);
   const [form, setForm] = useState<Form>(emptyForm);
-  const [query, setQuery] = useState("");
-  const [yearFilter, setYearFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [priorityFilter, setPriorityFilter] = useState("all");
+  const { q: query, year: yearFilter, status: statusFilter, priority: priorityFilter } = registerState(params);
+  const setQuery = (value: string) => updateStrategyQuery("q", value);
+  const setYearFilter = (value: string) => updateStrategyQuery("year", value);
+  const setStatusFilter = (value: string) => updateStrategyQuery("status", value);
+  const setPriorityFilter = (value: string) => updateStrategyQuery("priority", value);
   const canManage = role === "admin" || role === "cybersecurity_team";
 
   async function load() {
@@ -391,7 +398,7 @@ export default function ProjectRegisterPage() {
                   </span>
                 </div>
                 <div className="register-actions">
-                  <Link className="register-action-primary" href={`/roadmap/${project.id}`}>صفحة المشروع ←</Link>
+                  <Link className="register-action-primary" href={projectHref(project.id, "register", params)}>صفحة المشروع ←</Link>
                   <button type="button" className="register-action-secondary" onClick={() => openProject(project)}>عرض وإدارة</button>
                 </div>
               </article>

@@ -19,8 +19,8 @@ const paths = [
   'app/roadmap/[id]/page.tsx', 'app/roadmap/portfolio-metrics.ts',
 ];
 
-// Strip presentation leaves only: all non-render logic, literals/enums, role
-// predicates, query construction, hooks, mutations and calculations must match RC2.
+// Normalize presentation leaves when comparing the certified business contracts.
+// S1-B intentionally changes URL state/hrefs, not queries, commands or formulas.
 function logic(path, text) {
   const result = ts.transform(parse(path, text), [context => {
     const visit = node => {
@@ -36,7 +36,26 @@ function logic(path, text) {
   result.dispose();
   return output;
 }
-for (const path of paths) equal(logic(path, read(path)), logic(path, before(path)), `${path}: non-presentation logic unchanged`);
+function businessContracts(path, text) {
+  const found = [];
+  const visit = node => {
+    if (ts.isCallExpression(node) && (
+      node.expression.getText() === 'useMemo' ||
+      node.expression.getText() === 'requireProfile' ||
+      node.expression.getText().startsWith('supabase.')
+    )) found.push(logic(path, node.getText()));
+    if (ts.isVariableDeclaration(node) && ['canManage', 'permittedItems', 'items', 'form', 'emptyForm', 'roleLabels'].includes(node.name.getText())) {
+      found.push(logic(path, node.getText()));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parse(path, text));
+  return found;
+}
+for (const path of paths) {
+  equal(businessContracts(path, read(path)), businessContracts(path, before(path)), `${path}: queries/auth/commands/calculations unchanged`);
+}
+equal(logic('app/roadmap/portfolio-metrics.ts', read('app/roadmap/portfolio-metrics.ts')), logic('app/roadmap/portfolio-metrics.ts', before('app/roadmap/portfolio-metrics.ts')), 'all metric formulas unchanged');
 
 function attributes(path, text, name) {
   const found = [];
@@ -48,7 +67,8 @@ function attributes(path, text, name) {
   return found;
 }
 for (const path of paths) {
-  for (const name of ['href', 'value', 'disabled', 'onClick', 'onChange', 'onSubmit', 'dir']) {
+  // Exact project hrefs/context are certified by test-strategy-s1-b-navigation.
+  for (const name of ['value', 'disabled', 'onClick', 'onChange', 'onSubmit', 'dir']) {
     equal(attributes(path, read(path), name), attributes(path, before(path), name), `${path}: ${name} contracts unchanged`);
   }
 }

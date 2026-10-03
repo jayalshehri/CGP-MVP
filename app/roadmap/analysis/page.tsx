@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { projectHref } from "@/lib/strategy-navigation";
 import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -146,7 +147,7 @@ export default function PortfolioAnalysisPage() {
             <header><div><span>جودة البيانات</span><h2>المشاريع التي تحتاج استكمالًا</h2></div><small>{analysis.incomplete.length} مشروع</small></header>
             <div className="portfolio-gap-table">
               <div><span>المشروع</span><span>العناصر الناقصة</span><span>الاكتمال</span></div>
-              {analysis.incomplete.map(({ project, missing, readiness }) => <article key={project.id}><div><b dir="ltr">{project.project_code}</b><strong>{project.name_ar}</strong></div><span>{missing.map((item) => item.label).join(" · ")}</span><em>{readiness}%</em></article>)}
+              {analysis.incomplete.map(({ project, missing, readiness }) => <article key={project.id}><div><b dir="ltr">{project.project_code}</b><strong><Link className="strategy-project-link" href={projectHref(project.id, "analysis")}>{project.name_ar}</Link></strong></div><span>{missing.map((item) => item.label).join(" · ")}</span><em>{readiness}%</em></article>)}
               {!analysis.incomplete.length && <p className="portfolio-empty">عناصر التخطيط الخمسة الحالية مكتملة لجميع المشاريع المعروضة.</p>}
             </div>
           </article>

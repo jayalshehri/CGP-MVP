@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import FeedbackWidget from "@/components/FeedbackWidget";
 import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
 import { myControlsReturn, myControlsOrigin } from "@/lib/my-controls-context";
+import { projectReturn } from "@/lib/strategy-navigation";
 
 // CGP v2 IA (Package P1): grouped by domain (الامتثال / المخاطر /
 // الاستراتيجية والتنفيذ), each with at most one subgroup level.
@@ -124,6 +125,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
 function ContextBreadcrumb({pathname,leaf,activeGroup,controlId,complianceCode,assessmentFramework}:{pathname:string;leaf:string;activeGroup:string;controlId?:string;complianceCode?:string;assessmentFramework?:string}){
   const params=useSearchParams();
+  // Project identity stays in the path; the bounded origin only shapes this breadcrumb.
+  if (/^\/roadmap\/[^/]+$/.test(pathname) && !["/roadmap/analysis", "/roadmap/dashboard", "/roadmap/executive"].includes(pathname)) {
+    const context = projectReturn(params);
+    return <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link><span aria-hidden="true">/</span><span>الاستراتيجية والتنفيذ</span><span aria-hidden="true">/</span><Link href={context.href}>{context.label}</Link><span aria-hidden="true">/</span><span aria-current="page">تفاصيل المشروع</span></nav>;
+  }
   const personalReturn=myControlsReturn(new URLSearchParams(params.toString()))??myControlsReturn(new URLSearchParams(params.get('return_context')??''));
   const personalQuery=personalReturn?'&'+myControlsOrigin(params.get('my_context')??new URLSearchParams(params.get('return_context')??'').get('my_context')??''):'';
   const origin=params.get("from")==="workspace"?params.get("origin")?.toUpperCase():null;

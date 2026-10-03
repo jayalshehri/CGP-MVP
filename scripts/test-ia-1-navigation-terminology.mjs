@@ -52,7 +52,10 @@ for (const role of ['admin', 'cybersecurity_team', 'control_owner', 'nca_externa
   check(currentNav.filter(visible).map(item => item.href).sort(), oldNav.filter(visible).map(item => item.href).sort(), `${role} sidebar access unchanged`);
 }
 check(currentNav.find(item => item.href === '/review')?.team, true, 'owner cannot receive Review Center through rename');
-check(namedFunction('components/AppShell.tsx', shell, 'ContextBreadcrumb'), namedFunction('components/AppShell.tsx', oldShell, 'ContextBreadcrumb'), 'breadcrumb/deep-link mechanics unchanged');
+// S1-B adds a project-only early return. All prior compliance/owner/assessment
+// breadcrumb mechanics below that branch must remain byte-identical to RC1.
+const existingBreadcrumb = text => namedFunction('components/AppShell.tsx', text, 'ContextBreadcrumb').split('  const personalReturn=')[1];
+check(existingBreadcrumb(shell), existingBreadcrumb(oldShell), 'non-project breadcrumb/deep-link mechanics unchanged');
 check(shell.includes('cybersecurity_team: "فريق الأمن السيبراني"'), true, 'role display label');
 check(shell.includes('مدير الامتثال والمراجعة'), false, 'old role display absent');
 

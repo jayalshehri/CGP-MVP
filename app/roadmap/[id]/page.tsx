@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { projectIdFromPath, projectReturn, projectTabs, projectView, updateStrategyQuery } from "@/lib/strategy-navigation";
 import Link from "next/link";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -85,7 +86,14 @@ const single = <T,>(value: T | T[] | null): T | null => (Array.isArray(value) ? 
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
+  // Changing path identity must not retain a previous project's data or edit drafts.
+  return <Suspense fallback={<p>جاري التحميل...</p>}><ProjectDetailContent key={id} id={id} /></Suspense>;
+}
+
+function ProjectDetailContent({ id }: { id: string }) {
   const router = useRouter();
+  const params = useSearchParams();
+  const returnContext = projectReturn(params);
   const [project, setProject] = useState<Project | null>(null);
   const [projectRequirements, setProjectRequirements] = useState<ProjectRequirement[]>([]);
   const [requirementControls, setRequirementControls] = useState<RequirementControl[]>([]);
@@ -95,10 +103,10 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [message, setMessage] = useState("");
-  const [tab, setTab] = useState(0);
-  const [frameworkFilter, setFrameworkFilter] = useState("all");
-  const [coverageFilter, setCoverageFilter] = useState("all");
-  const [verificationFilter, setVerificationFilter] = useState("all");
+  const setTab = (index: number) => updateStrategyQuery("tab", projectTabs[index]);
+  const setFrameworkFilter = (value: string) => updateStrategyQuery("framework", value);
+  const setCoverageFilter = (value: string) => updateStrategyQuery("coverage", value);
+  const setVerificationFilter = (value: string) => updateStrategyQuery("verification", value);
   const [saving, setSaving] = useState(false);
   const [gapTitle, setGapTitle] = useState("");
   const [treatmentType, setTreatmentType] = useState<GapTreatment["treatment_type"]>("technology");
@@ -123,8 +131,8 @@ export default function ProjectDetailPage() {
         const { profile } = await requireProfile();
         if (!active) return;
         setRole(profile.role);
-        const projectId = Number(id);
-        if (!Number.isSafeInteger(projectId) || projectId <= 0) throw new Error("رقم المشروع غير صحيح.");
+        const projectId = projectIdFromPath(id);
+        if (projectId === null) throw new Error("رقم المشروع غير صحيح.");
         const [p, pr] = await Promise.all([
           supabase.from("cybersecurity_projects").select("*").eq("id", projectId).single(),
           supabase
@@ -273,6 +281,10 @@ export default function ProjectDetailPage() {
     return Array.from(set).sort();
   }, [derivedControls]);
 
+  const view = projectView(params, controlFrameworks);
+  const tab = projectTabs.indexOf(view.tab);
+  const { framework: frameworkFilter, coverage: coverageFilter, verification: verificationFilter } = view;
+
   const filteredControlRows = useMemo(
     () =>
       derivedControls.filter((row) => {
@@ -326,7 +338,7 @@ export default function ProjectDetailPage() {
   }, [projectRequirements, uniqueControls, derivedControls, requirementsWithStats]);
 
   if (loading) return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading">جاري تحميل المشروع…</p></main>;
-  if (error || !project) return <main className="roadmap-page" dir="rtl"><p role="alert">{error}</p><Link href="/roadmap">العودة إلى سجل المشاريع السيبرانية</Link></main>;
+  if (error || !project) return <main className="roadmap-page" dir="rtl"><p role="alert">{error}</p><Link href={returnContext.href}>العودة إلى {returnContext.label}</Link></main>;
 
   const clampedProgress = Math.max(0, Math.min(100, Number(project.progress_percent) || 0));
   const coverageTotal = rollup.full + rollup.partial + rollup.supporting;
@@ -335,7 +347,7 @@ export default function ProjectDetailPage() {
   return (
     <main className="roadmap-page" dir="rtl">
       <section className="roadmap-shell">
-        <Link className="detail-back" href="/roadmap">← العودة إلى سجل المشاريع السيبرانية</Link>
+        <Link className="detail-back" href={returnContext.href}>← العودة إلى {returnContext.label}</Link>
 
         {actionError && <p className="roadmap-alert" role="alert">{actionError}</p>}
         {message && <p className="roadmap-message" role="status">{message}</p>}
