@@ -9,6 +9,8 @@ const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, serviceWorkers: 'block' });
 const user = { id: '11111111-1111-4111-8111-111111111111', email: 'local-fixture@example.test', role: 'authenticated', app_metadata: {}, user_metadata: {} };
 const project = { id: 37, project_code: 'CODE-NOT-ID', name_ar: 'مشروع التنقل المحلي', status: 'planned', priority: 'high', initiative_type: 'technology_project', progress_percent: 15, planned_year: 2027, planned_quarter: 'Q1', target_end_date: null, executive_owner: null };
+// Reproduce the live failure: one short quarter stretched by a very tall neighbour.
+const crowdedQuarter = Array.from({ length: 27 }, (_, index) => ({ ...project, id: 100 + index, project_code: `Q2-${index}`, name_ar: 'مشروع في الربع المجاور', planned_quarter: 'Q2' }));
 const requirement = { project_id: 37, requirement_id: 12, coverage_type: 'full', cybersecurity_requirements: { id: 12, requirement_code: 'R12', title_ar: 'متطلب محلي', status: 'active' } };
 const control = { id: 41, control_code: 'C41', title_ar: 'ضابط محلي', implementation_status: 'not_implemented', evidence_status: 'accepted', verification_status: 'verified', frameworks: { code: 'DCC', is_active: true } };
 const calls = [], errors = [], writes = [];
@@ -29,7 +31,7 @@ await context.route('**/*', async route => {
     else if (table === 'cybersecurity_projects') {
       const id = url.searchParams.get('id');
       if (id && id !== 'eq.37') return route.fulfill({ status: 406, json: { code: 'PGRST116', message: 'No visible record' } });
-      json = id ? project : [project];
+      json = id ? project : [project, ...crowdedQuarter];
     } else if (table === 'cybersecurity_project_requirements') json = [requirement];
     else if (table === 'cybersecurity_requirement_controls') json = [{ requirement_id: 12, control_id: 41, coverage_type: 'partial', mapping_confidence: 'confirmed', controls: control }];
     else if (table === 'controls') json = [control];
@@ -98,6 +100,49 @@ try {
       check(await page.locator('[data-reading-focus]').getAttribute('id') === 'roadmap-2027-Q1', 'roadmap focus restored, not filtered');
       check(await page.locator('.quarterly-row').count() === 3, 'focus preserves all years');
     } else { await page.waitForURL(origin + path); check(new URL(page.url()).pathname === path, `${from} explicit return`); }
+  }
+  const focusPath = '/roadmap/dashboard?focus_year=2027&focus_quarter=Q1';
+  const visibleContext = async (id, cards = true) => {
+    const section = page.locator(`#${id}`);
+    await section.locator('h3').waitFor();
+    await page.waitForFunction(id => {
+      const heading = document.getElementById(`${id}-heading`);
+      const rect = heading?.getBoundingClientRect();
+      return rect && rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth;
+    }, id);
+    check(await page.locator('[data-reading-focus]').count() === 1 && await section.getAttribute('data-reading-focus') === 'true', 'only exact quarter focused');
+    if (cards) {
+      const box = await section.locator('.quarterly-project').first().boundingBox();
+      const viewport = page.viewportSize();
+      check(box && box.y >= 0 && box.y + box.height <= viewport.height && box.x >= 0 && box.x + box.width <= viewport.width, 'quarter card and heading visible, not middle of tall cell');
+    } else check(await section.locator('.quarterly-empty').isVisible(), 'empty quarter has its own context, no substitution');
+  };
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await load(focusPath); await visibleContext('roadmap-2027-Q1');
+    await page.locator('#roadmap-2027-Q1 .quarterly-project').click(); await selectedTab('نظرة عامة');
+    check(new URL(page.url()).pathname === '/roadmap/37', 'focus exact project');
+    await page.locator('a.detail-back').first().click(); await visibleContext('roadmap-2027-Q1');
+    check(page.url() === origin + focusPath, 'contextual return preserves exact focus URL');
+    await page.goBack(); await selectedTab('نظرة عامة');
+    await page.goBack(); await visibleContext('roadmap-2027-Q1');
+    await page.goForward(); await selectedTab('نظرة عامة');
+    await page.goForward(); await visibleContext('roadmap-2027-Q1');
+    await page.reload(); await visibleContext('roadmap-2027-Q1');
+    await page.screenshot({ path: `/private/tmp/cgp-s1b-quarter-${viewport.width}.png` });
+    await page.mouse.wheel(0, 450);
+    await page.waitForTimeout(300);
+    const userScroll = await page.evaluate(() => scrollY);
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => scrollY) === userScroll, 'no repeated restoration after user scroll');
+    await load('/roadmap/dashboard?focus_year=2028&focus_quarter=Q4'); await visibleContext('roadmap-2028-Q4', false);
+    for (const suffix of ['', '?focus_year=2030&focus_quarter=Q1', '?focus_year=2027&focus_quarter=Q5']) {
+      await load('/roadmap/dashboard' + suffix); await page.locator('.quarterly-row').first().waitFor();
+      check(await page.locator('[data-reading-focus]').count() === 0, 'direct/invalid context no fallback');
+      check(await page.evaluate(() => scrollY) === 0, 'direct/invalid context normal top-of-page');
+    }
+    check(await page.locator('main.roadmap-page').getAttribute('dir') === 'rtl', 'roadmap RTL retained');
   }
   await load('/roadmap/37?tab=unknown&from=https://evil.test&returnUrl=https://evil.test&framework=hidden');
   await selectedTab('نظرة عامة');
