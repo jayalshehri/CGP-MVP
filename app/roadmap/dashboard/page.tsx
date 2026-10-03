@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { projectHref, roadmapFocus } from "@/lib/strategy-navigation";
@@ -39,15 +39,20 @@ function RoadmapDashboardContent() {
   const router = useRouter();
   const params = useSearchParams();
   const focusId = roadmapFocus(params)?.id;
+  const quarterHeadings = useRef(new Map<string, HTMLHeadingElement>());
   const [projects, setProjects] = useState<Project[]>([]);
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!loading && !error && focusId) {
-      document.getElementById(focusId)?.scrollIntoView({ block: "center", inline: "nearest" });
-    }
+    if (loading || error || !focusId) return;
+    // Target the compact heading, not the grid cell stretched by adjacent quarters.
+    // One post-render scroll per context/load; no polling or scroll listener.
+    const frame = requestAnimationFrame(() => {
+      quarterHeadings.current.get(focusId)?.scrollIntoView({ behavior: "instant", block: "start", inline: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
   }, [loading, error, focusId]);
 
   const projectLink = (project: Project) => projectHref(project.id, "roadmap", new URLSearchParams({
@@ -147,7 +152,17 @@ function RoadmapDashboardContent() {
           <header><div><span>العرض التشغيلي</span><h2 id="quarterly-roadmap-title">توزيع المشاريع حسب السنة والربع</h2><p>اللون يوضح حالة التنفيذ، والشارة توضح الأولوية الإدارية.</p></div><small>As of {getRiyadhDate()}</small></header>
           <div className="quarterly-roadmap-grid">
             <div className="quarterly-head"><span>السنة</span>{quarters.map((quarter) => <b key={quarter}>{quarter}</b>)}</div>
-            {[2027, 2028, 2029].map((year) => <div className="quarterly-row" key={year}><b>{year}</b>{quarters.map((quarter) => <section key={quarter} id={`roadmap-${year}-${quarter}`} data-reading-focus={focusId === `roadmap-${year}-${quarter}` || undefined}>{projects.filter((project) => project.planned_year === year && project.planned_quarter === quarter).map((project) => <Link href={projectLink(project)} key={project.id} className={`quarterly-project ${project.status}`} title={`${project.project_code} — ${project.name_ar}`}><div><b dir="ltr">{project.project_code}</b><span className={`register-priority ${project.priority}`}>{priorityText[project.priority]}</span></div><strong>{project.name_ar}</strong><small>{project.executive_owner || "مالك غير محدد"} · {project.progress_percent}%</small></Link>)}</section>)}</div>)}
+            {[2027, 2028, 2029].map((year) => <div className="quarterly-row" key={year}><b>{year}</b>{quarters.map((quarter) => {
+              const id = `roadmap-${year}-${quarter}`;
+              const quarterProjects = projects.filter((project) => project.planned_year === year && project.planned_quarter === quarter);
+              return <section key={quarter} id={id} aria-labelledby={`${id}-heading`} data-reading-focus={focusId === id || undefined}>
+                <h3 id={`${id}-heading`} className="quarterly-context-heading" ref={(element) => {
+                  if (element) quarterHeadings.current.set(id, element);
+                  else quarterHeadings.current.delete(id);
+                }}><bdi>{quarter} / {year}</bdi></h3>
+                {quarterProjects.length ? quarterProjects.map((project) => <Link href={projectLink(project)} key={project.id} className={`quarterly-project ${project.status}`} title={`${project.project_code} — ${project.name_ar}`}><div><b dir="ltr">{project.project_code}</b><span className={`register-priority ${project.priority}`}>{priorityText[project.priority]}</span></div><strong>{project.name_ar}</strong><small>{project.executive_owner || "مالك غير محدد"} · {project.progress_percent}%</small></Link>) : <small className="quarterly-empty">لا توجد مشاريع مسجلة لهذا الربع.</small>}
+              </section>;
+            })}</div>)}
           </div>
         </section>
 

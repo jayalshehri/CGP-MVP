@@ -138,3 +138,5 @@
 .strategy-project-link:hover{text-decoration:underline}
 .strategy-project-link:focus-visible{outline:2px solid var(--accent,#2563eb);outline-offset:3px}
 .quarterly-row>section[data-reading-focus]{outline:2px solid var(--accent,#2563eb);outline-offset:-2px;scroll-margin-block:6rem}
+.quarterly-context-heading{margin:0;padding:4px 0;font-size:12px;color:#0f766e;scroll-margin-block-start:6rem;scroll-margin-inline:12px}
+.quarterly-empty{color:#657b87;font-size:11px;line-height:1.6}

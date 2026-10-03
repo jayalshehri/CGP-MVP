@@ -129,6 +129,15 @@ check(detailSource.includes('ProjectDetailContent key={id} id={id}'), 'path chan
 check(detailSource.includes('const projectId = projectIdFromPath(id)') && detailSource.includes('.eq("id", projectId).single()'), 'query uses only exact path identity');
 check(detailSource.includes('if (p.error || !p.data) throw new Error("المشروع غير موجود أو ليس ضمن صلاحيتك.")'), 'RLS-hidden and missing records share unavailable behavior');
 check(!detailSource.includes('params.get("project_id")') && !detailSource.includes('projects[0]'), 'no query/first-record fallback');
-check(source('app/roadmap/dashboard/page.tsx').includes('scrollIntoView({ block: "center", inline: "nearest" })'), 'roadmap reading position restoration');
+const dashboardSource = source('app/roadmap/dashboard/page.tsx');
+check(dashboardSource.includes('quarterHeadings.current.get(focusId)?.scrollIntoView({ behavior: "instant", block: "start", inline: "nearest" })'), 'bounded heading ref, instant start alignment (including reduced motion)');
+check(dashboardSource.includes('if (loading || error || !focusId) return') && dashboardSource.includes('cancelAnimationFrame(frame)'), 'post-render restoration is gated and cancelled on cleanup');
+check(!dashboardSource.includes('querySelector') && !dashboardSource.includes('block: "center"'), 'no URL selectors or stretched-cell centering');
+const focusedRoadmap = render('app/roadmap/dashboard/page.tsx', '/roadmap/dashboard?focus_year=2027&focus_quarter=Q1');
+check(focusedRoadmap.includes('id="roadmap-2027-Q1-heading" class="quarterly-context-heading"><bdi>Q1 / 2027</bdi>'), 'exact quarter/year heading rendered above cards');
+equal((focusedRoadmap.match(/data-reading-focus="true"/g) || []).length, 1, 'exactly one focused quarter');
+for (const query of ['', '?focus_year=2030&focus_quarter=Q1', '?focus_year=2027&focus_quarter=Q5']) {
+  check(!render('app/roadmap/dashboard/page.tsx', '/roadmap/dashboard' + query).includes('data-reading-focus'), 'direct or invalid context never substitutes another quarter');
+}
 check(!source('lib/strategy-navigation.ts').includes('supabase') && !source('lib/strategy-navigation.ts').includes('returnUrl'), 'URL helper has no data/redirect authority');
 console.log(`S1-B exact navigation, URL history and production component renders: ${checks} assertions PASS (offline only)`);
