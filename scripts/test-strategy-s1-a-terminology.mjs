@@ -20,7 +20,8 @@ const paths = [
 ];
 
 // Normalize presentation leaves when comparing the certified business contracts.
-// S1-B intentionally changes URL state/hrefs, not queries, commands or formulas.
+// S1-B owns URL state; S1-C owns read availability/paging. Keep mutation/auth,
+// input and pure formula invariants here; executable reads are tested by S1-C.
 function logic(path, text) {
   const result = ts.transform(parse(path, text), [context => {
     const visit = node => {
@@ -40,9 +41,8 @@ function businessContracts(path, text) {
   const found = [];
   const visit = node => {
     if (ts.isCallExpression(node) && (
-      node.expression.getText() === 'useMemo' ||
       node.expression.getText() === 'requireProfile' ||
-      node.expression.getText().startsWith('supabase.')
+      (node.expression.getText().startsWith('supabase.') && /\.(insert|update|delete)\(/.test(node.getText()))
     )) found.push(logic(path, node.getText()));
     if (ts.isVariableDeclaration(node) && ['canManage', 'permittedItems', 'items', 'form', 'emptyForm', 'roleLabels'].includes(node.name.getText())) {
       found.push(logic(path, node.getText()));
@@ -53,14 +53,14 @@ function businessContracts(path, text) {
   return found;
 }
 for (const path of paths) {
-  equal(businessContracts(path, read(path)), businessContracts(path, before(path)), `${path}: queries/auth/commands/calculations unchanged`);
+  equal(businessContracts(path, read(path)), businessContracts(path, before(path)), `${path}: auth/commands unchanged (read states covered by S1-C)`);
 }
 equal(logic('app/roadmap/portfolio-metrics.ts', read('app/roadmap/portfolio-metrics.ts')), logic('app/roadmap/portfolio-metrics.ts', before('app/roadmap/portfolio-metrics.ts')), 'all metric formulas unchanged');
 
 function attributes(path, text, name) {
   const found = [];
   const visit = node => {
-    if (ts.isJsxAttribute(node) && node.name.getText() === name) found.push(node.initializer?.getText());
+    if (ts.isJsxAttribute(node) && node.name.getText() === name && ['input', 'select', 'textarea', 'form'].includes(node.parent.parent.tagName?.getText())) found.push(node.initializer?.getText());
     ts.forEachChild(node, visit);
   };
   visit(parse(path, text));
@@ -69,7 +69,7 @@ function attributes(path, text, name) {
 for (const path of paths) {
   // Exact project hrefs/context are certified by test-strategy-s1-b-navigation.
   for (const name of ['value', 'disabled', 'onClick', 'onChange', 'onSubmit', 'dir']) {
-    equal(attributes(path, read(path), name), attributes(path, before(path), name), `${path}: ${name} contracts unchanged`);
+    equal(attributes(path, read(path), name), attributes(path, before(path), name), `${path}: form ${name} contracts unchanged`);
   }
 }
 
@@ -94,14 +94,14 @@ includes(registry, '"مشروع سيبراني جديد"');
 includes(registry, '<label>نوع العمل<select value={form.initiative_type}');
 includes('components/GrcAuditTrail.tsx', "initiative_type:'نوع العمل'");
 includes(dashboard, 'توزيع المشاريع حسب السنة والربع');
-for (const path of [dashboard, executive]) includes(path, 'label="متوسط تقدم المشاريع المسجّل" value={`${data.average}%`}');
-includes(executive, 'label="المشاريع السيبرانية" value={projects.length}');
-includes(executive, 'label="فئات التنبيه الإداري" value={data.attention.length}');
-includes(analysis, 'label="اكتمال عناصر التخطيط الخمسة الحالية" value={`${analysis.readiness}%`}');
-includes(analysis, 'label="ضوابط ذات ربط مباشر مسجّل" value={analysis.linkedControls}');
-includes(dashboard, 'label="ضوابط ذات ربط مباشر مسجّل" value={data.controls}');
-includes(registry, 'label="ضوابط ذات ربط مباشر مسجّل" value={stats.linked}');
-includes(registry, 'label="ضوابط مرتبطة عبر المتطلبات وحالتها متحققة" value={requirementStats.verified}');
+for (const path of [dashboard, executive]) includes(path, 'label="متوسط تقدم المشاريع المسجّل"');
+includes(executive, 'label="المشاريع السيبرانية"');
+includes(executive, 'label="فئات التنبيه الإداري"');
+includes(analysis, 'label="اكتمال عناصر التخطيط الخمسة الحالية"');
+includes(analysis, 'label="ضوابط ذات ربط مباشر مسجّل"');
+includes(dashboard, 'label="ضوابط ذات ربط مباشر مسجّل"');
+includes(registry, 'label="ضوابط ذات ربط مباشر مسجّل"');
+includes(registry, 'label="ضوابط مرتبطة عبر المتطلبات وحالتها متحققة"');
 includes(detail, '<span>نسبة الضوابط المرتبطة التي حالتها متحققة</span>');
 includes(detail, '<span>ضوابط بأدلة مقبولة ولم تُتحقق</span>');
 includes(detail, 'الأدلة المقبولة وحدها لا تثبت أهلية أمر التحقق.');

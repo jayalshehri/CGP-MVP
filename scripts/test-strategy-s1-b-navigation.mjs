@@ -102,9 +102,9 @@ move(-1); equal(nav.registerState(activeUrl.searchParams).year, 'all', 'register
 move(1); equal(nav.registerState(activeUrl.searchParams).year, '2027', 'register filter Forward');
 equal(nav.registerState(new URL(activeUrl.href).searchParams).q, 'مشروع', 'refresh preserves Arabic query');
 
-function render(path, href, state = {}) {
+export function render(path, href, state = {}) {
   activeUrl = new URL(href, 'https://local.test');
-  fixture = { loading: false, projects: [project], project, error: '', role: 'admin', ...state };
+  fixture = { loading: false, projects: [project], project, error: '', role: 'admin', reads: { projects: 'COMPLETE', links: 'COMPLETE', requirements: 'COMPLETE', mapping: 'COMPLETE', controls: 'COMPLETE', treatments: 'COMPLETE' }, ...state };
   return renderToStaticMarkup(React.createElement(load(path).default));
 }
 for (const [path, origin] of [['app/roadmap/page.tsx', 'register'], ['app/roadmap/dashboard/page.tsx', 'roadmap'], ['app/roadmap/analysis/page.tsx', 'analysis'], ['app/roadmap/executive/page.tsx', 'executive']]) {

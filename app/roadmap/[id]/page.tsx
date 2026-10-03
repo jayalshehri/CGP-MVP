@@ -1,10 +1,12 @@
 "use client";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { projectIdFromPath, projectReturn, projectTabs, projectView, updateStrategyQuery } from "@/lib/strategy-navigation";
 import Link from "next/link";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { readStrategyRows, createReadEpoch, unavailable, noRelationship, type ReadStatus } from "@/lib/strategy-read";
+import { ReadNotice, ReadSection } from "../read-state";
 import StatusBadge from "@/components/StatusBadge";
 import GrcAuditTrail from "@/components/GrcAuditTrail";
 import { formatDateAr } from "../portfolio-metrics";
@@ -113,19 +115,27 @@ function ProjectDetailContent({ id }: { id: string }) {
   const [recommendation, setRecommendation] = useState("");
   const [treatmentPriority, setTreatmentPriority] = useState<GapTreatment["priority"]>("medium");
   const [technologies, setTechnologies] = useState("");
+  const [reads, setReads] = useState<{ requirements: ReadStatus; controls: ReadStatus; treatments: ReadStatus }>({ requirements: "UNAVAILABLE", controls: "UNAVAILABLE", treatments: "UNAVAILABLE" });
+  const treatmentEpoch = useRef(createReadEpoch());
+  const requirementsReady = reads.requirements === "COMPLETE";
+  const controlsReady = requirementsReady && reads.controls === "COMPLETE";
+  const treatmentsReady = reads.treatments === "COMPLETE";
   const canManage = role === "admin" || role === "cybersecurity_team";
 
   async function loadTreatments(projectId: number) {
-    const result = await supabase
+    const epoch = treatmentEpoch.current.begin();
+    const result = await readStrategyRows((from, to) => supabase
       .from("cybersecurity_project_gap_treatments")
-      .select("id,project_id,gap_title,treatment_type,recommendation,priority")
-      .eq("project_id", projectId)
-      .order("id");
-    if (!result.error) setTreatments((result.data ?? []) as GapTreatment[]);
+      .select("id,project_id,gap_title,treatment_type,recommendation,priority", { count: "exact" })
+      .eq("project_id", projectId).order("id").range(from, to), row => row.id);
+    if (!treatmentEpoch.current.valid(epoch)) return;
+    setTreatments(result.data as GapTreatment[]);
+    setReads(previous => ({ ...previous, treatments: result.status }));
   }
 
   useEffect(() => {
     let active = true;
+    const epoch = treatmentEpoch.current;
     (async () => {
       try {
         const { profile } = await requireProfile();
@@ -135,44 +145,62 @@ function ProjectDetailContent({ id }: { id: string }) {
         if (projectId === null) throw new Error("رقم المشروع غير صحيح.");
         const [p, pr] = await Promise.all([
           supabase.from("cybersecurity_projects").select("*").eq("id", projectId).single(),
-          supabase
+          readStrategyRows((from, to) => supabase
             .from("cybersecurity_project_requirements")
-            .select("project_id,requirement_id,coverage_type,cybersecurity_requirements(id,requirement_code,title_ar,status)")
-            .eq("project_id", projectId),
+            .select("project_id,requirement_id,coverage_type,cybersecurity_requirements(id,requirement_code,title_ar,status)", { count: "exact" })
+            .eq("project_id", projectId).order("project_id").order("requirement_id").range(from, to),
+            row => `${row.project_id}:${row.requirement_id}`),
+          loadTreatments(projectId),
         ]);
-        if (p.error || !p.data) throw new Error("المشروع غير موجود أو ليس ضمن صلاحيتك.");
-        if (pr.error) throw new Error("تعذر تحميل متطلبات المشروع.");
         if (!active) return;
+        if (p.error || !p.data) throw new Error("المشروع غير موجود أو ليس ضمن صلاحيتك.");
         setProject(p.data as Project);
         setTechnologies((p.data as Project).recommended_technologies ?? "");
-        const rows = (pr.data ?? []) as unknown as ProjectRequirement[];
+        const rows = pr.data as unknown as ProjectRequirement[];
+        const requirementsComplete = !pr.error && rows.every(row => single(row.cybersecurity_requirements));
         setProjectRequirements(rows);
-        await loadTreatments(projectId);
-        const requirementIds = rows.map((row) => row.requirement_id);
-        if (requirementIds.length) {
-          const [rc, activeControlResult] = await Promise.all([
-            supabase
-              .from("cybersecurity_requirement_controls")
-              .select("requirement_id,control_id,coverage_type,mapping_confidence,controls(id,control_code,title_ar,implementation_status,evidence_status,verification_status,frameworks(code))")
-              .eq("mapping_status", "active")
-              .in("requirement_id", requirementIds),
-            supabase.from("controls").select("id,frameworks!inner(is_active)").eq("frameworks.is_active",true),
-          ]);
-          if (rc.error) throw new Error("تعذر تحميل الضوابط المشتقة من المتطلبات.");
-          if (activeControlResult.error) throw new Error("تعذر التحقق من الضوابط النشطة.");
-          const activeIds = new Set((activeControlResult.data ?? []).map(row => row.id));
-          if (active) setRequirementControls((rc.data ?? []).filter(row => activeIds.has(row.control_id)) as unknown as RequirementControl[]);
+        setReads(previous => ({ ...previous, requirements: requirementsComplete ? "COMPLETE" : "UNAVAILABLE" }));
+        if (!requirementsComplete) return;
+        const requirementIds = rows.map(row => row.requirement_id);
+        if (!requirementIds.length) {
+          setRequirementControls([]);
+          setReads(previous => ({ ...previous, controls: "COMPLETE" }));
+          return;
         }
+        const [rc, activeControlResult] = await Promise.all([
+          readStrategyRows((from, to) => supabase
+            .from("cybersecurity_requirement_controls")
+            .select("requirement_id,control_id,coverage_type,mapping_confidence,controls(id,control_code,title_ar,implementation_status,evidence_status,verification_status,frameworks(code))", { count: "exact" })
+            .eq("mapping_status", "active").in("requirement_id", requirementIds)
+            .order("requirement_id").order("control_id").range(from, to),
+            row => `${row.requirement_id}:${row.control_id}`),
+          readStrategyRows((from, to) => supabase.from("controls").select("id,frameworks!inner(is_active)", { count: "exact" })
+            .eq("frameworks.is_active", true).order("id").range(from, to), row => row.id),
+        ]);
+        if (!active) return;
+        const controlRows = rc.data as unknown as RequirementControl[];
+        const complete = !rc.error && !activeControlResult.error && controlRows.every(row => {
+          const control = single(row.controls);
+          return control && single(control.frameworks);
+        });
+        const activeIds = new Set(activeControlResult.data.map(row => row.id));
+        setRequirementControls(complete ? controlRows.filter(row => activeIds.has(row.control_id)) : []);
+        setReads(previous => ({ ...previous, controls: complete ? "COMPLETE" : "UNAVAILABLE" }));
       } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : "تعذر التحميل");
+        if (!active) return;
+        // Only our two safe identity messages may be shown, never service details.
+        const message = cause instanceof Error ? cause.message : "";
+        setError(["رقم المشروع غير صحيح.", "المشروع غير موجود أو ليس ضمن صلاحيتك."].includes(message)
+          ? message : "تعذر تحميل المشروع ضمن صلاحياتك الحالية.");
         const { data } = await supabase.auth.getSession();
-        if (!data.session) router.replace("/login");
+        if (active && !data.session) router.replace("/login");
       } finally {
         if (active) setLoading(false);
       }
     })();
     return () => {
       active = false;
+      epoch.cancel();
     };
   }, [id, router]);
 
@@ -363,33 +391,34 @@ function ProjectDetailContent({ id }: { id: string }) {
           <div className="project-detail-progress"><i style={{ width: `${clampedProgress}%` }} /></div>
         </header>
 
+        <ReadNotice statuses={["COMPLETE", ...Object.values(reads)]} />
         <section className="project-kpi-row" aria-label="مؤشرات المشروع الأساسية">
           <article className="project-kpi">
             <span>المتطلبات</span>
-            <strong>{rollup.requirementsCount}</strong>
+            <strong>{requirementsReady ? projectRequirements.length : unavailable}</strong>
           </article>
           <article className="project-kpi">
             <span>الضوابط المرتبطة</span>
-            <strong>{rollup.totalControls}</strong>
+            <strong>{controlsReady ? rollup.totalControls : unavailable}</strong>
           </article>
           <article className="project-kpi" title="Confirmed mappings — ربط مدعوم مباشرة بنص ضابط رسمي">
             <span>الربط المؤكد</span>
-            <strong>{rollup.confirmedMappings}</strong>
+            <strong>{controlsReady ? rollup.confirmedMappings : unavailable}</strong>
           </article>
           <article className="project-kpi">
             <span>ضوابط بأدلة مقبولة ولم تُتحقق</span>
-            <strong>{rollup.readyForVerification}</strong>
+            <strong>{controlsReady ? rollup.readyForVerification : unavailable}</strong>
           </article>
           <article className="project-kpi project-kpi-contribution">
             <span>نسبة الضوابط المرتبطة التي حالتها متحققة</span>
-            <strong>{rollup.contribution === null ? "—" : `${rollup.contribution}%`}</strong>
-            <small>{rollup.verified} من {rollup.totalControls} ضوابط متحققة</small>
-            <div className="project-kpi-progress"><i style={{ width: `${rollup.contribution ?? 0}%` }} /></div>
+            <strong>{controlsReady ? (rollup.contribution === null ? "—" : `${rollup.contribution}%`) : unavailable}</strong>
+            {controlsReady && <small>{rollup.contribution === null ? noRelationship : `${rollup.verified} من ${rollup.totalControls} ضوابط متحققة`}</small>}
+            {controlsReady && <div className="project-kpi-progress"><i style={{ width: `${rollup.contribution ?? 0}%` }} /></div>}
           </article>
         </section>
         <p className="detail-hint">النسبة هي الضوابط التي حالتها متحققة من إجمالي الضوابط المميزة المرتبطة عبر المتطلبات؛ لا تثبت أثر المشروع أو امتثال الضابط بسبب إنجاز المشروع. الأدلة المقبولة وحدها لا تثبت أهلية أمر التحقق.</p>
 
-        <section className="project-summary-grid">
+        <ReadSection available={controlsReady}><section className="project-summary-grid">
           <article className="coverage-summary-card">
             <header><h2>تغطية الضوابط</h2></header>
             <div className="coverage-seg-bar" role="img" aria-label={`تغطية كاملة ${rollup.full}، جزئية ${rollup.partial}، داعمة ${rollup.supporting}`}>
@@ -424,7 +453,7 @@ function ProjectDetailContent({ id }: { id: string }) {
               </li>
             </ul>
           </article>
-        </section>
+        </section></ReadSection>
 
         <div className="detail-tabs" role="tablist" aria-label="تفاصيل المشروع">
           {tabs.map((label, index) => (
@@ -446,9 +475,9 @@ function ProjectDetailContent({ id }: { id: string }) {
               </section>
             )}
 
-            {tab === 1 && (
+            {tab === 1 && (<ReadSection available={requirementsReady}>
               <section className="requirements-tab">
-                {!requirementsWithStats.length && <p className="roadmap-empty">لا توجد متطلبات مرتبطة بهذا المشروع بعد.</p>}
+                {!requirementsWithStats.length && <p className="roadmap-empty">{noRelationship}</p>}
                 {requirementsWithStats.map(
                   (item) =>
                     item.requirement && (
@@ -459,7 +488,7 @@ function ProjectDetailContent({ id }: { id: string }) {
                             <span className="requirement-coverage-tag">تغطية المشروع: {coverageText[item.coverage] ?? item.coverage}</span>
                           )}
                         </header>
-                        {item.mappingStatus === "unresolved" ? (
+                        {!controlsReady ? <p className="metric-unavailable">{unavailable}</p> : item.mappingStatus === "unresolved" ? (
                           <p className="requirement-warning">
                             <StatusBadge status="needs_control_mapping" /> لا يوجد ضابط رسمي موثوق مرتبط بهذا المتطلب بعد — غير محسوب ضمن الضوابط المُتحقَّقة أو نسبة الضوابط المرتبطة التي حالتها متحققة أو تغطية الضوابط.
                           </p>
@@ -473,10 +502,10 @@ function ProjectDetailContent({ id }: { id: string }) {
                       </article>
                     ),
                 )}
-              </section>
+              </section></ReadSection>
             )}
 
-            {tab === 2 && (
+            {tab === 2 && (<ReadSection available={controlsReady}>
               <section className="controls-tab">
                 <div className="controls-table-filters">
                   <label>
@@ -537,15 +566,15 @@ function ProjectDetailContent({ id }: { id: string }) {
                   </table>
                   {!filteredControlRows.length && <p className="roadmap-empty">لا توجد ضوابط مطابقة للفلاتر الحالية.</p>}
                 </div>
-              </section>
+              </section></ReadSection>
             )}
 
-            {tab === 3 && (
+            {tab === 3 && (<ReadSection available={controlsReady}>
               <section className="detail-card">
                 <h2>الأدلة</h2>
                 <p className="detail-hint">يُستخدم سجل الأدلة والمراجعة الحالي كما هو — لا مسار رفع أو مراجعة جديد هنا. افتح الضابط لإدارة دليله.</p>
                 {!uniqueControls.length ? (
-                  <p className="roadmap-empty">لا توجد أدلة مرتبطة بضوابط هذا المشروع حتى الآن.</p>
+                  <p className="roadmap-empty">{noRelationship}</p>
                 ) : (
                   uniqueControls.map((control) => (
                     <article className="control-evidence-item" key={control.id}>
@@ -555,7 +584,7 @@ function ProjectDetailContent({ id }: { id: string }) {
                     </article>
                   ))
                 )}
-              </section>
+              </section></ReadSection>
             )}
 
             {tab === 4 && (
@@ -581,7 +610,7 @@ function ProjectDetailContent({ id }: { id: string }) {
                   </div>
                 )}
                 <div className="roadmap-treatment-list">
-                  {treatments.length ? (
+                  {!treatmentsReady ? <p className="metric-unavailable">{unavailable} — تعذر تحميل المعالجات.</p> : treatments.length ? (
                     treatments.map((item) => (
                       <article key={item.id}>
                         <div>
@@ -611,16 +640,16 @@ function ProjectDetailContent({ id }: { id: string }) {
               </section>
             )}
 
-            {tab === 5 && (
+            {tab === 5 && (<ReadSection available={controlsReady}>
               <section>
                 {!uniqueControls.length && <section className="detail-card"><p>لا توجد ضوابط مرتبطة، لا يوجد سجل تدقيق مرتبط بعد.</p></section>}
                 {uniqueControls.map((control) => (
                   <details className="control-evidence-item" key={control.id} open={uniqueControls.length === 1}>
                     <summary dir="ltr">{control.control_code} — {control.title_ar}</summary>
-                    <GrcAuditTrail controlId={control.id} />
+                    <GrcAuditTrail controlId={control.id} reliableRead />
                   </details>
                 ))}
-              </section>
+              </section></ReadSection>
             )}
           </div>
         </section>
