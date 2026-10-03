@@ -99,7 +99,23 @@ try {
   equal(await quality.locator('dd').count(), 0, 'failed read produces no missing-field counts');
   check((await quality.innerText()).includes('غير متاح'), 'failed summary explicitly unavailable');
   check(!(await page.locator('main').innerText()).includes('RAW_PRIVATE_ERROR'), 'no raw read error');
+  await page.screenshot({ path: join(output, 'data-quality-unavailable-desktop.png'), fullPage: true });
   failProjects = false; failLinks = false;
+  // Local-only visual and accessible-name check for all five empty date fields.
+  record = { ...original, status: 'completed', planned_start_date: null, actual_start_date: null, target_end_date: null, forecast_end_date: null, actual_end_date: null };
+  await load('/roadmap'); await open();
+  equal(await page.getByText('لا يوجد تاريخ مسجل', { exact: true }).count(), 5, 'all five empty dates explicit');
+  for (const input of await page.locator('input[type="date"]').all()) {
+    equal(await input.inputValue(), '', 'empty native input remains empty');
+    const helperId = (await input.getAttribute('aria-describedby')).split(' ')[0];
+    equal(await page.locator(`#${helperId}`).innerText(), 'لا يوجد تاريخ مسجل', 'native date has associated empty description');
+  }
+  await page.getByLabel('تاريخ الانتهاء المتوقع', { exact: false }).fill('2027-08-01');
+  equal(await page.locator('#forecast-end-empty').count(), 0, 'helper disappears for real date');
+  await page.getByLabel('تاريخ الانتهاء المتوقع', { exact: false }).fill('');
+  equal(await page.locator('#forecast-end-empty').count(), 1, 'helper returns after explicit clear');
+  await page.getByRole('button', { name: 'إلغاء', exact: true }).click();
+  record = { ...original };
   // Existing read-only role remains unable to submit in register form.
   role = 'nca_external_auditor'; await load('/roadmap'); await open();
   equal(await page.getByRole('button', { name: 'حفظ التعديلات', exact: true }).count(), 0, 'auditor has no save control');

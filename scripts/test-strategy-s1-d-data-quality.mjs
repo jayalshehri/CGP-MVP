@@ -85,4 +85,21 @@ for (const path of ['components/AppShell.tsx', 'components/FeedbackWidget.tsx', 
 check(read(register).includes('projectWriteFields(form, selected ?? undefined)'), 'real authorized mutation uses tested delta payload');
 check(read(register).includes('.update(payload).eq("id", selected.id).select("*").single()'), 'existing exact-record mutation path');
 check(read(register).includes('requireProfile(["admin", "cybersecurity_team"])'), 'existing authorization preserved');
+const dateHelpers = { planned_start_date: 'planned-start-empty', actual_start_date: 'actual-start-empty', target_end_date: 'target-end-empty', forecast_end_date: 'forecast-end-empty', actual_end_date: 'actual-end-empty' };
+for (const empty of [true, false]) {
+  const p = { ...project, status: 'completed', ...Object.fromEntries(Object.keys(dateHelpers).map(key => [key, empty ? null : project[key]])) };
+  const dateForm = projectToForm(p);
+  const markup = render(register, '/roadmap', { projects: [p], open: true, selected: p, form: dateForm });
+  for (const [field, helperId] of Object.entries(dateHelpers)) {
+    const label = markup.match(new RegExp(`<label[^>]*>${projectDateLabels[field]}[\\s\\S]*?</label>`))?.[0];
+    check(label?.includes('type="date"'), `${field}: native date input retained`);
+    check(label.includes(`value="${dateForm[field]}"`), `${field}: actual input value retained`);
+    equal(label.includes(`id="${helperId}"`), empty, `${field}: empty helper conditional`);
+    equal(label.includes('لا يوجد تاريخ مسجل'), empty, `${field}: empty wording conditional`);
+    equal(Boolean(label.match(new RegExp(`aria-describedby="[^"]*${helperId}`))), empty, `${field}: helper linked accessibly only while empty`);
+    check(!/placeholder=|defaultValue=|Safari|WebKit/.test(label), `${field}: no invented date or browser-specific business text`);
+  }
+  equal(projectWriteFields(dateForm, p), {}, 'date presentation does not change unchanged payload');
+}
+equal(read('lib/strategy-project-fields.ts'), execFileSync('git', ['show', '9c1acbe1b5d5926b4223dc29c8b6a2218b0a29fe:lib/strategy-project-fields.ts'], { cwd: root, encoding: 'utf8' }), 'corrective polish leaves initialization/serialization byte-identical');
 console.log(`S1-D existing fields / edit safety / data quality: ${checks} assertions PASS (offline)`);

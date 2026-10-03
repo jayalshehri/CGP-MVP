@@ -400,14 +400,14 @@ function ProjectRegisterContent() {
               <h3 className="roadmap-form-section">التخطيط</h3>
               <label>نسبة الإنجاز<input type="number" min="0" max="100" value={form.progress_percent} onChange={(event) => setForm({ ...form, progress_percent: Number(event.target.value) })} /></label>
               <h3 className="roadmap-form-section">التواريخ</h3>
-              <label>{projectDateLabels.planned_start_date}<input dir="ltr" type="date" value={form.planned_start_date} onChange={(event) => setForm({ ...form, planned_start_date: event.target.value })} /></label>
-              <label>{projectDateLabels.target_end_date}<input dir="ltr" type="date" value={form.target_end_date} onChange={(event) => setForm({ ...form, target_end_date: event.target.value })} /></label>
-              <label>{projectDateLabels.forecast_end_date}<input dir="ltr" type="date" value={form.forecast_end_date} onChange={(event) => setForm({ ...form, forecast_end_date: event.target.value })} /><small>تقدير حالي مستقل عن التاريخ المستهدف؛ اختياري ولا يُعبّأ تلقائيًا.</small></label>
+              <label>{projectDateLabels.planned_start_date}<input dir="ltr" type="date" value={form.planned_start_date} aria-describedby={form.planned_start_date === "" ? "planned-start-empty" : undefined} onChange={(event) => setForm({ ...form, planned_start_date: event.target.value })} />{form.planned_start_date === "" && <small id="planned-start-empty">لا يوجد تاريخ مسجل</small>}</label>
+              <label>{projectDateLabels.target_end_date}<input dir="ltr" type="date" value={form.target_end_date} aria-describedby={form.target_end_date === "" ? "target-end-empty" : undefined} onChange={(event) => setForm({ ...form, target_end_date: event.target.value })} />{form.target_end_date === "" && <small id="target-end-empty">لا يوجد تاريخ مسجل</small>}</label>
+              <label>{projectDateLabels.forecast_end_date}<input dir="ltr" type="date" value={form.forecast_end_date} aria-describedby={form.forecast_end_date === "" ? "forecast-end-empty forecast-end-help" : "forecast-end-help"} onChange={(event) => setForm({ ...form, forecast_end_date: event.target.value })} />{form.forecast_end_date === "" && <small id="forecast-end-empty">لا يوجد تاريخ مسجل</small>}<small id="forecast-end-help">تقدير حالي مستقل عن التاريخ المستهدف؛ اختياري ولا يُعبّأ تلقائيًا.</small></label>
               {showActualStart && (
-                <label>{projectDateLabels.actual_start_date}<input dir="ltr" type="date" value={form.actual_start_date} onChange={(event) => setForm({ ...form, actual_start_date: event.target.value })} /></label>
+                <label>{projectDateLabels.actual_start_date}<input dir="ltr" type="date" value={form.actual_start_date} aria-describedby={form.actual_start_date === "" ? "actual-start-empty" : undefined} onChange={(event) => setForm({ ...form, actual_start_date: event.target.value })} />{form.actual_start_date === "" && <small id="actual-start-empty">لا يوجد تاريخ مسجل</small>}</label>
               )}
               {showActualEnd && (
-                <label>{projectDateLabels.actual_end_date}<input dir="ltr" type="date" value={form.actual_end_date} onChange={(event) => setForm({ ...form, actual_end_date: event.target.value })} /></label>
+                <label>{projectDateLabels.actual_end_date}<input dir="ltr" type="date" value={form.actual_end_date} aria-describedby={form.actual_end_date === "" ? "actual-end-empty" : undefined} onChange={(event) => setForm({ ...form, actual_end_date: event.target.value })} />{form.actual_end_date === "" && <small id="actual-end-empty">لا يوجد تاريخ مسجل</small>}</label>
               )}
 
               <h3 className="roadmap-form-section">وصف المشروع</h3>
