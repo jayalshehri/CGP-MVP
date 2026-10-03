@@ -106,21 +106,21 @@ export default function PortfolioAnalysisPage() {
     <main className="roadmap-page portfolio-analysis" dir="rtl">
       <section className="roadmap-shell">
         <nav className="roadmap-view-tabs" aria-label="إدارة محفظة الأمن السيبراني">
-          <Link href="/roadmap">سجل المشاريع</Link>
-          <Link className="active" href="/roadmap/analysis">تحليل المحفظة</Link>
-          <Link href="/roadmap/dashboard">خارطة الطريق</Link>
+          <Link href="/roadmap">سجل المشاريع السيبرانية</Link>
+          <Link className="active" href="/roadmap/analysis">تحليل المحفظة السيبرانية</Link>
+          <Link href="/roadmap/dashboard">خارطة طريق المشاريع</Link>
         </nav>
 
         <header className="portfolio-hero">
-          <div><span>دعم قرار محفظة الأمن السيبراني · 2027–2029</span><h1>الأولوية والقيمة والمخاطر</h1><p>يعرض التحليل ما يمكن احتسابه من بيانات النظام، ويصرّح بالبيانات الناقصة بدل إنتاج درجات تقديرية.</p></div>
+          <div><span>دعم قرار محفظة الأمن السيبراني · 2027–2029</span><h1>تحليل المحفظة السيبرانية</h1><p>يعرض التحليل ما يمكن احتسابه من بيانات النظام، ويصرّح بالبيانات الناقصة بدل إنتاج درجات تقديرية.</p></div>
           <Link className="roadmap-primary" href="/roadmap">استكمال بيانات المشاريع ←</Link>
         </header>
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
 
         <section className="portfolio-kpis" aria-label="مؤشرات تحليل المحفظة">
-          <Kpi label="اكتمال بيانات التخطيط" value={`${analysis.readiness}%`} detail="5 حقول موثقة لكل مشروع" tone="teal" />
-          <Kpi label="مشاريع مكتملة البيانات" value={`${analysis.complete}/${projects.length}`} detail="اكتمال جميع حقول خط الأساس" tone="blue" />
-          <Kpi label="ضوابط مرتبطة بمشروع معالجة" value={analysis.linkedControls} detail="روابط فعلية في سجل العلاقات" />
+          <Kpi label="اكتمال عناصر التخطيط الخمسة الحالية" value={`${analysis.readiness}%`} detail="متوسط غير مرجّح لاكتمال العناصر الخمسة" tone="teal" />
+          <Kpi label="مشاريع مكتملة العناصر الخمسة" value={`${analysis.complete}/${projects.length}`} detail="وفق عناصر التخطيط الخمسة الحالية فقط" tone="blue" />
+          <Kpi label="ضوابط ذات ربط مباشر مسجّل" value={analysis.linkedControls} detail="من سجل الربط المباشر بين المشروع والضابط" />
           <Kpi label="أولوية إدارية عالية" value={analysis.highPriority} detail="تصنيف إداري، وليس Portfolio Score" tone="amber" />
         </section>
 
@@ -135,23 +135,23 @@ export default function PortfolioAnalysisPage() {
           </article>
 
           <article className="portfolio-card portfolio-readiness">
-            <header><div><span>جودة خط الأساس</span><h2>اكتمال بيانات التخطيط</h2></div><small>ليس مؤشر التزام أو صحة محفظة</small></header>
-            <div className="portfolio-score"><div style={{ "--score": `${analysis.readiness * 3.6}deg` } as React.CSSProperties}><b>{analysis.readiness}%</b><span>اكتمال</span></div><aside><strong>{analysis.incomplete.length ? "التحليل ينتظر استكمال البيانات" : "خط الأساس مكتمل"}</strong><p>تُحسب النسبة بالتساوي من المالك، الناتج، التاريخ المستهدف، المعالجة أو التقنية، ورابط ضابط فعلي.</p><Link href="/roadmap">فتح سجل المشاريع ←</Link></aside></div>
+            <header><div><span>تعريف المؤشر</span><h2>عناصر التخطيط المحتسبة</h2></div><small>ليس مؤشر التزام أو صحة محفظة</small></header>
+            <p>تُحسب النسبة بالتساوي من المالك، الناتج المستهدف، التاريخ المستهدف، حقل المعالجة أو التقنية، ورابط مباشر مسجّل بضابط. لا يدخل الربط عبر المتطلبات في هذا المؤشر.</p><Link className="detail-back" href="/roadmap">فتح سجل المشاريع السيبرانية ←</Link>
           </article>
 
           <article className="portfolio-card portfolio-decision">
             <span>الإجراء التأسيسي التالي</span>
-            <h2>{analysis.incomplete.length ? "استكمال خط الأساس قبل ترتيب الاستثمار" : "اعتماد نموذج تقييم المحفظة"}</h2>
-            <p>{analysis.incomplete.length ? `${analysis.incomplete.length} مشروعًا يفتقد واحدًا أو أكثر من الحقول الخمسة. لن تظهر درجات أولوية قبل اكتمال مصدرها.` : "اكتملت بيانات التخطيط ويمكن الانتقال إلى اعتماد أوزان القيمة والجدوى."}</p>
+            <h2>{analysis.incomplete.length ? "استكمال عناصر التخطيط الناقصة" : "مراجعة بيانات المشاريع المسجلة"}</h2>
+            <p>{analysis.incomplete.length ? `${analysis.incomplete.length} مشروعًا يفتقد واحدًا أو أكثر من عناصر التخطيط الخمسة الحالية.` : "اكتملت عناصر التخطيط الخمسة الحالية؛ وهذا لا يمثل تقييمًا للقيمة أو المخاطر."}</p>
             <div><b>{analysis.highTreatments}</b><span>معالجات عالية الأولوية مسجلة للمراجعة، ولا تعني تلقائيًا قرار تمويل.</span></div>
           </article>
 
           <article className="portfolio-card portfolio-data-gaps">
             <header><div><span>جودة البيانات</span><h2>المشاريع التي تحتاج استكمالًا</h2></div><small>{analysis.incomplete.length} مشروع</small></header>
             <div className="portfolio-gap-table">
-              <div><span>المشروع</span><span>الحقول الناقصة</span><span>الاكتمال</span></div>
+              <div><span>المشروع</span><span>العناصر الناقصة</span><span>الاكتمال</span></div>
               {analysis.incomplete.map(({ project, missing, readiness }) => <article key={project.id}><div><b dir="ltr">{project.project_code}</b><strong>{project.name_ar}</strong></div><span>{missing.map((item) => item.label).join(" · ")}</span><em>{readiness}%</em></article>)}
-              {!analysis.incomplete.length && <p className="portfolio-empty">بيانات جميع المشاريع مكتملة وفق الحد الأدنى الحالي.</p>}
+              {!analysis.incomplete.length && <p className="portfolio-empty">عناصر التخطيط الخمسة الحالية مكتملة لجميع المشاريع المعروضة.</p>}
             </div>
           </article>
         </section>

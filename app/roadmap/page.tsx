@@ -316,16 +316,16 @@ export default function ProjectRegisterPage() {
     <main className="roadmap-page" dir="rtl">
       <section className="roadmap-shell">
         <nav className="roadmap-view-tabs" aria-label="إدارة محفظة الأمن السيبراني">
-          <Link className="active" href="/roadmap">سجل المشاريع</Link>
-          <Link href="/roadmap/analysis">تحليل المحفظة</Link>
-          <Link href="/roadmap/dashboard">خارطة الطريق</Link>
+          <Link className="active" href="/roadmap">سجل المشاريع السيبرانية</Link>
+          <Link href="/roadmap/analysis">تحليل المحفظة السيبرانية</Link>
+          <Link href="/roadmap/dashboard">خارطة طريق المشاريع</Link>
         </nav>
 
         <header className="roadmap-hero project-register-hero">
           <div>
             <span>المصدر الرئيسي لبيانات المحفظة</span>
-            <h1>سجل مشاريع الأمن السيبراني</h1>
-            <p>حدّث المشروع مرة واحدة لتنعكس حالته وتواريخه وروابطه على التحليل وخارطة الطريق.</p>
+            <h1>سجل المشاريع السيبرانية</h1>
+            <p>حدّث المشروع مرة واحدة لتنعكس حالته وتواريخه وروابطه على التحليل وخارطة طريق المشاريع.</p>
           </div>
           {canManage && <button className="roadmap-primary" onClick={startCreate}>+ مشروع جديد</button>}
         </header>
@@ -338,9 +338,9 @@ export default function ProjectRegisterPage() {
           <Metric label="مخططة" value={stats.planned} tone="muted" />
           <Metric label="قيد التنفيذ" value={stats.active} tone="active" />
           <Metric label="بلا تاريخ مستهدف" value={stats.missingDates} tone="warning" />
-          <Metric label="ضوابط مرتبطة بمشروع معالجة" value={stats.linked} tone="linked" />
+          <Metric label="ضوابط ذات ربط مباشر مسجّل" value={stats.linked} tone="linked" />
           <Metric label="متطلبات سيبرانية مرتبطة" value={requirementStats.requirementsCount} tone="linked" />
-          <Metric label="ضوابط مُتحقَّقة عبر المتطلبات" value={requirementStats.verified} tone="active" />
+          <Metric label="ضوابط مرتبطة عبر المتطلبات وحالتها متحققة" value={requirementStats.verified} tone="active" />
           <Metric label="ربط مؤكَّد (Confirmed)" value={requirementStats.confirmedMappings} tone="linked" />
           <Metric label="ربط محتمل (Probable)" value={requirementStats.probableMappings} tone="warning" />
           <Metric label="متطلبات بلا ربط ضوابط" value={requirementStats.requirementsWithoutMapping} tone={requirementStats.requirementsWithoutMapping ? "warning" : "muted"} />
@@ -401,7 +401,7 @@ export default function ProjectRegisterPage() {
         </section>
 
         <aside className="register-integrity-note">
-          <div><strong>تعريف التغطية</strong><p>الربط الرسمي المعتمد الآن هو المشروع ← المتطلب ← الضابط، ويُدار من صفحة المشروع. هذا السجل يعرض بيانات المشروع الأساسية فقط.</p></div>
+          <div><strong>تعريف التغطية</strong><p>مؤشر الربط المباشر من سجل علاقات المشروع بالضابط؛ ومؤشرات المتطلبات من مسار المشروع ← المتطلب ← الضابط. المصدران منفصلان، والربط لا يثبت أثر المشروع على حالة الضابط.</p></div>
           <Link href="/controls">فتح سجل الضوابط ←</Link>
         </aside>
       </section>
@@ -409,13 +409,13 @@ export default function ProjectRegisterPage() {
       {open && (
         <div className="roadmap-dialog-backdrop" role="presentation" onMouseDown={() => setOpen(false)}>
           <section className="roadmap-dialog project-register-dialog compact-form-dialog" role="dialog" aria-modal="true" aria-labelledby="roadmap-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
-            <header><div><span>{selected ? "بيانات المشروع" : "إضافة مشروع"}</span><h2 id="roadmap-dialog-title">{selected?.name_ar || "مبادرة سيبرانية جديدة"}</h2></div><button aria-label="إغلاق" onClick={() => setOpen(false)}>×</button></header>
+            <header><div><span>{selected ? "بيانات المشروع" : "إضافة مشروع"}</span><h2 id="roadmap-dialog-title">{selected?.name_ar || "مشروع سيبراني جديد"}</h2></div><button aria-label="إغلاق" onClick={() => setOpen(false)}>×</button></header>
 
             <form onSubmit={save} className="roadmap-form compact-form">
               <h3 className="roadmap-form-section">بيانات المشروع</h3>
               <label>اسم المشروع<input required value={form.name_ar} onChange={(event) => setForm({ ...form, name_ar: event.target.value })} /></label>
               <label>رمز المشروع<input required dir="ltr" disabled={Boolean(selected)} value={form.project_code} onChange={(event) => setForm({ ...form, project_code: event.target.value.toUpperCase() })} placeholder="R-12" /></label>
-              <label>نوع المبادرة<select value={form.initiative_type} onChange={(event) => setForm({ ...form, initiative_type: event.target.value })}>{Object.entries(initiativeTypeText).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <label>نوع العمل<select value={form.initiative_type} onChange={(event) => setForm({ ...form, initiative_type: event.target.value })}>{Object.entries(initiativeTypeText).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label>الحالة<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as Project["status"] })}>{Object.entries(statusText).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label>الأولوية<select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value as Project["priority"] })}>{Object.entries(priorityText).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label>السنة<select value={form.planned_year} onChange={(event) => setForm({ ...form, planned_year: Number(event.target.value) })}>{[2027, 2028, 2029].map((year) => <option key={year}>{year}</option>)}</select></label>

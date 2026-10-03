@@ -36,7 +36,7 @@ export function planningReadinessItems(
     { key: "outcome", label: "الناتج المستهدف", complete: Boolean(project.target_outcome?.trim()) },
     { key: "targetDate", label: "التاريخ المستهدف", complete: Boolean(project.target_end_date) },
     { key: "technology", label: "المعالجة أو التقنية", complete: Boolean(project.recommended_technologies?.trim()) },
-    { key: "controlLink", label: "رابط ضابط فعلي", complete: linkedControls > 0 },
+    { key: "controlLink", label: "رابط مباشر مسجّل بضابط", complete: linkedControls > 0 },
   ];
 }
 

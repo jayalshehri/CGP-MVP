@@ -34,6 +34,10 @@
 .project-kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:0 0 4px}
 .project-kpi{background:#fff;border:1px solid #dce8ed;border-radius:13px;padding:13px 15px}
 .project-kpi>span{display:block;color:#64748b;font-size:12px}
+/* S1-A: let the source-qualified labels wrap without widening the layout. */
+.roadmap-view-tabs{flex-wrap:wrap}
+.roadmap-metric,.roadmap-exec-kpi,.project-kpi{min-width:0}
+.roadmap-metric>span,.roadmap-exec-kpi>span,.project-kpi>span{white-space:normal;overflow-wrap:anywhere}
 .project-kpi>strong{display:block;font-size:24px;margin-top:6px}
 .project-kpi-contribution small{display:block;color:#64748b;font-size:11px;margin-top:2px}
 .project-kpi-progress{height:5px;border-radius:8px;background:#e4eded;margin-top:8px;overflow:hidden}
