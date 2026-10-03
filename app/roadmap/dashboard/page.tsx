@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { projectHref, roadmapFocus } from "@/lib/strategy-navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { averageProgress, getRiyadhDate, isDelayed, scheduleMetric } from "../portfolio-metrics";
@@ -31,11 +32,27 @@ const priorityText = { high: "عالية", medium: "متوسطة", low: "منخ�
 const quarters = ["Q1", "Q2", "Q3", "Q4"];
 
 export default function RoadmapDashboard() {
+  return <Suspense fallback={<p>جاري التحميل...</p>}><RoadmapDashboardContent /></Suspense>;
+}
+
+function RoadmapDashboardContent() {
   const router = useRouter();
+  const params = useSearchParams();
+  const focusId = roadmapFocus(params)?.id;
   const [projects, setProjects] = useState<Project[]>([]);
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!loading && !error && focusId) {
+      document.getElementById(focusId)?.scrollIntoView({ block: "center", inline: "nearest" });
+    }
+  }, [loading, error, focusId]);
+
+  const projectLink = (project: Project) => projectHref(project.id, "roadmap", new URLSearchParams({
+    focus_year: String(project.planned_year), focus_quarter: project.planned_quarter,
+  }));
 
   useEffect(() => {
     let live = true;
@@ -130,13 +147,13 @@ export default function RoadmapDashboard() {
           <header><div><span>العرض التشغيلي</span><h2 id="quarterly-roadmap-title">توزيع المشاريع حسب السنة والربع</h2><p>اللون يوضح حالة التنفيذ، والشارة توضح الأولوية الإدارية.</p></div><small>As of {getRiyadhDate()}</small></header>
           <div className="quarterly-roadmap-grid">
             <div className="quarterly-head"><span>السنة</span>{quarters.map((quarter) => <b key={quarter}>{quarter}</b>)}</div>
-            {[2027, 2028, 2029].map((year) => <div className="quarterly-row" key={year}><b>{year}</b>{quarters.map((quarter) => <section key={quarter}>{projects.filter((project) => project.planned_year === year && project.planned_quarter === quarter).map((project) => <Link href="/roadmap" key={project.id} className={`quarterly-project ${project.status}`} title={`${project.project_code} — ${project.name_ar}`}><div><b dir="ltr">{project.project_code}</b><span className={`register-priority ${project.priority}`}>{priorityText[project.priority]}</span></div><strong>{project.name_ar}</strong><small>{project.executive_owner || "مالك غير محدد"} · {project.progress_percent}%</small></Link>)}</section>)}</div>)}
+            {[2027, 2028, 2029].map((year) => <div className="quarterly-row" key={year}><b>{year}</b>{quarters.map((quarter) => <section key={quarter} id={`roadmap-${year}-${quarter}`} data-reading-focus={focusId === `roadmap-${year}-${quarter}` || undefined}>{projects.filter((project) => project.planned_year === year && project.planned_quarter === quarter).map((project) => <Link href={projectLink(project)} key={project.id} className={`quarterly-project ${project.status}`} title={`${project.project_code} — ${project.name_ar}`}><div><b dir="ltr">{project.project_code}</b><span className={`register-priority ${project.priority}`}>{priorityText[project.priority]}</span></div><strong>{project.name_ar}</strong><small>{project.executive_owner || "مالك غير محدد"} · {project.progress_percent}%</small></Link>)}</section>)}</div>)}
           </div>
         </section>
 
         <section className="roadmap-exceptions">
-          <article><header><div><span>استثناءات الجدول</span><h2>المشاريع المتأخرة</h2></div><b>{data.delayed.length}</b></header>{data.schedule.value === null ? <p className="metric-unavailable">لا يمكن تحديد التأخير قبل إدخال التواريخ المستهدفة.</p> : data.delayed.length ? <ul>{data.delayed.map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><span>{project.name_ar}</span><small>{project.target_end_date}</small></li>)}</ul> : <p>لا توجد مشاريع متأخرة حسب التواريخ المسجلة.</p>}</article>
-          <article><header><div><span>جودة الخطة</span><h2>تواريخ تحتاج استكمالًا</h2></div><b>{data.missingDates.length}</b></header>{data.missingDates.length ? <ul>{data.missingDates.slice(0, 6).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><span>{project.name_ar}</span><Link href="/roadmap">استكمال ←</Link></li>)}</ul> : <p>جميع المشاريع تحتوي على تاريخ مستهدف.</p>}</article>
+          <article><header><div><span>استثناءات الجدول</span><h2>المشاريع المتأخرة</h2></div><b>{data.delayed.length}</b></header>{data.schedule.value === null ? <p className="metric-unavailable">لا يمكن تحديد التأخير قبل إدخال التواريخ المستهدفة.</p> : data.delayed.length ? <ul>{data.delayed.map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectLink(project)}>{project.name_ar}</Link><small>{project.target_end_date}</small></li>)}</ul> : <p>لا توجد مشاريع متأخرة حسب التواريخ المسجلة.</p>}</article>
+          <article><header><div><span>جودة الخطة</span><h2>تواريخ تحتاج استكمالًا</h2></div><b>{data.missingDates.length}</b></header>{data.missingDates.length ? <ul>{data.missingDates.slice(0, 6).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectLink(project)}>{project.name_ar}</Link><Link href={projectLink(project)}>استكمال ←</Link></li>)}</ul> : <p>جميع المشاريع تحتوي على تاريخ مستهدف.</p>}</article>
           <article><header><div><span>القدرة التحليلية</span><h2>At Risk والاعتماديات</h2></div><b>—</b></header><p className="metric-unavailable">غير متاح حتى يُفعّل سجل مخاطر التسليم واعتماديات المشاريع. لن تعرض المنصة رقمًا تقديريًا.</p></article>
         </section>
       </section>

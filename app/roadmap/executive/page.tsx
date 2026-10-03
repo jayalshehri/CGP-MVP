@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { projectHref } from "@/lib/strategy-navigation";
 import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -120,10 +121,10 @@ export default function ExecutiveRoadmapPage() {
           <Kpi label="فئات التنبيه الإداري" value={data.attention.length} detail="عدد فئات القواعد المتحققة، لا عدد المشاريع أو القرارات" tone="blue" />
         </section>
 
-        <section className="executive-section"><header><span>التقدم المسجّل بحسب السنة</span><h2>توزيع المشاريع بحسب السنة</h2><p>يعرض الحالة الحالية من سجل المشاريع، ولا يعتبر ربط الضابط تحققًا للالتزام.</p></header><div className="executive-timeline">{data.years.map((year) => <article key={year.year}><header><b>{year.year}</b><span>{year.items.length} مشاريع</span></header><div className="executive-progress"><i style={{ width: `${year.progress}%` }} /></div><small>{year.progress}% متوسط تقدم المشاريع المسجّل · {year.high} عالية الأولوية</small><ul>{year.items.slice(0, 5).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><span>{project.name_ar}</span><em className={project.priority}>{priorityText[project.priority]}</em></li>)}</ul></article>)}</div></section>
+        <section className="executive-section"><header><span>التقدم المسجّل بحسب السنة</span><h2>توزيع المشاريع بحسب السنة</h2><p>يعرض الحالة الحالية من سجل المشاريع، ولا يعتبر ربط الضابط تحققًا للالتزام.</p></header><div className="executive-timeline">{data.years.map((year) => <article key={year.year}><header><b>{year.year}</b><span>{year.items.length} مشاريع</span></header><div className="executive-progress"><i style={{ width: `${year.progress}%` }} /></div><small>{year.progress}% متوسط تقدم المشاريع المسجّل · {year.high} عالية الأولوية</small><ul>{year.items.slice(0, 5).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectHref(project.id, "executive")}>{project.name_ar}</Link><em className={project.priority}>{priorityText[project.priority]}</em></li>)}</ul></article>)}</div></section>
 
         <section className="executive-focus-grid">
-          <article className="executive-section"><header><span>المشاريع السيبرانية</span><h2>أعلى الأولويات الحالية</h2><p>تعكس الأولوية الإدارية المسجلة، وليس درجة Portfolio Score.</p></header><ol>{projects.filter((project) => project.priority === "high").slice(0, 5).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><span>{project.name_ar}</span><small>{project.planned_year} · {project.planned_quarter}</small></li>)}</ol></article>
+          <article className="executive-section"><header><span>المشاريع السيبرانية</span><h2>أعلى الأولويات الحالية</h2><p>تعكس الأولوية الإدارية المسجلة، وليس درجة Portfolio Score.</p></header><ol>{projects.filter((project) => project.priority === "high").slice(0, 5).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectHref(project.id, "executive")}>{project.name_ar}</Link><small>{project.planned_year} · {project.planned_quarter}</small></li>)}</ol></article>
           <article className="executive-section"><header><span>NCA والضوابط</span><h2>ضوابط ذات ربط مباشر مسجّل</h2><p>ضوابط من سجل الربط المباشر بالمشاريع، دون دمج علاقات المتطلبات. الربط لا يعني الامتثال أو إغلاق الفجوة.</p></header><strong className="executive-big-number">{data.controls}</strong><Link href="/roadmap">مراجعة الروابط ←</Link></article>
         </section>
 
