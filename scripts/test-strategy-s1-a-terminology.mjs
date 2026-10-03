@@ -25,6 +25,11 @@ const paths = [
 function logic(path, text) {
   const result = ts.transform(parse(path, text), [context => {
     const visit = node => {
+      // S1-D adds exactly two optional form defaults. Their write isolation is
+      // tested by test-strategy-s1-d-data-quality; retain all older defaults.
+      if (path === 'app/roadmap/page.tsx' && text.startsWith('emptyForm:') && ts.isObjectLiteralExpression(node)) return ts.factory.updateObjectLiteralExpression(node,
+        node.properties.filter(property => !['forecast_end_date', 'target_outcome'].includes(property.name?.getText()))
+          .map(property => ts.visitNode(property, visit)));
       if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) return ts.factory.createNull();
       if (ts.isStringLiteral(node) && /[\u0600-\u06ff]/u.test(node.text)) return ts.factory.createStringLiteral('PRESENTATION');
       if (ts.isTemplateHead(node)) return ts.factory.createTemplateHead(node.text.replace(/[\u0600-\u06ff].*/us, 'PRESENTATION'));
@@ -60,11 +65,14 @@ equal(logic('app/roadmap/portfolio-metrics.ts', read('app/roadmap/portfolio-metr
 function attributes(path, text, name) {
   const found = [];
   const visit = node => {
-    if (ts.isJsxAttribute(node) && node.name.getText() === name && ['input', 'select', 'textarea', 'form'].includes(node.parent.parent.tagName?.getText())) found.push(node.initializer?.getText());
+    if (ts.isJsxAttribute(node) && node.name.getText() === name && ['input', 'select', 'textarea', 'form'].includes(node.parent.parent.tagName?.getText())) {
+      // Only the two explicitly approved S1-D input bindings are additive.
+      if (!/value=\{form\.(forecast_end_date|target_outcome)\}/.test(node.parent.getText())) found.push(node.initializer?.getText());
+    }
     ts.forEachChild(node, visit);
   };
   visit(parse(path, text));
-  return found;
+  return found.sort();
 }
 for (const path of paths) {
   // Exact project hrefs/context are certified by test-strategy-s1-b-navigation.
@@ -111,7 +119,7 @@ includes(executive, 'دون دمج علاقات المتطلبات');
 includes(dashboard, '"الضوابط ذات الربط المباشر المسجّل"');
 equal(read(analysis).includes('className="portfolio-score"'), false, 'duplicate circular score removed');
 equal((read(analysis).match(/analysis\.readiness/g) ?? []).length, 1, 'aggregate completeness displayed once');
-includes(analysis, 'missing.map((item) => item.label).join(" · ")');
+includes(analysis, 'missing.map((item) => item.key === "technology"');
 includes(analysis, '<em>{readiness}%</em>');
 includes(analysis, 'analysis.incomplete.map');
 includes(analysis, '<aside className="portfolio-prioritization-note" aria-labelledby="prioritization-note-title">');
