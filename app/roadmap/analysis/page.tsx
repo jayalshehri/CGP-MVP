@@ -6,6 +6,8 @@ import { projectHref } from "@/lib/strategy-navigation";
 import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-read";
+import { ReadNotice, ReadSection } from "../read-state";
 import { planningReadiness, planningReadinessItems } from "../portfolio-metrics";
 import "../roadmap.css";
 
@@ -33,6 +35,11 @@ export default function PortfolioAnalysisPage() {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reads, setReads] = useState<{ projects: ReadStatus; links: ReadStatus; treatments: ReadStatus }>({ projects: "UNAVAILABLE", links: "UNAVAILABLE", treatments: "UNAVAILABLE" });
+  const projectsReady = reads.projects === "COMPLETE";
+  const linksReady = reads.links === "COMPLETE";
+  const treatmentsReady = reads.treatments === "COMPLETE";
+  const planningReady = projectsReady && linksReady;
 
   useEffect(() => {
     let live = true;
@@ -40,16 +47,13 @@ export default function PortfolioAnalysisPage() {
       try {
         await requireProfile();
         const [projectResult, linkResult, treatmentResult, activeControlResult] = await Promise.all([
-          supabase.from("cybersecurity_projects").select("id,project_code,name_ar,planned_year,planned_quarter,status,priority,executive_owner,target_outcome,target_end_date,recommended_technologies,progress_percent").order("planned_year").order("planned_quarter"),
-          supabase.from("cybersecurity_project_controls").select("project_id,control_id"),
-          supabase.from("cybersecurity_project_gap_treatments").select("project_id,priority"),
-          supabase.from("controls").select("id,frameworks!inner(is_active)").eq("frameworks.is_active",true),
+          readStrategyRows((from, to) => supabase.from("cybersecurity_projects").select("id,project_code,name_ar,planned_year,planned_quarter,status,priority,executive_owner,target_outcome,target_end_date,recommended_technologies,progress_percent", { count: "exact" }).order("planned_year").order("planned_quarter").order("id").range(from, to), row => row.id),
+          readStrategyRows((from, to) => supabase.from("cybersecurity_project_controls").select("project_id,control_id", { count: "exact" }).order("project_id").order("control_id").range(from, to), row => `${row.project_id}:${row.control_id}`),
+          readStrategyRows((from, to) => supabase.from("cybersecurity_project_gap_treatments").select("id,project_id,priority", { count: "exact" }).order("id").range(from, to), row => row.id),
+          readStrategyRows((from, to) => supabase.from("controls").select("id,frameworks!inner(is_active)", { count: "exact" }).eq("frameworks.is_active",true).order("id").range(from, to), row => row.id),
         ]);
-        if (projectResult.error) throw projectResult.error;
-        if (linkResult.error) throw linkResult.error;
-        if (treatmentResult.error) throw treatmentResult.error;
-        if (activeControlResult.error) throw activeControlResult.error;
         if (live) {
+          setReads({ projects: projectResult.status, links: linkResult.error || activeControlResult.error ? "UNAVAILABLE" : "COMPLETE", treatments: treatmentResult.status });
           const activeIds = new Set((activeControlResult.data ?? []).map(row => row.id));
           setProjects((projectResult.data ?? []) as Project[]);
           setLinks((linkResult.data ?? []).filter(row => activeIds.has(row.control_id)) as ControlLink[]);
@@ -62,7 +66,7 @@ export default function PortfolioAnalysisPage() {
           router.replace("/login");
           return;
         }
-        setError(detail);
+        setError("غير متاح — تعذر تحميل هذا الجزء.");
       } finally {
         if (live) setLoading(false);
       }
@@ -75,7 +79,7 @@ export default function PortfolioAnalysisPage() {
   const analysis = useMemo(() => {
     const mapped = new Map<number, number>();
     links.forEach((link) => mapped.set(link.project_id, (mapped.get(link.project_id) ?? 0) + 1));
-    const rows = projects.map((project) => {
+    const rows = (planningReady ? projects : []).map((project) => {
       const linked = mapped.get(project.id) ?? 0;
       return {
         project,
@@ -97,7 +101,7 @@ export default function PortfolioAnalysisPage() {
       highTreatments: treatments.filter((item) => item.priority === "high").length,
       highPriority: projects.filter((project) => project.priority === "high").length,
     };
-  }, [projects, links, treatments]);
+  }, [projects, links, treatments, planningReady]);
 
   if (loading) {
     return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading">جاري تحليل محفظة المشاريع…</p></main>;
@@ -117,12 +121,13 @@ export default function PortfolioAnalysisPage() {
           <Link className="roadmap-primary" href="/roadmap">استكمال بيانات المشاريع ←</Link>
         </header>
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
+        <ReadNotice statuses={[reads.projects, reads.links, reads.treatments]} />
 
         <section className="portfolio-kpis" aria-label="مؤشرات تحليل المحفظة">
-          <Kpi label="اكتمال عناصر التخطيط الخمسة الحالية" value={`${analysis.readiness}%`} detail="متوسط غير مرجّح لاكتمال العناصر الخمسة" tone="teal" />
-          <Kpi label="مشاريع مكتملة العناصر الخمسة" value={`${analysis.complete}/${projects.length}`} detail="وفق عناصر التخطيط الخمسة الحالية فقط" tone="blue" />
-          <Kpi label="ضوابط ذات ربط مباشر مسجّل" value={analysis.linkedControls} detail="من سجل الربط المباشر بين المشروع والضابط" />
-          <Kpi label="أولوية إدارية عالية" value={analysis.highPriority} detail="تصنيف إداري، وليس Portfolio Score" tone="amber" />
+          <Kpi label="اكتمال عناصر التخطيط الخمسة الحالية" value={planningReady ? `${analysis.readiness}%` : unavailable} detail="متوسط غير مرجّح لاكتمال العناصر الخمسة" tone="teal" />
+          <Kpi label="مشاريع مكتملة العناصر الخمسة" value={planningReady ? `${analysis.complete}/${projects.length}` : unavailable} detail="وفق عناصر التخطيط الخمسة الحالية فقط" tone="blue" />
+          <Kpi label="ضوابط ذات ربط مباشر مسجّل" value={linksReady ? analysis.linkedControls : unavailable} detail="من سجل الربط المباشر بين المشروع والضابط" />
+          <Kpi label="أولوية إدارية عالية" value={projectsReady ? analysis.highPriority : unavailable} detail="تصنيف إداري، وليس Portfolio Score" tone="amber" />
         </section>
 
         <aside className="portfolio-prioritization-note" aria-labelledby="prioritization-note-title">
@@ -138,19 +143,21 @@ export default function PortfolioAnalysisPage() {
 
           <article className="portfolio-card portfolio-decision">
             <span>الإجراء التأسيسي التالي</span>
+            <ReadSection available={planningReady}>
             <h2>{analysis.incomplete.length ? "استكمال عناصر التخطيط الناقصة" : "مراجعة بيانات المشاريع المسجلة"}</h2>
-            <p>{analysis.incomplete.length ? `${analysis.incomplete.length} مشروعًا يفتقد واحدًا أو أكثر من عناصر التخطيط الخمسة الحالية.` : "اكتملت عناصر التخطيط الخمسة الحالية؛ وهذا لا يمثل تقييمًا للقيمة أو المخاطر."}</p>
-            <div><b>{analysis.highTreatments}</b><span>معالجات عالية الأولوية مسجلة للمراجعة، ولا تعني تلقائيًا قرار تمويل.</span></div>
+            <p>{analysis.incomplete.length ? `${analysis.incomplete.length} مشروعًا يفتقد واحدًا أو أكثر من عناصر التخطيط الخمسة الحالية.` : projects.length ? "اكتملت عناصر التخطيط الخمسة الحالية؛ وهذا لا يمثل تقييمًا للقيمة أو المخاطر." : "لا توجد مشاريع ضمن النطاق المقروء."}</p>
+            </ReadSection>
+            <div><b>{treatmentsReady ? analysis.highTreatments : unavailable}</b><span>معالجات عالية الأولوية مسجلة للمراجعة، ولا تعني تلقائيًا قرار تمويل.</span></div>
           </article>
 
-          <article className="portfolio-card portfolio-data-gaps">
+          <ReadSection available={planningReady}><article className="portfolio-card portfolio-data-gaps">
             <header><div><span>جودة البيانات</span><h2>المشاريع التي تحتاج استكمالًا</h2></div><small>{analysis.incomplete.length} مشروع</small></header>
             <div className="portfolio-gap-table">
               <div><span>المشروع</span><span>العناصر الناقصة</span><span>الاكتمال</span></div>
               {analysis.incomplete.map(({ project, missing, readiness }) => <article key={project.id}><div><b dir="ltr">{project.project_code}</b><strong><Link className="strategy-project-link" href={projectHref(project.id, "analysis")}>{project.name_ar}</Link></strong></div><span>{missing.map((item) => item.label).join(" · ")}</span><em>{readiness}%</em></article>)}
-              {!analysis.incomplete.length && <p className="portfolio-empty">عناصر التخطيط الخمسة الحالية مكتملة لجميع المشاريع المعروضة.</p>}
+              {!analysis.incomplete.length && <p className="portfolio-empty">{projects.length ? "عناصر التخطيط الخمسة الحالية مكتملة لجميع المشاريع المعروضة." : "لا توجد مشاريع ضمن النطاق المقروء."}</p>}
             </div>
-          </article>
+          </article></ReadSection>
         </section>
       </section>
     </main>

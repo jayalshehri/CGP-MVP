@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { projectHref, roadmapFocus } from "@/lib/strategy-navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-read";
+import { ReadNotice, ReadSection } from "../read-state";
 import { averageProgress, getRiyadhDate, isDelayed, scheduleMetric } from "../portfolio-metrics";
 import "../roadmap.css";
 
@@ -44,6 +46,10 @@ function RoadmapDashboardContent() {
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reads, setReads] = useState<{ projects: ReadStatus; links: ReadStatus }>({ projects: "UNAVAILABLE", links: "UNAVAILABLE" });
+  const projectsReady = reads.projects === "COMPLETE";
+  const linksReady = reads.links === "COMPLETE";
+  const exportReady = projectsReady && linksReady;
 
   useEffect(() => {
     if (loading || error || !focusId) return;
@@ -65,14 +71,13 @@ function RoadmapDashboardContent() {
       try {
         await requireProfile();
         const [projectResult, linkResult, activeControlResult] = await Promise.all([
-          supabase.from("cybersecurity_projects").select("id,project_code,name_ar,planned_year,planned_quarter,status,priority,progress_percent,executive_owner,target_outcome,recommended_technologies,planned_start_date,target_end_date,forecast_end_date").order("planned_year").order("planned_quarter").order("project_code"),
-          supabase.from("cybersecurity_project_controls").select("project_id,control_id"),
-          supabase.from("controls").select("id,frameworks!inner(is_active)").eq("frameworks.is_active",true),
+          readStrategyRows((from, to) => supabase.from("cybersecurity_projects").select("id,project_code,name_ar,planned_year,planned_quarter,status,priority,progress_percent,executive_owner,target_outcome,recommended_technologies,planned_start_date,target_end_date,forecast_end_date", { count: "exact" }).order("planned_year").order("planned_quarter").order("project_code").order("id").range(from, to), row => row.id),
+          readStrategyRows((from, to) => supabase.from("cybersecurity_project_controls").select("project_id,control_id", { count: "exact" }).order("project_id").order("control_id").range(from, to), row => `${row.project_id}:${row.control_id}`),
+          readStrategyRows((from, to) => supabase.from("controls").select("id,frameworks!inner(is_active)", { count: "exact" }).eq("frameworks.is_active",true).order("id").range(from, to), row => row.id),
         ]);
-        if (projectResult.error) throw projectResult.error;
-        if (linkResult.error) throw linkResult.error;
-        if (activeControlResult.error) throw activeControlResult.error;
         if (live) {
+          setError(projectResult.error ? "غير متاح — تعذر تحميل المشاريع." : "");
+          setReads({ projects: projectResult.status, links: linkResult.error || activeControlResult.error ? "UNAVAILABLE" : "COMPLETE" });
           const activeIds = new Set((activeControlResult.data ?? []).map(row => row.id));
           setProjects((projectResult.data ?? []) as Project[]);
           setLinks((linkResult.data ?? []).filter(row => activeIds.has(row.control_id)) as LinkRow[]);
@@ -84,7 +89,7 @@ function RoadmapDashboardContent() {
           router.replace("/login");
           return;
         }
-        setError(detail);
+        setError("غير متاح — تعذر تحميل هذا الجزء.");
       } finally {
         if (live) setLoading(false);
       }
@@ -108,6 +113,7 @@ function RoadmapDashboardContent() {
   }, [projects, links]);
 
   const exportExcel = () => {
+    if (!exportReady) return;
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const rows = [
       ["رمز المشروع", "المشروع", "السنة", "الربع", "الحالة", "الأولوية", "نسبة الإنجاز", "المالك", "بداية الخطة", "التاريخ المستهدف", "التاريخ المتوقع", "الضوابط ذات الربط المباشر المسجّل"],
@@ -136,19 +142,20 @@ function RoadmapDashboardContent() {
 
         <header className="roadmap-exec-hero">
           <div><span>خطة التنفيذ · 2027–2029</span><h1>خارطة طريق المشاريع</h1><p>توزيع المشاريع بحسب السنة والربع المسجّلين واستثناءات التواريخ المستهدفة؛ لا يمثل اعتماديات أو تسلسل تنفيذ.</p></div>
-          <div className="roadmap-export-actions"><button type="button" onClick={() => window.print()}>تصدير PDF</button><button type="button" onClick={exportExcel}>تصدير Excel</button><Link href="/roadmap/executive" className="roadmap-primary">عرض الإدارة العليا ←</Link><Link href="/roadmap" className="roadmap-secondary">تحديث المشاريع</Link></div>
+          <div className="roadmap-export-actions"><button type="button" disabled={!exportReady} title={!exportReady ? "التصدير غير متاح حتى تكتمل القراءات" : undefined} onClick={() => { if (exportReady) window.print(); }}>تصدير PDF</button><button type="button" disabled={!exportReady} onClick={exportExcel}>تصدير Excel</button><Link href="/roadmap/executive" className="roadmap-primary">عرض الإدارة العليا ←</Link><Link href="/roadmap" className="roadmap-secondary">تحديث المشاريع</Link></div>
         </header>
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
+        <ReadNotice statuses={[reads.projects, reads.links]} />
 
         <section className="roadmap-exec-kpis roadmap-snapshot" aria-label="ملخص خارطة طريق المشاريع">
-          <Kpi label="المشاريع" value={projects.length} detail={`${data.active} قيد التنفيذ · ${data.complete} مكتمل`} />
-          <Kpi label="متوسط تقدم المشاريع المسجّل" value={`${data.average}%`} detail="متوسط غير مرجح من المشاريع" tone="teal" />
-          <Kpi label="المشاريع المتأخرة" value={data.schedule.value ?? "غير متاح"} detail={data.schedule.value === null ? "أدخل التواريخ المستهدفة أولًا" : `حتى ${getRiyadhDate()}`} tone="amber" />
-          <Kpi label="بلا تاريخ مستهدف" value={data.schedule.missingDates} detail="لا تدخل في حساب التأخير" tone="amber" />
-          <Kpi label="ضوابط ذات ربط مباشر مسجّل" value={data.controls} detail="من سجل الربط المباشر؛ لا تعني تحقق الالتزام" tone="blue" />
+          <Kpi label="المشاريع" value={projectsReady ? projects.length : unavailable} detail={projectsReady ? `${data.active} قيد التنفيذ · ${data.complete} مكتمل` : unavailable} />
+          <Kpi label="متوسط تقدم المشاريع المسجّل" value={projectsReady ? `${data.average}%` : unavailable} detail="متوسط غير مرجح من المشاريع" tone="teal" />
+          <Kpi label="المشاريع المتأخرة" value={projectsReady ? (data.schedule.value ?? "بيانات غير كافية") : unavailable} detail={!projectsReady ? "تعذر قراءة التواريخ" : data.schedule.value === null ? "أدخل التواريخ المستهدفة أولًا" : `حتى ${getRiyadhDate()}`} tone="amber" />
+          <Kpi label="بلا تاريخ مستهدف" value={projectsReady ? data.schedule.missingDates : unavailable} detail="لا تدخل في حساب التأخير" tone="amber" />
+          <Kpi label="ضوابط ذات ربط مباشر مسجّل" value={linksReady ? data.controls : unavailable} detail="من سجل الربط المباشر؛ لا تعني تحقق الالتزام" tone="blue" />
         </section>
 
-        <section className="quarterly-roadmap" aria-labelledby="quarterly-roadmap-title">
+        <ReadSection available={projectsReady}><section className="quarterly-roadmap" aria-labelledby="quarterly-roadmap-title">
           <header><div><span>العرض التشغيلي</span><h2 id="quarterly-roadmap-title">توزيع المشاريع حسب السنة والربع</h2><p>اللون يوضح حالة التنفيذ، والشارة توضح الأولوية الإدارية.</p></div><small>As of {getRiyadhDate()}</small></header>
           <div className="quarterly-roadmap-grid">
             <div className="quarterly-head"><span>السنة</span>{quarters.map((quarter) => <b key={quarter}>{quarter}</b>)}</div>
@@ -167,10 +174,10 @@ function RoadmapDashboardContent() {
         </section>
 
         <section className="roadmap-exceptions">
-          <article><header><div><span>استثناءات الجدول</span><h2>المشاريع المتأخرة</h2></div><b>{data.delayed.length}</b></header>{data.schedule.value === null ? <p className="metric-unavailable">لا يمكن تحديد التأخير قبل إدخال التواريخ المستهدفة.</p> : data.delayed.length ? <ul>{data.delayed.map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectLink(project)}>{project.name_ar}</Link><small>{project.target_end_date}</small></li>)}</ul> : <p>لا توجد مشاريع متأخرة حسب التواريخ المسجلة.</p>}</article>
+          <article><header><div><span>استثناءات الجدول</span><h2>المشاريع المتأخرة</h2></div><b>{data.schedule.value === null ? "بيانات غير كافية" : data.delayed.length}</b></header>{data.schedule.value === null ? <p className="metric-unavailable">لا يمكن تحديد التأخير قبل إدخال التواريخ المستهدفة.</p> : data.delayed.length ? <ul>{data.delayed.map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectLink(project)}>{project.name_ar}</Link><small>{project.target_end_date}</small></li>)}</ul> : <p>لا توجد مشاريع متأخرة حسب التواريخ المسجلة.</p>}</article>
           <article><header><div><span>جودة الخطة</span><h2>تواريخ تحتاج استكمالًا</h2></div><b>{data.missingDates.length}</b></header>{data.missingDates.length ? <ul>{data.missingDates.slice(0, 6).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectLink(project)}>{project.name_ar}</Link><Link href={projectLink(project)}>استكمال ←</Link></li>)}</ul> : <p>جميع المشاريع تحتوي على تاريخ مستهدف.</p>}</article>
           <article><header><div><span>القدرة التحليلية</span><h2>At Risk والاعتماديات</h2></div><b>—</b></header><p className="metric-unavailable">غير متاح حتى يُفعّل سجل مخاطر التسليم واعتماديات المشاريع. لن تعرض المنصة رقمًا تقديريًا.</p></article>
-        </section>
+        </section></ReadSection>
       </section>
     </main>
   );

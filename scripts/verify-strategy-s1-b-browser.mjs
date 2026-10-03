@@ -37,7 +37,11 @@ await context.route('**/*', async route => {
     else if (table === 'controls') json = [control];
     else json = [];
   }
-  return route.fulfill({ status: 200, json });
+  // Match PostgREST exact-count/range contract as well as its JSON body.
+  const total = Array.isArray(json) ? json.length : null;
+  const from = Number(url.searchParams.get('offset') || 0);
+  if (total !== null) json = json.slice(from, from + Number(url.searchParams.get('limit') || 500));
+  return route.fulfill({ status: 200, json, headers: total === null ? {} : { 'content-range': `${from}-${from + json.length - 1}/${total}`, 'access-control-expose-headers': 'Content-Range' } });
 });
 await context.addInitScript(({ user }) => {
   const encode = value => btoa(JSON.stringify(value));
