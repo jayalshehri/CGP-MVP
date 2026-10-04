@@ -78,6 +78,13 @@ export async function tests(){
   for(const [date,expected] of [[null,'unspecified'],['2026-10-03','expired'],['2026-10-04','soon'],['2026-11-03','soon'],['2026-11-04','valid']])check(expiry(date)===expected,`Riyadh expiry boundary ${date}: ${expected}`);
   check(!summary.includes('<td class="grc-warning"')&&!summary.includes('<td class="evidence-validity'),'expiry color belongs to badge only');
   check(!expanded.slice(expanded.indexOf('evidence-summary-row'),expanded.indexOf('evidence-detail-row')).includes('تفاصيل توثيق'), 'description cannot stretch summary row');
+  check(!collapsed.includes('<colgroup>')&&!collapsed.includes('<caption'),'original register has no redesigned fixed column grid or extra caption');
+  const evidenceCss=source('app/evidence/evidence.css');
+  check(evidenceCss.includes('font-size:12.5px')&&evidenceCss.includes('padding:10px 11px'),'original register typography and desktop cell spacing restored');
+  check(!evidenceCss.includes('table-layout:fixed')&&!evidenceCss.includes('.evidence-actions button+button'),'original content-sized columns and download button treatment restored');
+  check(evidenceCss.includes('gap:6px;flex-wrap:wrap;min-width:195px')&&evidenceCss.includes('padding:7px 9px'),'original visible action layout retained');
+  check(evidenceCss.includes('contain:inline-size'),'expanded detail content cannot change intrinsic summary column widths');
+  check(/evidence-validity time\{[^}]*white-space:nowrap/.test(evidenceCss),'expiry dates remain intact rather than split across lines');
   const evidenceComponent=load('components/EvidenceRegister.tsx').default;
   check(!render(React.createElement(evidenceComponent,{rows:[evidence],canReview:false})).includes('/review#'), 'no extra review authority');
   const cycles=visualMarkup('cycles');
