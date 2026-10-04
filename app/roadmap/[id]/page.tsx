@@ -68,6 +68,7 @@ type RequirementControl = {
   mapping_confidence: "confirmed" | "probable";
   controls: ControlRow | ControlRow[] | null;
 };
+type LegacyLink = { project_id: number; control_id: number; controls: Pick<ControlRow, "id" | "control_code" | "title_ar"> | Pick<ControlRow, "id" | "control_code" | "title_ar">[] | null };
 
 const tabs = ["نظرة عامة", "المتطلبات", "الضوابط", "الأدلة", "المعالجات", "سجل التدقيق"];
 const treatmentText: Record<string, string> = {
@@ -106,6 +107,7 @@ function ProjectDetailContent({ id }: { id: string }) {
   const [project, setProject] = useState<Project | null>(null);
   const [projectRequirements, setProjectRequirements] = useState<ProjectRequirement[]>([]);
   const [requirementControls, setRequirementControls] = useState<RequirementControl[]>([]);
+  const [legacyLinks, setLegacyLinks] = useState<LegacyLink[]>([]);
   const [treatments, setTreatments] = useState<GapTreatment[]>([]);
   const [role, setRole] = useState<UserRole>("control_owner");
   const [loading, setLoading] = useState(true);
@@ -122,7 +124,7 @@ function ProjectDetailContent({ id }: { id: string }) {
   const [recommendation, setRecommendation] = useState("");
   const [treatmentPriority, setTreatmentPriority] = useState<GapTreatment["priority"]>("medium");
   const [technologies, setTechnologies] = useState("");
-  const [reads, setReads] = useState<{ requirements: ReadStatus; controls: ReadStatus; treatments: ReadStatus }>({ requirements: "UNAVAILABLE", controls: "UNAVAILABLE", treatments: "UNAVAILABLE" });
+  const [reads, setReads] = useState<{ requirements: ReadStatus; controls: ReadStatus; legacy: ReadStatus; treatments: ReadStatus }>({ requirements: "UNAVAILABLE", controls: "UNAVAILABLE", legacy: "UNAVAILABLE", treatments: "UNAVAILABLE" });
   const treatmentEpoch = useRef(createReadEpoch());
   const requirementsReady = reads.requirements === "COMPLETE";
   const controlsReady = requirementsReady && reads.controls === "COMPLETE";
@@ -150,18 +152,24 @@ function ProjectDetailContent({ id }: { id: string }) {
         setRole(profile.role);
         const projectId = projectIdFromPath(id);
         if (projectId === null) throw new Error("رقم المشروع غير صحيح.");
-        const [p, pr] = await Promise.all([
+        const [p, pr, legacy] = await Promise.all([
           supabase.from("cybersecurity_projects").select("*").eq("id", projectId).single(),
           readStrategyRows((from, to) => supabase
             .from("cybersecurity_project_requirements")
             .select("project_id,requirement_id,coverage_type,cybersecurity_requirements(id,requirement_code,title_ar,status)", { count: "exact" })
             .eq("project_id", projectId).order("project_id").order("requirement_id").range(from, to),
             row => `${row.project_id}:${row.requirement_id}`),
+          readStrategyRows((from, to) => supabase.from("cybersecurity_project_controls")
+            .select("project_id,control_id,controls(id,control_code,title_ar)", { count: "exact" })
+            .eq("project_id", projectId).order("project_id").order("control_id").range(from, to),
+            row => `${row.project_id}:${row.control_id}`),
           loadTreatments(projectId),
         ]);
         if (!active) return;
         if (p.error || !p.data) throw new Error("المشروع غير موجود أو ليس ضمن صلاحيتك.");
         setProject(p.data as Project);
+        setLegacyLinks(legacy.status === "COMPLETE" ? legacy.data as unknown as LegacyLink[] : []);
+        setReads(previous => ({ ...previous, legacy: legacy.status === "COMPLETE" && legacy.data.every(row => single(row.controls)) ? "COMPLETE" : "UNAVAILABLE" }));
         setTechnologies((p.data as Project).recommended_technologies ?? "");
         const rows = pr.data as unknown as ProjectRequirement[];
         const requirementsComplete = !pr.error && rows.every(row => single(row.cybersecurity_requirements));
@@ -291,15 +299,16 @@ function ProjectDetailContent({ id }: { id: string }) {
   );
 
   const derivedControls = useMemo(() => {
-    const rows: Array<{ requirementCode: string; coverage: "full" | "partial" | "supporting"; mappingConfidence: "confirmed" | "probable"; control: ControlRow }> = [];
+    const rows: Array<{ requirementId: number; requirementCode: string; projectCoverage: "full" | "partial" | "supporting" | null; coverage: "full" | "partial" | "supporting"; mappingConfidence: "confirmed" | "probable"; control: ControlRow }> = [];
     for (const rc of requirementControls) {
       const control = single(rc.controls);
       if (!control) continue;
-      const requirement = requirementsWithStats.find((item) => item.requirement?.id === rc.requirement_id)?.requirement;
-      rows.push({ requirementCode: requirement?.requirement_code ?? "—", coverage: rc.coverage_type, mappingConfidence: rc.mapping_confidence, control });
+      const projectLink = projectRequirements.find(item => item.requirement_id === rc.requirement_id);
+      const requirement = single(projectLink?.cybersecurity_requirements ?? null);
+      rows.push({ requirementId: rc.requirement_id, requirementCode: requirement?.requirement_code ?? "—", projectCoverage: projectLink?.coverage_type ?? null, coverage: rc.coverage_type, mappingConfidence: rc.mapping_confidence, control });
     }
     return rows;
-  }, [requirementControls, requirementsWithStats]);
+  }, [requirementControls, projectRequirements]);
 
   const uniqueControls = useMemo(() => {
     const seen = new Map<number, ControlRow>();
@@ -334,31 +343,19 @@ function ProjectDetailContent({ id }: { id: string }) {
   );
 
   const rollup = useMemo(() => {
-    // Full/Partial/Supporting is a breakdown of the LINKED CONTROLS by
-    // requirement<->control coverage_type — not the project<->requirement
-    // coverage (which is a separate, usually coarser, single value per
-    // requirement). One control can appear once per requirement it serves;
-    // dedupe by control id so a control isn't double-counted.
-    const seenForCoverage = new Set<number>();
-    const coverageRows = derivedControls.filter((row) => {
-      if (seenForCoverage.has(row.control.id)) return false;
-      seenForCoverage.add(row.control.id);
-      return true;
-    });
-    const full = coverageRows.filter((row) => row.coverage === "full").length;
-    const partial = coverageRows.filter((row) => row.coverage === "partial").length;
-    const supporting = coverageRows.filter((row) => row.coverage === "supporting").length;
+    // Coverage and confidence describe each Requirement–Control mapping path.
+    // The distinct Control count and authoritative Control state are separate.
+    const full = derivedControls.filter((row) => row.coverage === "full").length;
+    const partial = derivedControls.filter((row) => row.coverage === "partial").length;
+    const supporting = derivedControls.filter((row) => row.coverage === "supporting").length;
     const readyForVerification = uniqueControls.filter((c) => c.evidence_status === "accepted" && c.verification_status !== "verified").length;
     const verified = uniqueControls.filter((c) => goodVerification(c.verification_status)).length;
     const contribution = uniqueControls.length ? Math.round((verified / uniqueControls.length) * 100) : null;
-    // Confirmed/Probable is a mapping-QUALITY signal (does an official control text
-    // directly support this link, from the Phase 2 reconciliation) — a separate axis
-    // from Full/Partial/Supporting (coverage completeness). Dedupe by control id.
-    const confirmedMappings = coverageRows.filter((row) => row.mappingConfidence === "confirmed").length;
-    const probableMappings = coverageRows.length - confirmedMappings;
+    const confirmedMappings = derivedControls.filter((row) => row.mappingConfidence === "confirmed").length;
+    const probableMappings = derivedControls.length - confirmedMappings;
     const requirementsWithoutMapping = requirementsWithStats.filter((item) => item.mappingStatus === "unresolved").length;
     return {
-      requirementsCount: projectRequirements.length,
+      requirementsCount: new Set(projectRequirements.map(row => row.requirement_id)).size,
       totalControls: uniqueControls.length,
       full,
       partial,
@@ -402,14 +399,14 @@ function ProjectDetailContent({ id }: { id: string }) {
         <section className="project-kpi-row" aria-label="مؤشرات المشروع الأساسية">
           <article className="project-kpi">
             <span>المتطلبات</span>
-            <strong>{requirementsReady ? projectRequirements.length : unavailable}</strong>
+            <strong>{requirementsReady ? new Set(projectRequirements.map(row => row.requirement_id)).size : unavailable}</strong>
           </article>
           <article className="project-kpi">
             <span>الضوابط المرتبطة</span>
             <strong>{controlsReady ? rollup.totalControls : unavailable}</strong>
           </article>
           <article className="project-kpi" title="Confirmed mappings — ربط مدعوم مباشرة بنص ضابط رسمي">
-            <span>الربط المؤكد</span>
+            <span>مواءمات مؤكدة عبر المتطلبات</span>
             <strong>{controlsReady ? rollup.confirmedMappings : unavailable}</strong>
           </article>
           <article className="project-kpi">
@@ -427,8 +424,8 @@ function ProjectDetailContent({ id }: { id: string }) {
 
         <ReadSection available={controlsReady}><section className="project-summary-grid">
           <article className="coverage-summary-card">
-            <header><h2>تغطية الضوابط</h2></header>
-            <div className="coverage-seg-bar" role="img" aria-label={`تغطية كاملة ${rollup.full}، جزئية ${rollup.partial}، داعمة ${rollup.supporting}`}>
+            <header><h2>تغطية مواءمات المتطلبات والضوابط</h2></header>
+            <div className="coverage-seg-bar" role="img" aria-label={`مواءمات بتغطية كاملة ${rollup.full}، جزئية ${rollup.partial}، داعمة ${rollup.supporting}`}>
               {coverageTotal ? (
                 <>
                   <i className="seg-full" style={{ width: `${coveragePct(rollup.full)}%` }} />
@@ -440,9 +437,9 @@ function ProjectDetailContent({ id }: { id: string }) {
               )}
             </div>
             <ul className="coverage-legend">
-              <li><span className="legend-dot full" />تغطية كاملة: <b>{rollup.full}</b></li>
-              <li><span className="legend-dot partial" />تغطية جزئية: <b>{rollup.partial}</b></li>
-              <li><span className="legend-dot supporting" />تغطية داعمة: <b>{rollup.supporting}</b></li>
+              <li><span className="legend-dot full" />مواءمة بتغطية كاملة: <b>{rollup.full}</b></li>
+              <li><span className="legend-dot partial" />مواءمة بتغطية جزئية: <b>{rollup.partial}</b></li>
+              <li><span className="legend-dot supporting" />مواءمة بتغطية داعمة: <b>{rollup.supporting}</b></li>
             </ul>
           </article>
 
@@ -504,9 +501,7 @@ function ProjectDetailContent({ id }: { id: string }) {
                       <article className="requirement-card" key={item.requirement.id}>
                         <header>
                           <h3>{item.requirement.title_ar}</h3><small>معرف المطلب الداخلي: <span dir="ltr">{item.requirement.requirement_code}</span></small>
-                          {item.mappingStatus === "mapped" && (
-                            <span className="requirement-coverage-tag">تغطية المشروع: {coverageText[item.coverage] ?? item.coverage}</span>
-                          )}
+                          <span className="requirement-coverage-tag">تغطية المشروع لهذا المتطلب: {coverageText[item.coverage] ?? item.coverage}</span>
                         </header>
                         {!controlsReady ? <p className="metric-unavailable">{unavailable}</p> : item.mappingStatus === "unresolved" ? (
                           <p className="requirement-warning">
@@ -527,6 +522,8 @@ function ProjectDetailContent({ id }: { id: string }) {
 
             {tab === 2 && (<ReadSection available={controlsReady}>
               <section className="controls-tab">
+                <h2>العلاقات عبر المتطلبات</h2>
+                <p className="detail-hint">تُعرض المواءمات النشطة فقط. كل صف مسار متطلب ← ضابط؛ قد يظهر الضابط في أكثر من مسار، بينما يُحسب مرة واحدة في ملخص الضوابط المميزة.</p>
                 <div className="controls-table-filters">
                   <label>
                     <span>الإطار</span>
@@ -555,6 +552,7 @@ function ProjectDetailContent({ id }: { id: string }) {
                     <thead>
                       <tr>
                         <th>الإطار</th>
+                        <th>المتطلب وتغطية المشروع</th>
                         <th>الضابط</th>
                         <th>التغطية</th>
                         <th>جودة الربط</th>
@@ -564,11 +562,12 @@ function ProjectDetailContent({ id }: { id: string }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredControlRows.map((row, index) => {
+                      {filteredControlRows.map((row) => {
                         const framework = single(row.control.frameworks);
                         return (
-                          <tr key={`${row.control.id}-${index}`}>
+                          <tr key={`${row.requirementId}:${row.control.id}`}>
                             <td dir="ltr">{framework?.code ?? "—"}</td>
+                            <td><span dir="ltr">{row.requirementCode}</span><small> · تغطية المشروع: {row.projectCoverage ? coverageText[row.projectCoverage] : unavailable}</small></td>
                             <td>
                               <Link href={`/controls/${row.control.id}`}>
                                 <span dir="ltr">{row.control.control_code}</span> — {row.control.title_ar}
@@ -588,6 +587,16 @@ function ProjectDetailContent({ id }: { id: string }) {
                 </div>
               </section></ReadSection>
             )}
+            {tab === 2 && <ReadSection available={reads.legacy === "COMPLETE"}>
+              <section className="detail-card">
+                <h2>روابط مباشرة موروثة</h2>
+                <p className="detail-hint">سجل مستقل عن العلاقات عبر المتطلبات؛ لا يُستنتج منه متطلب أو تحقق امتثال.</p>
+                {!legacyLinks.length ? <p>{noRelationship}</p> : <ul>{legacyLinks.map(link => {
+                  const legacyControl = single(link.controls);
+                  return <li key={`${link.project_id}:${link.control_id}`}><Link href={`/controls/${link.control_id}`}><span dir="ltr">{legacyControl?.control_code}</span> — {legacyControl?.title_ar}</Link></li>;
+                })}</ul>}
+              </section>
+            </ReadSection>}
 
             {tab === 3 && (<ReadSection available={controlsReady}>
               <section className="detail-card">

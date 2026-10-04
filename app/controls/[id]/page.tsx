@@ -17,6 +17,7 @@ import { controlPlan } from "@/lib/control-plan";
 import { eccImplementationGuideUrl } from "@/lib/ecc-strategy-example";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { readStrategyRows } from "@/lib/strategy-read";
 import { frequencyLabels, formatComplianceDate, formatComplianceDateTime, scheduleState, scheduleStateLabels, cycleStage, cycleStageLabels } from "@/lib/grc";
 import "./detail.css";
 
@@ -90,7 +91,7 @@ function ControlDetailsContent({id}:{id:string}) {
   const [c,e,rc,cy,a,f,events]=await Promise.all([
    supabase.from('controls').select('*,frameworks(code,name_ar,version,is_active,source_url)').eq('id',controlId).single(),
    read(()=>loadControlEvidenceRegister(controlId)),
-   supabase.from('cybersecurity_requirement_controls').select('requirement_id,coverage_type,mapping_confidence,cybersecurity_requirements(requirement_code,title_ar)').eq('control_id',controlId).eq('mapping_status','active'),
+   readStrategyRows((from,to)=>supabase.from('cybersecurity_requirement_controls').select('requirement_id,control_id,coverage_type,mapping_confidence,cybersecurity_requirements(requirement_code,title_ar)',{count:'exact'}).eq('control_id',controlId).eq('mapping_status','active').order('requirement_id').order('control_id').range(from,to),row=>`${row.requirement_id}:${row.control_id}`),
    supabase.from('control_review_cycles').select('id,reviewer_id,due_date').eq('control_id',controlId).eq('status','open').limit(1),read(()=>loadControlAssessments(controlId)),read(()=>loadControlFindings(controlId)),read(()=>loadControlActivity(controlId))]);
   if(c.error||!c.data)throw new Error('الضابط غير موجود أو ليس ضمن صلاحيتك.');
 
@@ -100,20 +101,21 @@ function ControlDetailsContent({id}:{id:string}) {
    setControl(row);
    setAssessments(a.data??[]);setFindings(f.data?.findings??[]);setActions(f.data?.actions??[]);setActivity(events.data??[]);
    const links=(rc.data??[]) as unknown as RequirementLink[];
+   const requirementIds=[...new Set(links.map(link=>link.requirement_id))];
    const cycle=(cy.data??[])[0] as {id:number;reviewer_id:string;due_date:string}|undefined;
    const [eligibility,hierarchy,pr,rq,rv]=await Promise.all([
     row.frameworks?.is_active?read(()=>loadEligibleFrameworkEvidence(row.frameworks!.code,controlId)):Promise.resolve({data:[],error:''}),
     row.parent_control_id?supabase.from('controls').select('id,control_code,title_ar,official_text_ar,implementation_status').eq('id',row.parent_control_id):supabase.from('controls').select('id,control_code,title_ar,official_text_ar,implementation_status').eq('parent_control_id',controlId).order('control_code'),
-    links.length?supabase.from('cybersecurity_project_requirements').select('requirement_id,project_id,cybersecurity_projects(project_code,name_ar)').in('requirement_id',links.map(l=>l.requirement_id)):Promise.resolve({data:[],error:null}),
+    rc.status==='COMPLETE'&&requirementIds.length?readStrategyRows((from,to)=>supabase.from('cybersecurity_project_requirements').select('requirement_id,project_id,cybersecurity_projects(project_code,name_ar)',{count:'exact'}).in('requirement_id',requirementIds).order('requirement_id').order('project_id').range(from,to),row=>`${row.requirement_id}:${row.project_id}`):Promise.resolve({data:[],error:null,status:rc.status}),
     cycle?supabase.from('evidence_requests').select('status').eq('cycle_id',cycle.id).order('id',{ascending:false}).limit(1):Promise.resolve({data:[],error:null}),
     cycle&&['admin','cybersecurity_team'].includes(profile.role)?supabase.from('profiles').select('display_name').eq('user_id',cycle.reviewer_id).maybeSingle():Promise.resolve({data:null,error:null})
    ]);
    if(!active)return;
    setEligible(eligibility.data??[]);setEvidence((e.data??[]) as Evidence[]);
-   setIssues({evidence:e.error||eligibility.error?'تعذر تحميل أدلة الضابط.':'',assessment:a.error,findings:f.error,activity:events.error,requirements:rc.error||pr.error?'تعذر تحميل العلاقات.':'',review:cy.error||rq.error?'تعذر تحميل حالة المراجعة.':'',hierarchy:hierarchy.error?'تعذر تحميل التسلسل الهرمي.':''});
+   setIssues({evidence:e.error||eligibility.error?'تعذر تحميل أدلة الضابط.':'',assessment:a.error,findings:f.error,activity:events.error,requirements:rc.status!=='COMPLETE'||pr.status!=='COMPLETE'||links.some(link=>!single(link.cybersecurity_requirements))?'تعذر تحميل العلاقات.':'',review:cy.error||rq.error?'تعذر تحميل حالة المراجعة.':'',hierarchy:hierarchy.error?'تعذر تحميل التسلسل الهرمي.':''});
    if(row.parent_control_id)setParentControl((hierarchy.data??[])[0] as HierarchyPeer??null);
    else setChildControls((hierarchy.data??[]) as HierarchyPeer[]);
-   setRequirementLinks(links);setProjectLinks((pr.data??[]) as unknown as ProjectRequirementLink[]);
+   setRequirementLinks(rc.status==='COMPLETE'?links:[]);setProjectLinks(pr.status==='COMPLETE'?(pr.data??[]) as unknown as ProjectRequirementLink[]:[]);
    setOpenCycleId(cycle?.id??null);setOpenCycleDue(cycle?.due_date??null);setLatestRequestStatus((rq.data??[])[0]?.status);setReviewerName(rv.data?.display_name??null);
   }
  }catch(e){if(active)setError(e instanceof Error?e.message:'تعذر التحميل');const {data}=await supabase.auth.getSession();if(!data.session)router.replace('/login');}
@@ -169,20 +171,22 @@ function ControlDetailsContent({id}:{id:string}) {
     <section id="periodic-review" className="detail-card"><h2>المراجعة الدورية للضابط</h2>{issues.review?<p role="alert">{issues.review}</p>:<div className="detail-schedule-strip"><div><small>التكرار</small><strong>{frequencyLabels[control.audit_frequency]??control.audit_frequency}</strong></div><div><small>آخر مراجعة</small><strong>{formatComplianceDate(control.last_review_date)}</strong></div><div><small>المراجعة القادمة</small><strong>{formatComplianceDate(control.next_audit_date)}</strong><span>{scheduleStateLabels[scheduleState(control.next_audit_date)]}</span></div><div><small>الدورة الحالية</small><strong>{cycleStageLabels[cycleStage(!!openCycleId,latestRequestStatus)]}</strong>{openCycleDue&&<small>الاستحقاق: {formatComplianceDate(openCycleDue)}</small>}{reviewerName&&<small>المراجع: {reviewerName}</small>}</div></div>}<p className="detail-hint">مراجعة تشغيلية دورية مستقلة عن دورة تقييم الإطار.</p><details open={reviewShown} onToggle={event=>setReviewExpanded(event.currentTarget.open)}><summary>{archived?'تاريخ المراجعة الدورية':'تفاصيل المراجعة والطلبات'}</summary>{reviewShown&&<ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload} returnContext={context} targetCycleId={targetReviewCycleId}/>}</details>{canReview&&<Link className="control360-text-action" href={'/audit-schedule?control='+control.id}>فتح جدول المراجعة الدورية ←</Link>}</section>
        <details className="detail-card requirements-projects-card"><summary>المتطلبات والمشاريع المرتبطة</summary>
 
-    <p className="detail-hint">علاقة للقراءة فقط، مصدرها ربط المتطلبات السيبرانية الحالي — لا منطق ربط جديد ولا تكرار للبيانات.</p>
+    <p className="detail-hint">العلاقات عبر المتطلبات للقراءة فقط ضمن صلاحياتك. قد يرتبط المتطلب بأكثر من مشروع، وتبقى تغطية المواءمة وجودتها خاصة بكل متطلب وضابط.</p>
     {issues.requirements?<p role="alert">{issues.requirements}</p>:!requirementLinks.length?<p>لا يدعم هذا الضابط أي متطلب سيبراني مسجل حاليًا.</p>:
     <div className="req-proj-table-wrap"><table className="req-proj-table"><thead><tr><th>المتطلب</th><th>التغطية</th><th>جودة الربط</th><th>رمز المشروع</th><th>المشروع</th></tr></thead><tbody>
-     {requirementLinks.map(link=>{
+     {requirementLinks.flatMap(link=>{
       const requirement=single(link.cybersecurity_requirements);
-      const projectLink=projectLinks.find(p=>p.requirement_id===link.requirement_id);
+      const visibleProjects=projectLinks.filter(p=>p.requirement_id===link.requirement_id&&single(p.cybersecurity_projects));
+      return (visibleProjects.length?visibleProjects:[null]).map(projectLink=>{
       const project=projectLink?single(projectLink.cybersecurity_projects):null;
-      return <tr key={link.requirement_id}>
+      return <tr key={`${link.requirement_id}:${projectLink?.project_id??'none'}`}>
        <td>{requirement?.title_ar??'—'}{requirement?.requirement_code&&<details className="req-internal-id"><summary>تفاصيل إضافية</summary><span>المعرّف الداخلي: <b dir="ltr">{requirement.requirement_code}</b></span></details>}</td>
        <td><span className={`coverage-pill ${link.coverage_type}`}>{coverageText[link.coverage_type]??link.coverage_type}</span></td>
        <td><span className={`mapping-pill ${link.mapping_confidence}`}>{mappingConfidenceText[link.mapping_confidence]??link.mapping_confidence}</span></td>
        <td dir="ltr">{project?.project_code??'—'}</td>
-       <td>{project?<Link href={`/roadmap/${projectLink!.project_id}`}>{project.name_ar}</Link>:'غير مرتبط بمشروع'}</td>
+       <td>{project?<Link href={`/roadmap/${projectLink!.project_id}`}>{project.name_ar}</Link>:'لا يوجد مشروع ظاهر ضمن صلاحياتك'}</td>
       </tr>;
+      });
      })}
     </tbody></table></div>}
    </details>

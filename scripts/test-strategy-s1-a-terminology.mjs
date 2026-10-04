@@ -60,7 +60,8 @@ function businessContracts(path, text) {
 for (const path of paths) {
   equal(businessContracts(path, read(path)), businessContracts(path, before(path)), `${path}: auth/commands unchanged (read states covered by S1-C)`);
 }
-equal(logic('app/roadmap/portfolio-metrics.ts', read('app/roadmap/portfolio-metrics.ts')), logic('app/roadmap/portfolio-metrics.ts', before('app/roadmap/portfolio-metrics.ts')), 'all metric formulas unchanged');
+const s1Metrics = text => text.split('// --- Requirement layer rollups')[0];
+equal(logic('app/roadmap/portfolio-metrics.ts', s1Metrics(read('app/roadmap/portfolio-metrics.ts'))), logic('app/roadmap/portfolio-metrics.ts', s1Metrics(before('app/roadmap/portfolio-metrics.ts'))), 'S1-A planning formulas unchanged; S2-B relationship rollups tested separately');
 
 function attributes(path, text, name) {
   const found = [];

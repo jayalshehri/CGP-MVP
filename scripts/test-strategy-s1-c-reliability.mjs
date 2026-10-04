@@ -106,15 +106,19 @@ function calculations(path, text) {
 }
 for (const path of paths) {
   const before = execFileSync('git', ['show', `${base}:${path}`], { cwd: root, encoding: 'utf8' }), now = source(path);
-  equal(calculations(path, now), calculations(path, before), `${path} formulas/denominators/relationship grouping unchanged`);
-  equal(extract(now, 'from'), extract(before, 'from'), `${path} identical source tables`);
-  for (const method of ['eq', 'in']) equal(extract(now, method), extract(before, method), `${path} identical relationship filters`);
+  // S2-B deliberately replaces relationship aggregations and adds exact legacy
+  // reads in Project Detail. The new contract is covered by its own test.
+  if (path.includes('/analysis/') || path.includes('/dashboard/') || path.includes('/executive/')) {
+    equal(calculations(path, now), calculations(path, before), `${path} S1 planning formulas unchanged`);
+  }
+  if (!path.includes('/[id]/')) equal(extract(now, 'from'), extract(before, 'from'), `${path} original source tables retained`);
   check(now.includes('readStrategyRows('), `${path} paged authorized reads`);
   check(now.includes('.order("id")'), `${path} selected primary ID stable ordering`);
   check(now.includes('.order("project_id").order("control_id")') || now.includes('.order("requirement_id").order("control_id")'), `${path} selected compound relationship keys ordered`);
   check(!now.includes('setError(detail)'), `${path} raw read errors not exposed`);
 }
-equal(source('app/roadmap/portfolio-metrics.ts'), execFileSync('git', ['show', `${base}:app/roadmap/portfolio-metrics.ts`], { cwd: root, encoding: 'utf8' }), 'pure formulas byte-identical to accepted baseline');
+const s1Metrics = text => text.split('// --- Requirement layer rollups')[0];
+equal(s1Metrics(source('app/roadmap/portfolio-metrics.ts')), s1Metrics(execFileSync('git', ['show', `${base}:app/roadmap/portfolio-metrics.ts`], { cwd: root, encoding: 'utf8' })), 'S1 pure formulas byte-identical to accepted baseline');
 check(!source('lib/strategy-read.ts').includes('service_role'), 'no privileged fallback');
 check(!source('app/roadmap/page.tsx').includes('ينتظر تطبيق تحديث قاعدة البيانات'), 'read failure never presented as proven missing configuration');
 console.log(`S1-C read reliability: ${checks} assertions PASS (offline, no data writes)`);
