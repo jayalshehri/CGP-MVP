@@ -78,7 +78,8 @@ html = render(analysis, '/roadmap/analysis', { projects: [project], reads: { pro
 const summary = html.split('aria-labelledby="planning-information-title"')[1];
 check(summary.includes('<dd>0</dd>'), 'independent successful project-field summary survives failed links');
 check(html.includes('التقنية اختيارية'), 'technology not universally required');
-equal(read('app/roadmap/portfolio-metrics.ts'), baseline('app/roadmap/portfolio-metrics.ts'), 'all existing calculations/five-element formula byte-identical');
+const s1Metrics = text => text.split('// --- Requirement layer rollups')[0];
+equal(s1Metrics(read('app/roadmap/portfolio-metrics.ts')), s1Metrics(baseline('app/roadmap/portfolio-metrics.ts')), 'S1 project/date/five-element formula byte-identical; S2-B relationship rollup tested separately');
 equal(read('lib/strategy-navigation.ts'), baseline('lib/strategy-navigation.ts'), 'S1-B URL contracts byte-identical');
 equal(read('lib/strategy-read.ts'), baseline('lib/strategy-read.ts'), 'S1-C paging/read-state contracts byte-identical');
 for (const path of ['components/AppShell.tsx', 'components/FeedbackWidget.tsx', 'app/globals.css']) equal(read(path), baseline(path), `${path} unchanged (mobile deferred)`);

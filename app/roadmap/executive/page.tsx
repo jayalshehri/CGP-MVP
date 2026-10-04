@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-read";
+import { readCanonicalPortfolio } from "@/lib/strategy-portfolio-read";
+import type { RelationshipCounts } from "@/lib/strategy-relationships";
 import { ReadNotice, ReadSection } from "../read-state";
 import { averageProgress, getRiyadhDate, isDelayed } from "../portfolio-metrics";
 import "../roadmap.css";
@@ -36,9 +38,10 @@ export default function ExecutiveRoadmapPage() {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [modern, setModern] = useState<RelationshipCounts | null>(null);
   const [reads, setReads] = useState<{ projects: ReadStatus; links: ReadStatus; treatments: ReadStatus }>({ projects: "UNAVAILABLE", links: "UNAVAILABLE", treatments: "UNAVAILABLE" });
   const projectsReady = reads.projects === "COMPLETE";
-  const linksReady = reads.links === "COMPLETE";
+  const linksReady = projectsReady && reads.links === "COMPLETE";
   const treatmentsReady = reads.treatments === "COMPLETE";
   const exportReady = projectsReady && linksReady && treatmentsReady;
 
@@ -53,11 +56,14 @@ export default function ExecutiveRoadmapPage() {
           readStrategyRows((from, to) => supabase.from("cybersecurity_project_gap_treatments").select("id,project_id,priority", { count: "exact" }).order("id").range(from, to), row => row.id),
           readStrategyRows((from, to) => supabase.from("controls").select("id,frameworks!inner(is_active)", { count: "exact" }).eq("frameworks.is_active",true).order("id").range(from, to), row => row.id),
         ]);
+        const modernResult = projectResult.status === "COMPLETE" ? await readCanonicalPortfolio(projectResult.data.map(row => row.id)) : null;
         if (active) {
-          setReads({ projects: projectResult.status, links: linkResult.error || activeControlResult.error ? "UNAVAILABLE" : "COMPLETE", treatments: treatmentResult.status });
+          setReads({ projects: projectResult.status, links: linkResult.status === "COMPLETE" && activeControlResult.status === "COMPLETE" ? "COMPLETE" : "UNAVAILABLE", treatments: treatmentResult.status });
           const activeIds = new Set((activeControlResult.data ?? []).map(row => row.id));
+          const visibleProjects = new Set(projectResult.data.map(row => row.id));
           setProjects((projectResult.data ?? []) as Project[]);
-          setLinks((linkResult.data ?? []).filter(row => activeIds.has(row.control_id)) as LinkRow[]);
+          setLinks((linkResult.data ?? []).filter(row => visibleProjects.has(row.project_id) && activeIds.has(row.control_id)) as LinkRow[]);
+          setModern(modernResult);
           setTreatments((treatmentResult.data ?? []) as Treatment[]);
         }
       } catch (cause) {
@@ -117,7 +123,7 @@ export default function ExecutiveRoadmapPage() {
       <section className="roadmap-shell">
         <header className="executive-hero"><div><span>عرض الإدارة العليا · 2027–2029</span><h1>ملخص محفظة المشاريع السيبرانية</h1><p>الحالات والتقدم المسجّل للمشاريع وفئات التنبيه الإداري الحالية.</p></div><aside><button type="button" disabled={!exportReady} title={!exportReady ? "التصدير غير متاح حتى تكتمل القراءات" : undefined} onClick={() => { if (exportReady) window.print(); }}>تصدير PDF</button><Link href="/roadmap/dashboard">العودة إلى خارطة طريق المشاريع ←</Link></aside></header>
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
-        <ReadNotice statuses={[reads.projects, reads.links, reads.treatments]} />
+        <ReadNotice statuses={[reads.projects, reads.links, reads.treatments, modern ? "COMPLETE" : "UNAVAILABLE"]} />
 
         <section className="executive-kpis">
           <Kpi label="المشاريع السيبرانية" value={projectsReady ? projects.length : unavailable} detail="ضمن الخطة الثلاثية" />
@@ -131,6 +137,7 @@ export default function ExecutiveRoadmapPage() {
         <section className="executive-focus-grid">
           <ReadSection available={projectsReady}><article className="executive-section"><header><span>المشاريع السيبرانية</span><h2>أعلى الأولويات الحالية</h2><p>تعكس الأولوية الإدارية المسجلة، وليس درجة Portfolio Score.</p></header><ol>{projects.filter((project) => project.priority === "high").slice(0, 5).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectHref(project.id, "executive")}>{project.name_ar}</Link><small>{project.planned_year} · {project.planned_quarter}</small></li>)}</ol></article></ReadSection>
           <article className="executive-section"><header><span>NCA والضوابط</span><h2>ضوابط ذات ربط مباشر مسجّل</h2><p>ضوابط من سجل الربط المباشر بالمشاريع، دون دمج علاقات المتطلبات. الربط لا يعني الامتثال أو إغلاق الفجوة.</p></header><strong className="executive-big-number">{linksReady ? data.controls : unavailable}</strong><Link href="/roadmap">مراجعة الروابط ←</Link></article>
+          <article className="executive-section"><header><span>العلاقات عبر المتطلبات</span><h2>ضوابط مميزة مرتبطة بالمشاريع عبر المتطلبات</h2><p>حالة الربط ضمن نطاق القراءة، دون استنتاج أثر المشروع أو امتثال الضابط. لا تضاف إلى الروابط المباشرة الموروثة.</p></header><strong className="executive-big-number">{modern?.controls ?? unavailable}</strong><Link href="/roadmap">تفاصيل العلاقات ←</Link></article>
         </section>
 
         <section className="executive-decisions dynamic-attention"><header><span>Dynamic Management Attention</span><h2>ما الذي يحتاج انتباه الإدارة؟</h2><p>تظهر العناصر من قواعد بيانات قابلة للتتبع؛ لا توجد قيمة دنيا مصطنعة.</p></header><ReadSection available={projectsReady}>{!exportReady && <p className="metric-unavailable">بعض قواعد التنبيه غير متاحة؛ لا يمكن تأكيد خلو المحفظة من التنبيهات.</p>}{data.attention.length ? data.attention.map((item, index) => <article key={item.key} className={item.level}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{item.title}</strong><p>{item.detail}</p></div><em>{item.count}</em></article>) : exportReady ? <article className="attention-empty"><div><strong>لا توجد فئات تنبيه وفق القواعد الحالية</strong><p>سيظهر هنا أي تأخير أو توقف أو نقص في خط الأساس عند تسجيله.</p></div></article> : null}</ReadSection></section>

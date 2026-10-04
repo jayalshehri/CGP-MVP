@@ -7,6 +7,8 @@ import { projectHref, roadmapFocus } from "@/lib/strategy-navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-read";
+import { readCanonicalPortfolio } from "@/lib/strategy-portfolio-read";
+import type { RelationshipCounts } from "@/lib/strategy-relationships";
 import { ReadNotice, ReadSection } from "../read-state";
 import { averageProgress, getRiyadhDate, isDelayed, scheduleMetric } from "../portfolio-metrics";
 import "../roadmap.css";
@@ -46,9 +48,10 @@ function RoadmapDashboardContent() {
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [modern, setModern] = useState<RelationshipCounts | null>(null);
   const [reads, setReads] = useState<{ projects: ReadStatus; links: ReadStatus }>({ projects: "UNAVAILABLE", links: "UNAVAILABLE" });
   const projectsReady = reads.projects === "COMPLETE";
-  const linksReady = reads.links === "COMPLETE";
+  const linksReady = projectsReady && reads.links === "COMPLETE";
   const exportReady = projectsReady && linksReady;
 
   useEffect(() => {
@@ -75,12 +78,15 @@ function RoadmapDashboardContent() {
           readStrategyRows((from, to) => supabase.from("cybersecurity_project_controls").select("project_id,control_id", { count: "exact" }).order("project_id").order("control_id").range(from, to), row => `${row.project_id}:${row.control_id}`),
           readStrategyRows((from, to) => supabase.from("controls").select("id,frameworks!inner(is_active)", { count: "exact" }).eq("frameworks.is_active",true).order("id").range(from, to), row => row.id),
         ]);
+        const modernResult = projectResult.status === "COMPLETE" ? await readCanonicalPortfolio(projectResult.data.map(row => row.id)) : null;
         if (live) {
           setError(projectResult.error ? "غير متاح — تعذر تحميل المشاريع." : "");
-          setReads({ projects: projectResult.status, links: linkResult.error || activeControlResult.error ? "UNAVAILABLE" : "COMPLETE" });
+          setReads({ projects: projectResult.status, links: linkResult.status === "COMPLETE" && activeControlResult.status === "COMPLETE" ? "COMPLETE" : "UNAVAILABLE" });
           const activeIds = new Set((activeControlResult.data ?? []).map(row => row.id));
+          const visibleProjects = new Set(projectResult.data.map(row => row.id));
           setProjects((projectResult.data ?? []) as Project[]);
-          setLinks((linkResult.data ?? []).filter(row => activeIds.has(row.control_id)) as LinkRow[]);
+          setLinks((linkResult.data ?? []).filter(row => visibleProjects.has(row.project_id) && activeIds.has(row.control_id)) as LinkRow[]);
+          setModern(modernResult);
         }
       } catch (cause) {
         if (!live) return;
@@ -145,7 +151,7 @@ function RoadmapDashboardContent() {
           <div className="roadmap-export-actions"><button type="button" disabled={!exportReady} title={!exportReady ? "التصدير غير متاح حتى تكتمل القراءات" : undefined} onClick={() => { if (exportReady) window.print(); }}>تصدير PDF</button><button type="button" disabled={!exportReady} onClick={exportExcel}>تصدير Excel</button><Link href="/roadmap/executive" className="roadmap-primary">عرض الإدارة العليا ←</Link><Link href="/roadmap" className="roadmap-secondary">تحديث المشاريع</Link></div>
         </header>
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
-        <ReadNotice statuses={[reads.projects, reads.links]} />
+        <ReadNotice statuses={[reads.projects, reads.links, modern ? "COMPLETE" : "UNAVAILABLE"]} />
 
         <section className="roadmap-exec-kpis roadmap-snapshot" aria-label="ملخص خارطة طريق المشاريع">
           <Kpi label="المشاريع" value={projectsReady ? projects.length : unavailable} detail={projectsReady ? `${data.active} قيد التنفيذ · ${data.complete} مكتمل` : unavailable} />
@@ -153,6 +159,7 @@ function RoadmapDashboardContent() {
           <Kpi label="المشاريع المتأخرة" value={projectsReady ? (data.schedule.value ?? "بيانات غير كافية") : unavailable} detail={!projectsReady ? "تعذر قراءة التواريخ" : data.schedule.value === null ? "أدخل التواريخ المستهدفة أولًا" : `حتى ${getRiyadhDate()}`} tone="amber" />
           <Kpi label="بلا تاريخ مستهدف" value={projectsReady ? data.schedule.missingDates : unavailable} detail="لا تدخل في حساب التأخير" tone="amber" />
           <Kpi label="ضوابط ذات ربط مباشر مسجّل" value={linksReady ? data.controls : unavailable} detail="من سجل الربط المباشر؛ لا تعني تحقق الالتزام" tone="blue" />
+          <Kpi label="ضوابط مميزة عبر المتطلبات" value={modern?.controls ?? unavailable} detail="مسارات العلاقات الحديثة ضمن نطاق القراءة، منفصلة عن الربط المباشر" tone="blue" />
         </section>
 
         <ReadSection available={projectsReady}><section className="quarterly-roadmap" aria-labelledby="quarterly-roadmap-title">

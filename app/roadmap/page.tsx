@@ -11,6 +11,7 @@ import { readStrategyRows, createReadEpoch, unavailable, noRelationship, type Re
 import { ReadNotice } from "./read-state";
 import { projectToForm, projectWriteFields, projectDateLabels, type ProjectForm as Form } from "@/lib/strategy-project-fields";
 import { getRiyadhDate, isDelayed, requirementRollup, formatDateAr, type CoverageType, type RequirementControlLink, type ProjectRequirementRow } from "./portfolio-metrics";
+import { canonicalRelationships, legacyRelationships } from "@/lib/strategy-relationships";
 import "./roadmap.css";
 
 type Project = {
@@ -98,9 +99,9 @@ function ProjectRegisterContent() {
   const readEpoch = useRef(createReadEpoch());
   const [reads, setReads] = useState<{ projects: ReadStatus; links: ReadStatus; requirements: ReadStatus; mapping: ReadStatus }>({ projects: "UNAVAILABLE", links: "UNAVAILABLE", requirements: "UNAVAILABLE", mapping: "UNAVAILABLE" });
   const projectsReady = reads.projects === "COMPLETE";
-  const linksReady = reads.links === "COMPLETE";
+  const linksReady = projectsReady && reads.links === "COMPLETE";
   const requirementsReady = reads.requirements === "COMPLETE";
-  const mappingReady = requirementsReady && reads.mapping === "COMPLETE";
+  const mappingReady = projectsReady && requirementsReady && reads.mapping === "COMPLETE";
   const canManage = role === "admin" || role === "cybersecurity_team";
 
   async function load() {
@@ -108,13 +109,14 @@ function ProjectRegisterContent() {
     const [projectResult, linkResult, projectRequirementResult, requirementControlResult, activeControlResult] = await Promise.all([
       readStrategyRows((from, to) => supabase.from("cybersecurity_projects").select("*", { count: "exact" }).order("planned_year").order("planned_quarter").order("project_code").order("id").range(from, to), row => row.id),
       readStrategyRows((from, to) => supabase.from("cybersecurity_project_controls").select("project_id,control_id", { count: "exact" }).order("project_id").order("control_id").range(from, to), row => `${row.project_id}:${row.control_id}`),
-      readStrategyRows((from, to) => supabase.from("cybersecurity_project_requirements").select("project_id,requirement_id,coverage_type", { count: "exact" }).order("project_id").order("requirement_id").range(from, to), row => `${row.project_id}:${row.requirement_id}`),
+      readStrategyRows((from, to) => supabase.from("cybersecurity_project_requirements").select("project_id,requirement_id,coverage_type,cybersecurity_requirements(id)", { count: "exact" }).order("project_id").order("requirement_id").range(from, to), row => `${row.project_id}:${row.requirement_id}`),
       readStrategyRows((from, to) => supabase.from("cybersecurity_requirement_controls").select("requirement_id,control_id,coverage_type,mapping_confidence,controls(evidence_status,verification_status)", { count: "exact" }).eq("mapping_status", "active").order("requirement_id").order("control_id").range(from, to), row => `${row.requirement_id}:${row.control_id}`),
       readStrategyRows((from, to) => supabase.from("controls").select("id,frameworks!inner(is_active)", { count: "exact" }).eq("frameworks.is_active",true).order("id").range(from, to), row => row.id),
     ]);
     if (!readEpoch.current.valid(epoch)) return;
     const missingEmbedded = requirementControlResult.data.some(row => !row.controls || (Array.isArray(row.controls) && !row.controls.length));
-    setReads({ projects: projectResult.status, links: linkResult.error || activeControlResult.error ? "UNAVAILABLE" : "COMPLETE", requirements: projectRequirementResult.status, mapping: requirementControlResult.error || activeControlResult.error || missingEmbedded ? "UNAVAILABLE" : "COMPLETE" });
+    const missingRequirement = projectRequirementResult.data.some(row => !row.cybersecurity_requirements || (Array.isArray(row.cybersecurity_requirements) && !row.cybersecurity_requirements.length));
+    setReads({ projects: projectResult.status, links: linkResult.status === "COMPLETE" && activeControlResult.status === "COMPLETE" ? "COMPLETE" : "UNAVAILABLE", requirements: projectRequirementResult.status === "COMPLETE" && !missingRequirement ? "COMPLETE" : "UNAVAILABLE", mapping: requirementControlResult.status === "COMPLETE" && activeControlResult.status === "COMPLETE" && !missingEmbedded ? "COMPLETE" : "UNAVAILABLE" });
     const activeIds = new Set((activeControlResult.data ?? []).map(row => row.id));
     setProjects((projectResult.data ?? []) as Project[]);
     setLinks((linkResult.data ?? []).filter(row => activeIds.has(row.control_id)) as unknown as LinkRow[]);
@@ -159,10 +161,22 @@ function ProjectRegisterContent() {
     };
   }, [router]);
 
-  const requirementStats = useMemo(
-    () => requirementRollup(mappingReady ? requirementCoverage : [], mappingReady ? requirementControlLinks : []),
-    [requirementCoverage, requirementControlLinks, mappingReady],
-  );
+  const requirementStats = useMemo(() => {
+    if (!mappingReady) return requirementRollup([], []);
+    const visibleProjects = new Set(projects.map(project => project.id));
+    const scopedRequirements = requirementCoverage.filter(row => row.project_id != null && visibleProjects.has(row.project_id));
+    const requirementIds = new Set(scopedRequirements.map(row => row.requirement_id));
+    return requirementRollup(scopedRequirements, requirementControlLinks.filter(row => requirementIds.has(row.requirement_id)));
+  }, [projects, requirementCoverage, requirementControlLinks, mappingReady]);
+
+  const modern = useMemo(() => mappingReady ? canonicalRelationships(
+    projects.map(project => project.id),
+    requirementCoverage.filter((row): row is ProjectRequirementRow & { project_id: number } => row.project_id != null),
+    requirementControlLinks,
+  ) : null, [mappingReady, projects, requirementCoverage, requirementControlLinks]);
+  const legacy = useMemo(() => legacyRelationships(
+    projects.map(project => project.id), linksReady ? links : null, modern?.paths ?? null,
+  ), [projects, linksReady, links, modern]);
 
   // Per-project display counts for the register table (Requirements / Controls /
   // Verified), derived the same way as the project detail page's rollup -- read
@@ -172,39 +186,22 @@ function ProjectRegisterContent() {
       number,
       { requirementsCount: number; controlsCount: number; verifiedCount: number; confirmedCount: number; probableCount: number; requirementsWithoutMapping: number }
     >();
-    if (!mappingReady) return map;
-    const reqToProject = new Map<number, number>();
-    const reqIdsWithLinks = new Set<number>();
-    for (const row of requirementCoverage) {
-      if (row.project_id == null) continue;
-      reqToProject.set(row.requirement_id, row.project_id);
-      const entry = map.get(row.project_id) ?? { requirementsCount: 0, controlsCount: 0, verifiedCount: 0, confirmedCount: 0, probableCount: 0, requirementsWithoutMapping: 0 };
-      entry.requirementsCount += 1;
-      map.set(row.project_id, entry);
-    }
-    const seenPerProject = new Map<number, Set<number>>();
-    for (const link of requirementControlLinks) {
-      const projectId = reqToProject.get(link.requirement_id);
-      if (projectId == null) continue;
-      reqIdsWithLinks.add(link.requirement_id);
-      const seen = seenPerProject.get(projectId) ?? new Set<number>();
-      if (seen.has(link.control_id)) continue;
-      seen.add(link.control_id);
-      seenPerProject.set(projectId, seen);
-      const entry = map.get(projectId);
-      if (!entry) continue;
-      entry.controlsCount += 1;
-      if (link.verification_status === "verified") entry.verifiedCount += 1;
-      if (link.mapping_confidence === "confirmed") entry.confirmedCount += 1;
-      else entry.probableCount += 1;
-    }
-    for (const row of requirementCoverage) {
-      if (row.project_id == null || reqIdsWithLinks.has(row.requirement_id)) continue;
-      const entry = map.get(row.project_id);
-      if (entry) entry.requirementsWithoutMapping += 1;
+    if (!modern) return map;
+    for (const [projectId, counts] of modern.byProject) {
+      const paths = modern.paths.filter(path => path.project_id === projectId);
+      const verified = new Set(paths.filter(path => path.verification_status === "verified").map(path => path.control_id));
+      const mapped = new Set(paths.map(path => path.requirement_id));
+      map.set(projectId, {
+        requirementsCount: counts.requirements,
+        controlsCount: counts.controls,
+        verifiedCount: verified.size,
+        confirmedCount: paths.filter(path => path.mapping_confidence === "confirmed").length,
+        probableCount: paths.filter(path => path.mapping_confidence === "probable").length,
+        requirementsWithoutMapping: new Set(requirementCoverage.filter(row => row.project_id === projectId && !mapped.has(row.requirement_id)).map(row => row.requirement_id)).size,
+      });
     }
     return map;
-  }, [requirementCoverage, requirementControlLinks, mappingReady]);
+  }, [requirementCoverage, modern]);
 
   const stats = useMemo(() => {
     const missingDates = projects.filter((project) => !project.target_end_date).length;
@@ -213,9 +210,9 @@ function ProjectRegisterContent() {
       planned: projects.filter((project) => project.status === "planned").length,
       active: projects.filter((project) => project.status === "in_progress").length,
       missingDates,
-      linked: new Set(links.map((link) => link.control_id)).size,
+      linked: legacy?.controls ?? 0,
     };
-  }, [projects, links]);
+  }, [projects, legacy]);
 
   const filteredProjects = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ar");
@@ -314,10 +311,12 @@ function ProjectRegisterContent() {
           <Metric label="قيد التنفيذ" value={projectsReady ? stats.active : unavailable} tone="active" />
           <Metric label="بلا تاريخ مستهدف" value={projectsReady ? stats.missingDates : unavailable} tone="warning" />
           <Metric label="ضوابط ذات ربط مباشر مسجّل" value={linksReady ? stats.linked : unavailable} tone="linked" />
-          <Metric label="متطلبات سيبرانية مرتبطة" value={requirementsReady ? requirementCoverage.length : unavailable} tone="linked" />
+          <Metric label="متطلبات سيبرانية مميزة مرتبطة" value={modern ? modern.counts.requirements : unavailable} tone="linked" />
+          <Metric label="علاقات مشروع–متطلب" value={modern ? modern.counts.projectRequirementLinks : unavailable} tone="linked" />
+          <Metric label="ضوابط مميزة عبر المتطلبات" value={modern ? modern.counts.controls : unavailable} tone="linked" />
           <Metric label="ضوابط مرتبطة عبر المتطلبات وحالتها متحققة" value={mappingReady ? requirementStats.verified : unavailable} tone="active" />
-          <Metric label="ربط مؤكَّد (Confirmed)" value={mappingReady ? requirementStats.confirmedMappings : unavailable} tone="linked" />
-          <Metric label="ربط محتمل (Probable)" value={mappingReady ? requirementStats.probableMappings : unavailable} tone="warning" />
+          <Metric label="مواءمات مؤكدة (Confirmed)" value={mappingReady ? requirementStats.confirmedMappings : unavailable} tone="linked" />
+          <Metric label="مواءمات محتملة (Probable)" value={mappingReady ? requirementStats.probableMappings : unavailable} tone="warning" />
           <Metric label="متطلبات بلا ربط ضوابط" value={mappingReady ? requirementStats.requirementsWithoutMapping : unavailable} tone={requirementStats.requirementsWithoutMapping ? "warning" : "muted"} />
         </section>
 
@@ -357,13 +356,14 @@ function ProjectRegisterContent() {
                 <span className={`register-priority ${project.priority}`}>{priorityText[project.priority]}</span>
                 <div className="register-progress"><b>{Number(project.progress_percent)}%</b><i><span style={{ width: `${Math.max(0, Math.min(100, Number(project.progress_percent)))}%` }} /></i></div>
                 <div className="register-req-ctrl-stats">
-                  {!mappingReady ? <span>{unavailable}</span> : !reqStats?.requirementsCount ? <span>{noRelationship}</span> : <><span className="register-stats-line">
+                  {!mappingReady ? <span>العلاقات عبر المتطلبات: {unavailable}</span> : !reqStats?.requirementsCount ? <span>العلاقات عبر المتطلبات: {noRelationship}</span> : <><span className="register-stats-line">
                     {reqStats?.requirementsCount ?? 0} متطلب · {reqStats?.controlsCount ?? 0} ضوابط · {reqStats?.verifiedCount ?? 0} متحقق
                   </span>
                   <span className="register-mapping-line">
-                    {reqStats?.confirmedCount ?? 0} مؤكد · {reqStats?.probableCount ?? 0} محتمل
+                    {reqStats?.confirmedCount ?? 0} مسار مؤكد · {reqStats?.probableCount ?? 0} مسار محتمل
                     {Boolean(reqStats?.requirementsWithoutMapping) && <em className="register-needs-mapping">يحتاج ربط ضابط</em>}
                   </span></>}
+                  <span className="register-mapping-line">روابط مباشرة موروثة: {linksReady ? new Set(links.filter(link => link.project_id === project.id).map(link => link.control_id)).size : unavailable}</span>
                 </div>
                 <div className="register-actions">
                   <Link className="register-action-primary" href={projectHref(project.id, "register", params)}>صفحة المشروع ←</Link>

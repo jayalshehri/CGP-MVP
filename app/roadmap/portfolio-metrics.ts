@@ -135,30 +135,28 @@ export function requirementRollup(
   projectRequirements: ProjectRequirementRow[],
   requirementControlLinks: RequirementControlLink[],
 ): RequirementRollup {
-  const uniqueControlIds = new Set(requirementControlLinks.map((link) => link.control_id));
-  const uniqueLinks = Array.from(uniqueControlIds).map(
-    (controlId) => requirementControlLinks.find((link) => link.control_id === controlId)!,
-  );
-  const verified = uniqueLinks.filter((link) => isVerified(link.verification_status)).length;
+  const uniqueControls = new Map<number, RequirementControlLink>();
+  for (const link of requirementControlLinks) uniqueControls.set(link.control_id, link);
+  const verified = Array.from(uniqueControls.values()).filter((link) => isVerified(link.verification_status)).length;
   // A requirement with zero linked controls ("Needs Control Mapping" / Unresolved) is
   // derived live from the junction table, never a stored/guessed status — it is excluded
   // from Verified/Contribution/Coverage below simply because it contributes no controls,
   // but it still counts toward requirementsCount.
   const requirementIdsWithLinks = new Set(requirementControlLinks.map((link) => link.requirement_id));
-  const requirementsWithoutMapping = projectRequirements.filter(
+  const requirementsWithoutMapping = new Set(projectRequirements.filter(
     (item) => !requirementIdsWithLinks.has(item.requirement_id),
-  ).length;
+  ).map(item => item.requirement_id)).size;
   return {
-    requirementsCount: projectRequirements.length,
-    linkedControlsCount: uniqueControlIds.size,
+    requirementsCount: new Set(projectRequirements.map(item => item.requirement_id)).size,
+    linkedControlsCount: uniqueControls.size,
     full: projectRequirements.filter((item) => item.coverage_type === "full").length,
     partial: projectRequirements.filter((item) => item.coverage_type === "partial").length,
     supporting: projectRequirements.filter((item) => item.coverage_type === "supporting").length,
-    readyForVerification: uniqueLinks.filter((link) => isReadyForVerification(link.evidence_status, link.verification_status)).length,
+    readyForVerification: Array.from(uniqueControls.values()).filter((link) => isReadyForVerification(link.evidence_status, link.verification_status)).length,
     verified,
-    complianceContributionPercent: uniqueLinks.length ? Math.round((verified / uniqueLinks.length) * 100) : null,
-    confirmedMappings: uniqueLinks.filter((link) => link.mapping_confidence === "confirmed").length,
-    probableMappings: uniqueLinks.filter((link) => link.mapping_confidence === "probable").length,
+    complianceContributionPercent: uniqueControls.size ? Math.round((verified / uniqueControls.size) * 100) : null,
+    confirmedMappings: requirementControlLinks.filter((link) => link.mapping_confidence === "confirmed").length,
+    probableMappings: requirementControlLinks.filter((link) => link.mapping_confidence === "probable").length,
     requirementsWithoutMapping,
   };
 }
