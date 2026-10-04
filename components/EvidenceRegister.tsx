@@ -3,7 +3,14 @@ import Link from 'next/link';
 import {useId, useState} from 'react';
 import EvidenceDownload from '@/components/EvidenceDownload';
 import StatusBadge from '@/components/StatusBadge';
-import {formatComplianceDate, isExpired} from '@/lib/grc';
+import {formatComplianceDate, scheduleState} from '@/lib/grc';
+
+// Presentation only: reuse the product's Riyadh-calendar 30-day proximity window.
+export function evidenceExpiryState(value:string|null){
+  const proximity=scheduleState(value);
+  return proximity==='unscheduled'?'unspecified':proximity==='overdue'?'expired':proximity==='upcoming'?'valid':'soon';
+}
+const expiryLabels={valid:'سارية',soon:'تنتهي قريبًا',expired:'منتهية',unspecified:'غير محددة'};
 
 export type EvidenceRegisterRow = {
   id:number; control_id:number; version_number:number; is_current:boolean;
@@ -18,9 +25,9 @@ export type EvidenceRegisterRow = {
 export default function EvidenceRegister({rows,canReview}:{rows:EvidenceRegisterRow[];canReview:boolean}) {
   return <div className="evidence-table-scroll"><table className="evidence-table">
     <caption className="evidence-register-caption">سجل الأدلة والإصدارات — افتح تفاصيل الدليل لعرض بيانات الرفع والقرار.</caption>
-    <colgroup><col className="evidence-name-column"/><col className="evidence-control-column"/><col/><col/><col className="evidence-action-column"/></colgroup>
-    <thead><tr><th scope="col">الدليل والإصدار</th><th scope="col">الضابط والإطار</th><th scope="col">حالة المراجعة</th><th scope="col">الصلاحية</th><th scope="col">الإجراءات</th></tr></thead>
-    <tbody>{!rows.length?<tr><td colSpan={5} className="evidence-empty">لا توجد أدلة مطابقة حاليًا.</td></tr>:rows.map(row=><EvidenceEntry key={`${row.id}-${row.control_id}-${row.association}`} row={row} canReview={canReview}/>)}</tbody>
+    <colgroup><col className="evidence-name-column"/><col className="evidence-control-column"/><col className="evidence-framework-column"/><col className="evidence-owner-column"/><col className="evidence-version-column"/><col className="evidence-status-column"/><col className="evidence-expiry-column"/><col className="evidence-action-column"/></colgroup>
+    <thead><tr><th scope="col">الدليل</th><th scope="col">الضابط</th><th scope="col">الإطار</th><th scope="col">المالك</th><th scope="col">الإصدار</th><th scope="col">الحالة</th><th scope="col">الصلاحية</th><th scope="col">الإجراءات</th></tr></thead>
+    <tbody>{!rows.length?<tr><td colSpan={8} className="evidence-empty">لا توجد أدلة مطابقة حاليًا.</td></tr>:rows.map(row=><EvidenceEntry key={`${row.id}-${row.control_id}-${row.association}`} row={row} canReview={canReview}/>)}</tbody>
   </table></div>;
 }
 
@@ -29,18 +36,21 @@ function EvidenceEntry({row,canReview}:{row:EvidenceRegisterRow;canReview:boolea
   const detailId=useId();
   const name=row.evidence_name||row.file_name||`دليل ${row.id}`;
   const reviewable=canReview&&row.is_current&&['pending_review','under_review'].includes(row.status||'');
+  const expiry=evidenceExpiryState(row.valid_until);
   return <>
     <tr className="evidence-summary-row">
       <td className="evidence-primary"><strong>{name}</strong><small dir="auto">{row.file_name||'اسم الملف غير موثق'}</small>
-        <span className="evidence-version">الإصدار <b dir="ltr">{row.version_number}</b>{!row.is_current&&' · إصدار سابق'}</span>
         <button type="button" className="evidence-disclosure" aria-expanded={expanded} aria-controls={detailId} onClick={()=>setExpanded(!expanded)}>{expanded?'إخفاء التفاصيل':'تفاصيل الدليل'} <span aria-hidden="true">{expanded?'−':'+'}</span></button>
       </td>
-      <td><Link className="evidence-control-link" href={`/controls/${row.control_id}`}><b dir="ltr">{row.framework_code} · {row.target_control_code}</b><span>{row.control?.title_ar||'فتح الضابط'}</span></Link></td>
+      <td><Link className="evidence-control-link" href={`/controls/${row.control_id}`}><b dir="ltr">{row.target_control_code}</b><span>{row.control?.title_ar||'فتح الضابط'}</span></Link></td>
+      <td><span dir="ltr">{row.framework_code}</span></td>
+      <td>{row.control?.control_owner||'غير معيّن'}</td>
+      <td><span className="evidence-version"><b dir="ltr">{row.version_number}</b>{!row.is_current&&<small>إصدار سابق</small>}</span></td>
       <td><StatusBadge status={row.status||''}/></td>
-      <td><span className={`evidence-validity${isExpired(row.valid_until)?' evidence-validity-expired':''}`}>{row.valid_until?formatComplianceDate(row.valid_until,true):'غير محددة'}{isExpired(row.valid_until)&&<small>منتهية الصلاحية</small>}</span></td>
-      <td><div className="evidence-actions"><EvidenceDownload path={row.file_path} name={row.file_name}/>{reviewable&&<Link className="evidence-review-link" href={`/review#evidence-${row.id}`}>مراجعة ←</Link>}</div></td>
+      <td><span className={`evidence-validity evidence-validity-${expiry}`}>{expiryLabels[expiry]}{row.valid_until&&<time dateTime={row.valid_until} dir="ltr">{formatComplianceDate(row.valid_until,true)}</time>}</span></td>
+      <td><div className="evidence-actions"><EvidenceDownload path={row.file_path} name={row.file_name}/><Link className="evidence-open-control" href={`/controls/${row.control_id}`}>فتح الضابط</Link>{reviewable&&<Link className="evidence-review-link" href={`/review#evidence-${row.id}`}>مراجعة ←</Link>}</div></td>
     </tr>
-    <tr className="evidence-detail-row" hidden={!expanded}><td colSpan={5}>
+    <tr className="evidence-detail-row" hidden={!expanded}><td colSpan={8}>
       <section id={detailId} className="evidence-detail-panel" aria-label={`تفاصيل الدليل: ${name}`}>
         <div><h3>بيانات الدليل</h3><dl><div><dt>تاريخ الرفع</dt><dd>{formatComplianceDate(row.uploaded_at)}</dd></div><div><dt>رافع الدليل</dt><dd>{row.uploader_name||'غير موثق بالاسم'}</dd></div><div><dt>مالك الضابط</dt><dd>{row.control?.control_owner||'غير معيّن'}</dd></div><div><dt>نوع الربط</dt><dd>{row.association==='shared'?'دليل مشترك عبر مواءمة معتمدة':'دليل مباشر'}</dd></div></dl></div>
         <div><h3>الوصف</h3><p>{row.description||'لا يوجد وصف مسجل.'}</p></div>

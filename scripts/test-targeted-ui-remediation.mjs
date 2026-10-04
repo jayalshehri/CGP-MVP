@@ -12,7 +12,7 @@ const require=createRequire(import.meta.url);
 const root=new URL('../',import.meta.url);
 const source=file=>readFileSync(new URL(file,root),'utf8');
 const noWrite=()=>{throw new Error('Live effects/mutations are forbidden in visual tests');};
-function load(file,{states={},database={from:noWrite,rpc:noWrite},query=''}={}){
+function load(file,{states={},database={from:noWrite,rpc:noWrite},query='',clock=Date}={}){
   const cache=new Map();
   function compile(path){
     if(cache.has(path))return cache.get(path);
@@ -30,7 +30,7 @@ function load(file,{states={},database={from:noWrite,rpc:noWrite},query=''}={}){
       if(name.startsWith('@/')||name.startsWith('.')){const relative=name.startsWith('@/')?name.slice(2):posix.join(posix.dirname(path),name);return compile(relative+(existsSync(new URL(relative+'.tsx',root))?'.tsx':'.ts'));}
       return require(name);
     };
-    vm.runInNewContext(code,{module:loadedModule,exports:loadedModule.exports,require:resolve,console,Date,Intl,URLSearchParams},{filename:path});
+    vm.runInNewContext(code,{module:loadedModule,exports:loadedModule.exports,require:resolve,console,Date:clock,Intl,URLSearchParams},{filename:path});
     return loadedModule.exports;
   }
   return compile(file);
@@ -46,7 +46,8 @@ export function visualMarkup(area,mode='populated'){
   }
   if(area==='evidence'){
     const component=load('components/EvidenceRegister.tsx',{states:{'components/EvidenceRegister.tsx':{0:mode==='expanded'}}}).default;
-    return '<main class="workflow-page evidence-page"><h1>مستودع الأدلة</h1>'+render(React.createElement(component,{rows:mode==='empty'?[]:[evidence,{...evidence,id:902,evidence_name:'سجل مراجعة الصلاحيات',file_name:'review.pdf',association:'direct',status:'accepted',valid_until:'2027-12-31',reviewed_at:null}],canReview:true}))+'</main>';
+    const soon=new Date();soon.setUTCDate(soon.getUTCDate()+10);
+    return '<main class="workflow-page evidence-page"><h1>مستودع الأدلة</h1>'+render(React.createElement(component,{rows:mode==='empty'?[]:[evidence,{...evidence,id:902,evidence_name:'سجل مراجعة الصلاحيات',file_name:'review.pdf',association:'direct',status:'accepted',valid_until:'2099-12-31',reviewed_at:null},{...evidence,id:903,evidence_name:'تقرير المتابعة',valid_until:soon.toISOString().slice(0,10)},{...evidence,id:904,evidence_name:'سجل الأدلة',valid_until:null}],canReview:true}))+'</main>';
   }
   if(area==='cycles'){
     const component=load('components/AssessmentPortfolio.tsx').AssessmentPortfolioView;
@@ -64,10 +65,18 @@ export async function tests(){
   let n=0;const check=(value,message)=>{assert.ok(value,message);n++;};
   const collapsed=visualMarkup('evidence'),expanded=visualMarkup('evidence','expanded');
   check(collapsed.includes('aria-expanded="false"')&&collapsed.includes('evidence-detail-row" hidden'), 'details initially collapsed');
-  check(expanded.includes('aria-expanded="true"')&&expanded.includes('<td colSpan="5">'), 'details occupy full-width sibling row');
+  check(expanded.includes('aria-expanded="true"')&&expanded.includes('<td colSpan="8">'), 'details occupy all eight columns in full-width sibling row');
   check(expanded.includes('رافع الدليل التجريبي')&&expanded.includes('مراجع مستقل')&&expanded.includes('فريق إدارة الوصول'), 'metadata retained');
   check(expanded.includes('/controls/501')&&expanded.includes('/review#evidence-901'), 'exact control/review destination unchanged');
-  check(expanded.includes('منتهية الصلاحية')&&expanded.includes('الإصدار'), 'expiry and version retained');
+  check(expanded.includes('منتهية')&&expanded.includes('الإصدار'), 'expiry and version retained');
+  for(const label of ['الدليل','الضابط','الإطار','المالك','الإصدار','الحالة','الصلاحية','الإجراءات'])check(collapsed.includes(`<th scope="col">${label}</th>`),`compact register retains ${label} column`);
+  const summary=collapsed.slice(collapsed.indexOf('evidence-summary-row'),collapsed.indexOf('evidence-detail-row'));
+  for(const value of ['فريق إدارة الوصول','ECC','ECC-1-1-3-LONG-IDENTIFIER','معاينة','تنزيل الدليل','فتح الضابط','تفاصيل الدليل'])check(summary.includes(value),`summary retains ${value}`);
+  for(const state of ['valid','soon','expired','unspecified'])check(collapsed.includes(`evidence-validity-${state}`),`expiry badge ${state}`);
+  class FixedDate extends Date{constructor(...args){super(...(args.length?args:['2026-10-04T12:00:00Z']));}}
+  const expiry=load('components/EvidenceRegister.tsx',{clock:FixedDate}).evidenceExpiryState;
+  for(const [date,expected] of [[null,'unspecified'],['2026-10-03','expired'],['2026-10-04','soon'],['2026-11-03','soon'],['2026-11-04','valid']])check(expiry(date)===expected,`Riyadh expiry boundary ${date}: ${expected}`);
+  check(!summary.includes('<td class="grc-warning"')&&!summary.includes('<td class="evidence-validity'),'expiry color belongs to badge only');
   check(!expanded.slice(expanded.indexOf('evidence-summary-row'),expanded.indexOf('evidence-detail-row')).includes('تفاصيل توثيق'), 'description cannot stretch summary row');
   const evidenceComponent=load('components/EvidenceRegister.tsx').default;
   check(!render(React.createElement(evidenceComponent,{rows:[evidence],canReview:false})).includes('/review#'), 'no extra review authority');
@@ -97,12 +106,23 @@ export async function tests(){
   check(mappingHtml.includes('mapping-review-601')&&mappingHtml.includes('colSpan="4"'), 'deliberate full-width mapping workspace');
   check(mappingHtml.includes('/controls/501')&&mappingHtml.includes('/controls/502'), 'mapping identities retained');
   check(mappingHtml.includes('تصدير CSV')&&mappingHtml.includes('طباعة / PDF'), 'exports retained');
+  check(!mappingHtml.includes('إنشاء مقترح مواءمة'),'primary proposal UI is absent');
+  check(source('app/mappings/page.tsx').includes("action:'create'"),'dormant creation command preserved');
+  const mappingRows=Array.from({length:72},(_,i)=>({...mapping,id:i+1,validation_status:i<30?'approved':'pending'}));
+  const mappingPage=(extra={})=>render(React.createElement(load('app/mappings/page.tsx',{states:{'app/mappings/page.tsx':{1:mappingRows,2:'reviewer',4:false,...extra}}}).default));
+  check(mappingPage().includes('عدد العلاقات المطابقة: 72'),'72 supplied relationships remain 72 without suppression');
+  check(mappingPage({9:'approved'}).includes('عدد العلاقات المطابقة: 30'),'same status filter preserves count');
+  check(mappingPage({6:'no-match'}).includes('عدد العلاقات المطابقة: 0'),'search zero reflects actual filter');
+  check(source('app/mappings/page.tsx').includes("supabase.rpc('cgp_crosswalk')"),'existing relationship RPC read preserved');
   const form=visualMarkup('findings'),pinned=visualMarkup('findings','pinned'),unavailable=visualMarkup('findings','unavailable');
   check(!form.includes('معرّف سجل المصدر')&&form.includes(sourceOption.label), 'human-readable source choices replace raw ID input');
   check(pinned.includes(sourceOption.label)&&pinned.includes('findings-source-reference'), 'exact pinned source readable');
   check(form.includes('إرشاد داخلي في CGP')&&form.includes('ليس منهجية تصنيف صادرة عن NCA'), 'guidance not falsely regulatory');
   check(unavailable.includes('المصادر غير متاحة حاليًا')&&unavailable.includes('لن يُستخدم مصدر بديل'), 'failed source never becomes zero or fallback');
   check(form.includes('تُضاف الإجراءات التصحيحية')&&form.includes('اختياري'), 'progressive action planning and optional fields');
+  check(form.includes('findings-step-number')&&form.includes('من سيعالجها ومتى؟'),'four guided sections styled without changing semantics');
+  check(/<details id="finding-severity-guidance" class="findings-severity-help">/.test(form),'severity guidance defaults collapsed without open attribute');
+  check(!/موعد الاستحقاق[^<]*<input[^>]*required/.test(form),'due date remains optional');
   for(const area of ['evidence','cycles','mappings'])check(visualMarkup(area,'empty').includes('لا توجد'), `${area} true empty state`);
   function database(pages){const calls=[];return {calls,from(table){calls.push(['from',table]);const builder={};for(const name of ['select','not','eq','order','range'])builder[name]=(...args)=>{calls.push([name,...args]);return builder;};builder.then=resolve=>Promise.resolve(pages.shift()).then(resolve);return builder;}};}
   const db=database([{data:[{id:891,code:'1-1-3',title:'عنوان',cycle:{scope_name:'نطاق',frameworks:{code:'ECC'}}}],count:1,error:null}]);

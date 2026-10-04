@@ -5,7 +5,7 @@ Branch: `codex/targeted-ui-ux-remediation`.
 
 ## Boundaries and preserved contracts
 
-- Evidence register: five compact summary columns; uploader/owner/description/decision metadata in an accessible full-width sibling detail row. Existing download/preview component, filters, counts, current-version decision eligibility and exact control/review destinations unchanged.
+- Evidence register: eight compact summary columns (evidence, control, framework, owner, version, state, expiry, actions); uploader/description/decision metadata in an accessible full-width sibling detail row. Existing download/preview component, filters, counts, current-version decision eligibility and exact control/review destinations unchanged.
 - Assessment portfolio: same RPC, filters, calculations and next-action precedence. Full-width table, labeled gap badges, progress and exact-cycle CTA. No average across scopes.
 - Mapping: source → relationship → target → state before the review workspace. Existing RPC payload, revision/independence checks, filters, paging, CSV and print views preserved.
 - Findings: existing source kinds only. Authorized SELECTs supply human-readable labels; selected IDs remain internal values. Pinned source context is resolved by exact ID, never substituted. Loading/unavailable/empty are separate. Missing/incomplete reads disable creation. Existing authoritative command remains unchanged and rechecks source eligibility/security.
@@ -49,3 +49,27 @@ Manual review found that the assessment portfolio component was not mounted in `
 Page-composition regression coverage now includes the section, all required columns, exact-cycle links, filters, empty/unavailable states and restricted-role presentation. All 16 test scripts, TypeScript, changed-file lint and Webpack build passed after this correction. Actual page-component local browser rendering at 1440px confirmed the integrated section, RTL and no horizontal overflow. Preview live visual certification is separate from this deterministic local check.
 
 Use the feature Preview only. Open Evidence details, assessment cycles, Mapping details and the New Finding form. Do not save or execute a decision when reviewing. Unsupported source kinds remain outside this package.
+
+## Manual review correction pass after b1d7f61
+
+- Area A: restored the original eight-column operational hierarchy and explicit preview/download/open-control actions. Retained the separate eight-column-spanning details row and all detail metadata. Expiry is a compact badge (valid, within 30 days, expired, unspecified), derived through the existing Riyadh-calendar `scheduleState` helper; no stored value, eligibility or authority change.
+- Area B: no code changes in this correction. The approved Compliance Center placement below framework cards, table, filtering and exact-cycle links remain unchanged.
+- Area C: hid the prominent proposal-creation entry only; dormant creation implementation and command contract remain intact. Reads, filters, counts, review workflow, permissions and routes were not changed.
+- Area D: numbered the four approved questions, added short guidance, used a compact two-column desktop form, and grouped optional owner/due fields. Native severity disclosure remains closed by default; complete internal CGP guidance and NCA disclaimer remain available. Inputs, handlers, source identity and commands are unchanged.
+
+### Mapping count investigation (read-only QA)
+
+Authenticated QA Admin on the reviewed feature Preview showed zero matching rows with empty search and all filters set to All. The QA project is `lkozjnpfufdpzqtzdxhe` (CGP-QA). A read-only catalog/data inspection returned **0 underlying `public.control_framework_links` rows and 0 `public.cgp_crosswalk()` rows**. The function remains STABLE, security-invoker, with an empty search_path and the existing control/framework joins. The existing authenticated team-read policy permits admin/cybersecurity_team. No QA data was changed.
+
+Compared the complete page read effect, visible-row filtering and framework-option derivation with RC3: unchanged. Deterministic production-page tests preserve 72 supplied relationships as 72, apply an approved filter as 30, and unmatched search as zero. Thus the current zero is explained by the current QA dataset, not demonstrated suppression introduced by this feature.
+
+The earlier view showing 72 has not been independently located; its environment, time, user and dataset cannot be certified from current evidence. Its URL/context has been requested. **Historical 72-versus-0 reconciliation remains open; Area C is not declared fully PASS.** No count-specific application fix or data seeding is justified.
+
+### Correction validation
+
+- All 16 `scripts/test-*.mjs` passed, including S1-A/B/C/D. Targeted remediation coverage: 83 assertions passed.
+- TypeScript, changed-file ESLint (zero findings), diff whitespace check and production Webpack build passed.
+- Actual production-component local browser rendering checked at 1280×960, 1440×1000 and 1920×1080: long Evidence/control titles, all four expiry badges, closed/open details, unchanged integrated Compliance section, populated/empty Mapping presentation and review fields, and Finding guidance closed/open with optional owner/due fields.
+- No page-level horizontal overflow at the three widths. At 1280, Evidence summary row heights were identical closed/open (`167, 125.5, 167, 167` pixels); detail content is a separate sibling row. A status-label overlap found at 1280 was fixed by scoped badge wrapping; final summary cells have no overflow.
+- Local visual fixtures use the production components/CSS, not a release route or live QA fixtures. Populated Mapping review was inspected locally because the live QA dataset is empty. These checks do not claim a live Mapping lifecycle decision was executed.
+- No QA mutations, Production access/writes, migrations, RLS/grant/RPC/auth/role changes, main/qa/RC3/S2-B changes. P1 remains OPEN. This is a feature Preview for operator review, not a merge or freeze.

@@ -239,12 +239,12 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
     </div>
     {overdue.length>0&&<p className="findings-overdue findings-overdue-summary" role="status">{overdue.length} ملاحظة متأخرة ضمن الملاحظات غير المغلقة؛ التأخر ليس مرحلة منفصلة من دورة الملاحظة.</p>}
     {createOpen&&canCreate&&<form className="findings-panel findings-create" onSubmit={createFinding}>
-      <h2>تسجيل ملاحظة</h2><p className="findings-context">سجّل المشكلة ومصدرها أولًا. تُضاف الإجراءات التصحيحية وتُتابع بعد حفظ الملاحظة؛ لا تُنشأ تلقائيًا من درجة الامتثال.</p>
-      <fieldset className="findings-create-section"><legend>١. ما المشكلة؟</legend><div className="findings-form-grid">
+      <header className="findings-create-heading"><h2>تسجيل ملاحظة</h2><p className="findings-context">سجّل المشكلة ومصدرها أولًا. تُضاف الإجراءات التصحيحية وتُتابع بعد حفظ الملاحظة؛ لا تُنشأ تلقائيًا من درجة الامتثال.</p></header>
+      <fieldset className="findings-create-section"><legend><span className="findings-step-number">١</span> ما المشكلة؟</legend><p className="findings-step-hint">عنوان واضح ووصف يبيّن المشكلة المكتشفة.</p><div className="findings-form-grid">
         <label className="findings-wide">عنوان الملاحظة<input required minLength={2} maxLength={300} value={newFinding.title} onChange={e=>setNewFinding({...newFinding,title:e.target.value})} placeholder="وصف موجز للمشكلة المكتشفة"/></label>
         <label className="findings-wide">وصف المشكلة<textarea required value={newFinding.description} onChange={e=>setNewFinding({...newFinding,description:e.target.value})}/></label>
       </div></fieldset>
-      <fieldset className="findings-create-section"><legend>٢. من أين اكتُشفت؟</legend><div className="findings-form-grid">
+      <fieldset className="findings-create-section findings-source-step"><legend><span className="findings-step-number">٢</span> من أين اكتُشفت؟</legend><p className="findings-step-hint">اختر المصدر والسجل المرتبط ضمن صلاحياتك.</p><div className="findings-form-grid">
         <label>المصدر<select disabled={pinnedSource} value={newFinding.source_type} onChange={e=>{setSourceOptions({kind:e.target.value as FindingSource,state:'loading',rows:[]});setNewFinding({...newFinding,source_type:e.target.value as FindingSource,source_record_id:''});}}>
           <option value="assessment">بند تقييم</option><option value="risk" disabled={!teamRole(role)}>خطر</option>
           <option value="vulnerability" disabled={!teamRole(role)}>ثغرة</option>
@@ -252,13 +252,13 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
         </select></label>
         <div className="findings-source-field"><span>السجل المرتبط</span>{pinnedSource?<p className="findings-source-reference" role="status">{resolvedSource?.label||(sourceOptions.state==='loading'?'جاري التحقق من المصدر…':'المصدر غير متاح للتسجيل ضمن صلاحياتك أو حالته الحالية.')}</p>:<label className="findings-source-select"><span className="findings-context">اختر السجل باسمه؛ يُحفظ الربط تلقائيًا.</span><select aria-label="السجل المرتبط" required disabled={sourceOptions.state!=='ready'||sourceOptions.kind!==newFinding.source_type} value={newFinding.source_record_id} onChange={e=>setNewFinding({...newFinding,source_record_id:e.target.value})}><option value="">{sourceOptions.state==='loading'?'جاري تحميل المصادر…':sourceOptions.state==='unavailable'?'المصادر غير متاحة حاليًا':'اختر سجل المصدر'}</option>{sourceOptions.kind===newFinding.source_type&&sourceOptions.rows.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}</div>
       </div>{!pinnedSource&&sourceOptions.state==='ready'&&!sourceOptions.rows.length&&<p className="findings-context">لا توجد مصادر متاحة للتسجيل ضمن هذا النوع وصلاحياتك.</p>}{sourceOptions.state==='unavailable'&&<p className="findings-unavailable" role="status">تعذر عرض مصدر قابل للاختيار. أعد فتح النموذج أو انتقل إلى سجل المصدر؛ لن يُستخدم مصدر بديل.</p>}<p className="findings-context">يرتبط بند التقييم بضابطه ودورته تلقائيًا. الربط بالتدقيق الداخلي غير مفعّل حاليًا.</p></fieldset>
-      <fieldset className="findings-create-section"><legend>٣. ما خطورتها؟</legend><div className="findings-form-grid">
+      <fieldset className="findings-create-section findings-severity-step"><legend><span className="findings-step-number">٣</span> ما خطورتها؟</legend><p className="findings-step-hint">تقدير الفريق بحسب الأثر والسياق المتاح.</p><div className="findings-form-grid">
         <label>الخطورة<select aria-describedby="finding-severity-guidance" value={newFinding.severity} disabled={!teamRole(role)} onChange={e=>setNewFinding({...newFinding,severity:e.target.value})}>
           {Object.entries(severityLabels).map(([key,value])=><option key={key} value={key}>{value}</option>)}
         </select></label>
         <details id="finding-severity-guidance" className="findings-severity-help"><summary>كيف أحدد الخطورة؟</summary><p>إرشاد داخلي في CGP لتوثيق تقدير الفريق، وليس منهجية تصنيف صادرة عن NCA أو حسابًا آليًا للمخاطر.</p><ul><li>غير مصنفة: يلزم استكمال التقييم قبل تحديد الخطورة.</li><li>منخفضة: أثر محدود يمكن معالجته ضمن المتابعة الاعتيادية.</li><li>متوسطة: أثر يستدعي خطة معالجة ومتابعة محددة.</li><li>عالية: أثر كبير يستدعي اهتمامًا ومعالجة ذات أولوية.</li><li>حرجة: أثر شديد يستدعي تصعيدًا عاجلًا وفق إجراءات الجهة.</li></ul><p>استند إلى الأثر والسياق والمعلومات المتاحة، ووثّق المبرر في وصف الملاحظة.</p></details>
       </div></fieldset>
-      <fieldset className="findings-create-section"><legend>٤. من سيعالجها ومتى؟</legend><div className="findings-form-grid">
+      <fieldset className="findings-create-section"><legend><span className="findings-step-number">٤</span> من سيعالجها ومتى؟</legend><p className="findings-step-hint">يمكن تحديد المالك والموعد الآن أو استكمالهما لاحقًا.</p><div className="findings-form-grid">
         <label>مالك الملاحظة — اختياري<select value={newFinding.owner_id} disabled={!teamRole(role)} onChange={e=>setNewFinding({...newFinding,owner_id:e.target.value})}>
           <option value="">غير محدد</option>{people.filter(p=>['admin','cybersecurity_team','control_owner'].includes(p.role)).map(p=><option key={p.user_id} value={p.user_id}>{p.display_name||p.user_id}</option>)}
           {!teamRole(role)&&<option value={actor}>أنا</option>}

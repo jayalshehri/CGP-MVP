@@ -59,12 +59,22 @@
 .findings-edit { margin:14px 0; border:1px solid var(--cgp-line); border-radius:9px; padding:12px 14px; }
 .findings-edit summary { cursor:pointer; color:var(--cgp-teal-dark); font-weight:700; }
 .findings-edit form { margin-top:12px; }
-.findings-create-section{border:0;border-top:1px solid #e0e9e7;padding:18px 0 8px;margin:22px 0 0;min-width:0}
+.findings-create{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px;align-items:start}
+.findings-create-heading,.findings-create>.findings-buttons{grid-column:1/-1}
+.findings-create-heading h2{font-size:19px}
+.findings-create-heading .findings-context{margin-bottom:0}
+.findings-create-section{border:0;border-top:1px solid #e0e9e7;padding:10px 0 0;margin:0;min-width:0}
 .findings-create-section legend{font-size:15px;font-weight:800;color:#244d51;padding-inline-end:12px}
+.findings-step-number{display:inline-grid;place-items:center;min-width:27px;height:27px;border-radius:8px;background:#eaf5f2;color:var(--cgp-teal-dark);margin-inline-end:5px;font-size:13px}
+.findings-create .findings-step-hint{margin:0 0 12px;color:var(--cgp-muted);font-size:12px;line-height:1.7}
+.findings-create .findings-form-grid{gap:10px 12px}
+.findings-create .findings-source-step .findings-form-grid,.findings-create .findings-severity-step .findings-form-grid{grid-template-columns:1fr}
+.findings-create>.findings-buttons{margin:0;border-top:1px solid var(--cgp-line);padding-top:14px}
 .findings-source-field{display:grid;gap:6px;align-content:start;min-width:0;font-size:13px;font-weight:700}
 .findings-source-reference{margin:0!important;padding:11px 13px;background:#f1f8f6;border:1px solid #d4e7e0;border-radius:8px;line-height:1.8;overflow-wrap:anywhere}
 .findings-source-select select{max-width:100%;text-overflow:ellipsis}.findings-severity-help{align-self:start;border:1px solid #dae6e3;border-radius:9px;padding:10px 13px;background:#f8fbfa}
 .findings-severity-help summary{color:#176658;cursor:pointer;font-size:13px;font-weight:700}.findings-severity-help p,.findings-severity-help li{font-size:12px;color:#536a75;line-height:1.85}.findings-severity-help ul{padding-inline-start:20px}
 .findings-create :focus-visible{outline:3px solid #138b80;outline-offset:3px}
 @media(max-width:900px) { .findings-filter { grid-template-columns:repeat(2,minmax(0,1fr)); } .findings-facts,.findings-action-facts { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:1000px){.findings-create{grid-template-columns:1fr}}
 @media(max-width:600px) { .findings-panel { padding:16px; } .findings-form-grid,.findings-filter,.findings-facts { grid-template-columns:1fr; } .findings-detail>header,.findings-action-card>header,.findings-section-heading { flex-wrap:wrap; } .findings-action-facts { grid-template-columns:repeat(2,minmax(0,1fr)); } }

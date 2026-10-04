@@ -11,6 +11,8 @@ type Mapping={id:number;source_id:number;target_id:number;source_framework:strin
 type ControlChoice={id:number;label:string};
 const types:Record<string,string>={reference:'إشارة مرجعية',supports:'يدعم',partial:'تداخل جزئي',equivalent:'تكافؤ ضمن نطاق موثق'};
 const statuses:Record<string,string>={pending:'بحاجة إلى مراجعة واعتماد',approved:'معتمد',rejected:'مرفوض'};
+// Creation remains implemented for separately authorized workflows, not the primary register.
+const SHOW_MAPPING_PROPOSAL=false;
 export default function MappingsPage(){
  const [choices,setChoices]=useState<ControlChoice[]>([]);
  const [rows,setRows]=useState<Mapping[]>([]),[actor,setActor]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(true),[refresh,setRefresh]=useState(0);
@@ -21,7 +23,7 @@ export default function MappingsPage(){
  const change=(set:(s:string)=>void,v:string)=>{set(v);setPage(0);};
  return <main className="workflow-page ae-page mappings-page" dir="rtl"><WorkflowHeading title="مواءمة الضوابط" description="افهم العلاقة بين ضابط المصدر والضابط الهدف، ثم راجع مرجعها وحدودها قبل الاعتماد. لا ينتقل الالتزام تلقائيًا بين الطرفين."/>
  {error&&<p className="ae-error" role="alert">{error} <button onClick={()=>setRefresh(v=>v+1)}>إعادة المحاولة</button></p>}
- <NewMapping choices={choices} refresh={()=>setRefresh(v=>v+1)}/><div className="workflow-metrics"><WorkflowMetric label="علاقات مسجلة" value={rows.length}/><WorkflowMetric label="علاقات معتمدة" value={rows.filter(r=>r.validation_status==='approved').length} tone="success"/><WorkflowMetric label="بحاجة إلى مراجعة" value={rows.filter(r=>r.validation_status==='pending').length} tone="warning"/></div>
+ {SHOW_MAPPING_PROPOSAL&&<NewMapping choices={choices} refresh={()=>setRefresh(v=>v+1)}/>}<div className="workflow-metrics"><WorkflowMetric label="علاقات مسجلة" value={rows.length}/><WorkflowMetric label="علاقات معتمدة" value={rows.filter(r=>r.validation_status==='approved').length} tone="success"/><WorkflowMetric label="بحاجة إلى مراجعة" value={rows.filter(r=>r.validation_status==='pending').length} tone="warning"/></div>
  <p className="ae-warning">الروابط المستوردة سابقًا محفوظة للمراجعة. راجع رقم المتطلب الكامل وإصدار الوثيقة وحدود التغطية قبل الاعتماد. مشاركة ملف تتطلب مراجعة مستقلة لكل ضابط.</p>
  <div className="ae-toolbar"><label>البحث<input value={search} onChange={e=>change(setSearch,e.target.value)}/></label>{([['الإطار المصدر',source,setSource],['الإطار الهدف',target,setTarget]] as const).map(([l,v,set])=><label key={l}>{l}<select value={v} onChange={e=>change(set,e.target.value)}><option value="">الكل</option>{frameworks.map(f=><option key={f}>{f}</option>)}</select></label>)}<label>العلاقة<select value={type} onChange={e=>change(setType,e.target.value)}><option value="">الكل</option>{Object.entries(types).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><label>الاعتماد<select value={status} onChange={e=>change(setStatus,e.target.value)}><option value="">الكل</option>{Object.entries(statuses).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label></div>
  <div className="ae-actions"><button onClick={()=>csvDownload('control-crosswalk.csv',[['المصدر','الهدف','العلاقة','الاعتماد','المرجع','حدود التغطية'],...visible.map(r=>[`${r.source_framework} ${r.source_code}`,`${r.target_framework} ${r.target_code}`,types[r.coverage_type],statuses[r.validation_status],r.source_reference??'',r.coverage_notes??''])])}>تصدير CSV</button><button onClick={()=>window.print()}>طباعة / PDF</button></div>
