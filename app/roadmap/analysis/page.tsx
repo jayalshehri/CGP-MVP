@@ -10,6 +10,8 @@ import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-r
 import { ReadNotice, ReadSection } from "../read-state";
 import { PlanningInformationSummary } from "../planning-information";
 import { planningReadiness, planningReadinessItems } from "../portfolio-metrics";
+import { readCanonicalPortfolio } from "@/lib/strategy-portfolio-read";
+import type { RelationshipCounts } from "@/lib/strategy-relationships";
 import "../roadmap.css";
 
 type Project = {
@@ -35,11 +37,12 @@ export default function PortfolioAnalysisPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [links, setLinks] = useState<ControlLink[]>([]);
   const [treatments, setTreatments] = useState<Treatment[]>([]);
+  const [modern, setModern] = useState<RelationshipCounts | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reads, setReads] = useState<{ projects: ReadStatus; links: ReadStatus; treatments: ReadStatus }>({ projects: "UNAVAILABLE", links: "UNAVAILABLE", treatments: "UNAVAILABLE" });
   const projectsReady = reads.projects === "COMPLETE";
-  const linksReady = reads.links === "COMPLETE";
+  const linksReady = projectsReady && reads.links === "COMPLETE";
   const treatmentsReady = reads.treatments === "COMPLETE";
   const planningReady = projectsReady && linksReady;
 
@@ -54,11 +57,14 @@ export default function PortfolioAnalysisPage() {
           readStrategyRows((from, to) => supabase.from("cybersecurity_project_gap_treatments").select("id,project_id,priority", { count: "exact" }).order("id").range(from, to), row => row.id),
           readStrategyRows((from, to) => supabase.from("controls").select("id,frameworks!inner(is_active)", { count: "exact" }).eq("frameworks.is_active",true).order("id").range(from, to), row => row.id),
         ]);
+        const modernResult = projectResult.status === "COMPLETE" ? await readCanonicalPortfolio(projectResult.data.map(row => row.id)) : null;
         if (live) {
-          setReads({ projects: projectResult.status, links: linkResult.error || activeControlResult.error ? "UNAVAILABLE" : "COMPLETE", treatments: treatmentResult.status });
+          setReads({ projects: projectResult.status, links: linkResult.status === "COMPLETE" && activeControlResult.status === "COMPLETE" ? "COMPLETE" : "UNAVAILABLE", treatments: treatmentResult.status });
+          setModern(modernResult);
           const activeIds = new Set((activeControlResult.data ?? []).map(row => row.id));
+          const visibleProjects = new Set(projectResult.data.map(row => row.id));
           setProjects((projectResult.data ?? []) as Project[]);
-          setLinks((linkResult.data ?? []).filter(row => activeIds.has(row.control_id)) as ControlLink[]);
+          setLinks((linkResult.data ?? []).filter(row => visibleProjects.has(row.project_id) && activeIds.has(row.control_id)) as ControlLink[]);
           setTreatments((treatmentResult.data ?? []) as Treatment[]);
         }
       } catch (cause) {
@@ -123,12 +129,13 @@ export default function PortfolioAnalysisPage() {
           <Link className="roadmap-primary" href="/roadmap">استكمال بيانات المشاريع ←</Link>
         </header>
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
-        <ReadNotice statuses={[reads.projects, reads.links, reads.treatments]} />
+        <ReadNotice statuses={[reads.projects, reads.links, reads.treatments, modern ? "COMPLETE" : "UNAVAILABLE"]} />
 
         <section className="portfolio-kpis" aria-label="مؤشرات تحليل المحفظة">
           <Kpi label="اكتمال عناصر التخطيط الخمسة الحالية" value={planningReady ? `${analysis.readiness}%` : unavailable} detail="متوسط غير مرجّح لاكتمال العناصر الخمسة" tone="teal" />
           <Kpi label="مشاريع مكتملة العناصر الخمسة" value={planningReady ? `${analysis.complete}/${projects.length}` : unavailable} detail="وفق عناصر التخطيط الخمسة الحالية فقط" tone="blue" />
           <Kpi label="ضوابط ذات ربط مباشر مسجّل" value={linksReady ? analysis.linkedControls : unavailable} detail="من سجل الربط المباشر بين المشروع والضابط" />
+          <Kpi label="ضوابط مميزة عبر المتطلبات" value={modern?.controls ?? unavailable} detail="علاقات حديثة ضمن نطاق القراءة؛ لا تثبت أثر المشروع أو امتثاله" />
           <Kpi label="أولوية إدارية عالية" value={projectsReady ? analysis.highPriority : unavailable} detail="تصنيف إداري، وليس Portfolio Score" tone="amber" />
         </section>
 
