@@ -4,15 +4,13 @@ import Link from "next/link";
 import { myControlsReturn } from "@/lib/my-controls-context";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import EvidenceDownload from "@/components/EvidenceDownload";
+import EvidenceRegister from "@/components/EvidenceRegister";
 import GrcAttention from "@/components/GrcAttention";
-import StatusBadge from "@/components/StatusBadge";
 import { ResultSummary, WorkflowHeading } from "@/components/WorkflowUI";
 import { frameworkOf } from "@/lib/compliance";
 import { ASSESSMENT_ROUTES } from "@/lib/compliance-frameworks";
 import { loadEligibleFrameworkEvidence, type EligibleFrameworkEvidence } from "@/lib/framework-evidence";
 import { positiveId, controlHref } from "@/lib/control360";
-import { formatComplianceDate, isExpired } from "@/lib/grc";
 import { supabase } from "@/lib/supabase";
 import "./evidence.css";
 
@@ -127,21 +125,6 @@ function EvidenceContent(){
    {!contextual&&<label>حالة الدليل<select value={status} onChange={event=>setStatus(event.target.value)}><option value="all">كل الحالات</option><option value="pending_review">بانتظار المراجعة</option><option value="under_review">قيد المراجعة</option><option value="accepted">مقبول</option><option value="rejected">مرفوض</option><option value="changes_requested">يحتاج استكمالًا</option></select></label>}
   </div>
   <ResultSummary count={filtered.length} total={scoped.length} active={!!search||status!=="all"||framework!=="all"} reset={()=>{setSearch("");setStatus("all");setFramework(returnCode??"all");}}/>
-  <div className="evidence-table-scroll"><table className="evidence-table"><thead><tr><th>الدليل</th><th>الضابط</th><th>الإطار</th><th>المالك</th><th>الإصدار</th><th>الحالة</th><th>الصلاحية</th><th>الإجراءات</th></tr></thead><tbody>
-   {filtered.length===0?<tr><td colSpan={8} className="evidence-empty">لا توجد أدلة مطابقة حاليًا.</td></tr>:filtered.map(row=>{
-    const key=`${row.id}-${row.control_id}-${row.association}`;
-    const frameworkCode=row.framework_code;
-    return <tr key={key}>
-     <td className="evidence-primary"><strong>{row.evidence_name||row.file_name||`دليل ${row.id}`}</strong><small>{row.file_name||"اسم الملف غير موثق"}</small><details><summary>تفاصيل الدليل</summary><dl><dt>تاريخ الرفع</dt><dd>{formatComplianceDate(row.uploaded_at)}</dd><dt>رافع الدليل</dt><dd>{row.uploader_name||"غير موثق بالاسم"}</dd><dt>الوصف</dt><dd>{row.description||"لا يوجد"}</dd><dt>نوع الربط</dt><dd>{row.association==="shared"?"دليل مشترك عبر مواءمة معتمدة":"دليل مباشر"}</dd>{row.reviewed_at&&<><dt>تاريخ القرار</dt><dd>{formatComplianceDate(row.reviewed_at)}</dd><dt>المراجع</dt><dd>{row.reviewer_display_name||"مسجل في سجل القرار"}</dd><dt>ملاحظات المراجعة</dt><dd>{row.review_notes||"لا توجد"}</dd></>}</dl></details></td>
-     <td><span dir="ltr">{row.target_control_code}</span><small>{row.control?.title_ar||""}</small></td>
-     <td><span dir="ltr">{frameworkCode}</span></td>
-     <td>{row.control?.control_owner||"غير معيّن"}</td>
-     <td><span dir="ltr">{row.version_number}</span>{!row.is_current&&<small>إصدار سابق</small>}</td>
-     <td><StatusBadge status={row.status||""}/></td>
-     <td className={isExpired(row.valid_until)?"grc-warning":undefined}>{row.valid_until?formatComplianceDate(row.valid_until,true):"غير محددة"}</td>
-     <td><div className="evidence-actions"><EvidenceDownload path={row.file_path} name={row.file_name}/><Link href={`/controls/${row.control_id}`}>فتح الضابط</Link>{["admin","cybersecurity_team"].includes(role)&&row.is_current&&["pending_review","under_review"].includes(row.status||"")&&<Link href={`/review#evidence-${row.id}`}>مراجعة</Link>}</div></td>
-    </tr>;
-   })}
-  </tbody></table></div>
+  <EvidenceRegister rows={filtered} canReview={["admin","cybersecurity_team"].includes(role)}/>
  </main>;
 }

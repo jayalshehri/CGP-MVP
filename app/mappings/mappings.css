@@ -1,0 +1,13 @@
+.mappings-page{min-width:0}.mappings-page>.ae-warning{border-radius:9px;font-size:13px;line-height:1.8;border-inline-start:3px solid #dcb873}
+.mappings-page>.ae-toolbar{display:grid;grid-template-columns:1.6fr repeat(4,minmax(0,1fr));padding:16px;border:1px solid #dce7e6;border-radius:12px;background:#fff}
+.mappings-page>.ae-toolbar label{min-width:0;font-size:12px;font-weight:700}.mappings-page>.ae-toolbar input,.mappings-page>.ae-toolbar select{width:100%;font-weight:400}
+.mappings-page .mapping-table{table-layout:fixed;width:100%;font-size:13px}.mappings-page .mapping-table td:first-child{min-width:0}.mappings-page .mapping-table th{white-space:normal;font-size:12px}
+.mappings-page .mapping-table td{overflow-wrap:anywhere;padding:16px 12px}.mapping-summary a{text-decoration:none!important;line-height:1.65}.mapping-summary a:hover p{text-decoration:underline}.mapping-summary a p{color:#324f5d}.mapping-summary small{font-size:11px}
+.mapping-relationship{display:flex;flex-direction:column;align-items:center;gap:9px;padding:10px 4px;text-align:center;color:#456776;font-size:12px;font-weight:700}.mapping-relationship>span{font-size:23px;color:#70a59a}
+.mapping-status{display:inline-block;font-size:11px;line-height:1.7;padding:4px 9px;background:#fff5df;color:#805715;border-radius:7px}.mapping-status-approved{background:#e7f5ee;color:#186a4f}.mapping-status-rejected{background:#fff0ed;color:#963b30}
+.mappings-page .mapping-open{display:block;margin-top:12px;padding:7px 10px;background:#f2f8f6;color:#11675b;border-color:#bcd6cf;font-size:12px;font-weight:700}
+.mappings-page .mapping-detail-row>td{padding:0;background:#f6faf9}.mapping-review{padding:22px 24px;border-inline-start:3px solid #83b8aa}
+.mapping-review>header{display:flex;justify-content:space-between;gap:20px;align-items:start;margin-bottom:18px}.mapping-review h2{font-size:17px;margin:0}.mapping-review>header p{font-size:12px}.mapping-review>header small{line-height:1.9}
+.mapping-review-fields{display:grid;grid-template-columns:1fr 2fr;gap:16px}.mapping-review-fields label{font-size:12px;font-weight:700}.mapping-review-fields input,.mapping-review-fields select{width:100%;font-weight:400}.mapping-notes{grid-column:1/-1}.mapping-review-fields textarea{width:100%;font-weight:400}.mapping-review .ae-actions{margin-bottom:0}.mapping-review .ae-actions button{font-size:12px}
+@media(max-width:1050px){.mappings-page>.ae-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}.mappings-page>.ae-toolbar label:first-child{grid-column:1/-1}}
+@media(max-width:700px){.mappings-page .mapping-table{min-width:640px}.mapping-review-fields{grid-template-columns:1fr}.mapping-review>header{flex-wrap:wrap}}

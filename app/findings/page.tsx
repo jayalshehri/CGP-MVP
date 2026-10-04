@@ -15,6 +15,7 @@ import {controlHref} from '@/lib/control360';
 import {ASSESSMENT_ROUTES, assessmentHrefFor} from '@/lib/compliance-frameworks';
 import {assessmentItemHref} from '@/lib/assessment-journey';
 import {WorkflowHeading, WorkflowMetric} from '@/components/WorkflowUI';
+import {loadFindingSourceOptions,type FindingSourceOption} from '@/lib/finding-source-options';
 import './findings.css';
 import { reviewContextReturn } from '@/lib/review-context';
 
@@ -75,6 +76,8 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   const [statusFilter,setStatusFilter]=useState('all');
   const [severityFilter,setSeverityFilter]=useState('all');
   const [createOpen,setCreateOpen]=useState(false);
+  const pinnedSource=params.has('source_id');
+  const [sourceOptions,setSourceOptions]=useState<{kind:FindingSource;state:'loading'|'ready'|'unavailable';rows:FindingSourceOption[]}>({kind:sourceFromUrl,state:'loading',rows:[]});
   const [ownerSourceAllowed,setOwnerSourceAllowed]=useState<{actor:string;id:number}|null>(null);
   const [newFinding,setNewFinding]=useState({
     source_type:sourceFromUrl,source_record_id:Number.isSafeInteger(idFromUrl)&&idFromUrl>0?String(idFromUrl):'',
@@ -173,6 +176,20 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
     return()=>{active=false;};
   },[role,sourceFromUrl,idFromUrl,actor]);
   const canCreate=roleCanWork(role)&&(teamRole(role)||(sourceFromUrl==='assessment'&&ownerSourceAllowed?.actor===actor&&ownerSourceAllowed?.id===idFromUrl));
+  useEffect(()=>{
+    if(!createOpen||!canCreate)return;
+    let active=true;
+    const kind=newFinding.source_type;
+    void (async()=>{
+      try{
+        const rows=await loadFindingSourceOptions(kind,pinnedSource?idFromUrl:null);
+        if(active)setSourceOptions({kind,state:'ready',rows});
+      }catch{if(active)setSourceOptions({kind,state:'unavailable',rows:[]});}
+    })();
+    return()=>{active=false;};
+  },[createOpen,canCreate,newFinding.source_type,pinnedSource,idFromUrl]);
+  const resolvedSource=sourceOptions.kind===newFinding.source_type&&sourceOptions.state==='ready'
+    ?sourceOptions.rows.find(option=>String(option.id)===newFinding.source_record_id):undefined;
   const selectFinding=(findingId:number)=>{const next=new URLSearchParams(params.toString());next.set('finding',String(findingId));next.delete('action');next.delete('decision');router.push(`/findings?${next.toString()}`,{scroll:false});};
 
   async function run(action:string,finding:SharedFinding|null,payload:Record<string,unknown>){
@@ -195,7 +212,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
   async function createFinding(event:FormEvent){
     event.preventDefault();
     const sourceId=Number(newFinding.source_record_id);
-    if(!Number.isSafeInteger(sourceId)||sourceId<1){setError('اختر معرّف مصدر صحيحًا.');return;}
+    if(!Number.isSafeInteger(sourceId)||sourceId<1||!resolvedSource){setError('اختر سجل مصدر متاحًا ضمن صلاحياتك.');return;}
     const saved=await run('create_finding',null,{
       ...newFinding,source_record_id:sourceId,owner_id:newFinding.owner_id||null,
       due_date:newFinding.due_date||null,
@@ -211,7 +228,7 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
     {originCode&&<p className="findings-context"><Link href={`/compliance/${originCode}?tab=findings`}>العودة إلى ملاحظات {originCode} ←</Link></p>}
     <WorkflowHeading title={frameworkCode?`الملاحظات والإجراءات التصحيحية — ${frameworkCode}`:"الملاحظات والإجراءات التصحيحية"}
       description={frameworkCode?`الملاحظات المرتبطة فعليًا بإطار ${frameworkCode} ضمن صلاحياتك. نتائج التقييم القديمة مستقلة ومحفوظة في صفحاتها.`:"السجل المشترك المصرّح به يربط مصدر الملاحظة بالمعالجة والتحقق والإغلاق؛ نتائج التقييم القديمة باقية كما هي."}
-      action={canCreate?<button className="workflow-button workflow-primary" onClick={()=>setCreateOpen(v=>!v)}>+ تسجيل ملاحظة</button>:undefined}/>
+      action={canCreate?<button className="workflow-button workflow-primary" onClick={()=>{if(!createOpen)setSourceOptions({kind:newFinding.source_type,state:'loading',rows:[]});setCreateOpen(v=>!v);}}>+ تسجيل ملاحظة</button>:undefined}/>
     {error&&<p className="findings-error" role="alert">{error} <button onClick={()=>router.refresh()}>تحديث الصفحة</button></p>}
     {notice&&<p className="findings-success" role="status">{notice}</p>}
     <div className="workflow-metrics" aria-label="ملخص الملاحظات">
@@ -222,29 +239,33 @@ function FindingsContent({params}:{params:ReturnType<typeof useSearchParams>}){
     </div>
     {overdue.length>0&&<p className="findings-overdue findings-overdue-summary" role="status">{overdue.length} ملاحظة متأخرة ضمن الملاحظات غير المغلقة؛ التأخر ليس مرحلة منفصلة من دورة الملاحظة.</p>}
     {createOpen&&canCreate&&<form className="findings-panel findings-create" onSubmit={createFinding}>
-      <h2>ملاحظة جديدة</h2><p>لا تُنشأ الملاحظة تلقائيًا من درجة الامتثال؛ يلزم قرار بشري صريح.</p>
-      <div className="findings-form-grid">
-        <label>المصدر<select value={newFinding.source_type} onChange={e=>setNewFinding({...newFinding,source_type:e.target.value as FindingSource,source_record_id:''})}>
+      <h2>تسجيل ملاحظة</h2><p className="findings-context">سجّل المشكلة ومصدرها أولًا. تُضاف الإجراءات التصحيحية وتُتابع بعد حفظ الملاحظة؛ لا تُنشأ تلقائيًا من درجة الامتثال.</p>
+      <fieldset className="findings-create-section"><legend>١. ما المشكلة؟</legend><div className="findings-form-grid">
+        <label className="findings-wide">عنوان الملاحظة<input required minLength={2} maxLength={300} value={newFinding.title} onChange={e=>setNewFinding({...newFinding,title:e.target.value})} placeholder="وصف موجز للمشكلة المكتشفة"/></label>
+        <label className="findings-wide">وصف المشكلة<textarea required value={newFinding.description} onChange={e=>setNewFinding({...newFinding,description:e.target.value})}/></label>
+      </div></fieldset>
+      <fieldset className="findings-create-section"><legend>٢. من أين اكتُشفت؟</legend><div className="findings-form-grid">
+        <label>المصدر<select disabled={pinnedSource} value={newFinding.source_type} onChange={e=>{setSourceOptions({kind:e.target.value as FindingSource,state:'loading',rows:[]});setNewFinding({...newFinding,source_type:e.target.value as FindingSource,source_record_id:''});}}>
           <option value="assessment">بند تقييم</option><option value="risk" disabled={!teamRole(role)}>خطر</option>
           <option value="vulnerability" disabled={!teamRole(role)}>ثغرة</option>
           <option value="internal_audit" disabled>تدقيق داخلي — بعد إنشاء سجله المستقل</option>
         </select></label>
-        <label>معرّف سجل المصدر<input type="number" min="1" required dir="ltr" value={newFinding.source_record_id}
-          onChange={e=>setNewFinding({...newFinding,source_record_id:e.target.value})}/></label>
-        <label>العنوان<input required minLength={2} maxLength={300} value={newFinding.title}
-          onChange={e=>setNewFinding({...newFinding,title:e.target.value})}/></label>
-        <label>الخطورة<select value={newFinding.severity} disabled={!teamRole(role)} onChange={e=>setNewFinding({...newFinding,severity:e.target.value})}>
+        <div className="findings-source-field"><span>السجل المرتبط</span>{pinnedSource?<p className="findings-source-reference" role="status">{resolvedSource?.label||(sourceOptions.state==='loading'?'جاري التحقق من المصدر…':'المصدر غير متاح للتسجيل ضمن صلاحياتك أو حالته الحالية.')}</p>:<label className="findings-source-select"><span className="findings-context">اختر السجل باسمه؛ يُحفظ الربط تلقائيًا.</span><select aria-label="السجل المرتبط" required disabled={sourceOptions.state!=='ready'||sourceOptions.kind!==newFinding.source_type} value={newFinding.source_record_id} onChange={e=>setNewFinding({...newFinding,source_record_id:e.target.value})}><option value="">{sourceOptions.state==='loading'?'جاري تحميل المصادر…':sourceOptions.state==='unavailable'?'المصادر غير متاحة حاليًا':'اختر سجل المصدر'}</option>{sourceOptions.kind===newFinding.source_type&&sourceOptions.rows.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}</div>
+      </div>{!pinnedSource&&sourceOptions.state==='ready'&&!sourceOptions.rows.length&&<p className="findings-context">لا توجد مصادر متاحة للتسجيل ضمن هذا النوع وصلاحياتك.</p>}{sourceOptions.state==='unavailable'&&<p className="findings-unavailable" role="status">تعذر عرض مصدر قابل للاختيار. أعد فتح النموذج أو انتقل إلى سجل المصدر؛ لن يُستخدم مصدر بديل.</p>}<p className="findings-context">يرتبط بند التقييم بضابطه ودورته تلقائيًا. الربط بالتدقيق الداخلي غير مفعّل حاليًا.</p></fieldset>
+      <fieldset className="findings-create-section"><legend>٣. ما خطورتها؟</legend><div className="findings-form-grid">
+        <label>الخطورة<select aria-describedby="finding-severity-guidance" value={newFinding.severity} disabled={!teamRole(role)} onChange={e=>setNewFinding({...newFinding,severity:e.target.value})}>
           {Object.entries(severityLabels).map(([key,value])=><option key={key} value={key}>{value}</option>)}
         </select></label>
-        <label className="findings-wide">الوصف<textarea required value={newFinding.description}
-          onChange={e=>setNewFinding({...newFinding,description:e.target.value})}/></label>
-        <label>المالك<select value={newFinding.owner_id} disabled={!teamRole(role)} onChange={e=>setNewFinding({...newFinding,owner_id:e.target.value})}>
+        <details id="finding-severity-guidance" className="findings-severity-help"><summary>كيف أحدد الخطورة؟</summary><p>إرشاد داخلي في CGP لتوثيق تقدير الفريق، وليس منهجية تصنيف صادرة عن NCA أو حسابًا آليًا للمخاطر.</p><ul><li>غير مصنفة: يلزم استكمال التقييم قبل تحديد الخطورة.</li><li>منخفضة: أثر محدود يمكن معالجته ضمن المتابعة الاعتيادية.</li><li>متوسطة: أثر يستدعي خطة معالجة ومتابعة محددة.</li><li>عالية: أثر كبير يستدعي اهتمامًا ومعالجة ذات أولوية.</li><li>حرجة: أثر شديد يستدعي تصعيدًا عاجلًا وفق إجراءات الجهة.</li></ul><p>استند إلى الأثر والسياق والمعلومات المتاحة، ووثّق المبرر في وصف الملاحظة.</p></details>
+      </div></fieldset>
+      <fieldset className="findings-create-section"><legend>٤. من سيعالجها ومتى؟</legend><div className="findings-form-grid">
+        <label>مالك الملاحظة — اختياري<select value={newFinding.owner_id} disabled={!teamRole(role)} onChange={e=>setNewFinding({...newFinding,owner_id:e.target.value})}>
           <option value="">غير محدد</option>{people.filter(p=>['admin','cybersecurity_team','control_owner'].includes(p.role)).map(p=><option key={p.user_id} value={p.user_id}>{p.display_name||p.user_id}</option>)}
           {!teamRole(role)&&<option value={actor}>أنا</option>}
         </select></label>
-        <label>موعد الاستحقاق<input type="date" value={newFinding.due_date}
+        <label>موعد الاستحقاق — اختياري<input type="date" value={newFinding.due_date}
           onChange={e=>setNewFinding({...newFinding,due_date:e.target.value})}/></label>
-      </div><div className="findings-buttons"><button className="workflow-button workflow-primary" disabled={busy}>حفظ الملاحظة</button>
+      </div></fieldset><div className="findings-buttons"><button className="workflow-button workflow-primary" disabled={busy||!resolvedSource}>حفظ الملاحظة</button>
         <button type="button" className="workflow-button" onClick={()=>setCreateOpen(false)}>إلغاء</button></div>
     </form>}
     <section className="findings-panel">
