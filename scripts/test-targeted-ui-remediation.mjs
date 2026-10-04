@@ -40,6 +40,10 @@ const cycle={id:71,framework:'CSCC',framework_version:'2019',scope_name:'نطا�
 const mapping={id:601,source_id:501,target_id:502,source_framework:'ECC',target_framework:'CSCC',source_code:'ECC-1-1-3-LONG-IDENTIFIER',target_code:'CSCC-1-1-3',source_title:'إدارة هويات الدخول والصلاحيات للأنظمة والخدمات الحساسة والتحقق المستقل من فاعليتها',target_title:'مراجعة واعتماد صلاحيات الوصول للأنظمة الحساسة وتوثيق حدود التغطية والأدلة الداعمة',source_version:'2018',target_version:'2019',coverage_type:'equivalent',validation_status:'pending',source_reference:'وثيقة المواءمة — الإصدار الأول — الصفحة 24',coverage_notes:'حدود التغطية الواردة في الوثيقة تحتاج إلى مراجعة مستقلة. '.repeat(3),reviewed_by:'another-reviewer',reviewed_at:'2026-09-20',approved_at:null,revision:2};
 const sourceOption={id:891,label:'ECC — 1-1-3 — نتيجة تقييم إدارة هويات الدخول والصلاحيات — نطاق الأنظمة الحساسة'};
 export function visualMarkup(area,mode='populated'){
+  if(area==='compliance'){
+    const component=load('app/compliance/page.tsx',{states:{'app/compliance/page.tsx':{0:[{id:1,code:'CSCC',name_ar:'ضوابط الأمن السيبراني للأنظمة الحساسة',version:'2019'}],1:[{id:501,framework_id:1}],2:mode==='empty'||mode==='unavailable'?[]:[cycle],3:mode==='restricted'?'data_governance_team':'admin',4:false,6:mode==='unavailable'}}}).default;
+    return render(React.createElement(component));
+  }
   if(area==='evidence'){
     const component=load('components/EvidenceRegister.tsx',{states:{'components/EvidenceRegister.tsx':{0:mode==='expanded'}}}).default;
     return '<main class="workflow-page evidence-page"><h1>مستودع الأدلة</h1>'+render(React.createElement(component,{rows:mode==='empty'?[]:[evidence,{...evidence,id:902,evidence_name:'سجل مراجعة الصلاحيات',file_name:'review.pdf',association:'direct',status:'accepted',valid_until:'2027-12-31',reviewed_at:null}],canReview:true}))+'</main>';
@@ -71,6 +75,24 @@ export async function tests(){
   check(cycles.includes('/assessments?cycle=71')&&cycles.includes('/dcc-assessment?cycle=72'), 'next-action routes exact');
   check(cycles.includes('value="60"')&&cycles.includes('63/105')&&cycles.includes('دورة متأخرة'), 'counts/progress/next action retained');
   check(cycles.includes('حرجة')&&cycles.includes('متأخرة')&&cycles.includes('مفتوحة'), 'gap indicators labeled, not color only');
+  const center=visualMarkup('compliance');
+  check(center.includes('مركز الامتثال')&&center.includes('دورات قياس الالتزام حسب النطاق'),'actual Compliance Center includes cycles, not just standalone renderer');
+  check(center.includes('/compliance/CSCC')&&center.includes('/assessments?cycle=71'),'framework navigation and exact cycle navigation coexist');
+  for(const label of ['الإطار والنطاق','نتيجة التقييم المعتمدة','اكتمال التقييم','الفجوات','الإجراء التالي'])check(center.includes(label),`Compliance Center cycle column: ${label}`);
+  check(center.includes('value="60"')&&center.includes('63/105')&&center.includes('عرض الدورات'),'page retains summary metrics and filters');
+  const emptyCenter=visualMarkup('compliance','empty'),failedCenter=visualMarkup('compliance','unavailable');
+  check(emptyCenter.includes('لا توجد دورات مطابقة')&&!emptyCenter.includes('role="alert"'),'page complete-zero read remains empty');
+  check(failedCenter.includes('غير متاحة حاليًا')&&!failedCenter.includes('لا توجد دورات مطابقة')&&failedCenter.includes('/compliance/CSCC'),'page failed summary is not zero and framework navigation survives');
+  check(!visualMarkup('compliance','restricted').includes('دورات قياس الالتزام حسب النطاق'),'existing data governance assessment restriction preserved');
+  const centerSource=source('app/compliance/page.tsx');
+  check(centerSource.includes('isBusinessFramework(cycle.framework)'),'normal center excludes QA_SYNTH cycle rows');
+  check((centerSource.match(/rpc\("cgp_assessment_summary"\)/g)??[]).length===1&&!centerSource.includes('<AssessmentPortfolio '),'center reuses one existing authorized RPC read');
+  const cycleContent=load('components/AssessmentPortfolio.tsx',{states:{'components/AssessmentPortfolio.tsx':{0:'approved'}}}).AssessmentPortfolioContent;
+  const filtered=render(React.createElement(cycleContent,{rows:[cycle,{...cycle,id:72,status:'approved'}]}));
+  check(!filtered.includes('?cycle=71')&&filtered.includes('?cycle=72'),'shared content preserves approved filter');
+  const errorView=load('components/AssessmentPortfolio.tsx').AssessmentPortfolioView;
+  const errorMarkup=render(React.createElement(errorView,{rows:[],view:'all',filter:'',onFilter:noWrite,loading:false,error:'RAW DATABASE ERROR'}));
+  check(!errorMarkup.includes('RAW DATABASE ERROR')&&!errorMarkup.includes('لا توجد'),'error presentation does not leak raw errors or imply zero');
   const mappingHtml=visualMarkup('mappings','expanded');
   check(mappingHtml.includes('mapping-review-601')&&mappingHtml.includes('colSpan="4"'), 'deliberate full-width mapping workspace');
   check(mappingHtml.includes('/controls/501')&&mappingHtml.includes('/controls/502'), 'mapping identities retained');

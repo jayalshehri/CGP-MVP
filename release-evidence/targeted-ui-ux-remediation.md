@@ -42,4 +42,10 @@ A control ID alone is not a supported Finding source record in the certified com
 
 ## Manual Preview review
 
+### Area B corrective integration
+
+Manual review found that the assessment portfolio component was not mounted in `/compliance`; the initial offline visual checks rendered it standalone and therefore did not certify page integration. The Compliance Center now renders the same portfolio below the framework cards using its existing authorized summary RPC response, with no second request. Existing assessment role restriction and normal Business `QA_SYNTH` exclusion are preserved. Summary failure is explicitly unavailable, never an empty result, and does not block framework navigation or expose raw errors.
+
+Page-composition regression coverage now includes the section, all required columns, exact-cycle links, filters, empty/unavailable states and restricted-role presentation. All 16 test scripts, TypeScript, changed-file lint and Webpack build passed after this correction. Actual page-component local browser rendering at 1440px confirmed the integrated section, RTL and no horizontal overflow. Preview live visual certification is separate from this deterministic local check.
+
 Use the feature Preview only. Open Evidence details, assessment cycles, Mapping details and the New Finding form. Do not save or execute a decision when reviewing. Unsupported source kinds remain outside this package.

@@ -7,20 +7,21 @@ import { supabase } from "@/lib/supabase";
 import { cycleLabels } from "@/lib/assessment";
 import { assessmentHrefFor, isBusinessFramework } from "@/lib/compliance-frameworks";
 import { WorkflowHeading } from "@/components/WorkflowUI";
+import { AssessmentPortfolioContent, type AssessmentSummary } from "@/components/AssessmentPortfolio";
 import "./compliance.css";
 
 type Framework = { id:number; code:string; name_ar:string; version:string };
 type ControlRow = { id:number; framework_id:number };
-type CycleSummary = { id:number; framework:string; scope_name:string; status:string };
 
 export default function ComplianceCenterPage(){
  const router=useRouter();
  const [frameworks,setFrameworks]=useState<Framework[]>([]);
  const [controls,setControls]=useState<ControlRow[]>([]);
- const [cycles,setCycles]=useState<CycleSummary[]>([]);
+ const [cycles,setCycles]=useState<AssessmentSummary[]>([]);
  const [role,setRole]=useState<UserRole|null>(null);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
+ const [cyclesUnavailable,setCyclesUnavailable]=useState(false);
 
  useEffect(()=>{let active=true;void(async()=>{try{
   const {profile}=await requireProfile();
@@ -35,7 +36,8 @@ export default function ComplianceCenterPage(){
    setFrameworks(((f.data??[]) as Framework[]).filter(fw=>isBusinessFramework(fw.code)));
    setControls((c.data??[]) as ControlRow[]);
    // An unavailable assessment summary must not block framework navigation.
-   setCycles(s.error?[]:(s.data??[]) as CycleSummary[]);
+   setCyclesUnavailable(!!s.error);
+   setCycles(s.error?[]:((s.data??[]) as AssessmentSummary[]).filter(cycle=>isBusinessFramework(cycle.framework)));
    setError("");
   }
  }catch(e){if(active){const message=e instanceof Error?e.message:"";if(message.includes("تسجيل الدخول")){router.replace("/login");return;}setError(message||"تعذر تحميل مركز الامتثال.");}}
@@ -63,5 +65,6 @@ export default function ComplianceCenterPage(){
      </div>
     </article>;
    })}</div>}
+  {role&&role!=="data_governance_team"&&<AssessmentPortfolioContent rows={cycles} error={cyclesUnavailable?"unavailable":""}/>}
  </main>;
 }
