@@ -1,0 +1,18 @@
+{
+  "qa_ref": "lkozjnpfufdpzqtzdxhe",
+  "synthetic": true,
+  "projects": [
+    {
+      "id": -1
+    },
+    {
+      "id": -2
+    }
+  ],
+  "fingerprints": {
+    "projects": "00000000000000000000000000000000",
+    "project_requirements": "00000000000000000000000000000000",
+    "gap_treatments": "00000000000000000000000000000000",
+    "findings": "00000000000000000000000000000000"
+  }
+}

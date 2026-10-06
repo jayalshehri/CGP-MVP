@@ -1,0 +1,5 @@
+Source Row,Source Reference,Framework,Control Code,QA Control ID,Control Mapping Status,Raw Source Span,Source Span Start,Source Span End
+2,FX 1-1,FX,1-1,9001,exact_match,FX 1-1,0,6
+2,FX 1-2,FX,1-2,,needs_review,FX 1-2,0,6
+3,FX 2-1,FX,2-1,9002,exact_match,FX 2-1,0,6
+4,FX,FX,,,needs_review,FX,0,2

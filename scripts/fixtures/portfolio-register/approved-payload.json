@@ -1,0 +1,91 @@
+[
+  {
+    "stage_id": "00000000-0000-0000-0000-000000000001",
+    "name": "SYNTHETIC — تحقق كامل",
+    "priority": "P1",
+    "work_type": "technical_project",
+    "executive_owner_code": "it",
+    "executive_owner_other": null,
+    "duration_value": 6,
+    "duration_unit": "month",
+    "mappings": [
+      {
+        "id": "00000000-0000-0000-0000-00000000006e",
+        "match_status": "exact_match",
+        "source_error": false
+      }
+    ]
+  },
+  {
+    "stage_id": "00000000-0000-0000-0000-000000000002",
+    "name": "SYNTHETIC — ربط جزئي",
+    "priority": "P1",
+    "work_type": "managed_service",
+    "executive_owner_code": "cybersecurity",
+    "executive_owner_other": null,
+    "duration_value": 8,
+    "duration_unit": "month",
+    "mappings": [
+      {
+        "id": "00000000-0000-0000-0000-000000000078",
+        "match_status": "exact_match",
+        "source_error": false
+      },
+      {
+        "id": "00000000-0000-0000-0000-000000000079",
+        "match_status": "needs_review",
+        "source_error": false
+      }
+    ]
+  },
+  {
+    "stage_id": "00000000-0000-0000-0000-000000000003",
+    "name": "SYNTHETIC — بانتظار الربط",
+    "priority": "P2",
+    "work_type": "technical_change",
+    "executive_owner_code": "other",
+    "executive_owner_other": "Synthetic Unit",
+    "duration_value": 2,
+    "duration_unit": "week",
+    "mappings": [
+      {
+        "id": "00000000-0000-0000-0000-000000000082",
+        "match_status": "needs_review",
+        "source_error": false
+      }
+    ]
+  },
+  {
+    "stage_id": "00000000-0000-0000-0000-000000000004",
+    "name": "SYNTHETIC — خطأ مصدر",
+    "priority": "P2",
+    "work_type": "assessment",
+    "executive_owner_code": "dmo",
+    "executive_owner_other": null,
+    "duration_value": 1,
+    "duration_unit": "year",
+    "mappings": [
+      {
+        "id": "00000000-0000-0000-0000-00000000008c",
+        "match_status": "needs_review",
+        "source_error": true
+      },
+      {
+        "id": "00000000-0000-0000-0000-00000000008d",
+        "match_status": "exact_match",
+        "source_error": false
+      }
+    ]
+  },
+  {
+    "stage_id": "00000000-0000-0000-0000-000000000005",
+    "name": "SYNTHETIC — بلا مراجع",
+    "priority": "P3",
+    "work_type": "ongoing_activity",
+    "executive_owner_code": "it",
+    "executive_owner_other": null,
+    "duration_value": 3,
+    "duration_unit": "day",
+    "mappings": []
+  }
+]
