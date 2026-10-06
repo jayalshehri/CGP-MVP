@@ -9,7 +9,8 @@ export default function PortfolioProjectFields({ form, onChange, creating }: {
     onChange({ ...form, [key]: value, ...(key === "executive_owner_code" && value !== "other" ? { executive_owner_other: "" } : {}) });
   }
   return <>
-    <label>رمز المشروع<input required value={form.project_code} onChange={e => set("project_code", e.target.value)} /></label>
+    {/* The project code is chosen at creation only; it is read-only when editing. */}
+    <label>رمز المشروع<input required readOnly={!creating} aria-readonly={!creating} dir="ltr" value={form.project_code} onChange={e => { if (creating) set("project_code", e.target.value); }} />{!creating && <small>يُحدَّد الرمز عند الإنشاء ولا يُعدَّل لاحقًا.</small>}</label>
     <label>اسم المشروع<input required value={form.name_ar} onChange={e => set("name_ar", e.target.value)} /></label>
     <label>الأولوية<select required={creating} value={form.portfolio_priority} onChange={e => set("portfolio_priority", e.target.value as PortfolioForm["portfolio_priority"])}>
       <option value="">غير مصنّفة</option>{options(priorityLabels)}

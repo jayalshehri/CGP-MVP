@@ -33,6 +33,8 @@ for (const key of deprecated) {
 for (const [key, value, expected] of [['target_outcome', 'نتيجة معدلة', 'نتيجة معدلة'], ['description_ar', 'وصف معدل', 'وصف معدل'], ['status', 'planned', 'planned'], ['portfolio_priority', 'P3', 'P3'], ['duration_value', '9', 9]]) {
   equal(projectWriteFields({ ...form, [key]: value }, project), { [key]: expected }, `${key}: only explicitly changed field in update`);
 }
+equal(projectWriteFields({ ...form, project_code: 'CHANGED-CODE' }, project), {}, 'project code is creation-only: never sent on edit');
+equal(projectWriteFields({ ...form, project_code: 'NEW-CODE' }).project_code, 'NEW-CODE', 'project code is sent on create');
 equal(projectWriteFields({ ...form, executive_owner_code: 'it' }, project), { executive_owner_code: 'it', executive_owner_other: null }, 'Other text cleared to NULL when owner is not Other');
 equal(projectWriteFields({ ...form, duration_value: '', duration_unit: '' }, project), { duration_value: null, duration_unit: null }, 'edit may clear duration only as a pair');
 assert.throws(() => projectWriteFields({ ...form, duration_unit: '' }, project)); checks++;
