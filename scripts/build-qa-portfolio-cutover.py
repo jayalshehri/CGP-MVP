@@ -1,20 +1,40 @@
-"""Build guarded QA-only cutover/rollback from approved local evidence. No network."""
+"""Build guarded QA-only cutover/rollback from approved local evidence. No network.
+
+Generates SQL files only; it never connects to a database. The approved QA
+inputs (review CSVs, pre-cutover backup, source workbook) are NOT tracked in
+Git: pass them explicitly. Defaults reproduce the original 2026-10-06 QA run
+from a local working copy. Synthetic fixtures for offline tests live under
+scripts/fixtures/portfolio-cutover/ (see scripts/test-portfolio-cutover-builder.mjs).
+"""
 from pathlib import Path
-import csv,json,hashlib,uuid
+import argparse,csv,json,hashlib,sys,uuid
 ROOT=Path(__file__).resolve().parents[1]
-REVIEW=ROOT/'docs/portfolio-import-review'
-OUT=ROOT/'backups/portfolio-qa-cutover-20261006'
+QA_SOURCE_SHA='b0dc1bee3a082af6399067c00fbe553e7f38eb1932354f858ff417642011b329'
+cli=argparse.ArgumentParser(description=__doc__.splitlines()[0])
+cli.add_argument('--review-dir',type=Path,default=ROOT/'docs/portfolio-import-review',help='approved import review directory (untracked)')
+cli.add_argument('--out-dir',type=Path,default=ROOT/'backups/portfolio-qa-cutover-20261006',help='where generated SQL/payload are written')
+cli.add_argument('--backup',type=Path,default=None,help='PRE_CUTOVER_BACKUP.json (default: <out-dir>/PRE_CUTOVER_BACKUP.json)')
+cli.add_argument('--source',type=Path,default=ROOT/'CGP_Project_Portfolio_Analysis.xlsx',help='source workbook whose SHA-256 is verified')
+cli.add_argument('--expected-source-sha',default=QA_SOURCE_SHA)
+cli.add_argument('--expected-projects',type=int,default=43)
+cli.add_argument('--expected-references',type=int,default=119)
+cli.add_argument('--expected-exact',type=int,default=19)
+args=cli.parse_args()
+REVIEW=args.review_dir; OUT=args.out_dir
+missing=[str(p) for p in [REVIEW/'IMPORT_PREVIEW_43.csv',REVIEW/'CONTROL_MAPPING_REVIEW.csv',args.backup or OUT/'PRE_CUTOVER_BACKUP.json',args.source] if not p.is_file()]
+if missing: sys.exit('Missing required input(s); pass explicit paths:\n  '+'\n  '.join(missing))
 def rows(p): return list(csv.DictReader(p.open(encoding='utf-8-sig')))
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
-backup=json.loads((OUT/'PRE_CUTOVER_BACKUP.json').read_text())
+backup=json.loads((args.backup or OUT/'PRE_CUTOVER_BACKUP.json').read_text())
 assert backup['qa_ref']=='lkozjnpfufdpzqtzdxhe'
-source_sha='b0dc1bee3a082af6399067c00fbe553e7f38eb1932354f858ff417642011b329'
-assert sha(ROOT/'CGP_Project_Portfolio_Analysis.xlsx')==source_sha
+source_sha=args.expected_source_sha
+assert sha(args.source)==source_sha
 for name in ['IMPORT_PREVIEW_43.csv','CONTROL_MAPPING_REVIEW.csv']:
     assert sha(REVIEW/name)==sha(REVIEW/'evidence/phase2a'/name)
 projects=rows(REVIEW/'IMPORT_PREVIEW_43.csv'); refs=rows(REVIEW/'CONTROL_MAPPING_REVIEW.csv')
-assert len(projects)==43 and len(refs)==119
-assert sum(r['Control Mapping Status']=='exact_match' for r in refs)==19
+assert len(projects)==args.expected_projects and len(refs)==args.expected_references
+assert sum(r['Control Mapping Status']=='exact_match' for r in refs)==args.expected_exact
+OUT.mkdir(parents=True,exist_ok=True)
 batch=str(uuid.uuid5(uuid.NAMESPACE_URL,'cgp-qa-portfolio:'+source_sha))
 payload=[]
 for n,p in enumerate(projects,1):
@@ -185,4 +205,4 @@ select 'PASS: original 32 active; imported 43 retained archived; history preserv
 '''
 (OUT/'RESTORE_OLD_PORTFOLIO.sql').write_text(restore+'commit;\n')
 (OUT/'RESTORE_DRILL.sql').write_text(restore+'rollback;\n')
-print(json.dumps({'batch':batch,'projects':len(payload),'references':sum(len(p['mappings']) for p in payload),'backup_sha256':sha(OUT/'PRE_CUTOVER_BACKUP.json')},indent=2))
+print(json.dumps({'batch':batch,'projects':len(payload),'references':sum(len(p['mappings']) for p in payload),'backup_sha256':sha(args.backup or OUT/'PRE_CUTOVER_BACKUP.json')},indent=2))
