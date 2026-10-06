@@ -5,7 +5,7 @@ export const workTypeLabels = {
   policy_governance: "سياسة وحوكمة", assessment: "تقييم",
   technical_change: "تغيير تقني / تهيئة", ongoing_activity: "نشاط مستمر",
 } as const;
-export const ownerLabels = { it: "IT", cybersecurity: "Cybersecurity", dmo: "DMO", other: "Other" } as const;
+export const ownerLabels = { it: "IT", cybersecurity: "Cybersecurity", dmo: "DMO", other: "أخرى" } as const; // Display labels; stored values stay it|cybersecurity|dmo|other.
 export const durationLabels = { day: "يوم", week: "أسبوع", month: "شهر", year: "سنة" } as const;
 export const statusLabels = { planned: "مخطط", in_progress: "قيد التنفيذ", completed: "مكتمل", on_hold: "متوقف" } as const;
 export type Priority = keyof typeof priorityLabels;
@@ -86,7 +86,7 @@ export function portfolioPayload(form: PortfolioForm, creating: boolean) {
   if (duration !== null && (!Number.isFinite(duration) || duration <= 0)) throw new Error("المدة يجب أن تكون رقمًا موجبًا.");
   if ((duration === null) !== !form.duration_unit || (creating && duration === null)) throw new Error("أدخل قيمة المدة ووحدتها معًا.");
   if (form.duration_unit && !(form.duration_unit in durationLabels)) throw new Error("وحدة المدة غير صالحة.");
-  if (form.executive_owner_code === "other" && !form.executive_owner_other.trim()) throw new Error("اسم الجهة/المالك التنفيذي مطلوب عند اختيار Other.");
+  if (form.executive_owner_code === "other" && !form.executive_owner_other.trim()) throw new Error("اسم الجهة/المالك التنفيذي مطلوب عند اختيار «أخرى».");
   const progress = Number(form.progress_percent);
   if (!Number.isFinite(progress) || progress < 0 || progress > 100) throw new Error("نسبة الإنجاز يجب أن تكون بين 0 و100.");
   return {

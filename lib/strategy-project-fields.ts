@@ -44,7 +44,8 @@ export function projectWriteFields(form: ProjectForm, original?: ProjectFormReco
     ...portfolioPayload(projectToForm(original), false),
     target_outcome: original.target_outcome ?? null,
   };
-  return Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== before[key]));
+  // The project code is set at creation only and never sent on edit.
+  return Object.fromEntries(Object.entries(payload).filter(([key, value]) => key !== "project_code" && value !== before[key]));
 }
 
 export type PlanningInformation = Pick<PortfolioProject, "portfolio_priority" | "executive_owner_code" | "duration_value" | "duration_unit"> & {

@@ -50,6 +50,14 @@ html = page('app/roadmap/page.tsx', '/roadmap', { open: true, selected: null, fo
 check(html.includes('<output>السنة 3</output>'), 'execution year derived (read-only) in form');
 check(/اسم الجهة\/المالك التنفيذي<input required=""/.test(html), 'Other owner text required when Other selected');
 check(/الحالة<select disabled=""/.test(html), 'create status fixed to planned');
+const codeInput = markup => markup.match(/<label>رمز المشروع<input[^>]*>/)?.[0] ?? '';
+check(!/readonly=""/i.test(codeInput(html)), 'project code editable on create');
+check(html.includes('<option value="other">أخرى</option>') && !html.includes('>Other<'), 'Other displayed as «أخرى»; stored value stays other');
+const editForm = { project_code: 'PF43-002', name_ar: 'مشروع ثان', description_ar: '', portfolio_priority: 'P2', work_type: 'technical_change', executive_owner_code: 'other', executive_owner_other: 'إدارة المشتريات', duration_value: '2', duration_unit: 'week', status: 'in_progress', progress_percent: '0', target_outcome: '' };
+html = page('app/roadmap/page.tsx', '/roadmap', { open: true, selected: projects[1], form: editForm });
+check(/readonly=""/i.test(codeInput(html)) && /aria-readonly="true"/.test(codeInput(html)), 'project code read-only on edit');
+check(html.includes('يُحدَّد الرمز عند الإنشاء ولا يُعدَّل لاحقًا.'), 'read-only code explained');
+check(read('lib/strategy-project-fields.ts').includes('key !== "project_code"'), 'edit payload never sends project_code');
 
 // Project Details
 html = render('app/roadmap/[id]/page.tsx', '/roadmap/101?tab=overview&from=register', { project: projects[0], reads });
@@ -73,7 +81,7 @@ noLegacyPlanning(html, 'roadmap');
 // Portfolio Analysis
 html = page('app/roadmap/analysis/page.tsx', '/roadmap/analysis');
 for (const label of ['الأولوية', 'سنة التنفيذ', 'نوع العمل', 'الجهة المالكة', 'الحالة']) check(html.includes(`aria-label="${label}"`), `analysis breakdown by ${label}`);
-check(html.includes('<td>Other</td><td>1</td>') && html.includes('<td>قيد التنفيذ</td><td>1</td>') && html.includes('3 مشروع نشط'), 'analysis counts active portfolio only');
+check(html.includes('<td>أخرى</td><td>1</td>') && html.includes('<td>قيد التنفيذ</td><td>1</td>') && html.includes('3 مشروع نشط'), 'analysis counts active portfolio only');
 check(html.includes('<span>مشاريع الأولوية P1</span><strong>1</strong>'), 'analysis P1 KPI');
 noLegacyPlanning(html, 'analysis');
 
