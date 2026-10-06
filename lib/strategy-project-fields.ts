@@ -1,88 +1,63 @@
-// Existing project fields only. No defaults derived from dates, status or progress.
-export type ProjectForm = {
-  project_code: string;
-  name_ar: string;
-  initiative_type: string;
-  status: "planned" | "in_progress" | "on_hold" | "completed";
-  priority: "high" | "medium" | "low";
-  planned_year: number;
-  planned_quarter: string;
-  executive_owner: string;
-  planned_start_date: string;
-  target_end_date: string;
-  forecast_end_date: string;
-  actual_start_date: string;
-  actual_end_date: string;
-  progress_percent: number;
-  description_ar: string;
-  target_outcome: string;
-};
+import { emptyPortfolioForm, portfolioPayload, type PortfolioForm, type PortfolioProject } from "@/lib/project-portfolio";
 
-type ProjectFormRecord = {
-  [K in keyof ProjectForm]: ProjectForm[K] | null;
-};
+// Register form = the canonical QA portfolio form (lib/project-portfolio.ts)
+// plus the S1-D optional target outcome. Quarter, legacy priority/type/owner
+// text and project dates are deprecated and never written from this form.
+export type ProjectForm = PortfolioForm & { target_outcome: string };
+
+type ProjectFormRecord = Pick<PortfolioProject,
+  "project_code" | "name_ar" | "description_ar" | "portfolio_priority" | "work_type" | "executive_owner_code"
+  | "executive_owner_other" | "duration_value" | "duration_unit" | "status" | "progress_percent"
+> & { target_outcome?: string | null };
+
+export const emptyProjectForm: ProjectForm = { ...emptyPortfolioForm, target_outcome: "" };
 
 export function projectToForm(project: ProjectFormRecord): ProjectForm {
   return {
     project_code: project.project_code ?? "",
     name_ar: project.name_ar ?? "",
-    initiative_type: project.initiative_type ?? "",
-    status: project.status ?? "planned",
-    priority: project.priority ?? "medium",
-    planned_year: project.planned_year ?? 2027,
-    planned_quarter: project.planned_quarter ?? "",
-    executive_owner: project.executive_owner ?? "",
-    planned_start_date: project.planned_start_date ?? "",
-    target_end_date: project.target_end_date ?? "",
-    forecast_end_date: project.forecast_end_date ?? "",
-    actual_start_date: project.actual_start_date ?? "",
-    actual_end_date: project.actual_end_date ?? "",
-    progress_percent: Number(project.progress_percent) || 0,
     description_ar: project.description_ar ?? "",
+    portfolio_priority: project.portfolio_priority ?? "",
+    work_type: project.work_type ?? "",
+    executive_owner_code: project.executive_owner_code ?? "",
+    executive_owner_other: project.executive_owner_other ?? "",
+    duration_value: project.duration_value == null ? "" : String(Number(project.duration_value)),
+    duration_unit: project.duration_unit ?? "",
+    status: project.status ?? "planned",
+    progress_percent: String(Number(project.progress_percent) || 0),
     target_outcome: project.target_outcome ?? "",
   };
 }
 
-const nullableFields = new Set<keyof ProjectForm>([
-  "executive_owner", "planned_start_date", "target_end_date", "forecast_end_date",
-  "actual_start_date", "actual_end_date", "description_ar", "target_outcome",
-]);
-
-// Omitted means unchanged; null means the operator explicitly cleared a field.
-// Compare against the initial UI representation, not a null-coerced DB payload:
-// untouched null, empty and legacy values are never sent back in an update.
+// Validation and normalization come from the canonical portfolioPayload.
+// Creation sends the full payload. An edit sends only fields whose normalized
+// value differs from the loaded record, so untouched values are never written
+// back; database CHECKs still evaluate the complete row. execution_year,
+// archive and import provenance are never part of the payload.
 export function projectWriteFields(form: ProjectForm, original?: ProjectFormRecord) {
-  const initial = original ? projectToForm(original) : null;
-  const payload: Partial<Record<keyof ProjectForm, string | number | null>> = {};
-  for (const key of Object.keys(form) as (keyof ProjectForm)[]) {
-    if (initial && form[key] === initial[key]) continue;
-    payload[key] = nullableFields.has(key) && form[key] === "" ? null : form[key];
-  }
-  return payload;
+  const payload: Record<string, string | number | null> = {
+    ...portfolioPayload(form, !original),
+    target_outcome: form.target_outcome === "" ? null : form.target_outcome,
+  };
+  if (!original) return payload;
+  const before: Record<string, string | number | null> = {
+    ...portfolioPayload(projectToForm(original), false),
+    target_outcome: original.target_outcome ?? null,
+  };
+  return Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== before[key]));
 }
 
-export const projectDateLabels = {
-  planned_start_date: "تاريخ البدء المخطط",
-  actual_start_date: "تاريخ البدء الفعلي",
-  target_end_date: "تاريخ الانتهاء المستهدف",
-  forecast_end_date: "تاريخ الانتهاء المتوقع",
-  actual_end_date: "تاريخ الانتهاء الفعلي",
-} as const;
-
-export type PlanningInformation = {
-  executive_owner: string | null;
+export type PlanningInformation = Pick<PortfolioProject, "portfolio_priority" | "executive_owner_code" | "duration_value" | "duration_unit"> & {
   target_outcome: string | null;
-  target_end_date: string | null;
-  forecast_end_date: string | null;
 };
 
 // Descriptive absence, not a score or a new minimum-data contract.
 // Callers must pass only successfully loaded records.
 export function missingPlanningInformation(project: PlanningInformation) {
   return {
-    owner: !project.executive_owner?.trim(),
+    priority: !project.portfolio_priority,
+    owner: !project.executive_owner_code,
+    duration: !(Number(project.duration_value) > 0 && project.duration_unit),
     outcome: !project.target_outcome?.trim(),
-    target: !project.target_end_date,
-    forecast: !project.forecast_end_date,
   };
 }

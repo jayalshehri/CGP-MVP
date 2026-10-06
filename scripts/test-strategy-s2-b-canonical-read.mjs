@@ -65,5 +65,9 @@ const register = readFileSync(new URL('app/roadmap/page.tsx', root), 'utf8');
 equal(register.includes('reqToProject'), false, 'register cannot collapse requirement to one project');
 const detail = readFileSync(new URL('app/roadmap/[id]/page.tsx', root), 'utf8');
 equal(detail.includes('seenForCoverage'), false, 'detail cannot collapse multiple mapping coverage');
-equal(detail.includes('روابط مباشرة موروثة'), true, 'legacy appears separately');
+// Direct project->control links (historical or QA-approved exact matches) stay a
+// separate section and are never merged into requirement-derived control rows.
+equal(detail.includes('<h2>روابط مباشرة مسجّلة</h2>'), true, 'legacy appears separately');
+const derived = detail.slice(detail.indexOf('const derivedControls = useMemo('), detail.indexOf('const uniqueControls = useMemo('));
+equal(derived.includes('legacyLinks') || derived.includes('directControls'), false, 'direct links not merged into requirement-derived rows');
 console.log(`S2-B canonical read: ${checks} assertions PASS`);

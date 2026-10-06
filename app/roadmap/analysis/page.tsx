@@ -10,25 +10,21 @@ import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-r
 import { ReadNotice, ReadSection } from "../read-state";
 import { PlanningInformationSummary } from "../planning-information";
 import { planningReadiness, planningReadinessItems } from "../portfolio-metrics";
+import { dimensionOptions, dimensionText, isArchived, matchesPortfolioFilters, portfolioBreakdown, type PortfolioDimension, type PortfolioFields } from "@/lib/portfolio-analytics";
 import { readCanonicalPortfolio } from "@/lib/strategy-portfolio-read";
 import type { RelationshipCounts } from "@/lib/strategy-relationships";
 import "../roadmap.css";
 
-type Project = {
+type Project = PortfolioFields & {
   id: number;
   project_code: string;
   name_ar: string;
-  planned_year: number;
-  planned_quarter: string;
   status: "planned" | "in_progress" | "on_hold" | "completed";
-  priority: "high" | "medium" | "low";
-  executive_owner: string | null;
   target_outcome: string | null;
-  target_end_date: string | null;
-  forecast_end_date: string | null;
   recommended_technologies: string | null;
   progress_percent: number;
 };
+const dimensions: PortfolioDimension[] = ["priority", "execution_year", "work_type", "executive_owner", "status"];
 type ControlLink = { project_id: number; control_id: number };
 type Treatment = { project_id: number; priority: "high" | "medium" | "low" };
 
@@ -38,6 +34,7 @@ export default function PortfolioAnalysisPage() {
   const [links, setLinks] = useState<ControlLink[]>([]);
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [modern, setModern] = useState<RelationshipCounts | null>(null);
+  const [filters, setFilters] = useState<Record<PortfolioDimension, string>>({ priority: "all", execution_year: "all", work_type: "all", executive_owner: "all", status: "all" });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reads, setReads] = useState<{ projects: ReadStatus; links: ReadStatus; treatments: ReadStatus }>({ projects: "UNAVAILABLE", links: "UNAVAILABLE", treatments: "UNAVAILABLE" });
@@ -52,7 +49,7 @@ export default function PortfolioAnalysisPage() {
       try {
         await requireProfile();
         const [projectResult, linkResult, treatmentResult, activeControlResult] = await Promise.all([
-          readStrategyRows((from, to) => supabase.from("cybersecurity_projects").select("id,project_code,name_ar,planned_year,planned_quarter,status,priority,executive_owner,target_outcome,target_end_date,forecast_end_date,recommended_technologies,progress_percent", { count: "exact" }).order("planned_year").order("planned_quarter").order("id").range(from, to), row => row.id),
+          readStrategyRows((from, to) => supabase.from("cybersecurity_projects").select("id,project_code,name_ar,status,target_outcome,recommended_technologies,progress_percent,portfolio_priority,execution_year,work_type,executive_owner_code,executive_owner_other,duration_value,duration_unit,archived_at", { count: "exact" }).order("portfolio_priority", { nullsFirst: false }).order("id").range(from, to), row => row.id),
           readStrategyRows((from, to) => supabase.from("cybersecurity_project_controls").select("project_id,control_id", { count: "exact" }).order("project_id").order("control_id").range(from, to), row => `${row.project_id}:${row.control_id}`),
           readStrategyRows((from, to) => supabase.from("cybersecurity_project_gap_treatments").select("id,project_id,priority", { count: "exact" }).order("id").range(from, to), row => row.id),
           readStrategyRows((from, to) => supabase.from("controls").select("id,frameworks!inner(is_active)", { count: "exact" }).eq("frameworks.is_active",true).order("id").range(from, to), row => row.id),
@@ -84,10 +81,14 @@ export default function PortfolioAnalysisPage() {
     };
   }, [router]);
 
+  // Analysis covers the active (non-archived) portfolio, narrowed by the filters.
+  const active = useMemo(() => projects.filter((project) => !isArchived(project)), [projects]);
+  const scoped = useMemo(() => active.filter((project) => matchesPortfolioFilters(project, filters)), [active, filters]);
   const analysis = useMemo(() => {
     const mapped = new Map<number, number>();
     links.forEach((link) => mapped.set(link.project_id, (mapped.get(link.project_id) ?? 0) + 1));
-    const rows = (planningReady ? projects : []).map((project) => {
+    const scopedIds = new Set(scoped.map((project) => project.id));
+    const rows = (planningReady ? scoped : []).map((project) => {
       const linked = mapped.get(project.id) ?? 0;
       return {
         project,
@@ -105,11 +106,12 @@ export default function PortfolioAnalysisPage() {
       readiness,
       incomplete,
       complete: rows.filter((row) => row.readiness === 100).length,
-      linkedControls: new Set(links.map((link) => link.control_id)).size,
-      highTreatments: treatments.filter((item) => item.priority === "high").length,
-      highPriority: projects.filter((project) => project.priority === "high").length,
+      linkedControls: new Set(links.filter((link) => scopedIds.has(link.project_id)).map((link) => link.control_id)).size,
+      highTreatments: treatments.filter((item) => item.priority === "high" && scopedIds.has(item.project_id)).length,
+      p1: scoped.filter((project) => project.portfolio_priority === "P1").length,
+      breakdowns: dimensions.map((dimension) => ({ dimension, ...portfolioBreakdown(scoped, dimension) })),
     };
-  }, [projects, links, treatments, planningReady]);
+  }, [scoped, links, treatments, planningReady]);
 
   if (loading) {
     return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading">جاري تحليل محفظة المشاريع…</p></main>;
@@ -125,52 +127,67 @@ export default function PortfolioAnalysisPage() {
         </nav>
 
         <header className="portfolio-hero">
-          <div><span>دعم قرار محفظة الأمن السيبراني · 2027–2029</span><h1>تحليل المحفظة السيبرانية</h1><p>يعرض التحليل ما يمكن احتسابه من بيانات النظام، ويصرّح بالبيانات الناقصة بدل إنتاج درجات تقديرية.</p></div>
+          <div><span>دعم قرار محفظة الأمن السيبراني · الأولوية وسنة التنفيذ</span><h1>تحليل المحفظة السيبرانية</h1><p>يعرض التحليل ما يمكن احتسابه من بيانات النظام، ويصرّح بالبيانات الناقصة بدل إنتاج درجات تقديرية.</p></div>
           <Link className="roadmap-primary" href="/roadmap">استكمال بيانات المشاريع ←</Link>
         </header>
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
         <ReadNotice statuses={[reads.projects, reads.links, reads.treatments, modern ? "COMPLETE" : "UNAVAILABLE"]} />
 
+        <section className="register-toolbar" aria-label="تصفية تحليل المحفظة">
+          {dimensions.map((dimension) => <label key={dimension}><span>{dimensionText[dimension]}</span><select value={filters[dimension]} onChange={(event) => setFilters({ ...filters, [dimension]: event.target.value })}><option value="all">الكل</option>{Object.entries(dimensionOptions[dimension]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>)}
+          <strong>{projectsReady ? `${scoped.length} مشروع نشط` : unavailable}</strong>
+        </section>
+
         <section className="portfolio-kpis" aria-label="مؤشرات تحليل المحفظة">
           <Kpi label="اكتمال عناصر التخطيط الخمسة الحالية" value={planningReady ? `${analysis.readiness}%` : unavailable} detail="متوسط غير مرجّح لاكتمال العناصر الخمسة" tone="teal" />
-          <Kpi label="مشاريع مكتملة العناصر الخمسة" value={planningReady ? `${analysis.complete}/${projects.length}` : unavailable} detail="وفق عناصر التخطيط الخمسة الحالية فقط" tone="blue" />
+          <Kpi label="مشاريع مكتملة العناصر الخمسة" value={planningReady ? `${analysis.complete}/${scoped.length}` : unavailable} detail="وفق عناصر التخطيط الخمسة الحالية فقط" tone="blue" />
           <Kpi label="ضوابط ذات ربط مباشر مسجّل" value={linksReady ? analysis.linkedControls : unavailable} detail="من سجل الربط المباشر بين المشروع والضابط" />
           <Kpi label="ضوابط مميزة عبر المتطلبات" value={modern?.controls ?? unavailable} detail="علاقات حديثة ضمن نطاق القراءة؛ لا تثبت أثر المشروع أو امتثاله" />
-          <Kpi label="أولوية إدارية عالية" value={projectsReady ? analysis.highPriority : unavailable} detail="تصنيف إداري، وليس Portfolio Score" tone="amber" />
+          <Kpi label="مشاريع الأولوية P1" value={projectsReady ? analysis.p1 : unavailable} detail="السنة الأولى؛ تصنيف معتمد وليس Portfolio Score" tone="amber" />
         </section>
+
+        <ReadSection available={projectsReady}><section className="portfolio-card" aria-labelledby="portfolio-breakdown-title">
+          <header><div><span>توزيع المحفظة النشطة</span><h2 id="portfolio-breakdown-title">التحليل حسب الأولوية وسنة التنفيذ ونوع العمل والمالك والحالة</h2></div></header>
+          <div className="portfolio-breakdown">
+            {analysis.breakdowns.map(({ dimension, rows, unset }) => <table key={dimension} aria-label={dimensionText[dimension]}>
+              <thead><tr><th>{dimensionText[dimension]}</th><th>المشاريع</th></tr></thead>
+              <tbody>{rows.map((row) => <tr key={row.value}><td>{row.label}</td><td>{row.count}</td></tr>)}{unset > 0 && <tr><td>غير محدد (نموذج سابق)</td><td>{unset}</td></tr>}</tbody>
+            </table>)}
+          </div>
+        </section></ReadSection>
 
         <aside className="portfolio-prioritization-note" aria-labelledby="prioritization-note-title">
           <header><h2 id="prioritization-note-title">دعم تحديد الأولويات</h2><span>غير متاح حاليًا</span></header>
-          <p>تتوفر حاليًا بيانات الحالة والأولوية الإدارية والتقدم وبعض روابط الامتثال. يتطلب دعم تحديد الأولويات مستقبلًا بيانات معتمدة إضافية قبل تقديم توصيات أو تصنيف تحليلي للمشاريع.</p>
+          <p>تتوفر حاليًا بيانات الحالة والأولوية والتقدم وبعض روابط الامتثال. يتطلب دعم تحديد الأولويات مستقبلًا بيانات معتمدة إضافية قبل تقديم توصيات أو تصنيف تحليلي للمشاريع.</p>
         </aside>
 
         <section className="portfolio-layout">
           <article className="portfolio-card portfolio-readiness">
             <header><div><span>تعريف المؤشر</span><h2>عناصر التخطيط المحتسبة</h2></div><small>ليس مؤشر التزام أو صحة محفظة</small></header>
-            <p>تُحسب النسبة بالتساوي من المالك، النتيجة المستهدفة، تاريخ الانتهاء المستهدف، حقل المعالجة أو التقنية، ورابط مباشر مسجّل بضابط. لا يدخل الربط عبر المتطلبات في هذا المؤشر.</p>
-            <p className="detail-hint">هذا وصف للعناصر الخمسة الحالية، وليس حكمًا على ملاءمة نوع العمل. غياب التقنية لا يعني عيبًا في كل مشروع، وتاريخ الانتهاء المتوقع ليس عنصرًا إضافيًا في النسبة.</p><Link className="detail-back" href="/roadmap">فتح سجل المشاريع السيبرانية ←</Link>
+            <p>تُحسب النسبة بالتساوي من الأولوية، المالك التنفيذي، مدة المشروع، النتيجة المستهدفة، ورابط مباشر مسجّل بضابط. لا يدخل الربط عبر المتطلبات في هذا المؤشر.</p>
+            <p className="detail-hint">هذا وصف للعناصر الخمسة الحالية، وليس حكمًا على ملاءمة نوع العمل. لم تعد تواريخ المشروع عناصر في النسبة؛ سنة التنفيذ مشتقة من الأولوية.</p><Link className="detail-back" href="/roadmap">فتح سجل المشاريع السيبرانية ←</Link>
           </article>
 
           <article className="portfolio-card portfolio-decision">
             <span>الإجراء التأسيسي التالي</span>
             <ReadSection available={planningReady}>
             <h2>{analysis.incomplete.length ? "استكمال عناصر التخطيط الناقصة" : "مراجعة بيانات المشاريع المسجلة"}</h2>
-            <p>{analysis.incomplete.length ? `${analysis.incomplete.length} مشروعًا يفتقد واحدًا أو أكثر من عناصر التخطيط الخمسة الحالية.` : projects.length ? "اكتملت عناصر التخطيط الخمسة الحالية؛ وهذا لا يمثل تقييمًا للقيمة أو المخاطر." : "لا توجد مشاريع ضمن النطاق المقروء."}</p>
+            <p>{analysis.incomplete.length ? `${analysis.incomplete.length} مشروعًا يفتقد واحدًا أو أكثر من عناصر التخطيط الخمسة الحالية.` : scoped.length ? "اكتملت عناصر التخطيط الخمسة الحالية؛ وهذا لا يمثل تقييمًا للقيمة أو المخاطر." : "لا توجد مشاريع ضمن النطاق المقروء."}</p>
             </ReadSection>
             <div><b>{treatmentsReady ? analysis.highTreatments : unavailable}</b><span>معالجات عالية الأولوية مسجلة للمراجعة، ولا تعني تلقائيًا قرار تمويل.</span></div>
           </article>
 
           <ReadSection available={planningReady}><article className="portfolio-card portfolio-data-gaps">
             <header><div><span>اكتمال عناصر التخطيط الخمسة الحالية</span><h2>العناصر غير المسجلة حسب المؤشر الحالي</h2></div><small>{analysis.incomplete.length} مشروع</small></header>
-            <p className="detail-hint">للمراجعة بحسب نوع العمل، لا تمثل هذه القائمة متطلبات إلزامية. التقنية اختيارية وقد لا تنطبق على السياسة أو التقييم أو التوعية أو النشاط المستمر.</p>
+            <p className="detail-hint">للمراجعة بحسب نوع العمل. المشاريع المسجلة بالنموذج السابق تظهر هنا حتى تُستكمل أولويتها ومالكها ومدتها يدويًا.</p>
             <div className="portfolio-gap-table">
               <div><span>المشروع</span><span>العناصر الناقصة</span><span>الاكتمال</span></div>
-              {analysis.incomplete.map(({ project, missing, readiness }) => <article key={project.id}><div><b dir="ltr">{project.project_code}</b><strong><Link className="strategy-project-link" href={projectHref(project.id, "analysis")}>{project.name_ar}</Link></strong></div><span>{missing.map((item) => item.key === "technology" ? "المعالجة أو التقنية — اختياري بحسب نوع العمل" : item.key === "outcome" ? "النتيجة المستهدفة" : item.key === "targetDate" ? "تاريخ الانتهاء المستهدف" : item.label).join(" · ")}</span><em>{readiness}%</em></article>)}
-              {!analysis.incomplete.length && <p className="portfolio-empty">{projects.length ? "عناصر التخطيط الخمسة الحالية مكتملة لجميع المشاريع المعروضة." : "لا توجد مشاريع ضمن النطاق المقروء."}</p>}
+              {analysis.incomplete.map(({ project, missing, readiness }) => <article key={project.id}><div><b dir="ltr">{project.project_code}</b><strong><Link className="strategy-project-link" href={projectHref(project.id, "analysis")}>{project.name_ar}</Link></strong></div><span>{missing.map((item) => item.key === "outcome" ? "النتيجة المستهدفة" : item.label).join(" · ")}</span><em>{readiness}%</em></article>)}
+              {!analysis.incomplete.length && <p className="portfolio-empty">{scoped.length ? "عناصر التخطيط الخمسة الحالية مكتملة لجميع المشاريع المعروضة." : "لا توجد مشاريع ضمن النطاق المقروء."}</p>}
             </div>
           </article></ReadSection>
         </section>
-        <PlanningInformationSummary projects={projects} status={reads.projects} />
+        <PlanningInformationSummary projects={scoped} status={reads.projects} />
       </section>
     </main>
   );

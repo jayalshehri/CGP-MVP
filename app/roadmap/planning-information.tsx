@@ -9,12 +9,12 @@ export function PlanningInformationSummary({ projects, status }: { projects: Pla
     <header><div><span>البيانات المسجلة</span><h2 id="planning-information-title">معلومات التخطيط غير المقدّمة</h2></div></header>
     <ReadSection available={status === "COMPLETE"}>
       {projects.length === 0 ? <p>لا توجد مشاريع ضمن النطاق المقروء.</p> : <dl className="project-facts">
-        <div><dt>دون مالك مسجل نصيًا</dt><dd>{missing.filter(item => item.owner).length}</dd></div>
+        <div><dt>دون أولوية (P1/P2/P3)</dt><dd>{missing.filter(item => item.priority).length}</dd></div>
+        <div><dt>دون مالك تنفيذي</dt><dd>{missing.filter(item => item.owner).length}</dd></div>
+        <div><dt>دون مدة مشروع</dt><dd>{missing.filter(item => item.duration).length}</dd></div>
         <div><dt>دون نتيجة مستهدفة</dt><dd>{missing.filter(item => item.outcome).length}</dd></div>
-        <div><dt>دون تاريخ انتهاء مستهدف</dt><dd>{missing.filter(item => item.target).length}</dd></div>
-        <div><dt>دون تاريخ انتهاء متوقع — اختياري</dt><dd>{missing.filter(item => item.forecast).length}</dd></div>
       </dl>}
-      <p className="detail-hint">وصف للحقول غير المقدّمة، وليس درجة جودة أو متطلبات إلزامية جديدة. المالك المسجل نصيًا لا يثبت إسنادًا لحساب مستخدم. التقنية اختيارية بحسب نوع العمل، ولا يلزم تسجيلها لكل مشروع.</p>
+      <p className="detail-hint">وصف للحقول غير المقدّمة، وليس درجة جودة. المشاريع المسجلة بالنموذج السابق تظهر هنا دون أولوية أو مالك أو مدة حتى تُستكمل يدويًا؛ لا تُشتق هذه القيم تلقائيًا.</p>
     </ReadSection>
   </section>;
 }

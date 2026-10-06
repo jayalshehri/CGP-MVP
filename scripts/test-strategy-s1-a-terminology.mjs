@@ -49,7 +49,11 @@ function businessContracts(path, text) {
       node.expression.getText() === 'requireProfile' ||
       (node.expression.getText().startsWith('supabase.') && /\.(insert|update|delete)\(/.test(node.getText()))
     )) found.push(logic(path, node.getText()));
-    if (ts.isVariableDeclaration(node) && ['canManage', 'permittedItems', 'items', 'form', 'emptyForm', 'roleLabels'].includes(node.name.getText())) {
+    // Portfolio Phase 1 replaced the register form model (emptyForm); its
+    // contract is certified by test-portfolio-phase1-model instead.
+    // The executive per-year `items` grouping moved from planned_year to execution year in Phase 1.
+    if (ts.isVariableDeclaration(node) && ['canManage', 'permittedItems', 'items', 'form', 'roleLabels'].includes(node.name.getText())
+      && !(path === 'app/roadmap/executive/page.tsx' && node.name.getText() === 'items')) {
       found.push(logic(path, node.getText()));
     }
     ts.forEachChild(node, visit);
@@ -60,15 +64,20 @@ function businessContracts(path, text) {
 for (const path of paths) {
   equal(businessContracts(path, read(path)), businessContracts(path, before(path)), `${path}: auth/commands unchanged (read states covered by S1-C)`);
 }
-const s1Metrics = text => text.split('// --- Requirement layer rollups')[0];
-equal(logic('app/roadmap/portfolio-metrics.ts', s1Metrics(read('app/roadmap/portfolio-metrics.ts'))), logic('app/roadmap/portfolio-metrics.ts', s1Metrics(before('app/roadmap/portfolio-metrics.ts'))), 'S1-A planning formulas unchanged; S2-B relationship rollups tested separately');
+// Portfolio Phase 1 deliberately replaced the date/quarter planning formulas;
+// the new elements are executed below. S2-B relationship rollups are tested separately.
 
 function attributes(path, text, name) {
   const found = [];
   const visit = node => {
     if (ts.isJsxAttribute(node) && node.name.getText() === name && ['input', 'select', 'textarea', 'form'].includes(node.parent.parent.tagName?.getText())) {
       // Only the two explicitly approved S1-D input bindings are additive.
-      if (!/value=\{form\.(forecast_end_date|target_outcome)\}/.test(node.parent.getText())) found.push(node.initializer?.getText());
+      // Portfolio Phase 1 replaces the register/roadmap/analysis form and filter
+      // controls; those are certified by test-portfolio-phase1-model.
+      const binding = node.parent.getText();
+      const phase1 = /form\.(forecast_end_date|target_outcome|planned_|target_end_date|actual_|priority|initiative_type|executive_owner|portfolio_priority|work_type|duration_)|Filter\b|filters|setFilters|archiveQueryValue|updateStrategyQuery\("(priority|status)"|^value=\{value\}$|=> onChange\(event|updateStrategyQuery\((key|"q"|"duration_(min|max)"),/.test(binding)
+        || (/value=\{(yearFilter|statusFilter|priorityFilter)\}/.test(binding));
+      if (!phase1) found.push(node.initializer?.getText());
     }
     ts.forEachChild(node, visit);
   };
@@ -76,6 +85,10 @@ function attributes(path, text, name) {
   return found.sort();
 }
 for (const path of paths) {
+  // The register form/filter controls are now the canonical QA portfolio form
+  // (components/PortfolioProjectFields.tsx), certified by
+  // test-portfolio-qa-integration and the QA portfolio tests.
+  if (path === 'app/roadmap/page.tsx') continue;
   // Exact project hrefs/context are certified by test-strategy-s1-b-navigation.
   for (const name of ['value', 'disabled', 'onClick', 'onChange', 'onSubmit', 'dir']) {
     equal(attributes(path, read(path), name), attributes(path, before(path), name), `${path}: form ${name} contracts unchanged`);
@@ -100,9 +113,10 @@ includes(analysis, '<h1>تحليل المحفظة السيبرانية</h1>');
 includes(dashboard, '<h1>خارطة طريق المشاريع</h1>');
 includes(executive, '<h1>ملخص محفظة المشاريع السيبرانية</h1>');
 includes(registry, '"مشروع سيبراني جديد"');
-includes(registry, '<label>نوع العمل<select value={form.initiative_type}');
+includes('components/PortfolioProjectFields.tsx', '<label>نوع العمل<select value={form.work_type}');
+includes(registry, '<PortfolioProjectFields form={form}');
 includes('components/GrcAuditTrail.tsx', "initiative_type:'نوع العمل'");
-includes(dashboard, 'توزيع المشاريع حسب السنة والربع');
+includes(dashboard, 'توزيع المشاريع حسب سنة التنفيذ');
 for (const path of [dashboard, executive]) includes(path, 'label="متوسط تقدم المشاريع المسجّل"');
 includes(executive, 'label="المشاريع السيبرانية"');
 includes(executive, 'label="فئات التنبيه الإداري"');
@@ -120,12 +134,12 @@ includes(executive, 'دون دمج علاقات المتطلبات');
 includes(dashboard, '"الضوابط ذات الربط المباشر المسجّل"');
 equal(read(analysis).includes('className="portfolio-score"'), false, 'duplicate circular score removed');
 equal((read(analysis).match(/analysis\.readiness/g) ?? []).length, 1, 'aggregate completeness displayed once');
-includes(analysis, 'missing.map((item) => item.key === "technology"');
+includes(analysis, 'missing.map((item) => item.key === "outcome"');
 includes(analysis, '<em>{readiness}%</em>');
 includes(analysis, 'analysis.incomplete.map');
 includes(analysis, '<aside className="portfolio-prioritization-note" aria-labelledby="prioritization-note-title">');
 includes(analysis, '<h2 id="prioritization-note-title">دعم تحديد الأولويات</h2><span>غير متاح حاليًا</span>');
-includes(analysis, 'تتوفر حاليًا بيانات الحالة والأولوية الإدارية والتقدم وبعض روابط الامتثال. يتطلب دعم تحديد الأولويات مستقبلًا بيانات معتمدة إضافية قبل تقديم توصيات أو تصنيف تحليلي للمشاريع.');
+includes(analysis, 'تتوفر حاليًا بيانات الحالة والأولوية والتقدم وبعض روابط الامتثال. يتطلب دعم تحديد الأولويات مستقبلًا بيانات معتمدة إضافية قبل تقديم توصيات أو تصنيف تحليلي للمشاريع.');
 for (const removed of ['Portfolio Prioritization', 'Must Do', 'Quick Wins', 'Defer', 'Strategic Alignment', 'Risk Reduction', 'Compliance Criticality', 'Effort / Complexity', 'decision-data-grid', 'portfolio-decision-readiness']) {
   equal(read(analysis).includes(removed), false, `unapproved future framework removed: ${removed}`);
 }
@@ -142,14 +156,14 @@ for (const path of [registry, analysis, dashboard, executive, detail]) {
 // Execute the existing formulas with discriminating local fixtures, never QA data.
 const js = ts.transpileModule(read('app/roadmap/portfolio-metrics.ts'), { compilerOptions: { module: ts.ModuleKind.ES2022 } }).outputText;
 const metrics = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
-const blank = { id: 1, status: 'planned', progress_percent: 0, executive_owner: null, target_outcome: null, target_end_date: null, recommended_technologies: null };
+const blank = { id: 1, status: 'planned', progress_percent: 0, portfolio_priority: null, executive_owner_code: null, duration_value: null, duration_unit: null, target_outcome: null, recommended_technologies: null };
 equal(metrics.planningReadiness(blank, 0), 0, 'empty planning baseline');
-equal(metrics.planningReadiness({ ...blank, executive_owner: 'Owner' }, 0), 20, 'five equal-weight elements');
-equal(metrics.planningReadiness({ ...blank, executive_owner: 'Owner', target_outcome: 'Outcome', target_end_date: '2027-01-01', recommended_technologies: 'Technology' }, 1), 100, 'all five planning elements');
+equal(metrics.planningReadiness({ ...blank, executive_owner_code: 'it' }, 0), 20, 'five equal-weight elements');
+equal(metrics.planningReadiness({ ...blank, duration_value: 6, duration_unit: 'quarter' }, 0), 0, 'unknown duration unit not counted');
+equal(metrics.planningReadiness({ ...blank, portfolio_priority: 'P1', executive_owner_code: 'dmo', duration_value: 6, duration_unit: 'month', target_outcome: 'Outcome' }, 1), 100, 'all five planning elements');
 equal(metrics.planningReadinessItems(blank, 0).length, 5, 'unchanged planning denominator');
 equal(metrics.averageProgress([{ progress_percent: 10 }, { progress_percent: 90 }, { progress_percent: 20 }]), 40, 'unweighted manual progress');
-equal(metrics.isDelayed({ status: 'planned', target_end_date: '2027-01-01' }, '2027-01-02'), true, 'overdue semantics');
-equal(metrics.isDelayed({ status: 'completed', target_end_date: '2027-01-01' }, '2027-01-02'), false, 'completed not overdue');
+equal(['isDelayed', 'scheduleMetric', 'formatDateAr'].filter(name => name in metrics), [], 'date/quarter schedule logic removed from portfolio metrics');
 const link = { requirement_id: 1, control_id: 10, coverage_type: 'full', mapping_confidence: 'confirmed', evidence_status: 'accepted', verification_status: 'verified' };
 const result = metrics.requirementRollup([{ requirement_id: 1, coverage_type: 'full' }], [link, { ...link, requirement_id: 2 }, { ...link, control_id: 20, verification_status: 'not_verified' }]);
 equal(result.linkedControlsCount, 2, 'distinct linked controls');
