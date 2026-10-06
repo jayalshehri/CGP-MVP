@@ -10,30 +10,21 @@ import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-r
 import { readCanonicalPortfolio } from "@/lib/strategy-portfolio-read";
 import type { RelationshipCounts } from "@/lib/strategy-relationships";
 import { ReadNotice, ReadSection } from "../read-state";
-import { averageProgress, getRiyadhDate, isDelayed, scheduleMetric } from "../portfolio-metrics";
+import { averageProgress } from "../portfolio-metrics";
+import { dimensionOptions, dimensionText, durationLabel, executionYearFor, executionYearText, executionYears, executiveOwnerLabel, isArchived, isLegacyProject, matchesPortfolioFilters, projectStatusText as statusText, workTypeText, type PortfolioDimension, type PortfolioFields } from "@/lib/portfolio-analytics";
 import "../roadmap.css";
 
-type Project = {
+type Project = PortfolioFields & {
   id: number;
   project_code: string;
   name_ar: string;
-  planned_year: number;
-  planned_quarter: string;
   status: "planned" | "in_progress" | "on_hold" | "completed";
-  priority: "high" | "medium" | "low";
   progress_percent: number;
-  executive_owner: string | null;
-  target_outcome: string | null;
-  recommended_technologies: string | null;
-  planned_start_date: string | null;
-  target_end_date: string | null;
-  forecast_end_date: string | null;
 };
 type LinkRow = { project_id: number; control_id: number };
 
-const statusText = { planned: "مخطط", in_progress: "قيد التنفيذ", on_hold: "متوقف", completed: "مكتمل" };
-const priorityText = { high: "عالية", medium: "متوسطة", low: "منخفضة" };
-const quarters = ["Q1", "Q2", "Q3", "Q4"];
+const projectColumns = "id,project_code,name_ar,status,progress_percent,portfolio_priority,execution_year,work_type,executive_owner_code,executive_owner_other,duration_value,duration_unit,archived_at";
+const filterDimensions: PortfolioDimension[] = ["priority", "execution_year", "work_type", "executive_owner", "status"];
 
 export default function RoadmapDashboard() {
   return <Suspense fallback={<p>جاري التحميل...</p>}><RoadmapDashboardContent /></Suspense>;
@@ -43,7 +34,8 @@ function RoadmapDashboardContent() {
   const router = useRouter();
   const params = useSearchParams();
   const focusId = roadmapFocus(params)?.id;
-  const quarterHeadings = useRef(new Map<string, HTMLHeadingElement>());
+  const yearHeadings = useRef(new Map<string, HTMLHeadingElement>());
+  const [filters, setFilters] = useState<Record<PortfolioDimension, string>>({ priority: "all", execution_year: "all", work_type: "all", executive_owner: "all", status: "all" });
   const [projects, setProjects] = useState<Project[]>([]);
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,17 +48,17 @@ function RoadmapDashboardContent() {
 
   useEffect(() => {
     if (loading || error || !focusId) return;
-    // Target the compact heading, not the grid cell stretched by adjacent quarters.
-    // One post-render scroll per context/load; no polling or scroll listener.
+    // Target the compact year heading. One post-render scroll per context/load.
     const frame = requestAnimationFrame(() => {
-      quarterHeadings.current.get(focusId)?.scrollIntoView({ behavior: "instant", block: "start", inline: "nearest" });
+      yearHeadings.current.get(focusId)?.scrollIntoView({ behavior: "instant", block: "start", inline: "nearest" });
     });
     return () => cancelAnimationFrame(frame);
   }, [loading, error, focusId]);
 
-  const projectLink = (project: Project) => projectHref(project.id, "roadmap", new URLSearchParams({
-    focus_year: String(project.planned_year), focus_quarter: project.planned_quarter,
-  }));
+  const projectLink = (project: Project) => {
+    const year = executionYearFor(project.portfolio_priority);
+    return projectHref(project.id, "roadmap", new URLSearchParams(year ? { focus_year: String(year) } : {}));
+  };
 
   useEffect(() => {
     let live = true;
@@ -74,7 +66,7 @@ function RoadmapDashboardContent() {
       try {
         await requireProfile();
         const [projectResult, linkResult, activeControlResult] = await Promise.all([
-          readStrategyRows((from, to) => supabase.from("cybersecurity_projects").select("id,project_code,name_ar,planned_year,planned_quarter,status,priority,progress_percent,executive_owner,target_outcome,recommended_technologies,planned_start_date,target_end_date,forecast_end_date", { count: "exact" }).order("planned_year").order("planned_quarter").order("project_code").order("id").range(from, to), row => row.id),
+          readStrategyRows((from, to) => supabase.from("cybersecurity_projects").select(projectColumns, { count: "exact" }).order("portfolio_priority", { nullsFirst: false }).order("project_code").order("id").range(from, to), row => row.id),
           readStrategyRows((from, to) => supabase.from("cybersecurity_project_controls").select("project_id,control_id", { count: "exact" }).order("project_id").order("control_id").range(from, to), row => `${row.project_id}:${row.control_id}`),
           readStrategyRows((from, to) => supabase.from("controls").select("id,frameworks!inner(is_active)", { count: "exact" }).eq("frameworks.is_active",true).order("id").range(from, to), row => row.id),
         ]);
@@ -105,30 +97,34 @@ function RoadmapDashboardContent() {
     };
   }, [router]);
 
+  // The roadmap shows the active (non-archived) portfolio only.
+  const visible = useMemo(() => projects.filter((project) => !isArchived(project) && matchesPortfolioFilters(project, filters)), [projects, filters]);
   const data = useMemo(() => {
-    const schedule = scheduleMetric(projects);
+    const ids = new Set(visible.map((project) => project.id));
     return {
-      average: averageProgress(projects),
-      active: projects.filter((project) => project.status === "in_progress").length,
-      complete: projects.filter((project) => project.status === "completed").length,
-      controls: new Set(links.map((link) => link.control_id)).size,
-      schedule,
-      delayed: projects.filter((project) => isDelayed(project)).sort((a, b) => String(a.target_end_date).localeCompare(String(b.target_end_date))),
-      missingDates: projects.filter((project) => !project.target_end_date),
+      average: averageProgress(visible),
+      active: visible.filter((project) => project.status === "in_progress").length,
+      complete: visible.filter((project) => project.status === "completed").length,
+      controls: new Set(links.filter((link) => ids.has(link.project_id)).map((link) => link.control_id)).size,
+      unplanned: visible.filter(isLegacyProject),
+      archived: projects.filter(isArchived).length,
     };
-  }, [projects, links]);
+  }, [projects, visible, links]);
 
   const exportExcel = () => {
     if (!exportReady) return;
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const rows = [
-      ["رمز المشروع", "المشروع", "السنة", "الربع", "الحالة", "الأولوية", "نسبة الإنجاز", "المالك", "بداية الخطة", "التاريخ المستهدف", "التاريخ المتوقع", "الضوابط ذات الربط المباشر المسجّل"],
-      ...projects.map((project) => [project.project_code, project.name_ar, project.planned_year, project.planned_quarter, statusText[project.status], priorityText[project.priority], `${project.progress_percent}%`, project.executive_owner, project.planned_start_date, project.target_end_date, project.forecast_end_date, links.filter((link) => link.project_id === project.id).length]),
+      ["رمز المشروع", "المشروع", "الأولوية", "سنة التنفيذ", "مدة المشروع", "نوع العمل", "المالك التنفيذي", "الحالة", "نسبة الإنجاز", "الضوابط ذات الربط المباشر المسجّل"],
+      ...visible.map((project) => {
+        const year = executionYearFor(project.portfolio_priority);
+        return [project.project_code, project.name_ar, project.portfolio_priority ?? "", year ? executionYearText[year] : "", durationLabel(project) ?? "", project.work_type ? workTypeText[project.work_type as keyof typeof workTypeText] ?? project.work_type : "", executiveOwnerLabel(project) ?? "", statusText[project.status], `${project.progress_percent}%`, links.filter((link) => link.project_id === project.id).length];
+      }),
     ];
     const url = URL.createObjectURL(new Blob(["\ufeff" + rows.map((row) => row.map(quote).join(",")).join("\n")], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "خارطة-طريق-المشاريع-2027-2029.csv";
+    anchor.download = "خارطة-طريق-المشاريع.csv";
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -147,42 +143,45 @@ function RoadmapDashboardContent() {
         </nav>
 
         <header className="roadmap-exec-hero">
-          <div><span>خطة التنفيذ · 2027–2029</span><h1>خارطة طريق المشاريع</h1><p>توزيع المشاريع بحسب السنة والربع المسجّلين واستثناءات التواريخ المستهدفة؛ لا يمثل اعتماديات أو تسلسل تنفيذ.</p></div>
+          <div><span>خطة التنفيذ · ثلاث سنوات</span><h1>خارطة طريق المشاريع</h1><p>توزيع المشاريع بحسب سنة التنفيذ المشتقة من الأولوية (P1 ← السنة الأولى، P2 ← الثانية، P3 ← الثالثة)؛ لا يمثل اعتماديات أو تسلسل تنفيذ.</p></div>
           <div className="roadmap-export-actions"><button type="button" disabled={!exportReady} title={!exportReady ? "التصدير غير متاح حتى تكتمل القراءات" : undefined} onClick={() => { if (exportReady) window.print(); }}>تصدير PDF</button><button type="button" disabled={!exportReady} onClick={exportExcel}>تصدير Excel</button><Link href="/roadmap/executive" className="roadmap-primary">عرض الإدارة العليا ←</Link><Link href="/roadmap" className="roadmap-secondary">تحديث المشاريع</Link></div>
         </header>
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
         <ReadNotice statuses={[reads.projects, reads.links, modern ? "COMPLETE" : "UNAVAILABLE"]} />
 
+        <section className="register-toolbar" aria-label="تصفية خارطة طريق المشاريع">
+          {filterDimensions.map((dimension) => <label key={dimension}><span>{dimensionText[dimension]}</span><select value={filters[dimension]} onChange={(event) => setFilters({ ...filters, [dimension]: event.target.value })}><option value="all">الكل</option>{Object.entries(dimensionOptions[dimension]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>)}
+          <strong>{projectsReady ? `${visible.length} مشروع` : unavailable}</strong>
+        </section>
+
         <section className="roadmap-exec-kpis roadmap-snapshot" aria-label="ملخص خارطة طريق المشاريع">
-          <Kpi label="المشاريع" value={projectsReady ? projects.length : unavailable} detail={projectsReady ? `${data.active} قيد التنفيذ · ${data.complete} مكتمل` : unavailable} />
+          <Kpi label="المشاريع" value={projectsReady ? visible.length : unavailable} detail={projectsReady ? `${data.active} قيد التنفيذ · ${data.complete} مكتمل` : unavailable} />
           <Kpi label="متوسط تقدم المشاريع المسجّل" value={projectsReady ? `${data.average}%` : unavailable} detail="متوسط غير مرجح من المشاريع" tone="teal" />
-          <Kpi label="المشاريع المتأخرة" value={projectsReady ? (data.schedule.value ?? "بيانات غير كافية") : unavailable} detail={!projectsReady ? "تعذر قراءة التواريخ" : data.schedule.value === null ? "أدخل التواريخ المستهدفة أولًا" : `حتى ${getRiyadhDate()}`} tone="amber" />
-          <Kpi label="بلا تاريخ مستهدف" value={projectsReady ? data.schedule.missingDates : unavailable} detail="لا تدخل في حساب التأخير" tone="amber" />
+          <Kpi label="بلا أولوية P1/P2/P3" value={projectsReady ? data.unplanned.length : unavailable} detail="مسجلة بالنموذج السابق؛ لا تظهر في السنوات" tone="amber" />
+          <Kpi label="مشاريع مؤرشفة" value={projectsReady ? data.archived : unavailable} detail="مستبعدة من خارطة الطريق" />
           <Kpi label="ضوابط ذات ربط مباشر مسجّل" value={linksReady ? data.controls : unavailable} detail="من سجل الربط المباشر؛ لا تعني تحقق الالتزام" tone="blue" />
           <Kpi label="ضوابط مميزة عبر المتطلبات" value={modern?.controls ?? unavailable} detail="مسارات العلاقات الحديثة ضمن نطاق القراءة، منفصلة عن الربط المباشر" tone="blue" />
         </section>
 
-        <ReadSection available={projectsReady}><section className="quarterly-roadmap" aria-labelledby="quarterly-roadmap-title">
-          <header><div><span>العرض التشغيلي</span><h2 id="quarterly-roadmap-title">توزيع المشاريع حسب السنة والربع</h2><p>اللون يوضح حالة التنفيذ، والشارة توضح الأولوية الإدارية.</p></div><small>As of {getRiyadhDate()}</small></header>
-          <div className="quarterly-roadmap-grid">
-            <div className="quarterly-head"><span>السنة</span>{quarters.map((quarter) => <b key={quarter}>{quarter}</b>)}</div>
-            {[2027, 2028, 2029].map((year) => <div className="quarterly-row" key={year}><b>{year}</b>{quarters.map((quarter) => {
-              const id = `roadmap-${year}-${quarter}`;
-              const quarterProjects = projects.filter((project) => project.planned_year === year && project.planned_quarter === quarter);
-              return <section key={quarter} id={id} aria-labelledby={`${id}-heading`} data-reading-focus={focusId === id || undefined}>
+        <ReadSection available={projectsReady}><section className="quarterly-roadmap" aria-labelledby="year-roadmap-title">
+          <header><div><span>العرض التشغيلي</span><h2 id="year-roadmap-title">توزيع المشاريع حسب سنة التنفيذ</h2><p>اللون يوضح حالة التنفيذ، والشارة توضح الأولوية.</p></div></header>
+          <div className="year-roadmap-grid">
+            {executionYears.map((year) => {
+              const id = `roadmap-year-${year}`;
+              const yearProjects = visible.filter((project) => executionYearFor(project.portfolio_priority) === year);
+              return <section key={year} id={id} aria-labelledby={`${id}-heading`} data-reading-focus={focusId === id || undefined}>
                 <h3 id={`${id}-heading`} className="quarterly-context-heading" ref={(element) => {
-                  if (element) quarterHeadings.current.set(id, element);
-                  else quarterHeadings.current.delete(id);
-                }}><bdi>{quarter} / {year}</bdi></h3>
-                {quarterProjects.length ? quarterProjects.map((project) => <Link href={projectLink(project)} key={project.id} className={`quarterly-project ${project.status}`} title={`${project.project_code} — ${project.name_ar}`}><div><b dir="ltr">{project.project_code}</b><span className={`register-priority ${project.priority}`}>{priorityText[project.priority]}</span></div><strong>{project.name_ar}</strong><small>{project.executive_owner || "مالك غير محدد"} · {project.progress_percent}%</small></Link>) : <small className="quarterly-empty">لا توجد مشاريع مسجلة لهذا الربع.</small>}
+                  if (element) yearHeadings.current.set(id, element);
+                  else yearHeadings.current.delete(id);
+                }}><bdi>{executionYearText[year]} · P{year}</bdi></h3>
+                {yearProjects.length ? yearProjects.map((project) => <Link href={projectLink(project)} key={project.id} className={`quarterly-project ${project.status}`} title={`${project.project_code} — ${project.name_ar}`}><div><b dir="ltr">{project.project_code}</b><span className={`register-priority ${project.portfolio_priority}`}>{project.portfolio_priority}</span></div><strong>{project.name_ar}</strong><small>{executiveOwnerLabel(project) ?? "مالك غير محدد"} · {durationLabel(project) ?? "مدة غير محددة"} · {project.progress_percent}%</small></Link>) : <small className="quarterly-empty">لا توجد مشاريع مسجلة لهذه السنة.</small>}
               </section>;
-            })}</div>)}
+            })}
           </div>
         </section>
 
         <section className="roadmap-exceptions">
-          <article><header><div><span>استثناءات الجدول</span><h2>المشاريع المتأخرة</h2></div><b>{data.schedule.value === null ? "بيانات غير كافية" : data.delayed.length}</b></header>{data.schedule.value === null ? <p className="metric-unavailable">لا يمكن تحديد التأخير قبل إدخال التواريخ المستهدفة.</p> : data.delayed.length ? <ul>{data.delayed.map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectLink(project)}>{project.name_ar}</Link><small>{project.target_end_date}</small></li>)}</ul> : <p>لا توجد مشاريع متأخرة حسب التواريخ المسجلة.</p>}</article>
-          <article><header><div><span>جودة الخطة</span><h2>تواريخ تحتاج استكمالًا</h2></div><b>{data.missingDates.length}</b></header>{data.missingDates.length ? <ul>{data.missingDates.slice(0, 6).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectLink(project)}>{project.name_ar}</Link><Link href={projectLink(project)}>استكمال ←</Link></li>)}</ul> : <p>جميع المشاريع تحتوي على تاريخ مستهدف.</p>}</article>
+          <article><header><div><span>جودة الخطة</span><h2>مشاريع تحتاج أولوية</h2></div><b>{data.unplanned.length}</b></header>{data.unplanned.length ? <ul>{data.unplanned.slice(0, 6).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectLink(project)}>{project.name_ar}</Link><Link href={projectLink(project)}>استكمال ←</Link></li>)}</ul> : <p>جميع المشاريع المعروضة لها أولوية وسنة تنفيذ.</p>}</article>
           <article><header><div><span>القدرة التحليلية</span><h2>At Risk والاعتماديات</h2></div><b>—</b></header><p className="metric-unavailable">غير متاح حتى يُفعّل سجل مخاطر التسليم واعتماديات المشاريع. لن تعرض المنصة رقمًا تقديريًا.</p></article>
         </section></ReadSection>
       </section>

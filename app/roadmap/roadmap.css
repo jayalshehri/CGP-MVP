@@ -148,3 +148,14 @@
 .planning-information { margin-top:18px; }
 .roadmap-form label>small { font-size:12px; font-weight:400; line-height:1.6; }
 .portfolio-toolbar{grid-template-columns:repeat(auto-fit,minmax(165px,1fr))}.portfolio-table-wrap{overflow-x:auto;border:1px solid #d9e6e9;border-radius:14px;background:white}.portfolio-table{width:100%;min-width:1120px;border-collapse:collapse;font-size:13px}.portfolio-table caption{text-align:right;padding:16px;font-weight:800}.portfolio-table th,.portfolio-table td{padding:12px;text-align:right;border-bottom:1px solid #e5edef;vertical-align:top}.portfolio-table thead{background:#f1f7f6}.portfolio-table th[scope=row]{min-width:230px}.portfolio-table a{color:#0f766e}.portfolio-table small{display:block;color:#607387;font-size:11px;margin-top:4px}.portfolio-table .register-action-secondary{display:block;margin-top:8px}.portfolio-dialog{border:1px solid #d9e6e9;max-height:90vh;overflow:auto;width:min(960px,94vw);padding:0;color:#102a43}.portfolio-dialog::backdrop{background:#102a4388}.portfolio-dialog output{padding:10px;background:#f1f7f6;border-radius:8px}.register-priority.P1{background:#fff1de;color:#9a640c}.register-priority.P2{background:#edf3ff;color:#365b95}.register-priority.P3{background:#eef6f3;color:#26725f}
+/* Portfolio integration: execution-year roadmap and analysis breakdowns. */
+.year-roadmap-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.year-roadmap-grid>section{display:grid;gap:7px;align-content:start;padding:9px;min-height:138px;border-inline-start:1px solid #e9eff0}
+.year-roadmap-grid>section:first-child{border-inline-start:0}
+.year-roadmap-grid>section[data-reading-focus]{outline:2px solid var(--accent,#2563eb);outline-offset:-2px;scroll-margin-block:6rem}
+@media (max-width:800px){.year-roadmap-grid{grid-template-columns:1fr}.year-roadmap-grid>section{border-inline-start:0;border-top:1px solid #e9eff0}}
+.portfolio-breakdown{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.portfolio-breakdown table{width:100%;border-collapse:collapse;font-size:13px}
+.portfolio-breakdown th,.portfolio-breakdown td{padding:6px 4px;border-bottom:1px solid #e9eff0;text-align:start}
+.portfolio-breakdown td:last-child{text-align:end;font-weight:800}
+.portfolio-table tr.is-archived{opacity:.75}

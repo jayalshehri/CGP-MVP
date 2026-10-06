@@ -37,9 +37,9 @@ const complete = { projects: 'COMPLETE', links: 'COMPLETE', requirements: 'COMPL
 const renderPage = (name, states = {}, query = '') => render(`app/roadmap/${name ? name + '/' : ''}page.tsx`, `/roadmap${name === '[id]' ? '/37' : name ? '/' + name : ''}${query}`, { reads: complete, ...states });
 const kpi = (html, label) => html.match(new RegExp(`<span>${label}</span><strong>(.*?)</strong>`))?.[1];
 let html = renderPage('', { projects: [] });
-equal(kpi(html, 'إجمالي المشاريع'), '0', 'complete register zero');
+equal(kpi(html, 'مشاريع النطاق المعروض'), '0', 'complete register zero');
 html = renderPage('', { projects: [], reads: { ...complete, projects: 'UNAVAILABLE' } });
-equal(kpi(html, 'إجمالي المشاريع'), 'غير متاح', 'primary count unavailable');
+equal(kpi(html, 'مشاريع النطاق المعروض'), 'غير متاح', 'primary count unavailable');
 check(!html.includes('لا توجد مشاريع مطابقة'), 'no false empty register on failure');
 html = renderPage('', { reads: { ...complete, links: 'UNAVAILABLE', mapping: 'UNAVAILABLE' } });
 check(html.includes('مشروع محدد'), 'register independent projects survive');
@@ -48,18 +48,18 @@ check(html.includes('قراءة جزئية'), 'partial read explained safely');
 check(renderPage('').includes('لا توجد علاقة مسجلة ضمن هذا المصدر'), 'complete empty relationship distinct');
 html = renderPage('analysis', { reads: { ...complete, links: 'UNAVAILABLE' } });
 equal(kpi(html, 'اكتمال عناصر التخطيط الخمسة الحالية'), 'غير متاح', 'five-element composite requires direct relationships');
-equal(kpi(html, 'أولوية إدارية عالية'), '1', 'project-only analysis survives');
+equal(kpi(html, 'مشاريع الأولوية P1'), '1', 'project-only analysis survives');
 check(!html.includes('مكتملة لجميع المشاريع المعروضة'), 'no false planning completeness');
 html = renderPage('analysis', { reads: { ...complete, treatments: 'UNAVAILABLE' } });
 check(html.includes('<b>غير متاح</b>'), 'treatment count unavailable, not zero');
 check(!html.includes('data-read-status="UNAVAILABLE"'), 'independent project analysis still partial not page failure');
-html = renderPage('dashboard', { reads: { ...complete, links: 'UNAVAILABLE' } }, '?focus_year=2027&focus_quarter=Q1');
+html = renderPage('dashboard', { reads: { ...complete, links: 'UNAVAILABLE' } }, '?focus_year=1');
 check(html.includes('quarterly-project') && html.includes('data-reading-focus="true"'), 'roadmap placement/context survives enrichment failure');
 equal(kpi(html, 'ضوابط ذات ربط مباشر مسجّل'), 'غير متاح', 'roadmap enrichment not zero');
-equal(kpi(html, 'المشاريع المتأخرة'), 'بيانات غير كافية', 'loaded records without dates are insufficient, not read failure');
+equal(kpi(html, 'المشاريع المتأخرة'), undefined, 'date-based delay KPI removed with the portfolio model');
 check((html.match(/disabled=""/g) || []).length >= 2, 'both roadmap exports blocked');
 html = renderPage('dashboard', { projects: [], reads: { ...complete, projects: 'UNAVAILABLE' } });
-check(!html.includes('quarterly-project') && !html.includes('لا توجد مشاريع مسجلة لهذا الربع'), 'failed snapshot cannot masquerade as empty quarter');
+check(!html.includes('quarterly-project') && !html.includes('لا توجد مشاريع مسجلة لهذه السنة'), 'failed snapshot cannot masquerade as empty year');
 html = renderPage('executive', { projects: [], reads: { ...complete, treatments: 'UNAVAILABLE' } });
 equal(kpi(html, 'فئات التنبيه الإداري'), 'غير متاح', 'executive composite alert count blocked');
 check(!html.includes('لا توجد فئات تنبيه وفق القواعد الحالية'), 'no false no-alert conclusion');
@@ -106,11 +106,11 @@ function calculations(path, text) {
 }
 for (const path of paths) {
   const before = execFileSync('git', ['show', `${base}:${path}`], { cwd: root, encoding: 'utf8' }), now = source(path);
-  // S2-B deliberately replaces relationship aggregations and adds exact legacy
-  // reads in Project Detail. The new contract is covered by its own test.
-  if (path.includes('/analysis/') || path.includes('/dashboard/') || path.includes('/executive/')) {
-    equal(calculations(path, now), calculations(path, before), `${path} S1 planning formulas unchanged`);
-  }
+  // S2-B deliberately replaced relationship aggregations, and Portfolio Phase 1
+  // replaced the quarter/date planning formulas on analysis, roadmap and
+  // executive views (priority/execution year/duration). Those contracts are
+  // covered by test-portfolio-phase1-model; only the read-shape checks remain here.
+  void calculations;
   if (!path.includes('/[id]/')) equal(extract(now, 'from'), extract(before, 'from'), `${path} original source tables retained`);
   check(now.includes('readStrategyRows('), `${path} paged authorized reads`);
   check(now.includes('.order("id")'), `${path} selected primary ID stable ordering`);
@@ -118,7 +118,7 @@ for (const path of paths) {
   check(!now.includes('setError(detail)'), `${path} raw read errors not exposed`);
 }
 const s1Metrics = text => text.split('// --- Requirement layer rollups')[0];
-equal(s1Metrics(source('app/roadmap/portfolio-metrics.ts')), s1Metrics(execFileSync('git', ['show', `${base}:app/roadmap/portfolio-metrics.ts`], { cwd: root, encoding: 'utf8' })), 'S1 pure formulas byte-identical to accepted baseline');
+check(!/target_end_date|planned_quarter|planned_year/.test(s1Metrics(source('app/roadmap/portfolio-metrics.ts'))), 'portfolio planning formulas no longer depend on dates or quarters');
 check(!source('lib/strategy-read.ts').includes('service_role'), 'no privileged fallback');
 check(!source('app/roadmap/page.tsx').includes('ينتظر تطبيق تحديث قاعدة البيانات'), 'read failure never presented as proven missing configuration');
 console.log(`S1-C read reliability: ${checks} assertions PASS (offline, no data writes)`);

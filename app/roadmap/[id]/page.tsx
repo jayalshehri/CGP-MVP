@@ -9,28 +9,12 @@ import { readStrategyRows, createReadEpoch, unavailable, noRelationship, type Re
 import { ReadNotice, ReadSection } from "../read-state";
 import StatusBadge from "@/components/StatusBadge";
 import GrcAuditTrail from "@/components/GrcAuditTrail";
-import { formatDateAr } from "../portfolio-metrics";
-import { projectDateLabels } from "@/lib/strategy-project-fields";
+import { formatDuration, mappingCompletenessLabels, ownerLabels, priorityLabels, workTypeLabels, type PortfolioProject } from "@/lib/project-portfolio";
 import "../roadmap.css";
 import "@/app/controls/[id]/detail.css";
 
-type Project = {
-  id: number;
-  project_code: string;
-  name_ar: string;
-  description_ar: string | null;
-  status: string;
-  priority: string;
-  initiative_type: string;
-  executive_owner: string | null;
-  progress_percent: number;
-  planned_year: number;
-  planned_quarter: string;
-  target_end_date: string | null;
-  planned_start_date: string | null;
-  actual_start_date: string | null;
-  forecast_end_date: string | null;
-  actual_end_date: string | null;
+// Canonical QA portfolio record (lib/project-portfolio.ts) plus detail-only fields.
+type Project = PortfolioProject & {
   target_outcome: string | null;
   updated_at: string | null;
   recommended_technologies: string | null;
@@ -77,20 +61,12 @@ const treatmentText: Record<string, string> = {
   policy: "وثيقة/سياسة",
   training: "تدريب",
 };
-const initiativeTypeText: Record<string, string> = {
-  technology_project: "مشروع تقني",
-  managed_service: "خدمة مُدارة",
-  framework_agreement: "اتفاقية إطارية",
-  internal_program: "برنامج داخلي",
-  policy_governance: "سياسة وحوكمة",
-  assessment: "تقييم",
-  continuous_activity: "نشاط مستمر",
-};
 const coverageText: Record<string, string> = { full: "كاملة", partial: "جزئية", supporting: "داعمة" };
 const statusText: Record<string, string> = { planned: "مخطط", in_progress: "قيد التنفيذ", on_hold: "متوقف", completed: "مكتمل" };
 const priorityText: Record<string, string> = { high: "عالية", medium: "متوسطة", low: "منخفضة" };
 const mappingConfidenceText: Record<string, string> = { confirmed: "مؤكد", probable: "محتمل" };
 const verificationFilterText: Record<string, string> = { verified: "تم التحقق", not_verified: "غير متحقق" };
+const ownerText = (project: Project) => project.executive_owner_code === "other" ? project.executive_owner_other : project.executive_owner_code ? ownerLabels[project.executive_owner_code] : "بانتظار التصنيف";
 const goodVerification = (value: string) => value === "verified";
 const single = <T,>(value: T | T[] | null): T | null => (Array.isArray(value) ? value[0] ?? null : value);
 
@@ -387,12 +363,15 @@ function ProjectDetailContent({ id }: { id: string }) {
         <header className="project-detail-head">
           <h1>{project.name_ar}</h1>
           <p className="project-detail-tags">
-            <span dir="ltr">{project.project_code}</span> · {initiativeTypeText[project.initiative_type] ?? project.initiative_type} · {statusText[project.status] ?? project.status} · أولوية {priorityText[project.priority] ?? project.priority}
+            <span dir="ltr">{project.project_code}</span> · {project.work_type ? workTypeLabels[project.work_type] : "نوع العمل بانتظار التصنيف"} · {statusText[project.status] ?? project.status} · أولوية {project.portfolio_priority ? priorityLabels[project.portfolio_priority] : "غير مصنّفة"}
           </p>
           <p className="project-detail-line">
-            {project.planned_year} · {project.planned_quarter} <span className="sep">|</span> المالك: {project.executive_owner?.trim() || "لا يوجد مالك مسجل"} <span className="sep">|</span> الإنجاز: {clampedProgress}%
+            {project.execution_year ? `السنة ${project.execution_year}` : "سنة التنفيذ غير محددة"} · {formatDuration(project.duration_value, project.duration_unit)} · {project.archived_at ? "المحفظة المؤرشفة" : "المحفظة النشطة"} <span className="sep">|</span> المالك: {ownerText(project)} <span className="sep">|</span> الإنجاز: {clampedProgress}%
           </p>
           <div className="project-detail-progress"><i style={{ width: `${clampedProgress}%` }} /></div>
+          <p role="status">{mappingCompletenessLabels[project.mapping_completeness ?? "mapping_pending"]}
+            {project.import_staging_id && <> — {project.mapping_exact_count} من {project.mapping_reference_count} مراجع مصدر مرتبطة؛ {project.mapping_reference_count - project.mapping_exact_count - project.mapping_source_error_count} بانتظار المراجعة، {project.mapping_source_error_count} أخطاء مصدر. عدد الضوابط المرتبطة لا يمثل كامل النطاق. اكتمال الربط لا يعني الامتثال.</>}
+          </p>
         </header>
 
         <ReadNotice statuses={["COMPLETE", ...Object.values(reads)]} />
@@ -440,6 +419,7 @@ function ProjectDetailContent({ id }: { id: string }) {
               <li><span className="legend-dot full" />مواءمة بتغطية كاملة: <b>{rollup.full}</b></li>
               <li><span className="legend-dot partial" />مواءمة بتغطية جزئية: <b>{rollup.partial}</b></li>
               <li><span className="legend-dot supporting" />مواءمة بتغطية داعمة: <b>{rollup.supporting}</b></li>
+              <li>روابط مباشرة مسجّلة: <b>{reads.legacy === "COMPLETE" ? new Set(legacyLinks.map(link => link.control_id)).size : unavailable}</b> — مستقلة عن المتطلبات ودون استنتاج مستوى التغطية</li>
             </ul>
           </article>
 
@@ -472,22 +452,21 @@ function ProjectDetailContent({ id }: { id: string }) {
             {tab === 0 && (
               <section className="detail-card">
                 <h2>نظرة عامة</h2>
-                <p>الحالة: {statusText[project.status] ?? project.status} · الأولوية: {priorityText[project.priority] ?? project.priority}</p>
-                <p>نوع العمل: {initiativeTypeText[project.initiative_type] ?? project.initiative_type} · نسبة الإنجاز: {clampedProgress}%</p>
-                <p>المالك التنفيذي: {project.executive_owner?.trim() || "لا يوجد مالك مسجل"}{project.executive_owner?.trim() && <small className="detail-hint"> — مالك مسجل نصيًا؛ لا يثبت إسنادًا لحساب مستخدم.</small>}</p>
+                <dl className="project-facts">
+                  <div><dt>الأولوية</dt><dd>{project.portfolio_priority ? priorityLabels[project.portfolio_priority] : "غير مصنّفة"}</dd></div>
+                  <div><dt>سنة التنفيذ</dt><dd>{project.execution_year ? `السنة ${project.execution_year}` : "غير محددة"}</dd></div>
+                  <div><dt>مدة المشروع</dt><dd>{formatDuration(project.duration_value, project.duration_unit)}</dd></div>
+                  <div><dt>نوع العمل</dt><dd>{project.work_type ? workTypeLabels[project.work_type] : "بانتظار التصنيف"}</dd></div>
+                  <div><dt>الجهة المالكة</dt><dd>{ownerText(project)}</dd></div>
+                  <div><dt>الحالة</dt><dd>{statusText[project.status] ?? project.status}</dd></div>
+                  <div><dt>نسبة الإنجاز</dt><dd>{clampedProgress}%</dd></div>
+                  <div><dt>المحفظة</dt><dd>{project.archived_at ? `مؤرشفة${project.archive_reason ? ` — ${project.archive_reason}` : ""}` : "نشطة"}</dd></div>
+                </dl>
                 <h3>وصف المشروع</h3>
                 <p>{project.description_ar || "لا يوجد وصف مسجل."}</p>
                 <h3>النتيجة المستهدفة</h3>
                 <p className="project-outcome">{project.target_outcome?.trim() || "لا توجد نتيجة مستهدفة مسجلة."}</p>
                 <p className="detail-hint">النتيجة المتوقع تحقيقها عند اكتمال المشروع؛ ليست إثباتًا لتحقق النتيجة.</p>
-                <h3>التواريخ المسجلة</h3>
-                <dl className="project-facts">
-                  {Object.entries(projectDateLabels).map(([field, label]) => {
-                    const value = project[field as keyof typeof projectDateLabels];
-                    return <div key={field}><dt>{label}</dt><dd>{value ? <time dateTime={value} dir="ltr">{formatDateAr(value)}</time> : field === "target_end_date" ? "لا يوجد تاريخ انتهاء مستهدف" : field === "forecast_end_date" ? "غير مقدم — اختياري" : "غير مسجل"}</dd></div>;
-                  })}
-                </dl>
-                <p className="detail-hint">المتوقع تقدير حالي مستقل عن المستهدف، والفعلي يسجل ما حدث. لا تُستنتج التواريخ من الحالة أو نسبة الإنجاز.</p>
                 <p>آخر تعديل: {project.updated_at && Number.isFinite(Date.parse(project.updated_at)) ? <time dateTime={project.updated_at}>{new Date(project.updated_at).toLocaleString("ar-SA", { calendar: "gregory", timeZone: "Asia/Riyadh" })} (الرياض)</time> : "غير مسجل"}</p>
               </section>
             )}
@@ -589,8 +568,8 @@ function ProjectDetailContent({ id }: { id: string }) {
             )}
             {tab === 2 && <ReadSection available={reads.legacy === "COMPLETE"}>
               <section className="detail-card">
-                <h2>روابط مباشرة موروثة</h2>
-                <p className="detail-hint">سجل مستقل عن العلاقات عبر المتطلبات؛ لا يُستنتج منه متطلب أو تحقق امتثال.</p>
+                <h2>روابط مباشرة مسجّلة</h2>
+                <p className="detail-hint">سجل مستقل عن العلاقات عبر المتطلبات؛ لا يُستنتج منه متطلب أو مستوى تغطية أو تحقق امتثال.{project.import_staging_id ? " لمشاريع المحفظة المستوردة تقتصر هذه الروابط على مطابقات المصدر الحرفية المعتمدة (exact_match)." : ""}</p>
                 {!legacyLinks.length ? <p>{noRelationship}</p> : <ul>{legacyLinks.map(link => {
                   const legacyControl = single(link.controls);
                   return <li key={`${link.project_id}:${link.control_id}`}><Link href={`/controls/${link.control_id}`}><span dir="ltr">{legacyControl?.control_code}</span> — {legacyControl?.title_ar}</Link></li>;
