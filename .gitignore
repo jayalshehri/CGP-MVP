@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local evidence, payloads and generated cutover packages (real data; never commit)
+/backups/
