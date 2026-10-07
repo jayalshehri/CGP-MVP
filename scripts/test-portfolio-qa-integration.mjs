@@ -106,8 +106,8 @@ for (const [file, sha] of Object.entries(applied)) equal(createHash('sha256').up
 const migrations = readdirSync(new URL('supabase/migrations/', root));
 check(!migrations.some(name => name.startsWith('20261007090000')), 'superseded 20261007090000 migration excluded');
 // Only the approved, not-yet-applied identity/audit hardening follows the QA-applied head.
-equal(migrations.filter(name => name.slice(0, 14) > '20261006102306'), ['20261007100000_portfolio_identity_audit_hardening.sql'], 'only the approved corrective migration after the QA-applied head');
-const hardening = read('supabase/migrations/20261007100000_portfolio_identity_audit_hardening.sql').replace(/--.*$/gm, '');
+equal(migrations.filter(name => name.slice(0, 14) > '20261006102306'), ['20261007185235_portfolio_identity_audit_hardening.sql'], 'only the approved corrective migration after the QA-applied head');
+const hardening = read('supabase/migrations/20261007185235_portfolio_identity_audit_hardening.sql').replace(/--.*$/gm, '');
 for (const forbidden of [/\binsert\s+into\s+public\./i, /\bupdate\s+public\./i, /\bdelete\s+from\b/i, /\btruncate\b/i, /\bdrop\s+/i, /\bgrant\s+/i, /alter\s+table/i, /disable\s+row\s+level/i]) check(!forbidden.test(hardening), `hardening migration has no ${forbidden}`);
 for (const required of ['new.created_by := auth.uid()', 'new.archived_by := auth.uid()', 'as restrictive for select', "'portfolio_mapping_reviews'"]) check(hardening.includes(required), `hardening migration includes ${required}`);
 console.log(`Portfolio QA integration: ${checks} assertions PASS (offline, synthetic fixtures)`);

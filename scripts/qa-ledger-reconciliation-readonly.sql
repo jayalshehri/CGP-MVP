@@ -35,7 +35,7 @@ from public.cybersecurity_requirement_controls
 where notes like '%[Master-Catalog review 2026-09-21]%';
 
 -- 4) Repository versions (83 files on claude/qa-portfolio-integration,
---    including the not-yet-applied 20261007100000) missing from the QA ledger.
+--    including 20261007185235, applied on QA 2026-10-07) missing from the QA ledger.
 with repo_versions(version) as (values
   ('20260903000000'),
   ('20260903070000'),
@@ -119,7 +119,7 @@ with repo_versions(version) as (values
   ('20261006095402'),
   ('20261006095409'),
   ('20261006102306'),
-  ('20261007100000')
+  ('20261007185235')
 )
 select r.version as repo_version_not_in_qa_ledger
 from repo_versions r left join supabase_migrations.schema_migrations m on m.version = r.version
@@ -208,7 +208,7 @@ with repo_versions(version) as (values
   ('20261006095402'),
   ('20261006095409'),
   ('20261006102306'),
-  ('20261007100000')
+  ('20261007185235')
 )
 select m.version as qa_ledger_version_not_in_repo, m.name
 from supabase_migrations.schema_migrations m left join repo_versions r on r.version = m.version
