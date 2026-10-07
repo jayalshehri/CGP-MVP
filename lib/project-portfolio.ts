@@ -1,4 +1,5 @@
 export const priorityLabels = { P1: "P1 — السنة الأولى", P2: "P2 — السنة الثانية", P3: "P3 — السنة الثالثة" } as const;
+export const executionYearLabels = { 1: "السنة الأولى", 2: "السنة الثانية", 3: "السنة الثالثة" } as const;
 export const workTypeLabels = {
   technical_project: "مشروع تقني", managed_service: "خدمة مُدارة",
   framework_agreement: "اتفاقية إطارية", internal_program: "برنامج داخلي",

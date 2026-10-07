@@ -75,7 +75,7 @@ function attributes(path, text, name) {
       // Portfolio Phase 1 replaces the register/roadmap/analysis form and filter
       // controls; those are certified by test-portfolio-phase1-model.
       const binding = node.parent.getText();
-      const phase1 = /form\.(forecast_end_date|target_outcome|planned_|target_end_date|actual_|priority|initiative_type|executive_owner|portfolio_priority|work_type|duration_)|Filter\b|filters|setFilters|archiveQueryValue|updateStrategyQuery\("(priority|status)"|^value=\{value\}$|=> onChange\(event|updateStrategyQuery\((key|"q"|"duration_(min|max)"),/.test(binding)
+      const phase1 = /form\.(forecast_end_date|target_outcome|planned_|target_end_date|actual_|priority|initiative_type|executive_owner|portfolio_priority|work_type|duration_)|Filter\b|filters|setFilters|archiveQueryValue|updateStrategyQuery\("(priority|status)"|^value=\{value\}$|=> onChange\(event|updateStrategyQuery\((key|"q"|"duration_(min|max)"),|setScope\(/.test(binding)
         || (/value=\{(yearFilter|statusFilter|priorityFilter)\}/.test(binding));
       if (!phase1) found.push(node.initializer?.getText());
     }

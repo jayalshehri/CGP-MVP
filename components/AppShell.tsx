@@ -179,7 +179,10 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   // Presentation only: permittedItems and page authorization still allow valid
   // deep links. Sidebar, mobile navigation and navigation search share items.
   const items = permittedItems.filter(item => (!item.personal || account?.role === "control_owner") && (!item.ownerHidden || account?.role !== "control_owner") && !item.sidebarHidden && (workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls"));
-  const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "الرئيسية");
+  // The executive summary is not a navigation item; without this it inherits the
+  // "/roadmap" prefix match and is mislabelled as the project register.
+  const current = pathname === "/roadmap/executive" ? "ملخص محفظة المشاريع السيبرانية"
+    : navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "الرئيسية");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const complianceCode = /^\/compliance\/([^/]+)/.exec(pathname)?.[1];
   const assessmentFramework = ASSESSMENT_ROUTES.find(route => route.href === pathname)?.code;

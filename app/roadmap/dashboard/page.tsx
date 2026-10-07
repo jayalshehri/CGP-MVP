@@ -7,11 +7,11 @@ import { projectHref, roadmapFocus } from "@/lib/strategy-navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-read";
-import { readCanonicalPortfolio } from "@/lib/strategy-portfolio-read";
-import type { RelationshipCounts } from "@/lib/strategy-relationships";
+import { readCanonicalEdges, type CanonicalEdges } from "@/lib/strategy-portfolio-read";
+import { projectCount } from "@/lib/arabic-count";
 import { ReadNotice, ReadSection } from "../read-state";
 import { averageProgress } from "../portfolio-metrics";
-import { dimensionOptions, dimensionText, durationLabel, executionYearFor, executionYearText, executionYears, executiveOwnerLabel, isArchived, isLegacyProject, matchesPortfolioFilters, projectStatusText as statusText, workTypeText, type PortfolioDimension, type PortfolioFields } from "@/lib/portfolio-analytics";
+import { dimensionOptions, dimensionText, durationLabel, executionYearFor, executionYearText, executionYears, executiveOwnerLabel, isArchived, isLegacyProject, isPortfolioScope, matchesPortfolioFilters, matchesScope, portfolioScopes, scopedRequirementCounts, type PortfolioScope, projectStatusText as statusText, workTypeText, type PortfolioDimension, type PortfolioFields } from "@/lib/portfolio-analytics";
 import "../roadmap.css";
 
 type Project = PortfolioFields & {
@@ -40,7 +40,8 @@ function RoadmapDashboardContent() {
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [modern, setModern] = useState<RelationshipCounts | null>(null);
+  const [canonical, setCanonical] = useState<CanonicalEdges | null>(null);
+  const [scope, setScope] = useState<PortfolioScope>("active");
   const [reads, setReads] = useState<{ projects: ReadStatus; links: ReadStatus }>({ projects: "UNAVAILABLE", links: "UNAVAILABLE" });
   const projectsReady = reads.projects === "COMPLETE";
   const linksReady = projectsReady && reads.links === "COMPLETE";
@@ -70,7 +71,7 @@ function RoadmapDashboardContent() {
           readStrategyRows((from, to) => supabase.from("cybersecurity_project_controls").select("project_id,control_id", { count: "exact" }).order("project_id").order("control_id").range(from, to), row => `${row.project_id}:${row.control_id}`),
           readStrategyRows((from, to) => supabase.from("controls").select("id,frameworks!inner(is_active)", { count: "exact" }).eq("frameworks.is_active",true).order("id").range(from, to), row => row.id),
         ]);
-        const modernResult = projectResult.status === "COMPLETE" ? await readCanonicalPortfolio(projectResult.data.map(row => row.id)) : null;
+        const edges = projectResult.status === "COMPLETE" ? await readCanonicalEdges() : null;
         if (live) {
           setError(projectResult.error ? "غير متاح — تعذر تحميل المشاريع." : "");
           setReads({ projects: projectResult.status, links: linkResult.status === "COMPLETE" && activeControlResult.status === "COMPLETE" ? "COMPLETE" : "UNAVAILABLE" });
@@ -78,7 +79,7 @@ function RoadmapDashboardContent() {
           const visibleProjects = new Set(projectResult.data.map(row => row.id));
           setProjects((projectResult.data ?? []) as Project[]);
           setLinks((linkResult.data ?? []).filter(row => visibleProjects.has(row.project_id) && activeIds.has(row.control_id)) as LinkRow[]);
-          setModern(modernResult);
+          setCanonical(edges);
         }
       } catch (cause) {
         if (!live) return;
@@ -97,8 +98,10 @@ function RoadmapDashboardContent() {
     };
   }, [router]);
 
-  // The roadmap shows the active (non-archived) portfolio only.
-  const visible = useMemo(() => projects.filter((project) => !isArchived(project) && matchesPortfolioFilters(project, filters)), [projects, filters]);
+  // Displayed scope: active portfolio by default, narrowed by the filters. Every
+  // KPI below (including requirement-derived controls) counts exactly these projects.
+  const visible = useMemo(() => projects.filter((project) => matchesScope(project, scope) && matchesPortfolioFilters(project, filters)), [projects, scope, filters]);
+  const modern = useMemo(() => scopedRequirementCounts(canonical, visible), [canonical, visible]);
   const data = useMemo(() => {
     const ids = new Set(visible.map((project) => project.id));
     return {
@@ -150,17 +153,18 @@ function RoadmapDashboardContent() {
         <ReadNotice statuses={[reads.projects, reads.links, modern ? "COMPLETE" : "UNAVAILABLE"]} />
 
         <section className="register-toolbar" aria-label="تصفية خارطة طريق المشاريع">
+          <label><span>المحفظة</span><select value={scope} onChange={(event) => { if (isPortfolioScope(event.target.value)) setScope(event.target.value); }}>{Object.entries(portfolioScopes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           {filterDimensions.map((dimension) => <label key={dimension}><span>{dimensionText[dimension]}</span><select value={filters[dimension]} onChange={(event) => setFilters({ ...filters, [dimension]: event.target.value })}><option value="all">الكل</option>{Object.entries(dimensionOptions[dimension]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>)}
-          <strong>{projectsReady ? `${visible.length} مشروع` : unavailable}</strong>
+          <strong>{projectsReady ? projectCount(visible.length) : unavailable}</strong>
         </section>
 
         <section className="roadmap-exec-kpis roadmap-snapshot" aria-label="ملخص خارطة طريق المشاريع">
           <Kpi label="المشاريع" value={projectsReady ? visible.length : unavailable} detail={projectsReady ? `${data.active} قيد التنفيذ · ${data.complete} مكتمل` : unavailable} />
           <Kpi label="متوسط تقدم المشاريع المسجّل" value={projectsReady ? `${data.average}%` : unavailable} detail="متوسط غير مرجح من المشاريع" tone="teal" />
           <Kpi label="بلا أولوية P1/P2/P3" value={projectsReady ? data.unplanned.length : unavailable} detail="مسجلة بالنموذج السابق؛ لا تظهر في السنوات" tone="amber" />
-          <Kpi label="مشاريع مؤرشفة" value={projectsReady ? data.archived : unavailable} detail="مستبعدة من خارطة الطريق" />
+          <Kpi label="مشاريع مؤرشفة" value={projectsReady ? data.archived : unavailable} detail={scope === "active" ? "إجمالي المحفظة المؤرشفة؛ مستبعدة من النطاق المعروض" : "إجمالي المحفظة المؤرشفة"} />
           <Kpi label="ضوابط ذات ربط مباشر مسجّل" value={linksReady ? data.controls : unavailable} detail="من سجل الربط المباشر؛ لا تعني تحقق الالتزام" tone="blue" />
-          <Kpi label="ضوابط مميزة عبر المتطلبات" value={modern?.controls ?? unavailable} detail="مسارات العلاقات الحديثة ضمن نطاق القراءة، منفصلة عن الربط المباشر" tone="blue" />
+          <Kpi label="ضوابط مميزة عبر المتطلبات" value={modern?.controls ?? unavailable} detail="لمشاريع النطاق والفلاتر المعروضة فقط؛ منفصلة عن الربط المباشر" tone="blue" />
         </section>
 
         <ReadSection available={projectsReady}><section className="quarterly-roadmap" aria-labelledby="year-roadmap-title">
@@ -174,7 +178,7 @@ function RoadmapDashboardContent() {
                   if (element) yearHeadings.current.set(id, element);
                   else yearHeadings.current.delete(id);
                 }}><bdi>{executionYearText[year]} · P{year}</bdi></h3>
-                {yearProjects.length ? yearProjects.map((project) => <Link href={projectLink(project)} key={project.id} className={`quarterly-project ${project.status}`} title={`${project.project_code} — ${project.name_ar}`}><div><b dir="ltr">{project.project_code}</b><span className={`register-priority ${project.portfolio_priority}`}>{project.portfolio_priority}</span></div><strong>{project.name_ar}</strong><small>{executiveOwnerLabel(project) ?? "مالك غير محدد"} · {durationLabel(project) ?? "مدة غير محددة"} · {project.progress_percent}%</small></Link>) : <small className="quarterly-empty">لا توجد مشاريع مسجلة لهذه السنة.</small>}
+                {yearProjects.length ? yearProjects.map((project) => <Link href={projectLink(project)} key={project.id} className={`quarterly-project ${project.status}`} title={`${project.project_code} — ${project.name_ar}`}><div><b dir="ltr">{project.project_code}</b><span className={`register-priority ${project.portfolio_priority}`}>{project.portfolio_priority}</span></div><strong>{project.name_ar}</strong><small className="bidi-meta"><bdi>{executiveOwnerLabel(project) ?? "مالك غير محدد"}</bdi> · <bdi>{durationLabel(project) ?? "مدة غير محددة"}</bdi> · <bdi>{`${project.progress_percent}%`}</bdi></small></Link>) : <small className="quarterly-empty">لا توجد مشاريع مسجلة لهذه السنة.</small>}
               </section>;
             })}
           </div>

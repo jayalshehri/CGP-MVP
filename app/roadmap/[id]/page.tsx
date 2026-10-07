@@ -9,7 +9,7 @@ import { readStrategyRows, createReadEpoch, unavailable, noRelationship, type Re
 import { ReadNotice, ReadSection } from "../read-state";
 import StatusBadge from "@/components/StatusBadge";
 import GrcAuditTrail from "@/components/GrcAuditTrail";
-import { formatDuration, mappingCompletenessLabels, ownerLabels, priorityLabels, workTypeLabels, type PortfolioProject } from "@/lib/project-portfolio";
+import { executionYearLabels, formatDuration, mappingCompletenessLabels, ownerLabels, priorityLabels, workTypeLabels, type PortfolioProject } from "@/lib/project-portfolio";
 import "../roadmap.css";
 import "@/app/controls/[id]/detail.css";
 
@@ -366,7 +366,7 @@ function ProjectDetailContent({ id }: { id: string }) {
             <span dir="ltr">{project.project_code}</span> · {project.work_type ? workTypeLabels[project.work_type] : "نوع العمل بانتظار التصنيف"} · {statusText[project.status] ?? project.status} · أولوية {project.portfolio_priority ? priorityLabels[project.portfolio_priority] : "غير مصنّفة"}
           </p>
           <p className="project-detail-line">
-            {project.execution_year ? `السنة ${project.execution_year}` : "سنة التنفيذ غير محددة"} · {formatDuration(project.duration_value, project.duration_unit)} · {project.archived_at ? "المحفظة المؤرشفة" : "المحفظة النشطة"} <span className="sep">|</span> المالك: {ownerText(project)} <span className="sep">|</span> الإنجاز: {clampedProgress}%
+            {project.execution_year ? executionYearLabels[project.execution_year] : "سنة التنفيذ غير محددة"} · <bdi>{formatDuration(project.duration_value, project.duration_unit)}</bdi> · {project.archived_at ? "المحفظة المؤرشفة" : "المحفظة النشطة"} <span className="sep">|</span> المالك: <bdi>{ownerText(project)}</bdi> <span className="sep">|</span> الإنجاز: <bdi>{`${clampedProgress}%`}</bdi>
           </p>
           <div className="project-detail-progress"><i style={{ width: `${clampedProgress}%` }} /></div>
           <p role="status">{mappingCompletenessLabels[project.mapping_completeness ?? "mapping_pending"]}
@@ -380,9 +380,13 @@ function ProjectDetailContent({ id }: { id: string }) {
             <span>المتطلبات</span>
             <strong>{requirementsReady ? new Set(projectRequirements.map(row => row.requirement_id)).size : unavailable}</strong>
           </article>
-          <article className="project-kpi">
-            <span>الضوابط المرتبطة</span>
+          <article className="project-kpi" title="ضوابط مميزة مرتبطة عبر متطلبات المشروع">
+            <span>ضوابط عبر المتطلبات</span>
             <strong>{controlsReady ? rollup.totalControls : unavailable}</strong>
+          </article>
+          <article className="project-kpi" title="روابط مباشرة مسجّلة بين المشروع والضابط؛ مصدر مستقل لا يُجمع مع ضوابط المتطلبات">
+            <span>روابط مباشرة</span>
+            <strong>{reads.legacy === "COMPLETE" ? new Set(legacyLinks.map(link => link.control_id)).size : unavailable}</strong>
           </article>
           <article className="project-kpi" title="Confirmed mappings — ربط مدعوم مباشرة بنص ضابط رسمي">
             <span>مواءمات مؤكدة عبر المتطلبات</span>
@@ -454,7 +458,7 @@ function ProjectDetailContent({ id }: { id: string }) {
                 <h2>نظرة عامة</h2>
                 <dl className="project-facts">
                   <div><dt>الأولوية</dt><dd>{project.portfolio_priority ? priorityLabels[project.portfolio_priority] : "غير مصنّفة"}</dd></div>
-                  <div><dt>سنة التنفيذ</dt><dd>{project.execution_year ? `السنة ${project.execution_year}` : "غير محددة"}</dd></div>
+                  <div><dt>سنة التنفيذ</dt><dd>{project.execution_year ? executionYearLabels[project.execution_year] : "غير محددة"}</dd></div>
                   <div><dt>مدة المشروع</dt><dd>{formatDuration(project.duration_value, project.duration_unit)}</dd></div>
                   <div><dt>نوع العمل</dt><dd>{project.work_type ? workTypeLabels[project.work_type] : "بانتظار التصنيف"}</dd></div>
                   <div><dt>الجهة المالكة</dt><dd>{ownerText(project)}</dd></div>

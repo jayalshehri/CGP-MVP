@@ -7,11 +7,11 @@ import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-read";
-import { readCanonicalPortfolio } from "@/lib/strategy-portfolio-read";
-import type { RelationshipCounts } from "@/lib/strategy-relationships";
+import { readCanonicalEdges, type CanonicalEdges } from "@/lib/strategy-portfolio-read";
+import { projectCount } from "@/lib/arabic-count";
 import { ReadNotice, ReadSection } from "../read-state";
 import { averageProgress } from "../portfolio-metrics";
-import { durationLabel, executionYearFor, executionYearText, executionYears, isArchived, type PortfolioFields } from "@/lib/portfolio-analytics";
+import { durationLabel, executionYearFor, executionYearText, executionYears, isArchived, scopedRequirementCounts, type PortfolioFields } from "@/lib/portfolio-analytics";
 import "../roadmap.css";
 
 type Project = PortfolioFields & {
@@ -34,7 +34,7 @@ export default function ExecutiveRoadmapPage() {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [modern, setModern] = useState<RelationshipCounts | null>(null);
+  const [canonical, setCanonical] = useState<CanonicalEdges | null>(null);
   const [reads, setReads] = useState<{ projects: ReadStatus; links: ReadStatus; treatments: ReadStatus }>({ projects: "UNAVAILABLE", links: "UNAVAILABLE", treatments: "UNAVAILABLE" });
   const projectsReady = reads.projects === "COMPLETE";
   const linksReady = projectsReady && reads.links === "COMPLETE";
@@ -52,14 +52,14 @@ export default function ExecutiveRoadmapPage() {
           readStrategyRows((from, to) => supabase.from("cybersecurity_project_gap_treatments").select("id,project_id,priority", { count: "exact" }).order("id").range(from, to), row => row.id),
           readStrategyRows((from, to) => supabase.from("controls").select("id,frameworks!inner(is_active)", { count: "exact" }).eq("frameworks.is_active",true).order("id").range(from, to), row => row.id),
         ]);
-        const modernResult = projectResult.status === "COMPLETE" ? await readCanonicalPortfolio(projectResult.data.map(row => row.id)) : null;
+        const edges = projectResult.status === "COMPLETE" ? await readCanonicalEdges() : null;
         if (active) {
           setReads({ projects: projectResult.status, links: linkResult.status === "COMPLETE" && activeControlResult.status === "COMPLETE" ? "COMPLETE" : "UNAVAILABLE", treatments: treatmentResult.status });
           const activeIds = new Set((activeControlResult.data ?? []).map(row => row.id));
           const visibleProjects = new Set(projectResult.data.map(row => row.id));
           setProjects((projectResult.data ?? []) as Project[]);
           setLinks((linkResult.data ?? []).filter(row => visibleProjects.has(row.project_id) && activeIds.has(row.control_id)) as LinkRow[]);
-          setModern(modernResult);
+          setCanonical(edges);
           setTreatments((treatmentResult.data ?? []) as Treatment[]);
         }
       } catch (cause) {
@@ -97,10 +97,10 @@ export default function ExecutiveRoadmapPage() {
         .map((item) => item.project_id),
     );
     const attention: Attention[] = [];
-    if (unprioritized.length) attention.push({ key: "baseline", title: "اعتماد أولويات المشاريع", detail: `${unprioritized.length} مشروعًا مسجلًا بالنموذج السابق بلا أولوية P1/P2/P3، ولذلك لا يظهر في سنوات التنفيذ.`, count: unprioritized.length, level: "decision" });
-    if (p1WithoutDuration.length) attention.push({ key: "duration", title: "استكمال مدد مشاريع السنة الأولى", detail: `${p1WithoutDuration.length} مشروعًا بأولوية P1 بلا مدة مسجلة.`, count: p1WithoutDuration.length, level: "data" });
-    if (stopped.length) attention.push({ key: "stopped", title: "حسم المشاريع المتوقفة", detail: `${stopped.length} مشروعًا متوقفًا يحتاج قرار استئناف أو إعادة تخطيط.`, count: stopped.length, level: "decision" });
-    if (linksReady && treatmentsReady && highTreatmentsWithoutControlLinks.size) attention.push({ key: "mapping", title: "استكمال مواءمة المعالجات والضوابط", detail: `${highTreatmentsWithoutControlLinks.size} مشروعًا لديه معالجة عالية بلا رابط مباشر مسجّل بضابط.`, count: highTreatmentsWithoutControlLinks.size, level: "data" });
+    if (unprioritized.length) attention.push({ key: "baseline", title: "اعتماد أولويات المشاريع", detail: `${projectCount(unprioritized.length)} مسجلًا بالنموذج السابق بلا أولوية P1/P2/P3، ولذلك لا يظهر في سنوات التنفيذ.`, count: unprioritized.length, level: "decision" });
+    if (p1WithoutDuration.length) attention.push({ key: "duration", title: "استكمال مدد مشاريع السنة الأولى", detail: `${projectCount(p1WithoutDuration.length)} بأولوية P1 بلا مدة مسجلة.`, count: p1WithoutDuration.length, level: "data" });
+    if (stopped.length) attention.push({ key: "stopped", title: "حسم المشاريع المتوقفة", detail: `${projectCount(stopped.length)} متوقفًا يحتاج قرار استئناف أو إعادة تخطيط.`, count: stopped.length, level: "decision" });
+    if (linksReady && treatmentsReady && highTreatmentsWithoutControlLinks.size) attention.push({ key: "mapping", title: "استكمال مواءمة المعالجات والضوابط", detail: `${projectCount(highTreatmentsWithoutControlLinks.size)} لديه معالجة عالية بلا رابط مباشر مسجّل بضابط.`, count: highTreatmentsWithoutControlLinks.size, level: "data" });
     const activeIds = new Set(active.map((project) => project.id));
     return {
       active,
@@ -111,6 +111,8 @@ export default function ExecutiveRoadmapPage() {
       attention,
     };
   }, [projects, links, treatments, linksReady, treatmentsReady]);
+  // Requirement-derived controls for the same active portfolio the page shows.
+  const modern = useMemo(() => scopedRequirementCounts(canonical, data.active), [canonical, data.active]);
 
   if (loading) {
     return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading">جاري إعداد العرض التنفيذي…</p></main>;
@@ -130,12 +132,12 @@ export default function ExecutiveRoadmapPage() {
           <Kpi label="فئات التنبيه الإداري" value={exportReady ? data.attention.length : unavailable} detail="عدد فئات القواعد المتحققة، لا عدد المشاريع أو القرارات" tone="blue" />
         </section>
 
-        <ReadSection available={projectsReady}><section className="executive-section"><header><span>التقدم المسجّل بحسب سنة التنفيذ</span><h2>توزيع المشاريع بحسب سنة التنفيذ</h2><p>يعرض الحالة الحالية من سجل المشاريع، ولا يعتبر ربط الضابط تحققًا للالتزام.</p></header><div className="executive-timeline">{data.years.map((year) => <article key={year.year}><header><b>{executionYearText[year.year]}</b><span>{year.items.length} مشاريع</span></header><div className="executive-progress"><i style={{ width: `${year.progress}%` }} /></div><small>{year.progress}% متوسط تقدم المشاريع المسجّل · أولوية P{year.year}</small><ul>{year.items.slice(0, 5).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectHref(project.id, "executive")}>{project.name_ar}</Link><em className={project.portfolio_priority ?? ""}>{project.portfolio_priority}</em></li>)}</ul></article>)}</div></section></ReadSection>
+        <ReadSection available={projectsReady}><section className="executive-section"><header><span>التقدم المسجّل بحسب سنة التنفيذ</span><h2>توزيع المشاريع بحسب سنة التنفيذ</h2><p>يعرض الحالة الحالية من سجل المشاريع، ولا يعتبر ربط الضابط تحققًا للالتزام.</p></header><div className="executive-timeline">{data.years.map((year) => <article key={year.year}><header><b>{executionYearText[year.year]}</b><span>{projectCount(year.items.length)}</span></header><div className="executive-progress"><i style={{ width: `${year.progress}%` }} /></div><small>{year.progress}% متوسط تقدم المشاريع المسجّل · أولوية P{year.year}</small><ul>{year.items.slice(0, 5).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectHref(project.id, "executive")}>{project.name_ar}</Link><em className={project.portfolio_priority ?? ""}>{project.portfolio_priority}</em></li>)}</ul></article>)}</div></section></ReadSection>
 
         <section className="executive-focus-grid">
           <ReadSection available={projectsReady}><article className="executive-section"><header><span>المشاريع السيبرانية</span><h2>مشاريع الأولوية P1</h2><p>تعكس الأولوية المسجلة، وليس درجة Portfolio Score.</p></header><ol>{data.p1.slice(0, 5).map((project) => <li key={project.id}><b dir="ltr">{project.project_code}</b><Link className="strategy-project-link" href={projectHref(project.id, "executive")}>{project.name_ar}</Link><small>{executionYearText[1]} · {durationLabel(project) ?? "مدة غير محددة"}</small></li>)}</ol></article></ReadSection>
           <article className="executive-section"><header><span>NCA والضوابط</span><h2>ضوابط ذات ربط مباشر مسجّل</h2><p>ضوابط من سجل الربط المباشر بالمشاريع، دون دمج علاقات المتطلبات. الربط لا يعني الامتثال أو إغلاق الفجوة.</p></header><strong className="executive-big-number">{linksReady ? data.controls : unavailable}</strong><Link href="/roadmap">مراجعة الروابط ←</Link></article>
-          <article className="executive-section"><header><span>العلاقات عبر المتطلبات</span><h2>ضوابط مميزة مرتبطة بالمشاريع عبر المتطلبات</h2><p>حالة الربط ضمن نطاق القراءة، دون استنتاج أثر المشروع أو امتثال الضابط. لا تضاف إلى الروابط المباشرة الموروثة.</p></header><strong className="executive-big-number">{modern?.controls ?? unavailable}</strong><Link href="/roadmap">تفاصيل العلاقات ←</Link></article>
+          <article className="executive-section"><header><span>العلاقات عبر المتطلبات</span><h2>ضوابط مميزة مرتبطة بالمشاريع عبر المتطلبات</h2><p>للمحفظة النشطة فقط، دون استنتاج أثر المشروع أو امتثال الضابط. منفصلة عن الروابط المباشرة ولا تُجمع معها.</p></header><strong className="executive-big-number">{modern?.controls ?? unavailable}</strong><Link href="/roadmap">تفاصيل العلاقات ←</Link></article>
         </section>
 
         <section className="executive-decisions dynamic-attention"><header><span>Dynamic Management Attention</span><h2>ما الذي يحتاج انتباه الإدارة؟</h2><p>تظهر العناصر من قواعد بيانات قابلة للتتبع؛ لا توجد قيمة دنيا مصطنعة.</p></header><ReadSection available={projectsReady}>{!exportReady && <p className="metric-unavailable">بعض قواعد التنبيه غير متاحة؛ لا يمكن تأكيد خلو المحفظة من التنبيهات.</p>}{data.attention.length ? data.attention.map((item, index) => <article key={item.key} className={item.level}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{item.title}</strong><p>{item.detail}</p></div><em>{item.count}</em></article>) : exportReady ? <article className="attention-empty"><div><strong>لا توجد فئات تنبيه وفق القواعد الحالية</strong><p>سيظهر هنا أي توقف أو نقص في الأولويات أو المدد عند تسجيله.</p></div></article> : null}</ReadSection></section>
