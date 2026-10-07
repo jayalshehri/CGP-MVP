@@ -69,12 +69,19 @@ export const emptyPortfolioForm: PortfolioForm = {
 export function executionYear(priority: Priority | "" | null): 1 | 2 | 3 | null {
   return priority === "P1" ? 1 : priority === "P2" ? 2 : priority === "P3" ? 3 : null;
 }
+// Arabic counted durations by CLDR plural category (Intl.PluralRules "ar"):
+// one "شهر واحد", two "شهران", few (3–10) "3 أشهر", many (11–99) "11 شهرًا",
+// other (100+, decimals) "100 شهر" / "1.5 شهر". Display only; values are unchanged.
+const durationForms: Record<DurationUnit, Record<Intl.LDMLPluralRule, string>> = {
+  day: { zero: "{n} يوم", one: "يوم واحد", two: "يومان", few: "{n} أيام", many: "{n} يومًا", other: "{n} يوم" },
+  week: { zero: "{n} أسبوع", one: "أسبوع واحد", two: "أسبوعان", few: "{n} أسابيع", many: "{n} أسبوعًا", other: "{n} أسبوع" },
+  month: { zero: "{n} شهر", one: "شهر واحد", two: "شهران", few: "{n} أشهر", many: "{n} شهرًا", other: "{n} شهر" },
+  year: { zero: "{n} سنة", one: "سنة واحدة", two: "سنتان", few: "{n} سنوات", many: "{n} سنةً", other: "{n} سنة" },
+};
+const arabicPlural = new Intl.PluralRules("ar");
 export function formatDuration(value: number | null, unit: DurationUnit | null): string {
   if (value === null || !unit) return "غير محددة";
-  const label = value >= 3 && value <= 10 && Number.isInteger(value)
-    ? { day: "أيام", week: "أسابيع", month: "أشهر", year: "سنوات" }[unit]
-    : durationLabels[unit];
-  return `${value} ${label}`;
+  return durationForms[unit][arabicPlural.select(value)].replace("{n}", String(value));
 }
 export function portfolioPayload(form: PortfolioForm, creating: boolean) {
   if (!form.name_ar.trim() || !form.project_code.trim()) throw new Error("اسم المشروع ورمزه مطلوبان.");

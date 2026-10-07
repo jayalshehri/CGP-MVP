@@ -21,6 +21,13 @@ for (const path of ['app/roadmap/page.tsx', 'app/roadmap/dashboard/page.tsx', 'a
   check(!/\} مشاريع<|\} مشروعًا|length\} مشروع/.test(read(path)), `${path}: no hand-built count phrases`);
 }
 
+// --- Arabic duration wording (display only), reusable across units and values.
+const modelJs = ts.transpileModule(read('lib/project-portfolio.ts'), { compilerOptions: { module: ts.ModuleKind.ES2022 } }).outputText;
+const { formatDuration } = await import(`data:text/javascript;base64,${Buffer.from(modelJs).toString('base64')}`);
+equal([[1, 'month'], [2, 'month'], [3, 'month'], [10, 'month'], [11, 'month'], [100, 'month'], [1.5, 'month'], [1, 'week'], [2, 'week'], [4, 'week'], [1, 'year'], [2, 'year'], [3, 'year'], [1, 'day'], [2, 'day'], [14, 'day']].map(([v, u]) => formatDuration(v, u)),
+  ['شهر واحد', 'شهران', '3 أشهر', '10 أشهر', '11 شهرًا', '100 شهر', '1.5 شهر', 'أسبوع واحد', 'أسبوعان', '4 أسابيع', 'سنة واحدة', 'سنتان', '3 سنوات', 'يوم واحد', 'يومان', '14 يومًا'], 'Arabic duration forms');
+equal(formatDuration(null, 'month'), 'غير محددة', 'missing duration unchanged');
+
 // --- Fixtures: two active projects and one archived project that owns historical requirement paths.
 const base = { status: 'planned', progress_percent: 0, description_ar: null, target_outcome: null, recommended_technologies: null, updated_at: null,
   archived_by: null, archive_reason: null, import_staging_id: null, executive_owner_other: null, work_type: 'technical_project',
@@ -72,13 +79,16 @@ let html = page('app/roadmap/analysis/page.tsx');
 const durationCard = html.split('id="portfolio-duration-title"')[1] ?? '';
 check(durationCard.includes('شهر: 3 مشاريع · الأدنى <bdi>6</bdi> · الوسيط <bdi>6</bdi> · الأعلى <bdi>8</bdi>'), 'month group summary');
 check(durationCard.includes('<td><bdi>6 أشهر</bdi></td><td>2</td>') && durationCard.includes('<td><bdi>8 أشهر</bdi></td><td>1</td>'), 'month distinct values');
-check(durationCard.includes('أسبوع: مشروع واحد') && durationCard.includes('<td><bdi>2 أسبوع</bdi></td><td>1</td>'), 'week group kept in its own unit');
+check(durationCard.includes('أسبوع: مشروع واحد') && durationCard.includes('<td><bdi>أسبوعان</bdi></td><td>1</td>'), 'week group kept in its own unit');
 check(!durationCard.includes('بلا مدة مسجّلة'), 'active scope has no unset durations');
 html = page('app/roadmap/analysis/page.tsx', { filters: { ...allFilters, execution_year: '1' } });
 const filteredDuration = html.split('id="portfolio-duration-title"')[1] ?? '';
 check(filteredDuration.includes('شهر: مشروعان') && !filteredDuration.includes('أسبوع:'), 'duration analysis follows the filters');
 html = page('app/roadmap/analysis/page.tsx', { scope: 'archived' });
 check((html.split('id="portfolio-duration-title"')[1] ?? '').includes('لا توجد مدد مسجّلة للمشاريع المعروضة.'), 'no durations invented for archived projects');
+html = page('app/roadmap/analysis/page.tsx', { scope: 'all' });
+check(html.includes('5 مشاريع — كل المحفظة') && html.includes('<span>توزيع كل المحفظة</span>') && !html.includes('المحفظة الجميع'), 'all scope reads «كل المحفظة»');
+check(page('app/roadmap/analysis/page.tsx').includes('<span>توزيع المحفظة النشطة</span>'), 'active scope heading');
 
 // --- Finding 2: bidi-safe roadmap card line.
 html = page('app/roadmap/dashboard/page.tsx');

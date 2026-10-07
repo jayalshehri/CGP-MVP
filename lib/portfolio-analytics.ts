@@ -42,6 +42,8 @@ export function executionYearLabel(project: Pick<PortfolioFields, "portfolio_pri
 // Portfolio scope: active by default; archived and all are explicit choices.
 export const portfolioScopes = { active: "النشطة", archived: "المؤرشفة", all: "الجميع" } as const;
 export type PortfolioScope = keyof typeof portfolioScopes;
+/** Scope as a noun phrase for sentences and headings ("كل المحفظة", not "المحفظة الجميع"). */
+export const portfolioScopePhrases: Record<PortfolioScope, string> = { active: "المحفظة النشطة", archived: "المحفظة المؤرشفة", all: "كل المحفظة" };
 export const isPortfolioScope = (value: string): value is PortfolioScope => Object.hasOwn(portfolioScopes, value);
 export const matchesScope = (project: Pick<PortfolioFields, "archived_at">, scope: PortfolioScope) =>
   scope === "all" || (scope === "archived") === isArchived(project);

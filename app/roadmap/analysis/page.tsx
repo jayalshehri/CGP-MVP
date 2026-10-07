@@ -10,7 +10,7 @@ import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-r
 import { ReadNotice, ReadSection } from "../read-state";
 import { PlanningInformationSummary } from "../planning-information";
 import { planningReadiness, planningReadinessItems } from "../portfolio-metrics";
-import { dimensionOptions, dimensionText, durationBreakdown, isPortfolioScope, matchesPortfolioFilters, matchesScope, portfolioBreakdown, portfolioScopes, scopedRequirementCounts, type PortfolioDimension, type PortfolioFields, type PortfolioScope } from "@/lib/portfolio-analytics";
+import { dimensionOptions, dimensionText, durationBreakdown, isPortfolioScope, matchesPortfolioFilters, matchesScope, portfolioBreakdown, portfolioScopePhrases, portfolioScopes, scopedRequirementCounts, type PortfolioDimension, type PortfolioFields, type PortfolioScope } from "@/lib/portfolio-analytics";
 import { projectCount } from "@/lib/arabic-count";
 import { readCanonicalEdges, type CanonicalEdges } from "@/lib/strategy-portfolio-read";
 import "../roadmap.css";
@@ -140,7 +140,7 @@ export default function PortfolioAnalysisPage() {
         <section className="register-toolbar" aria-label="تصفية تحليل المحفظة">
           <label><span>المحفظة</span><select value={scope} onChange={(event) => { if (isPortfolioScope(event.target.value)) setScope(event.target.value); }}>{Object.entries(portfolioScopes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           {dimensions.map((dimension) => <label key={dimension}><span>{dimensionText[dimension]}</span><select value={filters[dimension]} onChange={(event) => setFilters({ ...filters, [dimension]: event.target.value })}><option value="all">الكل</option>{Object.entries(dimensionOptions[dimension]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>)}
-          <strong>{projectsReady ? `${projectCount(scoped.length)} — المحفظة ${portfolioScopes[scope]}` : unavailable}</strong>
+          <strong>{projectsReady ? `${projectCount(scoped.length)} — ${portfolioScopePhrases[scope]}` : unavailable}</strong>
         </section>
 
         <section className="portfolio-kpis" aria-label="مؤشرات تحليل المحفظة">
@@ -152,7 +152,7 @@ export default function PortfolioAnalysisPage() {
         </section>
 
         <ReadSection available={projectsReady}><section className="portfolio-card" aria-labelledby="portfolio-breakdown-title">
-          <header><div><span>توزيع المحفظة {portfolioScopes[scope]}</span><h2 id="portfolio-breakdown-title">التحليل حسب الأولوية وسنة التنفيذ ونوع العمل والمالك والحالة</h2></div></header>
+          <header><div><span>توزيع {portfolioScopePhrases[scope]}</span><h2 id="portfolio-breakdown-title">التحليل حسب الأولوية وسنة التنفيذ ونوع العمل والمالك والحالة</h2></div></header>
           <div className="portfolio-breakdown">
             {analysis.breakdowns.map(({ dimension, rows, unset }) => <table key={dimension} aria-label={dimensionText[dimension]}>
               <thead><tr><th>{dimensionText[dimension]}</th><th>المشاريع</th></tr></thead>
