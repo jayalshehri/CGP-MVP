@@ -116,7 +116,10 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const workspaceLabel = workspace === "data" ? "حوكمة البيانات" : workspace === "shared" ? "مركز المواءمة" : "الأمن السيبراني";
   const permittedItems = account ? navigation.filter(item => account.role === "data_governance_team" ? Boolean(item.data) : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];
   const items = permittedItems.filter(item => workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls");
-  const current = navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "لوحة المتابعة");
+  // The executive summary is not a navigation item; without this it inherits the
+  // "/roadmap" prefix match and is mislabelled as the project register.
+  const current = pathname === "/roadmap/executive" ? "ملخص محفظة المشاريع السيبرانية"
+    : navigation.find(item => item.href !== "/" && (pathname === item.href || pathname.startsWith(item.href + "/")))?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "لوحة المتابعة");
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const isProjectDetail = /^\/roadmap\/[^/]+$/.test(pathname) && !["/roadmap/analysis", "/roadmap/dashboard", "/roadmap/executive"].includes(pathname);
   const leaf = pathname.endsWith("/assign") ? "تكليف المالك" : pathname.endsWith("/evidence/new") ? "رفع دليل" : controlId ? "تفاصيل الضابط" : current;

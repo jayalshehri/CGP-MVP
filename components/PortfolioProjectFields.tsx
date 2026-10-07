@@ -1,6 +1,6 @@
 "use client";
 
-import { durationLabels, emptyPortfolioForm, executionYear, ownerLabels, priorityLabels, statusLabels, workTypeLabels, type PortfolioForm } from "@/lib/project-portfolio";
+import { durationLabels, emptyPortfolioForm, executionYear, executionYearLabels, ownerLabels, priorityLabels, statusLabels, workTypeLabels, type PortfolioForm } from "@/lib/project-portfolio";
 
 export default function PortfolioProjectFields({ form, onChange, creating }: {
   form: PortfolioForm; onChange: (form: PortfolioForm) => void; creating: boolean;
@@ -15,7 +15,7 @@ export default function PortfolioProjectFields({ form, onChange, creating }: {
     <label>الأولوية<select required={creating} value={form.portfolio_priority} onChange={e => set("portfolio_priority", e.target.value as PortfolioForm["portfolio_priority"])}>
       <option value="">غير مصنّفة</option>{options(priorityLabels)}
     </select></label>
-    <label>سنة التنفيذ<output>{executionYear(form.portfolio_priority) ? `السنة ${executionYear(form.portfolio_priority)}` : "تُشتق من الأولوية"}</output></label>
+    <label>سنة التنفيذ<output>{executionYear(form.portfolio_priority) ? executionYearLabels[executionYear(form.portfolio_priority)!] : "تُشتق من الأولوية"}</output></label>
     <label>نوع العمل<select value={form.work_type} onChange={e => set("work_type", e.target.value as PortfolioForm["work_type"])}>
       <option value="">بانتظار التصنيف المعتمد</option>{options(workTypeLabels)}
     </select></label>

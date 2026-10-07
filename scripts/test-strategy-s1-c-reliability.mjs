@@ -68,7 +68,7 @@ html = renderPage('executive', { reads: { ...complete, links: 'UNAVAILABLE' }, t
 check(!html.includes('لديه معالجة عالية بلا رابط'), 'failed links cannot manufacture mapping alert');
 html = renderPage('[id]', { reads: { ...complete, requirements: 'UNAVAILABLE', controls: 'UNAVAILABLE' } });
 check(html.includes('مشروع محدد') && html.includes('نظرة عامة'), 'detail primary survives secondary failure');
-equal(kpi(html, 'الضوابط المرتبطة'), 'غير متاح', 'detail dependent rollup unavailable');
+equal(kpi(html, 'ضوابط عبر المتطلبات'), 'غير متاح', 'detail dependent rollup unavailable');
 html = renderPage('[id]', { reads: { ...complete, treatments: 'UNAVAILABLE' } }, '?tab=treatments');
 check(html.includes('تعذر تحميل المعالجات') && !html.includes('لم تسجل معالجات'), 'treatment failure not empty');
 check(html.includes('تقنيات مرشحة'), 'independent primary project technologies retained');

@@ -63,12 +63,12 @@ equal(missingPlanningInformation({ ...historical, target_outcome: ' ' }), { prio
 
 const register = 'app/roadmap/page.tsx', detail = 'app/roadmap/[id]/page.tsx', analysis = 'app/roadmap/analysis/page.tsx';
 let html = render(register, '/roadmap?q=محلي&status=on_hold&priority=P2', { projects: [project], open: true, selected: project, form });
-for (const value of ['نتيجة مستقلة', 'وصف مستقل', 'إدارة الحوكمة', 'السنة 2', '8 أشهر']) check(html.includes(value), `${value} appears in real register`);
+for (const value of ['نتيجة مستقلة', 'وصف مستقل', 'إدارة الحوكمة', 'السنة الثانية', '8 أشهر']) check(html.includes(value), `${value} appears in real register`);
 check(!/type="date"|الربع|Q1/.test(html), 'no date or quarter inputs in the register');
 const outcome = html.match(/<label[^>]*>النتيجة المستهدفة[\s\S]*?<\/label>/)?.[0];
 check(outcome && !outcome.includes('required='), 'outcome optional in actual form');
 html = render(detail, '/roadmap/37?tab=overview&from=roadmap&focus_year=2', { project });
-for (const text of ['P2 — السنة الثانية', 'السنة 2', '8 أشهر', 'إدارة الحوكمة', 'سياسة وحوكمة', 'الربط بانتظار المراجعة']) check(html.includes(text), `detail shows ${text}`);
+for (const text of ['P2 — السنة الثانية', 'السنة الثانية', '8 أشهر', 'إدارة الحوكمة', 'سياسة وحوكمة', 'الربط بانتظار المراجعة']) check(html.includes(text), `detail shows ${text}`);
 check(!/تاريخ الانتهاء المستهدف|تاريخ البدء|dateTime="2027/.test(html), 'detail no longer shows project dates');
 check(html.includes('آخر تعديل:') && !/آخر مراجعة|آخر اعتماد|آخر تحقق/.test(html), 'updated_at only modification');
 check(html.includes(`dateTime="${project.updated_at}"`), 'stored updated_at preserved');
@@ -85,9 +85,17 @@ html = render(analysis, '/roadmap/analysis', { projects: [project], reads: { pro
 const summary = html.split('aria-labelledby="planning-information-title"')[1];
 check(summary.includes('<dd>0</dd>'), 'independent successful project-field summary survives failed links');
 html = render(analysis, '/roadmap/analysis', { projects: [historical], reads: { projects: 'COMPLETE', links: 'COMPLETE', treatments: 'COMPLETE' } });
-check(html.includes('0 مشروع نشط'), 'archived projects excluded from analysis');
+check(html.includes('0 مشروع — المحفظة النشطة'), 'archived projects excluded from analysis');
 equal(read('lib/strategy-read.ts'), baseline('lib/strategy-read.ts'), 'S1-C paging/read-state contracts byte-identical');
-for (const path of ['components/AppShell.tsx', 'components/FeedbackWidget.tsx', 'app/globals.css']) equal(read(path), baseline(path), `${path} unchanged (mobile deferred)`);
+// The only approved AppShell change is the executive-summary breadcrumb label;
+// normalize exactly that block so any other shell edit still fails here.
+const executiveBreadcrumb = `  // The executive summary is not a navigation item; without this it inherits the
+  // "/roadmap" prefix match and is mislabelled as the project register.
+  const current = pathname === "/roadmap/executive" ? "ملخص محفظة المشاريع السيبرانية"
+    : navigation.find(`;
+check(read('components/AppShell.tsx').includes(executiveBreadcrumb), 'executive breadcrumb label fix present');
+const shell = read('components/AppShell.tsx').replace(executiveBreadcrumb, '  const current = navigation.find(');
+for (const [path, text] of [['components/AppShell.tsx', shell], ['components/FeedbackWidget.tsx', read('components/FeedbackWidget.tsx')], ['app/globals.css', read('app/globals.css')]]) equal(text, baseline(path), `${path} unchanged apart from approved fixes (mobile deferred)`);
 check(read(register).includes('projectWriteFields(form, selected ?? undefined)'), 'real authorized mutation uses tested delta payload');
 check(read(register).includes('.update(payload).eq("id", selected.id).select("*").single()'), 'existing exact-record mutation path');
 check(read(register).includes('requireProfile(["admin", "cybersecurity_team"])'), 'existing authorization preserved');

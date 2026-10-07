@@ -12,6 +12,7 @@ import { ReadNotice } from "./read-state";
 import { emptyProjectForm, projectToForm, projectWriteFields, type ProjectForm as Form } from "@/lib/strategy-project-fields";
 import { requirementRollup, type CoverageType, type RequirementControlLink, type ProjectRequirementRow } from "./portfolio-metrics";
 import PortfolioProjectFields from "@/components/PortfolioProjectFields";
+import { projectCount } from "@/lib/arabic-count";
 import { durationLabels, formatDuration, mappingCompletenessLabels, matchesPortfolioFilters, ownerLabels, priorityLabels, statusLabels as statusText, workTypeLabels, type PortfolioProject } from "@/lib/project-portfolio";
 import { canonicalRelationships, legacyRelationships } from "@/lib/strategy-relationships";
 import "./roadmap.css";
@@ -279,24 +280,33 @@ function ProjectRegisterContent() {
           {filterSelect("اكتمال الربط", "mapping", filters.mappingCompleteness, mappingCompletenessLabels, false)}
           <label><span>المدة من</span><input type="number" min="0" step="any" value={filters.durationMin} onChange={(event) => updateStrategyQuery("duration_min", event.target.value)} /></label>
           <label><span>المدة إلى</span><input type="number" min="0" step="any" value={filters.durationMax} onChange={(event) => updateStrategyQuery("duration_max", event.target.value)} /></label>
-          <strong>{projectsReady ? `${filteredProjects.length} مشروع` : unavailable}</strong>
+          <strong>{projectsReady ? projectCount(filteredProjects.length) : unavailable}</strong>
           <small>حدود المدة تقارن القيمة بوحدتها؛ اختر وحدة للمقارنة بين مدد متجانسة.</small>
         </section>
 
         <div className="portfolio-table-wrap"><table className="portfolio-table">
-          <caption>سجل المشاريع — {projectsReady ? `${filteredProjects.length} مشروع` : unavailable}</caption>
+          <caption>سجل المشاريع — {projectsReady ? projectCount(filteredProjects.length) : unavailable}</caption>
           <thead><tr>{["المشروع", "المتطلبات والضوابط", "نوع العمل", "الجهة المالكة", "الأولوية", "مدة المشروع", "سنة التنفيذ", "الحالة", "الإنجاز", "الإجراءات"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
           <tbody>{filteredProjects.map((project) => {
             const reqStats = perProjectStats.get(project.id);
             const href = projectHref(project.id, "register", params);
             return <tr key={project.id} className={project.archived_at ? "is-archived" : undefined}>
               <th scope="row"><Link className="strategy-project-link" href={href}>{project.name_ar}</Link><small dir="ltr">{project.project_code}</small><small>{project.archived_at ? "المحفظة المؤرشفة" : "المحفظة النشطة"}</small></th>
-              <td className="register-req-ctrl-stats">
-                {!mappingReady ? <span>العلاقات عبر المتطلبات: {unavailable}</span> : !reqStats?.requirementsCount ? <span>العلاقات عبر المتطلبات: {noRelationship}</span> : <span className="register-stats-line">{reqStats.requirementsCount} متطلب · {reqStats.controlsCount} ضوابط · {reqStats.verifiedCount} متحقق</span>}
-                <span className="register-mapping-line">روابط مباشرة مسجّلة: {linksReady ? new Set(links.filter(link => link.project_id === project.id).map(link => link.control_id)).size : unavailable}</span>
-                <strong>{mappingCompletenessLabels[project.mapping_completeness ?? "mapping_pending"]}</strong>
-                {project.import_staging_id && <small>{project.mapping_exact_count} من {project.mapping_reference_count} مراجع مصدر مرتبطة بمطابقة مثبتة؛ {project.mapping_reference_count - project.mapping_exact_count - project.mapping_source_error_count} بانتظار المراجعة، {project.mapping_source_error_count} أخطاء مصدر. العدد المرتبط لا يمثل كامل نطاق الضوابط.</small>}
-                <small>اكتمال الربط ليس تحققًا من الامتثال.</small>
+              <td className="register-req-ctrl-stats register-rel">
+                {/* Compact summary; same counts and sources, explanations under details. */}
+                <span className={`register-rel-badge ${project.mapping_completeness ?? "mapping_pending"}`}>{mappingCompletenessLabels[project.mapping_completeness ?? "mapping_pending"]}</span>
+                <span className="register-rel-counts">
+                  <span>عبر المتطلبات: {!mappingReady ? unavailable : reqStats?.requirementsCount ? <><b>{reqStats.requirementsCount}</b> متطلب · <b>{reqStats.controlsCount}</b> ضابط</> : "—"}</span>
+                  <span>روابط مباشرة: <b>{linksReady ? new Set(links.filter(link => link.project_id === project.id).map(link => link.control_id)).size : unavailable}</b></span>
+                  {project.import_staging_id && <span>مراجع المصدر: <b><bdi>{`${project.mapping_exact_count}/${project.mapping_reference_count}`}</bdi></b></span>}
+                </span>
+                <details>
+                  <summary>التفاصيل</summary>
+                  {mappingReady && !reqStats?.requirementsCount && <p>العلاقات عبر المتطلبات: {noRelationship}</p>}
+                  {mappingReady && Boolean(reqStats?.requirementsCount) && <p>{reqStats?.requirementsCount} متطلب · {reqStats?.controlsCount} ضوابط · {reqStats?.verifiedCount} متحقق عبر المتطلبات.</p>}
+                  {project.import_staging_id && <p>{project.mapping_exact_count} من {project.mapping_reference_count} مراجع مصدر مرتبطة بمطابقة مثبتة؛ {project.mapping_reference_count - project.mapping_exact_count - project.mapping_source_error_count} بانتظار المراجعة، {project.mapping_source_error_count} أخطاء مصدر. العدد المرتبط لا يمثل كامل نطاق الضوابط.</p>}
+                  <p>الروابط المباشرة مصدر مستقل لا يُجمع مع ضوابط المتطلبات. اكتمال الربط ليس تحققًا من الامتثال.</p>
+                </details>
               </td>
               <td>{project.work_type ? workTypeLabels[project.work_type] : "بانتظار التصنيف"}</td>
               <td>{ownerText(project)}</td>

@@ -1,10 +1,13 @@
 import { supabase } from "@/lib/supabase";
 import { readStrategyRows } from "@/lib/strategy-read";
-import { canonicalRelationships, type RelationshipCounts } from "@/lib/strategy-relationships";
+import { canonicalRelationships, type ProjectRequirementEdge, type RelationshipCounts, type RequirementControlEdge } from "@/lib/strategy-relationships";
+
+export type CanonicalEdges = { projectRequirements: ProjectRequirementEdge[]; requirementControls: RequirementControlEdge[] };
 
 // Never publish a plausible partial total: all three authorized sources must
-// complete before the modern portfolio aggregate can be computed.
-export async function readCanonicalPortfolio(visibleProjectIds: readonly number[]): Promise<RelationshipCounts | null> {
+// complete before any modern relationship aggregate can be computed.
+// The edges are scope-free; callers count them for the projects they display.
+export async function readCanonicalEdges(): Promise<CanonicalEdges | null> {
   try {
   const [pr, rc, activeControls] = await Promise.all([
     readStrategyRows((from, to) => supabase.from("cybersecurity_project_requirements")
@@ -19,8 +22,13 @@ export async function readCanonicalPortfolio(visibleProjectIds: readonly number[
   ]);
   if ([pr, rc, activeControls].some(read => read.status !== "COMPLETE") || pr.data.some(row => !row.cybersecurity_requirements)) return null;
   const activeIds = new Set(activeControls.data.map(row => row.id));
-  return canonicalRelationships(visibleProjectIds, pr.data, rc.data.filter(row => activeIds.has(row.control_id))).counts;
+  return { projectRequirements: pr.data, requirementControls: rc.data.filter(row => activeIds.has(row.control_id)) };
   } catch {
     return null;
   }
+}
+
+export async function readCanonicalPortfolio(visibleProjectIds: readonly number[]): Promise<RelationshipCounts | null> {
+  const edges = await readCanonicalEdges();
+  return edges ? canonicalRelationships(visibleProjectIds, edges.projectRequirements, edges.requirementControls).counts : null;
 }
