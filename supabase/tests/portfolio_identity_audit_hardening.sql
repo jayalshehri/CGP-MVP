@@ -1,4 +1,4 @@
--- 20261007100000_portfolio_identity_audit_hardening: identity stamping,
+-- 20261007185235_portfolio_identity_audit_hardening: identity stamping,
 -- spoof resistance, archive/unarchive attribution and portfolio audit
 -- visibility. Real PostgreSQL RLS context; every fixture rolls back.
 begin;

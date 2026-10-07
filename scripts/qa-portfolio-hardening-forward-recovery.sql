@@ -1,11 +1,11 @@
--- FORWARD RECOVERY for 20261007100000_portfolio_identity_audit_hardening.
+-- FORWARD RECOVERY for 20261007185235_portfolio_identity_audit_hardening.
 -- DO NOT RUN unless the post-check fails or an approved incident requires
 -- reverting the hardening. Run on QA as postgres. Removes exactly the objects
 -- the migration created; it changes no business data (the migration changed
 -- none). Rows created while the hardening was active keep their
 -- session-stamped created_by/archived_by values, which are correct.
 -- If this is used, add the same SQL to the repository as a NEW migration
--- (never edit or delete 20261007100000) and record that one version only.
+-- (never edit or delete 20261007185235) and record that one version only.
 begin;
 set local lock_timeout = '10s';
 

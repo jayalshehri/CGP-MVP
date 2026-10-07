@@ -1,4 +1,8 @@
--- CGP-QA READ-ONLY preflight for 20261007100000_portfolio_identity_audit_hardening.
+-- CGP-QA READ-ONLY preflight for 20261007185235_portfolio_identity_audit_hardening.
+-- Pre-apply check. The migration was applied on CGP-QA on 2026-10-07 and is
+-- recorded as 20261007185235 portfolio_identity_audit_hardening, so re-running
+-- this on QA now correctly reports the ledger checks as already applied. Kept
+-- for the record and for applying the same migration to another environment.
 -- Run on QA (lkozjnpfufdpzqtzdxhe) as postgres, immediately before applying.
 -- Every row below must show ok = true. Record section 6 fingerprints and
 -- compare them with the post-check. No writes: BEGIN READ ONLY ... ROLLBACK.
@@ -9,7 +13,7 @@ select current_database() as db, current_user as executing_role, version() as po
 
 -- 1) Ledger position: QA head is the cutover guards; hardening not yet recorded.
 select 'ledger: 20261006102306 applied' as item, exists(select 1 from supabase_migrations.schema_migrations where version = '20261006102306') as ok
-union all select 'ledger: 20261007100000 not yet applied', not exists(select 1 from supabase_migrations.schema_migrations where version = '20261007100000')
+union all select 'ledger: 20261007185235 not yet applied', not exists(select 1 from supabase_migrations.schema_migrations where version = '20261007185235')
 union all select 'ledger: no hardening recorded under another version', not exists(select 1 from supabase_migrations.schema_migrations where name ilike '%identity_audit_hardening%')
 union all select 'ledger: nothing newer than 20261006102306', not exists(select 1 from supabase_migrations.schema_migrations where version > '20261006102306');
 

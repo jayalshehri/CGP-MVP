@@ -1,5 +1,5 @@
 -- CGP-QA READ-ONLY audit visibility probe. Run once BEFORE and once AFTER
--- 20261007100000 (as postgres), in the same quiet window as preflight/post-check.
+-- 20261007185235 (as postgres), in the same quiet window as preflight/post-check.
 -- Simulates one existing active user per role through RLS and counts the
 -- grc_audit_events rows each can read. Reads only; SET LOCAL/set_config are
 -- transaction-scoped; ends in ROLLBACK.

@@ -1,22 +1,48 @@
--- CGP-QA READ-ONLY post-check for 20261007100000_portfolio_identity_audit_hardening.
+-- CGP-QA READ-ONLY post-check for 20261007185235_portfolio_identity_audit_hardening.
 -- Run on QA as postgres immediately after applying. Every ok must be true and
 -- section 5 fingerprints must equal the preflight values. Then run
--- scripts/qa-portfolio-audit-visibility-probe.sql and compare with its BEFORE run.
+-- scripts/qa-portfolio-audit-visibility-probe.sql (compare with its BEFORE run)
+-- and, for actual behavior, scripts/qa-portfolio-hardening-behavior-probe.sql.
 -- No writes: BEGIN READ ONLY ... ROLLBACK.
 begin transaction read only;
 
 select current_database() as db, current_user as executing_role, now() as checked_at;
 
--- 1) Ledger record of the hardening (version as recorded by the chosen apply path).
-select version, name from supabase_migrations.schema_migrations
- where version = '20261007100000' or name ilike '%identity_audit_hardening%' order by version;
-
--- 2) New objects exist exactly as reviewed.
+-- 1) Ledger: the hardening is recorded exactly once, under the QA-applied version.
 select item, ok from (values
-  ('function stamp_portfolio_creator body', (select md5(prosrc) = 'b5bc03526d443fb72414be1b30c85e65' from pg_proc where oid = to_regprocedure('private.stamp_portfolio_creator()'))),
-  ('function stamp_project_archive body', (select md5(prosrc) = 'ab5d0cc0139689a7e37065952d6e6116' from pg_proc where oid = to_regprocedure('private.stamp_project_archive()'))),
-  ('functions are SECURITY INVOKER with empty search_path', (select bool_and(not prosecdef and proconfig = array['search_path=""']) from pg_proc
-      where oid in (to_regprocedure('private.stamp_portfolio_creator()'), to_regprocedure('private.stamp_project_archive()')))),
+  ('ledger: 20261007185235 portfolio_identity_audit_hardening', exists(select 1 from supabase_migrations.schema_migrations
+      where version = '20261007185235' and name = 'portfolio_identity_audit_hardening')),
+  ('ledger: recorded once (no duplicate under another version)', (select count(*) = 1 from supabase_migrations.schema_migrations where name ilike '%identity_audit_hardening%')),
+  ('ledger: superseded draft version 20261007100000 absent', not exists(select 1 from supabase_migrations.schema_migrations where version = '20261007100000'))
+) as v(item, ok);
+
+-- 2) New objects, verified structurally (not by whitespace-sensitive raw text).
+--    canon(f) = md5 of the body with -- comments removed, lower-cased and all
+--    whitespace removed, so storage reformatting cannot cause a false failure.
+with fn as (
+  select p.oid, p.proname, p.prosecdef, p.proconfig, p.prolang, p.prorettype, p.pronargs, p.proretset, p.provolatile,
+         md5(regexp_replace(lower(regexp_replace(p.prosrc, '--[^\n]*', '', 'g')), '\s+', '', 'g')) as canon,
+         regexp_replace(lower(regexp_replace(p.prosrc, '--[^\n]*', '', 'g')), '\s+', ' ', 'g') as body
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'private' and p.proname in ('stamp_portfolio_creator', 'stamp_project_archive')
+)
+select item, ok from (
+  select 'functions exist (exactly 2, no overloads)' as item, (select count(*) = 2 from fn) as ok
+  union all select 'functions: plpgsql trigger(), no args, not set-returning, volatile',
+    (select bool_and(prolang = (select oid from pg_language where lanname = 'plpgsql') and prorettype = 'trigger'::regtype and pronargs = 0 and not proretset and provolatile = 'v') from fn)
+  union all select 'functions: SECURITY INVOKER', (select bool_and(not prosecdef) from fn)
+  union all select 'functions: search_path is empty', (select bool_and(array_length(proconfig, 1) = 1 and proconfig[1] in ('search_path=""', 'search_path=''''')) from fn)
+  union all select 'stamp_portfolio_creator canonical body', (select canon = '1a8bd8891d2956a8dbcf77105a28498c' from fn where proname = 'stamp_portfolio_creator')
+  union all select 'stamp_project_archive canonical body', (select canon = '7fbb29c9f2f7ce5fd813df4cb8249ba7' from fn where proname = 'stamp_project_archive')
+  union all select 'creator: stamps auth.uid() and rejects no-session non-postgres',
+    (select body like '%new.created_by := auth.uid()%' and body like '%current_user = ''postgres'' and session_user = ''postgres''%' and body like '%errcode = ''42501''%' from fn where proname = 'stamp_portfolio_creator')
+  union all select 'creator: created_by immutable', (select body like '%created_by is immutable%' from fn where proname = 'stamp_portfolio_creator')
+  union all select 'archive: stamps auth.uid(), clears on unarchive, immutable while archived',
+    (select body like '%new.archived_by := auth.uid()%' and body like '%new.archived_by := null%' and body like '%new.archive_reason := null%'
+       and body like '%archived_by is immutable while the project is archived%' from fn where proname = 'stamp_project_archive')
+) checks
+union all
+select item, ok from (values
   ('no EXECUTE for public/anon/authenticated', not exists(select 1 from (values ('public'), ('anon'), ('authenticated')) r(role), (values ('private.stamp_portfolio_creator()'), ('private.stamp_project_archive()')) f(fn)
       where case when r.role = 'public' then exists(select 1 from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where p.oid = to_regprocedure(f.fn) and a.grantee = 0 and a.privilege_type = 'EXECUTE')
                  else has_function_privilege(r.role, f.fn, 'EXECUTE') end)),
@@ -25,10 +51,12 @@ select item, ok from (values
       and pg_get_triggerdef(oid) like 'CREATE TRIGGER stamp_portfolio_creator BEFORE INSERT OR UPDATE OF created_by ON public.% FOR EACH ROW EXECUTE FUNCTION private.stamp_portfolio_creator()')),
   ('stamp_project_archive on cybersecurity_projects, enabled', (select count(*) = 1 and bool_and(tgenabled = 'O') from pg_trigger where tgname = 'stamp_project_archive'
       and pg_get_triggerdef(oid) = 'CREATE TRIGGER stamp_project_archive BEFORE INSERT OR UPDATE OF archived_at, archived_by, archive_reason ON public.cybersecurity_projects FOR EACH ROW EXECUTE FUNCTION private.stamp_project_archive()')),
-  ('policy portfolio_audit_events_team: permissive SELECT to authenticated', exists(select 1 from pg_policies where tablename = 'grc_audit_events' and policyname = 'portfolio_audit_events_team'
-      and permissive = 'PERMISSIVE' and cmd = 'SELECT' and roles = '{authenticated}')),
+  ('policy portfolio_audit_events_team: permissive SELECT to authenticated, team-only portfolio entities', exists(select 1 from pg_policies where tablename = 'grc_audit_events' and policyname = 'portfolio_audit_events_team'
+      and permissive = 'PERMISSIVE' and cmd = 'SELECT' and roles = '{authenticated}' and with_check is null
+      and regexp_replace(qual, '\s+', ' ', 'g') = '((entity_type = ANY (ARRAY[''cybersecurity_projects''::text, ''portfolio_import_batches''::text, ''portfolio_import_projects''::text, ''portfolio_mapping_reviews''::text])) AND (( SELECT private.current_user_role() AS current_user_role) = ANY (ARRAY[''admin''::text, ''cybersecurity_team''::text])))')),
   ('policy portfolio_audit_events_restrict: RESTRICTIVE SELECT to authenticated', exists(select 1 from pg_policies where tablename = 'grc_audit_events' and policyname = 'portfolio_audit_events_restrict'
-      and permissive = 'RESTRICTIVE' and cmd = 'SELECT' and roles = '{authenticated}')),
+      and permissive = 'RESTRICTIVE' and cmd = 'SELECT' and roles = '{authenticated}' and with_check is null
+      and regexp_replace(qual, '\s+', ' ', 'g') = '((entity_type <> ALL (ARRAY[''cybersecurity_projects''::text, ''portfolio_import_batches''::text, ''portfolio_import_projects''::text, ''portfolio_mapping_reviews''::text])) OR (( SELECT private.current_user_role() AS current_user_role) = ANY (ARRAY[''admin''::text, ''cybersecurity_team''::text])))')),
   ('pre-existing grc_audit_events policies unchanged', (select count(*) = 5 from pg_policies where tablename = 'grc_audit_events' and policyname in
       ('grc_scoped_read', 'grc_assessment_cycle_events', 'grc_crosswalk_events', 'grc_finding_events_team', 'grc_finding_events_restrict'))),
   ('grc_audit_events policies = preflight inventory + the 2 new ones', (select count(*) from pg_policies where tablename = 'grc_audit_events'
