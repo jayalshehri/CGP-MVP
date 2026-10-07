@@ -142,21 +142,23 @@ export default function ControlDetailsPage() {
    {tab===0&&<><ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload}/>
    <section className="detail-card requirements-projects-card">
     <h2>المتطلبات والمشاريع المرتبطة</h2>
-    <p className="detail-hint">علاقة للقراءة فقط، مصدرها ربط المتطلبات السيبرانية الحالي — لا منطق ربط جديد ولا تكرار للبيانات.</p>
+    <p className="detail-hint">العلاقات عبر المتطلبات للقراءة فقط ضمن صلاحياتك. قد يرتبط المتطلب بأكثر من مشروع، وتبقى تغطية المواءمة وجودتها خاصة بكل متطلب وضابط.</p>
     {!requirementLinks.length?<p>لا يدعم هذا الضابط أي متطلب سيبراني مسجل حاليًا.</p>:
     <div className="req-proj-table-wrap"><table className="req-proj-table"><thead><tr><th>رمز المتطلب</th><th>المتطلب</th><th>التغطية</th><th>جودة الربط</th><th>رمز المشروع</th><th>المشروع</th></tr></thead><tbody>
-     {requirementLinks.map(link=>{
+     {requirementLinks.flatMap(link=>{
       const requirement=single(link.cybersecurity_requirements);
-      const projectLink=projectLinks.find(p=>p.requirement_id===link.requirement_id);
+      const visibleProjects=projectLinks.filter(p=>p.requirement_id===link.requirement_id&&single(p.cybersecurity_projects));
+      return (visibleProjects.length?visibleProjects:[null]).map(projectLink=>{
       const project=projectLink?single(projectLink.cybersecurity_projects):null;
-      return <tr key={link.requirement_id}>
+      return <tr key={`${link.requirement_id}:${projectLink?.project_id??'none'}`}>
        <td dir="ltr">{requirement?.requirement_code??'—'}</td>
        <td>{requirement?.title_ar??'—'}</td>
        <td><span className={`coverage-pill ${link.coverage_type}`}>{coverageText[link.coverage_type]??link.coverage_type}</span></td>
        <td><span className={`mapping-pill ${link.mapping_confidence}`}>{mappingConfidenceText[link.mapping_confidence]??link.mapping_confidence}</span></td>
        <td dir="ltr">{project?.project_code??'—'}</td>
-       <td>{project?<Link href={`/roadmap/${projectLink!.project_id}`}>{project.name_ar}</Link>:'غير مرتبط بمشروع'}</td>
+       <td>{project?<Link href={`/roadmap/${projectLink!.project_id}`}>{project.name_ar}</Link>:'لا يوجد مشروع ظاهر ضمن صلاحياتك'}</td>
       </tr>;
+      });
      })}
     </tbody></table></div>}
    </section>

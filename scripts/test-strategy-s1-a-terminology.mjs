@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
 
-const base = '55a261c7b13854e32a53eacdb4e98b2e75d5c41a';
+// Production portfolio release: business contracts are compared with origin/main,
+// the release base (the QA integration branch compares with the IA-3 checkpoint 55a261c).
+const base = '8aa8b93c59ceb61af3d216fce41d933c9e4202c5';
 const root = new URL('..', import.meta.url);
 const read = path => readFileSync(new URL(path, root), 'utf8');
 const before = path => execFileSync('git', ['show', `${base}:${path}`], { cwd: root, encoding: 'utf8' });
@@ -105,7 +107,8 @@ for (const [route, label] of [
   ['/roadmap/dashboard', 'خارطة طريق المشاريع'],
   ['/roadmap', 'سجل المشاريع السيبرانية'],
 ]) {
-  includes('components/AppShell.tsx', `{ href: "${route}", label: "${label}", group: "الاستراتيجية والتنفيذ", team: true }`);
+  // Labels only: the release keeps main's navigation groups (the IA-1 regrouping is not shipped).
+  includes('components/AppShell.tsx', `{ href: "${route}", label: "${label}", group: "العمليات", subgroup: "إدارة خارطة الطريق", team: true }`);
   for (const path of [registry, analysis, dashboard]) includes(path, `href="${route}">${label}</Link>`);
 }
 includes(registry, '<h1>سجل المشاريع السيبرانية</h1>');

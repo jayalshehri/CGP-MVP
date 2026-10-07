@@ -9,7 +9,8 @@ import ts from 'typescript';
 import { render } from './test-strategy-s1-b-navigation.mjs';
 const root = new URL('../', import.meta.url);
 const read = path => readFileSync(new URL(path, root), 'utf8');
-const baseline = path => execFileSync('git', ['show', `bbc737d6b3eadaa46ab98047913503266fc590d0:${path}`], { cwd: root, encoding: 'utf8' });
+// S1-C checkpoint as cherry-picked onto the Production release branch (QA: bbc737d).
+const baseline = path => execFileSync('git', ['show', `64fd838649c5f48736ffacc40de0ec1fdba92325:${path}`], { cwd: root, encoding: 'utf8' });
 const transpile = path => ts.transpileModule(read(path), { compilerOptions: { module: ts.ModuleKind.ES2022 } }).outputText;
 const modelUrl = `data:text/javascript;base64,${Buffer.from(transpile('lib/project-portfolio.ts')).toString('base64')}`;
 const load = async path => import(`data:text/javascript;base64,${Buffer.from(transpile(path).replaceAll('"@/lib/project-portfolio"', JSON.stringify(modelUrl))).toString('base64')}`);
