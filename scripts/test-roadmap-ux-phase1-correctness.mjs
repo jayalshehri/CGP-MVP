@@ -43,17 +43,28 @@ check(analysis.includes('scopedHighTreatments(treatments, scoped).length'), 'ana
 const { controlProjectRelationships } = await load('lib/control-project-relationships.ts');
 const req = (id, code, title, coverage = 'full', confidence = 'confirmed') => ({ requirement_id: id, coverage_type: coverage, mapping_confidence: confidence, cybersecurity_requirements: { requirement_code: code, title_ar: title } });
 const project = (code, name, archived) => ({ project_code: code, name_ar: name, archived_at: archived ? '2026-10-08T06:00:00Z' : null });
-// Control 238 on Production: two archived projects via requirements, PF43-009 active via a direct link.
+// Control 238 on Production (control 115 on QA): two active imported projects linked
+// directly (PF43-007, PF43-009) and two archived projects via requirements (DPS-01, MDM-01).
+// Inputs are given out of order to prove the sort.
 const c238 = controlProjectRelationships(
   [req(11, 'REQ-MDM-UEM', 'MDM/UEM — إدارة الأجهزة المحمولة'), req(12, 'REQ-DLP', 'DLP — منع تسرب البيانات')],
   [{ requirement_id: 11, project_id: 5, cybersecurity_projects: [project('MDM-01', 'Mobile Device & Endpoint Management (MDM/UEM)', true)] },
    { requirement_id: 12, project_id: 6, cybersecurity_projects: project('DPS-01', 'Data Protection Suite (DLP / Masking / DRM)', true) }],
-  [{ project_id: 94, cybersecurity_projects: project('PF43-009', 'DLP — منع تسرب البيانات', false) }],
+  [{ project_id: 94, cybersecurity_projects: project('PF43-009', 'DLP — منع تسرب البيانات', false) },
+   { project_id: 92, cybersecurity_projects: project('PF43-007', 'MDM/UEM — إدارة الأجهزة المحمولة', false) }],
 );
-equal(c238.projects.map(r => r.project_code), ['PF43-009', 'DPS-01', 'MDM-01'], 'control 238: PF43-009 shown, active first, then archived history');
-equal(c238.projects[0], { project_id: 94, project_code: 'PF43-009', name_ar: 'DLP — منع تسرب البيانات', archived: false, sources: ['direct'], requirements: [] }, 'PF43-009 is a direct, active relationship');
-equal(c238.projects.slice(1).map(r => [r.archived, r.sources]), [[true, ['requirement']], [true, ['requirement']]], 'archived projects flagged and labelled as requirement-derived');
-equal(c238.projects[1].requirements.map(r => [r.requirement_code, r.coverage_type, r.mapping_confidence]), [['REQ-DLP', 'full', 'confirmed']], 'requirement coverage and confidence kept per requirement');
+const labels = Object.fromEntries([...read('app/controls/[id]/page.tsx').match(/const sourceText:Record<string,string>=\{(.*?)\};/)[1].matchAll(/(\w+):'([^']+)'/g)].map(m => [m[1], m[2]]));
+const view = c238.projects.map(r => [r.project_code, r.archived ? 'Archived' : 'Active', r.sources.map(s => labels[s]).join('+')]);
+equal(c238.projects.length, 4, 'control 238: four related projects');
+equal(view, [
+  ['PF43-007', 'Active', 'مباشر'],
+  ['PF43-009', 'Active', 'مباشر'],
+  ['DPS-01', 'Archived', 'متطلب'],
+  ['MDM-01', 'Archived', 'متطلب'],
+], 'control 238: active first, archived after, each ordered by project_code, with source labels');
+equal(new Set(c238.projects.map(r => r.project_id)).size, c238.projects.length, 'control 238: no duplicate projects');
+equal(c238.projects.filter(r => !r.archived).map(r => r.requirements), [[], []], 'direct links carry no inferred requirement');
+equal(c238.projects.find(r => r.project_code === 'DPS-01').requirements.map(r => [r.requirement_code, r.coverage_type, r.mapping_confidence]), [['REQ-DLP', 'full', 'confirmed']], 'requirement coverage and confidence kept per requirement');
 equal(c238.requirementsWithoutProject, [], 'every requirement has a visible project');
 
 // Deduplication: a project reached through two requirements and a direct link is one row with both sources.
