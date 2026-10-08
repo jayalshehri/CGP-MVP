@@ -1,0 +1,139 @@
+// Local browser acceptance only. All service requests (including form writes)
+// are fulfilled in memory; nothing is forwarded to QA/Production.
+import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+const { chromium } = await import(process.env.CGP_PLAYWRIGHT_MODULE || 'playwright');
+const origin = process.env.CGP_LOCAL_URL || 'http://127.0.0.1:3202';
+assert.ok(['127.0.0.1', 'localhost'].includes(new URL(origin).hostname));
+const output = mkdtempSync(join(tmpdir(), 'cgp-s1d-browser-'));
+const user = { id: '11111111-1111-4111-8111-111111111111', email: 'local@example.test', role: 'authenticated', app_metadata: {}, user_metadata: {} };
+const original = { id: 37, project_code: 'LOCAL-37', name_ar: 'مشروع تحسين حوكمة البيانات', status: 'on_hold', priority: 'high', initiative_type: 'policy_governance', progress_percent: 42, planned_year: 2027, planned_quarter: 'Q1', executive_owner: 'إدارة الحوكمة', description_ar: 'وصف المشروع مستقل عن النتيجة', target_outcome: 'سياسة معتمدة وواضحة لحوكمة البيانات', planned_start_date: '2027-01-01', actual_start_date: '2027-01-03', target_end_date: '2027-05-01', forecast_end_date: '2027-06-01', actual_end_date: '2027-06-02', recommended_technologies: null, updated_at: '2026-10-03T11:45:00Z' };
+let record = { ...original }, role = 'admin', failProjects = false, failLinks = false;
+const writes = [], errors = [], unexpected = [];
+const browser = await chromium.launch({ headless: true });
+try {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, serviceWorkers: 'block' });
+  context.setDefaultTimeout(15000);
+  await context.route('**/*', async route => {
+    const req = route.request(), url = new URL(req.url()), table = url.pathname.split('/').at(-1);
+    if (url.origin === origin && req.method() === 'GET') return route.continue();
+    if (!url.hostname.endsWith('.supabase.co')) return route.abort();
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204 });
+    if (req.method() !== 'GET') {
+      if (table !== 'cybersecurity_projects' || !['PATCH', 'POST'].includes(req.method())) { unexpected.push(url.pathname); return route.abort(); }
+      const payload = req.postDataJSON();
+      writes.push({ method: req.method(), payload, id: url.searchParams.get('id') });
+      record = req.method() === 'PATCH' ? { ...record, ...payload } : { ...payload, id: 38 };
+      return route.fulfill({ status: 200, json: record });
+    }
+    if ((table === 'cybersecurity_projects' && failProjects) || (table === 'cybersecurity_project_controls' && failLinks)) return route.fulfill({ status: 403, json: { code: '42501', message: 'RAW_PRIVATE_ERROR_MUST_NOT_DISPLAY' } });
+    let json = [];
+    if (url.pathname === '/auth/v1/user') json = user;
+    else if (table === 'profiles') json = { role, is_active: true, display_name: 'فحص محلي — بيانات اصطناعية' };
+    else if (table === 'cybersecurity_projects') json = url.searchParams.has('id') ? record : [record];
+    const total = Array.isArray(json) ? json.length : null;
+    const offset = Number(url.searchParams.get('offset') || 0);
+    if (total !== null) json = json.slice(offset, offset + Number(url.searchParams.get('limit') || 500));
+    return route.fulfill({ status: 200, json, headers: total === null ? {} : { 'content-range': `${offset}-${offset + json.length - 1}/${total}`, 'access-control-expose-headers': 'Content-Range' } });
+  });
+  await context.addInitScript(({ user }) => {
+    const encode = value => btoa(JSON.stringify(value));
+    localStorage.setItem('sb-lkozjnpfufdpzqtzdxhe-auth-token', JSON.stringify({ user, access_token: `${encode({ alg: 'HS256' })}.${encode({ sub: user.id, exp: 4102444800 })}.local-only`, refresh_token: 'local-only', expires_at: 4102444800, expires_in: 999999, token_type: 'bearer' }));
+  }, { user });
+  const page = await context.newPage();
+  page.on('pageerror', error => errors.push(error.message));
+  let checks = 0;
+  const check = (value, label) => { assert.ok(value, label); checks++; };
+  const equal = (a, b, label) => { assert.deepEqual(a, b, label); checks++; };
+  const load = async path => { await page.goto(origin + path); await page.locator('.roadmap-loading').waitFor({ state: 'hidden' }); };
+  const register = '/roadmap?q=حوكمة&year=2027&status=on_hold&priority=high';
+  const open = async () => { await page.getByRole('button', { name: 'عرض وإدارة', exact: true }).click(); await page.getByRole('dialog').waitFor(); };
+  const save = async () => { await page.getByRole('button', { name: 'حفظ التعديلات', exact: true }).click(); await page.getByRole('dialog').waitFor({ state: 'hidden' }); };
+  const stripped = payload => Object.fromEntries(Object.entries(payload).filter(([key]) => key !== 'updated_at'));
+  await load(register); await open();
+  equal(await page.getByLabel('النتيجة المستهدفة', { exact: false }).inputValue(), original.target_outcome, 'outcome initial value');
+  equal(await page.getByLabel('تاريخ الانتهاء المتوقع', { exact: false }).inputValue(), original.forecast_end_date, 'forecast initial value');
+  equal(await page.getByLabel('تاريخ البدء الفعلي', { exact: true }).count(), 0, 'actual dates hidden but retained');
+  await page.screenshot({ path: join(output, 'edit-desktop.png'), fullPage: true });
+  await page.getByLabel('النتيجة المستهدفة', { exact: false }).fill('نتيجة جديدة محددة');
+  await page.getByLabel('تاريخ الانتهاء المتوقع', { exact: false }).fill('2027-07-10');
+  await save();
+  equal(stripped(writes.at(-1).payload), { forecast_end_date: '2027-07-10', target_outcome: 'نتيجة جديدة محددة' }, 'real form sends only changed fields');
+  equal(writes.at(-1).id, 'eq.37', 'exact project mutation scope');
+  equal(page.url(), new URL(register, origin).href, 'save preserves query/filters');
+  for (const key of ['description_ar', 'target_end_date', 'actual_start_date', 'actual_end_date', 'status', 'progress_percent', 'recommended_technologies']) equal(record[key], original[key], `preserves ${key}`);
+  await page.reload(); await open();
+  equal(await page.getByLabel('النتيجة المستهدفة', { exact: false }).inputValue(), record.target_outcome, 'outcome persists roundtrip');
+  equal(await page.getByLabel('تاريخ الانتهاء المتوقع', { exact: false }).inputValue(), record.forecast_end_date, 'forecast persists roundtrip');
+  await page.getByLabel('النتيجة المستهدفة', { exact: false }).fill('');
+  await page.getByLabel('تاريخ الانتهاء المتوقع', { exact: false }).fill(''); await save();
+  equal(stripped(writes.at(-1).payload), { forecast_end_date: null, target_outcome: null }, 'explicit clear sends null');
+  await open(); await page.getByLabel('وصف/هدف مختصر', { exact: false }).fill('وصف محدث'); await save();
+  equal(stripped(writes.at(-1).payload), { description_ar: 'وصف محدث' }, 'untouched null fields not resubmitted');
+  equal(record.forecast_end_date, null, 'no automatic forecast copy');
+  equal(record.target_outcome, null, 'outcome null retained');
+  await open(); const beforeCancel = writes.length;
+  await page.getByLabel('النتيجة المستهدفة', { exact: false }).fill('مسودة غير محفوظة');
+  await page.getByRole('button', { name: 'إلغاء', exact: true }).click();
+  equal(writes.length, beforeCancel, 'cancel makes no write'); await open();
+  equal(await page.getByLabel('النتيجة المستهدفة', { exact: false }).inputValue(), '', 'unsaved draft reset');
+  await page.getByRole('button', { name: 'إلغاء', exact: true }).click();
+  record = { ...original };
+  await load('/roadmap/37?tab=overview&from=roadmap&focus_year=2027&focus_quarter=Q1');
+  const overview = page.locator('.detail-content');
+  for (const label of ['تاريخ البدء المخطط', 'تاريخ البدء الفعلي', 'تاريخ الانتهاء المستهدف', 'تاريخ الانتهاء المتوقع', 'تاريخ الانتهاء الفعلي', 'آخر تعديل', 'مالك مسجل نصيًا', 'النتيجة المستهدفة']) check((await overview.innerText()).includes(label), `overview ${label}`);
+  await page.screenshot({ path: join(output, 'overview-desktop.png'), fullPage: true });
+  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'desktop no overflow');
+  await load('/roadmap/analysis');
+  const quality = page.locator('.planning-information');
+  equal(await quality.locator('dd').allTextContents(), ['0', '0', '0', '0'], 'loaded fields give factual zero gaps');
+  await page.screenshot({ path: join(output, 'data-quality-desktop.png'), fullPage: true });
+  record = { ...record, target_outcome: null, forecast_end_date: null }; await page.reload(); await quality.waitFor();
+  equal(await quality.locator('dd').allTextContents(), ['0', '1', '0', '1'], 'missing outcome/optional forecast exact counts');
+  failLinks = true; await page.reload(); await quality.waitFor();
+  equal(await quality.locator('dd').allTextContents(), ['0', '1', '0', '1'], 'independent field gaps survive failed links');
+  equal(await page.locator('.portfolio-kpis article > strong').first().innerText(), 'غير متاح', 'composite not calculated with incomplete links');
+  failProjects = true; await page.reload(); await quality.waitFor();
+  equal(await quality.locator('dd').count(), 0, 'failed read produces no missing-field counts');
+  check((await quality.innerText()).includes('غير متاح'), 'failed summary explicitly unavailable');
+  check(!(await page.locator('main').innerText()).includes('RAW_PRIVATE_ERROR'), 'no raw read error');
+  await page.screenshot({ path: join(output, 'data-quality-unavailable-desktop.png'), fullPage: true });
+  failProjects = false; failLinks = false;
+  // Local-only visual and accessible-name check for all five empty date fields.
+  record = { ...original, status: 'completed', planned_start_date: null, actual_start_date: null, target_end_date: null, forecast_end_date: null, actual_end_date: null };
+  await load('/roadmap'); await open();
+  equal(await page.getByText('لا يوجد تاريخ مسجل', { exact: true }).count(), 5, 'all five empty dates explicit');
+  for (const input of await page.locator('input[type="date"]').all()) {
+    equal(await input.inputValue(), '', 'empty native input remains empty');
+    const helperId = (await input.getAttribute('aria-describedby')).split(' ')[0];
+    equal(await page.locator(`#${helperId}`).innerText(), 'لا يوجد تاريخ مسجل', 'native date has associated empty description');
+  }
+  await page.getByLabel('تاريخ الانتهاء المتوقع', { exact: false }).fill('2027-08-01');
+  equal(await page.locator('#forecast-end-empty').count(), 0, 'helper disappears for real date');
+  await page.getByLabel('تاريخ الانتهاء المتوقع', { exact: false }).fill('');
+  equal(await page.locator('#forecast-end-empty').count(), 1, 'helper returns after explicit clear');
+  await page.getByRole('button', { name: 'إلغاء', exact: true }).click();
+  record = { ...original };
+  // Existing read-only role remains unable to submit in register form.
+  role = 'nca_external_auditor'; await load('/roadmap'); await open();
+  equal(await page.getByRole('button', { name: 'حفظ التعديلات', exact: true }).count(), 0, 'auditor has no save control');
+  role = 'cybersecurity_team'; await load('/roadmap'); await open();
+  check(await page.getByRole('button', { name: 'حفظ التعديلات', exact: true }).isVisible(), 'team existing editor preserved');
+  await page.getByRole('button', { name: 'إلغاء', exact: true }).click();
+  await page.getByRole('button', { name: '+ مشروع جديد', exact: true }).click();
+  await page.getByLabel('اسم المشروع', { exact: true }).fill('مشروع محلي جديد');
+  await page.getByLabel('رمز المشروع', { exact: true }).fill('LOCAL-38');
+  await page.getByLabel('النتيجة المستهدفة', { exact: false }).fill('نتيجة الإنشاء');
+  equal(await page.getByLabel('تاريخ الانتهاء المتوقع', { exact: false }).inputValue(), '', 'new forecast starts empty');
+  await page.getByRole('button', { name: 'حفظ وإنشاء المشروع', exact: true }).click();
+  await page.waitForURL(origin + '/roadmap/38');
+  equal(writes.at(-1).method, 'POST', 'existing create path');
+  equal(writes.at(-1).payload.target_outcome, 'نتيجة الإنشاء', 'create persists outcome');
+  equal(writes.at(-1).payload.forecast_end_date, null, 'create optional forecast null');
+  equal(writes.at(-1).payload.actual_start_date, null, 'no automatic actual start');
+  equal(writes.at(-1).payload.actual_end_date, null, 'no automatic actual end');
+  equal(errors, [], 'no runtime errors'); equal(unexpected, [], 'no unexpected simulated mutation');
+  console.log(JSON.stringify({ checks, result: 'PASS', simulatedProjectWrites: writes.length, liveServiceWrites: 0, screenshots: output }));
+} finally { await browser.close(); }

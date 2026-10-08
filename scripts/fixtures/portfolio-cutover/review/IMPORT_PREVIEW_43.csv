@@ -1,0 +1,4 @@
+Source Sheet,Source Row,Project Name,Priority,Duration Value,Duration Unit,Work Type,Executive Owner,Executive Owner Other,Control references
+Project Portfolio,2,SYNTHETIC — مشروع أ,P1,6,month,technical_project,it,,FX 1-1 FX 1-2
+Project Portfolio,3,SYNTHETIC — مشروع ب,P2,2,week,technical_change,other,Synthetic Unit,FX 2-1
+Project Portfolio,4,SYNTHETIC — مشروع ج,P3,1,year,assessment,dmo,,FX
