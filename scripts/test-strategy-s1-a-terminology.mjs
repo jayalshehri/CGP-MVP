@@ -140,7 +140,7 @@ includes(registry, '...(mappingReady && summary.requirements > 0 ? [{ label: "م
 includes(detail, '<span>نسبة الضوابط المرتبطة التي حالتها متحققة</span>');
 includes(detail, '<span>ضوابط بأدلة مقبولة ولم تُتحقق</span>');
 includes(detail, 'الأدلة المقبولة وحدها لا تثبت أهلية أمر التحقق.');
-includes(registry, 'viaRequirements && viaRequirements.requirements > 0 && <small className="rm-sub">عبر المتطلبات:');
+includes(registry, '<small className="rm-sub rm-nowrap" title="علاقات عبر المتطلبات">متطلبات <bdi>{viaRequirements.requirements}</bdi> · ضوابط <bdi>{viaRequirements.controls}</bdi></small>');
 includes(analysis, '{modern && modern.controls > 0 && <p className="rm-note">عبر المتطلبات:');
 includes(executive, 'دون دمج علاقات المتطلبات');
 includes(dashboard, '"الضوابط ذات الربط المباشر المسجّل"');

@@ -144,7 +144,8 @@ function ProjectRegisterContent() {
       p3: filteredProjects.filter((project) => project.portfolio_priority === "P3").length,
       direct: direct?.controls ?? null,
       requirements: viaRequirements?.requirements ?? 0,
-      incomplete: scoped.filter((project) => missingData(project).length > 0).length,
+      // Archived projects are history, not a completion work queue.
+      incomplete: scoped.filter((project) => !project.archived_at && missingData(project).length > 0).length,
     };
   }, [filteredProjects, linksReady, links, mappingReady, requirementCoverage, requirementControlLinks, scoped]);
 
@@ -203,12 +204,12 @@ function ProjectRegisterContent() {
     updateStrategyQuery("priority", value);
   };
   const query = (key: StrategyQueryKey) => (value: string) => updateStrategyQuery(key, value);
+  // A summary item is shown when it is non-zero or unreadable; zeros add no information.
+  const informative = (value: number | null, ready: boolean) => !ready || value === null || value > 0;
   const summaryItems: SummaryItem[] = [
-    { label: "المشاريع", value: projectsReady ? summary.total : unavailable },
-    { label: "P1", value: projectsReady ? summary.p1 : unavailable },
-    { label: "P2", value: projectsReady ? summary.p2 : unavailable },
-    { label: "P3", value: projectsReady ? summary.p3 : unavailable },
-    { label: "ضوابط بربط مباشر", value: summary.direct ?? unavailable },
+    { label: filters.archive === "archived" ? "مؤرشفة" : "المشاريع", value: projectsReady ? summary.total : unavailable },
+    ...(["p1", "p2", "p3"] as const).filter((key) => informative(summary[key], projectsReady)).map((key) => ({ label: key.toUpperCase(), value: projectsReady ? summary[key] : unavailable })),
+    ...(informative(summary.direct, linksReady) ? [{ label: "ضوابط بربط مباشر", value: summary.direct ?? unavailable }] : []),
     ...(mappingReady && summary.requirements > 0 ? [{ label: "متطلبات مرتبطة", value: summary.requirements }] : []),
     ...(canManage && projectsReady && summary.incomplete > 0 && missingFilter === "all" ? [{ label: "بيانات ناقصة", value: summary.incomplete, href: "?missing=any", tone: "attention" as const }] : []),
   ];
@@ -251,13 +252,15 @@ function ProjectRegisterContent() {
             const viaRequirements = mappingReady ? requirementCounts.get(project.id) : undefined;
             return <tr key={project.id} className={archived ? "is-archived" : undefined}>
               <th scope="row"><Link className="strategy-project-link" href={href}>{project.name_ar}</Link><span className="rm-code-line"><bdi className="rm-code" dir="ltr">{project.project_code}</bdi>{archived && <ArchivedBadge />}</span></th>
-              <td><PriorityBadge priority={project.portfolio_priority} /></td>
-              <td>{project.work_type ? workTypeLabels[project.work_type] : <span className="rm-muted">—</span>}</td>
-              <td>{owner ? <bdi className="rm-nowrap">{owner}</bdi> : <span className="rm-muted">—</span>}</td>
+              <td>{archived && !project.portfolio_priority ? <span className="rm-muted">—</span> : <PriorityBadge priority={project.portfolio_priority} />}</td>
+              <td className="rm-nowrap">{project.work_type ? workTypeLabels[project.work_type] : <span className="rm-muted">—</span>}</td>
+              <td>{owner ? <bdi className={project.executive_owner_code === "other" ? "rm-owner-other" : "rm-nowrap"}>{owner}</bdi> : <span className="rm-muted">—</span>}</td>
               <td className="rm-nowrap">{project.duration_value !== null && project.duration_unit ? <bdi>{formatDuration(project.duration_value, project.duration_unit)}</bdi> : <span className="rm-muted">—</span>}</td>
               <td><StatusChip status={project.status} />{showProgress(project) && <small className="rm-progress"><bdi>{`${Number(project.progress_percent)}%`}</bdi></small>}</td>
-              <td>{archived && !project.import_staging_id ? <span className="rm-muted">—</span> : <MappingBadge completeness={project.mapping_completeness} exact={project.mapping_exact_count} references={project.import_staging_id ? project.mapping_reference_count : undefined} />}
-                {viaRequirements && viaRequirements.requirements > 0 && <small className="rm-sub">عبر المتطلبات: <bdi>{viaRequirements.requirements}</bdi> متطلب · <bdi>{viaRequirements.controls}</bdi> ضابط</small>}</td>
+              <td>{!(archived && !project.import_staging_id) && <MappingBadge completeness={project.mapping_completeness} exact={project.mapping_exact_count} references={project.import_staging_id ? project.mapping_reference_count : undefined} />}
+                {viaRequirements && viaRequirements.requirements > 0
+                  ? <small className="rm-sub rm-nowrap" title="علاقات عبر المتطلبات">متطلبات <bdi>{viaRequirements.requirements}</bdi> · ضوابط <bdi>{viaRequirements.controls}</bdi></small>
+                  : archived && !project.import_staging_id && <span className="rm-muted">—</span>}</td>
               <td className="rm-actions"><Link className="register-action-primary" href={href}>فتح</Link>{canManage && !archived && <button type="button" className="register-action-secondary" onClick={() => openProject(project)}>تعديل</button>}</td>
             </tr>;
           })}</tbody>

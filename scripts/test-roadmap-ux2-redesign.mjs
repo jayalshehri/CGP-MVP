@@ -54,11 +54,15 @@ check(!html.includes('<span>وحدة المدة</span>') && !html.includes('حد
 check(!html.includes('>0%<'), 'no 0% progress for planned projects');
 check(html.includes('<span class="rm-status in_progress">قيد التنفيذ</span><small class="rm-progress"><bdi>40%</bdi></small>'), 'progress shown once work started');
 check(html.includes('<bdi class="rm-code" dir="ltr">PF43-001</bdi>'), 'project code isolated');
-check(html.includes('<bdi class="rm-nowrap">Cybersecurity</bdi>') && html.includes('<bdi class="rm-nowrap">Procurement / Legal</bdi>'), 'owner labels isolated and kept on one line');
+check(html.includes('<bdi class="rm-nowrap">Cybersecurity</bdi>') && html.includes('<bdi class="rm-owner-other">Procurement / Legal</bdi>'), 'standard owners never wrap; free-text "other" owner may wrap within a bounded width');
+check(html.includes('<td class="rm-nowrap">خدمة مُدارة</td>') || html.includes('<td class="rm-nowrap">مشروع تقني</td>'), 'work type kept on one line (compact rows)');
 check(html.includes('ربط جزئي<bdi class="rm-mapping-count">1/6</bdi>'), 'mapping completeness badge with exact/reference count');
 check(!html.includes('عبر المتطلبات:') && !html.includes('متطلبات مرتبطة'), 'zero requirement-derived relationships are not shown');
 check(!html.includes('تعريف التغطية') && !html.includes('<details>'), 'long explanations removed from the main screen');
 const css = read('app/roadmap/roadmap.css');
+check(/\.rm-register td,\.rm-register tbody th\{padding-block:7px\}/.test(css) && /\.rm-owner-other\{display:inline-block;max-width:140px/.test(css), 'compact row and bounded free-text owner contracts');
+check(/\.rm-register tr\.is-archived \.rm-status\{background:transparent/.test(css), 'archived status reads as history, not an action');
+for (const legacy of ['.roadmap-metric{', '.roadmap-exec-hero{', '.quarterly-roadmap{', '.portfolio-hero{', '.register-metrics{', '.portfolio-prioritization-note{']) check(!css.includes(legacy), `unused legacy CSS removed: ${legacy}`);
 check(/\.rm-code\{white-space:nowrap/.test(css) && /\.rm-nowrap\{white-space:nowrap\}/.test(css) && /\.rm-priority\{[^}]*white-space:nowrap/.test(css), 'codes, owners and priority badges never wrap');
 check(/\.rm-table-wrap\{overflow-x:auto/.test(css) && css.includes('@media(max-width:760px)') && /\.rm-register thead\{display:none\}/.test(css), 'table scrolls inside its wrapper; stacked rows on small screens');
 
@@ -68,12 +72,19 @@ html = register('/roadmap', {
   requirementControlLinks: [{ requirement_id: 5, control_id: 20, coverage_type: 'full', mapping_confidence: 'confirmed', evidence_status: 'accepted', verification_status: 'verified' }],
 });
 check(strip(html).some(([label, value]) => label === 'متطلبات مرتبطة' && value === '1'), 'requirement summary shown when non-zero');
-check(html.includes('عبر المتطلبات: <bdi>1</bdi> متطلب · <bdi>1</bdi> ضابط'), 'per-project requirement line shown when non-zero');
+check(html.includes('<small class="rm-sub rm-nowrap" title="علاقات عبر المتطلبات">متطلبات <bdi>1</bdi> · ضوابط <bdi>1</bdi></small>'), 'per-project requirement line: compact, one line, shown when non-zero');
 
 // Archived rows: clear badge, no completion prompt, no edit action.
 html = register('/roadmap?archive=archived');
 check(html.includes('<span class="rm-archived">مؤرشف</span>') && !html.includes('بانتظار التصنيف'), 'archived badge, not "pending classification"');
 check(!html.includes('>تعديل</button>'), 'edit hidden for archived projects');
+// UX-2.1: the archived scope shows no zero items and no completion queue.
+equal(strip(html), [['مؤرشفة', '1']], 'archived scope summary: only the archived count (zero P1/P2/P3/direct hidden, no missing-data item)');
+check(!html.includes('<span>بيانات ناقصة</span>'), 'no missing-data filter for archived projects');
+const archivedBody = html.split('<tbody>')[1]?.split('</tbody>')[0] ?? '';
+check(!archivedBody.includes('غير مصنّفة') && !archivedBody.includes('عبر المتطلبات:') && archivedBody.includes('<span class="rm-muted">—</span>'), 'archived rows: no "unclassified" prompt, compact wording');
+html = register('/roadmap?archive=include');
+check(strip(html).some(([label, value]) => label === 'بيانات ناقصة' && value === '3'), 'missing-data count covers active projects only (archived excluded)');
 
 // Data-quality filter (moved from analysis): missing target outcome.
 html = register('/roadmap?missing=outcome');
