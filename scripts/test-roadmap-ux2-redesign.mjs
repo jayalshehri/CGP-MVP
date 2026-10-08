@@ -60,7 +60,7 @@ check(!html.includes('عبر المتطلبات:') && !html.includes('متطلب
 check(!html.includes('تعريف التغطية') && !html.includes('<details>'), 'long explanations removed from the main screen');
 const css = read('app/roadmap/roadmap.css');
 check(/\.rm-code\{white-space:nowrap/.test(css) && /\.rm-nowrap\{white-space:nowrap\}/.test(css) && /\.rm-priority\{[^}]*white-space:nowrap/.test(css), 'codes, owners and priority badges never wrap');
-check(/\.rm-table-wrap\{overflow-x:auto/.test(css) && css.includes('@media(max-width:760px)') && /\.rm-table thead\{display:none\}/.test(css), 'table scrolls inside its wrapper; stacked rows on small screens');
+check(/\.rm-table-wrap\{overflow-x:auto/.test(css) && css.includes('@media(max-width:760px)') && /\.rm-register thead\{display:none\}/.test(css), 'table scrolls inside its wrapper; stacked rows on small screens');
 
 // Requirement-derived relationships appear only when they exist.
 html = register('/roadmap', {
@@ -83,5 +83,73 @@ check(html.includes('<option value="outcome" selected="">بلا نتيجة مس�
 // Mixed duration units bring the unit filter back.
 html = register('/roadmap', { projects: [projects[0], { ...projects[1], duration_unit: 'week' }] });
 check(html.includes('<span>وحدة المدة</span>'), 'unit filter shown when units differ');
+
+// ------------------------------------------------------------ planned portfolio load
+const matrix = rules.plannedLoadMatrix([
+  ...projects,
+  { ...base, id: 5, project_code: 'X5', name_ar: 'سنة', portfolio_priority: 'P1', executive_owner_code: 'cybersecurity', duration_value: 1, duration_unit: 'year' },
+  { ...base, id: 6, project_code: 'X6', name_ar: 'أسبوع', portfolio_priority: 'P1', executive_owner_code: 'it', duration_value: 3, duration_unit: 'week' },
+  { ...base, id: 7, project_code: 'X7', name_ar: 'بلا مالك', portfolio_priority: 'P2', executive_owner_code: null, duration_value: 5, duration_unit: 'month' },
+]);
+const cell = (owner, year) => matrix.rows.find(row => row.owner === owner)?.cells[year - 1];
+equal(matrix.rows.map(row => row.owner), ['cybersecurity', 'it', 'dmo', 'other', 'unset'], 'owner rows (unset only when present)');
+equal(cell('cybersecurity', 1), { projects: 2, months: 20, unmeasured: 0 }, 'cybersecurity year 1: 8 months + 1 year (12) = 20 project-months');
+equal(cell('it', 1), { projects: 2, months: 4, unmeasured: 1 }, 'week durations are not converted; counted as unmeasured');
+equal(cell('unset', 2), { projects: 1, months: 5, unmeasured: 0 }, 'projects without an owner are kept visible');
+equal(matrix.totals.map(total => [total.projects, total.months]), [[4, 24], [2, 7], [1, 1]], 'year totals');
+equal(matrix.unscheduled, 1, 'unprioritised (archived legacy) project is outside the execution years');
+equal(matrix.rows.find(row => row.owner === 'cybersecurity').total, { projects: 2, months: 20, unmeasured: 0 }, 'row totals');
+equal(rules.plannedLoadMatrix([]).rows.map(row => row.owner), ['cybersecurity', 'it', 'dmo', 'other'], 'empty scope keeps the fixed owner rows');
+
+// ------------------------------------------------------------ analysis
+const analysisPath = 'app/roadmap/analysis/page.tsx';
+const analysisSource = read(analysisPath);
+const analysisState = { projects, reads, links, treatments: [], canonical: { projectRequirements: [], requirementControls: [] } };
+html = render(analysisPath, '/roadmap/analysis', analysisState);
+const cards = [...html.matchAll(/<article class="rm-kpi">(?:<a [^>]*>)?<span>(.*?)<\/span><strong><bdi>(.*?)<\/bdi>/g)].map(m => [m[1], m[2]]);
+equal(cards, [['المشاريع', '4'], ['مشاريع P1', '2'], ['الحمل التخطيطي — السنة الأولى', '12'], ['بنود تحتاج انتباه الإدارة', '0']], 'four management KPIs: projects, P1, year-1 planned load (8+4), attention items');
+check(html.includes('<h2 id="planned-load-title">الحمل التخطيطي للمحفظة</h2>') && html.includes('ولا يمثل موارد أو FTE أو نسبة استغلال'), 'planned load is labelled as plan, not resources');
+check(!/Capacity|السعة|القدرة الاستيعابية|utili[sz]ation|استغلال الموارد/.test(analysisSource.replace('ولا يمثل موارد أو FTE أو نسبة استغلال', '')), 'no capacity / FTE / utilisation claim');
+check(!html.includes('aria-label="الأولوية"') && !html.includes('aria-label="سنة التنفيذ"'), 'no separate priority and execution-year tables');
+check(!html.includes('<td>مخطط</td>') && !analysisSource.includes('"status"]'), 'no status table');
+check(!html.includes('مدة المشاريع المسجّلة') && !html.includes('وحدة المدة'), 'no duration tables or unit filter');
+check(!html.includes('اكتمال عناصر التخطيط') && !html.includes('النتيجة المستهدفة'), 'data completeness moved out of analysis');
+check(!html.includes('عبر المتطلبات:'), 'zero requirement-derived coverage hidden');
+for (const key of ['verified', 'partially_mapped', 'mapping_pending', 'source_error']) check(html.includes(`<a href="/roadmap?mapping=${key}"`), `mapping completeness ${key} links to the register filter`);
+check(render(analysisPath, '/roadmap/analysis', { ...analysisState, scope: 'all' }).includes('<a href="/roadmap?mapping=verified&amp;archive=include"'), 'mapping links keep the selected portfolio scope');
+check(html.includes('<span>مشروع تقني</span>') && !html.includes('<span>تقييم</span>'), 'work type mix lists non-zero categories only');
+check(html.includes('لا توجد بنود تحتاج انتباه الإدارة وفق القواعد الحالية.'), 'empty attention state stated once');
+// Attention rules are shared: analysis count equals the executive list for the same active scope.
+const attentionState = { ...analysisState, projects: [...projects, { ...base, id: 8, project_code: 'X8', name_ar: 'متوقف', portfolio_priority: 'P2', executive_owner_code: 'it', duration_value: 2, duration_unit: 'month', status: 'on_hold' }], treatments: [{ project_id: 2, priority: 'high' }, { project_id: 9, priority: 'high' }] };
+html = render(analysisPath, '/roadmap/analysis', attentionState);
+const analysisAttention = html.match(/<span>بنود تحتاج انتباه الإدارة<\/span><strong><bdi>(\d+)<\/bdi>/)?.[1];
+const executiveHtml = render('app/roadmap/executive/page.tsx', '/roadmap/executive', attentionState);
+equal(analysisAttention, String((executiveHtml.match(/<article class="(decision|data|risk)"><b>/g) ?? []).length), 'analysis attention count = executive attention list (same rules, same scope)');
+equal(analysisAttention, '2', 'stopped project + active high treatment without direct link; archived treatment ignored');
+
+// ------------------------------------------------------------ roadmap
+const roadmapPath = 'app/roadmap/dashboard/page.tsx';
+html = render(roadmapPath, '/roadmap/dashboard', { projects, reads, links, canonical: { projectRequirements: [], requirementControls: [] } });
+equal(strip(html), [['المشاريع', '4'], ['مؤرشفة (خارج العرض)', '1'], ['ضوابط بربط مباشر', '2']], 'roadmap strip: planning facts only (no average progress, no zero requirement counts, no zero unprioritised)');
+const year1 = html.split('id="roadmap-year-1"')[1]?.split('</section>')[0] ?? '';
+check(year1.includes('<bdi class="rm-code" dir="ltr">PF43-001</bdi>') && !year1.includes('register-priority') && !/>P1</.test(year1.replace('<bdi>السنة الأولى · P1</bdi>', '')), 'cards carry no repeated P1 badge');
+check(!year1.includes('السنة الأولى</small>') && !year1.includes('rm-status'), 'cards do not repeat the year; planned status hidden');
+check(!html.includes('>0%<'), 'no 0% on planned cards');
+const year2 = html.split('id="roadmap-year-2"')[1]?.split('</section>')[0] ?? '';
+check(year2.includes('<span class="rm-status in_progress">قيد التنفيذ</span>') && year2.includes('<bdi>40%</bdi>'), 'status and progress shown once work started');
+check(!html.includes('At Risk') && !html.includes('مشاريع بلا أولوية'), 'no placeholder or empty unprioritised panel');
+html = render(roadmapPath, '/roadmap/dashboard', { projects, reads, links, scope: 'all' });
+check(html.includes('<h2 id="unplanned-title">مشاريع بلا أولوية</h2>') && strip(html).some(([label, value]) => label === 'بلا أولوية' && value === '1'), 'unprioritised projects surfaced only when present');
+
+// ------------------------------------------------------------ shared design system
+for (const path of ['app/roadmap/page.tsx', roadmapPath, analysisPath]) {
+  const text = read(path);
+  check(text.includes('<RoadmapTabs active=') && text.includes('<PageHeader title=') && text.includes('<FilterBar label='), `${path}: shared tabs, header and filter bar`);
+  check(!text.includes('roadmap-exec-hero') && !text.includes('portfolio-hero') && !text.includes('project-register-hero'), `${path}: no page-specific hero`);
+}
+for (const path of [roadmapPath, analysisPath]) check(read(path).includes('label="الأولوية / سنة التنفيذ"'), `${path}: merged priority/year filter`);
+check(/\.rm-kpis\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/.test(css) && /@media\(max-width:1100px\)\{\.rm-kpis\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}\}/.test(css), 'analysis cards: 4 → 2 columns');
+check(/\.rm-grid-2\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(css) && /@media\(max-width:760px\)\{\.rm-grid-2\{grid-template-columns:1fr\}/.test(css), 'analysis panels: 2 → 1 column on small screens');
+check(/@media \(max-width:800px\)\{\.year-roadmap-grid\{grid-template-columns:1fr\}/.test(css), 'roadmap years stack on small screens');
 
 console.log(`Roadmap UX-2 redesign: ${checks} assertions PASS (offline, synthetic fixtures)`);

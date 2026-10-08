@@ -58,41 +58,43 @@ const LABEL = 'ضوابط مميزة عبر المتطلبات';
 const bigNumber = html => html.match(/ضوابط مميزة مرتبطة بالمشاريع عبر المتطلبات[\s\S]*?executive-big-number">(.*?)</)?.[1];
 
 // --- Finding 1: requirement-derived controls follow the displayed scope and filters.
-for (const path of ['app/roadmap/dashboard/page.tsx', 'app/roadmap/analysis/page.tsx']) {
-  equal(kpi(page(path), LABEL), '2', `${path}: active default excludes the archived project's paths (controls 4 and shared 1)`);
-  equal(kpi(page(path, { scope: 'archived' }), LABEL), '3', `${path}: archived scope shows archived paths only`);
-  equal(kpi(page(path, { scope: 'all' }), LABEL), '4', `${path}: all scope counts the shared control once (no double counting)`);
-  equal(kpi(page(path, { filters: { ...allFilters, priority: 'P2' } }), LABEL), '0', `${path}: priority filter changes the KPI`);
-  equal(kpi(page(path, { filters: { ...allFilters, executive_owner: 'cybersecurity' } }), LABEL), '2', `${path}: owner filter keeps only matching projects`);
-  equal(kpi(page(path, { canonical: null }), LABEL), 'غير متاح', `${path}: unreadable canonical source is unavailable, never zero`);
+// UX-2: they are shown only when non-zero (roadmap strip item, analysis note).
+const stripValue = (html, label) => html.match(new RegExp(`<dt>${label.replace(/[()]/g, '\\$&')}</dt><dd>(?:<a [^>]*>)?<bdi>(.*?)</bdi>`))?.[1];
+const viaRequirements = {
+  'app/roadmap/dashboard/page.tsx': html => stripValue(html, LABEL.replace('مميزة ', '')),
+  'app/roadmap/analysis/page.tsx': html => html.match(/عبر المتطلبات: <bdi>\d+<\/bdi> متطلب · <bdi>(\d+)<\/bdi> ضابط/)?.[1],
+};
+for (const [path, value] of Object.entries(viaRequirements)) {
+  equal(value(page(path)), '2', `${path}: active default excludes the archived project's paths (controls 4 and shared 1)`);
+  equal(value(page(path, { scope: 'archived' })), '3', `${path}: archived scope shows archived paths only`);
+  equal(value(page(path, { scope: 'all' })), '4', `${path}: all scope counts the shared control once (no double counting)`);
+  equal(value(page(path, { filters: { ...allFilters, priority: 'P2' } })), undefined, `${path}: zero requirement-derived controls are hidden`);
+  equal(value(page(path, { filters: { ...allFilters, executive_owner: 'cybersecurity' } })), '2', `${path}: owner filter keeps only matching projects`);
+  const unread = page(path, { canonical: null });
+  check(value(unread) === undefined && unread.includes('قراءة جزئية'), `${path}: unreadable canonical source is disclosed, never shown as zero`);
   check(page(path).includes('<span>المحفظة</span><select'), `${path}: portfolio scope selector`);
 }
-equal(kpi(page('app/roadmap/dashboard/page.tsx', { links: [{ project_id: 101, control_id: 4 }, { project_id: 104, control_id: 9 }] }), 'ضوابط ذات ربط مباشر مسجّل'), '1', 'direct links counted separately and scoped');
+equal(stripValue(page('app/roadmap/dashboard/page.tsx', { links: [{ project_id: 101, control_id: 4 }, { project_id: 104, control_id: 9 }] }), 'ضوابط بربط مباشر'), '1', 'direct links counted separately and scoped');
 equal(bigNumber(page('app/roadmap/executive/page.tsx')), '2', 'executive requirement-derived controls = active portfolio only');
 check(read('lib/portfolio-analytics.ts').includes('canonicalRelationships(projects.map(project => project.id)'), 'KPI computed from the displayed projects');
 for (const path of ['app/roadmap/dashboard/page.tsx', 'app/roadmap/analysis/page.tsx', 'app/roadmap/executive/page.tsx']) {
   check(!read(path).includes('readCanonicalPortfolio('), `${path}: no whole-portfolio aggregate`);
 }
 
-// --- Finding 3: duration analysis in the stored unit, filtered like the rest of Analysis.
+// --- Finding 3 (UX-2): planned load replaces the duration tables; stored units are never converted
+// except years (x12); day/week durations are disclosed, not counted.
 let html = page('app/roadmap/analysis/page.tsx');
-const durationCard = html.split('id="portfolio-duration-title"')[1] ?? '';
-check(durationCard.includes('شهر: 3 مشاريع · الأدنى <bdi>6</bdi> · الوسيط <bdi>6</bdi> · الأعلى <bdi>8</bdi>'), 'month group summary');
-check(durationCard.includes('<td><bdi>6 أشهر</bdi></td><td>2</td>') && durationCard.includes('<td><bdi>8 أشهر</bdi></td><td>1</td>'), 'month distinct values');
-check(durationCard.includes('أسبوع: مشروع واحد') && durationCard.includes('<td><bdi>أسبوعان</bdi></td><td>1</td>'), 'week group kept in its own unit');
-check(!durationCard.includes('بلا مدة مسجّلة'), 'active scope has no unset durations');
-html = page('app/roadmap/analysis/page.tsx', { filters: { ...allFilters, execution_year: '1' } });
-const filteredDuration = html.split('id="portfolio-duration-title"')[1] ?? '';
-check(filteredDuration.includes('شهر: مشروعان') && !filteredDuration.includes('أسبوع:'), 'duration analysis follows the filters');
-html = page('app/roadmap/analysis/page.tsx', { scope: 'archived' });
-check((html.split('id="portfolio-duration-title"')[1] ?? '').includes('لا توجد مدد مسجّلة للمشاريع المعروضة.'), 'no durations invented for archived projects');
+check(html.includes('<span>الحمل التخطيطي — السنة الأولى</span><strong><bdi>14</bdi><small>مشروع-شهر</small></strong><small>مشروعان</small>'), 'year-1 load: 6 + 8 project-months, two projects');
+check(html.includes('بوحدة يوم/أسبوع غير محتسبة'), 'week duration disclosed, not converted');
+html = page('app/roadmap/analysis/page.tsx', { filters: { ...allFilters, execution_year: '2' } });
+check(html.includes('<span>الحمل التخطيطي — السنة الأولى</span><strong><bdi>0</bdi>'), 'planned load follows the filters');
 html = page('app/roadmap/analysis/page.tsx', { scope: 'all' });
-check(html.includes('5 مشاريع — كل المحفظة') && html.includes('<span>توزيع كل المحفظة</span>') && !html.includes('المحفظة الجميع'), 'all scope reads «كل المحفظة»');
-check(page('app/roadmap/analysis/page.tsx').includes('<span>توزيع المحفظة النشطة</span>'), 'active scope heading');
+check(html.includes('5 مشاريع — كل المحفظة') && html.includes('<small>كل المحفظة</small>') && !html.includes('المحفظة الجميع'), 'all scope reads «كل المحفظة»');
+check(page('app/roadmap/analysis/page.tsx').includes('<small>المحفظة النشطة</small>'), 'active scope label');
 
-// --- Finding 2: bidi-safe roadmap card line.
+// --- Finding 2: bidi-safe roadmap card line (UX-2: no 0% for planned work).
 html = page('app/roadmap/dashboard/page.tsx');
-check(html.includes('<small class="bidi-meta"><bdi>Cybersecurity</bdi> · <bdi>6 أشهر</bdi> · <bdi>0%</bdi></small>'), 'owner, duration and progress isolated in roadmap cards');
+check(html.includes('<small class="bidi-meta"><bdi class="rm-nowrap">Cybersecurity</bdi> · <bdi class="rm-nowrap">6 أشهر</bdi></small>'), 'owner and duration isolated in roadmap cards; no 0% progress');
 
 // --- Finding 4/5 (detail): separate explicit labels; Arabic years; bidi-safe header.
 const project = projects[0];

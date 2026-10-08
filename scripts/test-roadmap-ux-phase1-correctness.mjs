@@ -35,7 +35,10 @@ equal(new Set(scopedHighTreatments(mixed, active).map(t => t.project_id)), new S
 check([...executiveProjects].every(id => active.some(p => p.id === id)), 'executive alerts reference active projects only');
 const executive = read('app/roadmap/executive/page.tsx');
 const analysis = read('app/roadmap/analysis/page.tsx');
-check(executive.includes('highTreatmentProjectsWithoutDirectLinks(treatments, links, active)'), 'executive alert uses the active scope');
+// UX-2 moved the attention rules to lib/portfolio-attention.ts (shared with analysis); the scope stays active.
+check(executive.includes('managementAttention(active, links, treatments, {'), 'executive alert uses the active scope');
+check(read('lib/portfolio-attention.ts').includes('highTreatmentProjectsWithoutDirectLinks(treatments, links, scope)'), 'shared attention rules use the scoped helper');
+check(analysis.includes('managementAttention(scoped, links, treatments, {'), 'analysis counts the same attention rules for its scope');
 check(!/treatments\s*\n?\s*\.filter\(\(item\) => item\.priority === "high"/.test(executive), 'executive no longer filters unscoped treatments');
 check(analysis.includes('scopedHighTreatments(treatments, scoped).length'), 'analysis uses the shared scoped helper');
 

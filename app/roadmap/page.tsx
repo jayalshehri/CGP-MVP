@@ -238,10 +238,10 @@ function ProjectRegisterContent() {
             <label className="rm-field"><span>المدة من</span><input type="number" min="0" step="any" value={filters.durationMin} onChange={(event) => updateStrategyQuery("duration_min", event.target.value)} /></label>
             <label className="rm-field"><span>المدة إلى</span><input type="number" min="0" step="any" value={filters.durationMax} onChange={(event) => updateStrategyQuery("duration_max", event.target.value)} /></label>
           </>}
-          {(missingFilter !== "all" || (canManage && summary.incomplete > 0)) && <FilterSelect label="بيانات ناقصة" value={missingFilter} onChange={query("missing")} options={missingOptions} />}
+          {(missingFilter !== "all" || (canManage && projectsReady && summary.incomplete > 0)) && <FilterSelect label="بيانات ناقصة" value={missingFilter} onChange={query("missing")} options={missingOptions} />}
         </FilterBar>
 
-        <div className="rm-table-wrap"><table className="rm-table">
+        <div className="rm-table-wrap rm-register-wrap"><table className="rm-table rm-register">
           <caption className="rm-visually-hidden">سجل المشاريع — {projectsReady ? projectCount(filteredProjects.length) : unavailable}</caption>
           <thead><tr>{["المشروع", "الأولوية", "نوع العمل", "الجهة المالكة", "المدة", "الحالة", "اكتمال الربط", "الإجراءات"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
           <tbody>{filteredProjects.map((project) => {

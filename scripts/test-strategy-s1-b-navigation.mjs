@@ -111,7 +111,9 @@ export function render(path, href, state = {}) {
 }
 for (const [path, origin] of [['app/roadmap/page.tsx', 'register'], ['app/roadmap/dashboard/page.tsx', 'roadmap'], ['app/roadmap/analysis/page.tsx', 'analysis'], ['app/roadmap/executive/page.tsx', 'executive']]) {
   const html = render(path, originRoutes[origin]);
-  check(html.includes(`/roadmap/37?tab=overview&amp;from=${origin}`), `${origin} production page exact link rendered`);
+  // UX-2: analysis is aggregate-only (no project list); it links to the register, never to a guessed project.
+  if (origin === 'analysis') check(!/\/roadmap\/\d+\?/.test(html), 'analysis renders no per-project links');
+  else check(html.includes(`/roadmap/37?tab=overview&amp;from=${origin}`), `${origin} production page exact link rendered`);
   check(!html.includes('/roadmap/NOT-AN-ID'), 'project code is never identity');
 }
 const detail = 'app/roadmap/[id]/page.tsx';

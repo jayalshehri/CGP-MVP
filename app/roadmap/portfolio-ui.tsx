@@ -64,3 +64,8 @@ export function MappingBadge({ completeness, exact, references }: { completeness
 export function ArchivedBadge() {
   return <span className="rm-archived">مؤرشف</span>;
 }
+
+export function KpiCard({ label, value, unit, detail, href }: { label: string; value: string | number; unit?: string; detail?: string; href?: string }) {
+  const body = <><span>{label}</span><strong><bdi>{value}</bdi>{unit && <small>{unit}</small>}</strong>{detail && <small>{detail}</small>}</>;
+  return <article className="rm-kpi">{href ? <Link href={href}>{body}</Link> : body}</article>;
+}

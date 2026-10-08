@@ -123,12 +123,17 @@ includes('components/PortfolioProjectFields.tsx', '<label>نوع العمل<sele
 includes(registry, '<PortfolioProjectFields form={form}');
 includes('components/GrcAuditTrail.tsx', "initiative_type:'نوع العمل'");
 includes(dashboard, 'توزيع المشاريع حسب سنة التنفيذ');
-for (const path of [dashboard, executive]) includes(path, 'label="متوسط تقدم المشاريع المسجّل"');
+includes(executive, 'label="متوسط تقدم المشاريع المسجّل"');
 includes(executive, 'label="المشاريع السيبرانية"');
 includes(executive, 'label="فئات التنبيه الإداري"');
-includes(analysis, 'label="اكتمال عناصر التخطيط الخمسة الحالية"');
-includes(analysis, 'label="ضوابط ذات ربط مباشر مسجّل"');
-includes(dashboard, 'label="ضوابط ذات ربط مباشر مسجّل"');
+// UX-2: roadmap keeps planning facts only; average progress and zero requirement counts are not shown.
+equal(read(dashboard).includes('متوسط تقدم المشاريع المسجّل'), false, 'roadmap: no average-progress KPI');
+includes(dashboard, '...(!linksReady || data.controls > 0 ? [{ label: "ضوابط بربط مباشر", value: linksReady ? data.controls : unavailable }] : [])');
+includes(dashboard, '...(modern && modern.controls > 0 ? [{ label: "ضوابط عبر المتطلبات", value: modern.controls }] : [])');
+// UX-2: analysis has four management KPIs; the five-element completeness KPI moved to the register filter.
+for (const label of ['المشاريع', 'مشاريع P1', 'الحمل التخطيطي — السنة الأولى', 'بنود تحتاج انتباه الإدارة']) includes(analysis, `<KpiCard label="${label}"`);
+equal((read(analysis).match(/<KpiCard /g) ?? []).length, 4, 'analysis: at most four KPIs');
+equal(read(analysis).includes('اكتمال عناصر التخطيط الخمسة'), false, 'analysis: data-completeness KPI removed');
 // UX-2 register: one summary strip; requirement-derived counts only when non-zero.
 includes(registry, '{ label: "ضوابط بربط مباشر", value: summary.direct ?? unavailable }');
 includes(registry, '...(mappingReady && summary.requirements > 0 ? [{ label: "متطلبات مرتبطة", value: summary.requirements }] : [])');
@@ -136,24 +141,16 @@ includes(detail, '<span>نسبة الضوابط المرتبطة التي حال
 includes(detail, '<span>ضوابط بأدلة مقبولة ولم تُتحقق</span>');
 includes(detail, 'الأدلة المقبولة وحدها لا تثبت أهلية أمر التحقق.');
 includes(registry, 'viaRequirements && viaRequirements.requirements > 0 && <small className="rm-sub">عبر المتطلبات:');
-includes(analysis, 'لا يدخل الربط عبر المتطلبات في هذا المؤشر.');
+includes(analysis, '{modern && modern.controls > 0 && <p className="rm-note">عبر المتطلبات:');
 includes(executive, 'دون دمج علاقات المتطلبات');
 includes(dashboard, '"الضوابط ذات الربط المباشر المسجّل"');
 equal(read(analysis).includes('className="portfolio-score"'), false, 'duplicate circular score removed');
-equal((read(analysis).match(/analysis\.readiness/g) ?? []).length, 1, 'aggregate completeness displayed once');
-includes(analysis, 'missing.map((item) => item.key === "outcome"');
-includes(analysis, '<em>{readiness}%</em>');
-includes(analysis, 'analysis.incomplete.map');
-includes(analysis, '<aside className="portfolio-prioritization-note" aria-labelledby="prioritization-note-title">');
-includes(analysis, '<h2 id="prioritization-note-title">دعم تحديد الأولويات</h2><span>غير متاح حاليًا</span>');
-includes(analysis, 'تتوفر حاليًا بيانات الحالة والأولوية والتقدم وبعض روابط الامتثال. يتطلب دعم تحديد الأولويات مستقبلًا بيانات معتمدة إضافية قبل تقديم توصيات أو تصنيف تحليلي للمشاريع.');
+// UX-2: the per-project missing-outcome list and the "not available" prioritisation note carry no decision value.
+equal(read(analysis).includes('analysis.incomplete'), false, 'analysis: 43-row missing-data list removed (moved to register filter)');
+equal(read(analysis).includes('دعم تحديد الأولويات'), false, 'analysis: unavailable prioritisation placeholder removed');
 for (const removed of ['Portfolio Prioritization', 'Must Do', 'Quick Wins', 'Defer', 'Strategic Alignment', 'Risk Reduction', 'Compliance Criticality', 'Effort / Complexity', 'decision-data-grid', 'portfolio-decision-readiness']) {
   equal(read(analysis).includes(removed), false, `unapproved future framework removed: ${removed}`);
 }
-const note = read(analysis).match(/<aside className="portfolio-prioritization-note"[\s\S]*?<\/aside>/)?.[0];
-assert.ok(note);
-equal(/<button|<Link|<input|\{/.test(note), false, 'informational callout only: no action, calculation or recommendation');
-includes('app/roadmap/roadmap.css', '.portfolio-prioritization-note>header{display:flex;flex-wrap:wrap;');
 for (const path of [registry, analysis, dashboard, executive, detail]) {
   for (const obsolete of ['مساهمة الامتثال', 'نسبة المساهمة', 'المبادرات الاستراتيجية', 'التسلسل الربعي للمبادرات', 'الأولوية والقيمة والمخاطر', 'ضوابط مرتبطة بمشروع معالجة', 'جاهزة للتحقق']) {
     equal(read(path).includes(obsolete), false, `${path}: no misleading ${obsolete}`);

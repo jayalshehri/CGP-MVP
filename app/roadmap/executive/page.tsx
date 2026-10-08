@@ -12,7 +12,7 @@ import { projectCount } from "@/lib/arabic-count";
 import { ReadNotice, ReadSection } from "../read-state";
 import { averageProgress } from "../portfolio-metrics";
 import { durationLabel, executionYearFor, executionYearText, executionYears, isArchived, scopedRequirementCounts, type PortfolioFields } from "@/lib/portfolio-analytics";
-import { highTreatmentProjectsWithoutDirectLinks } from "@/lib/portfolio-treatments";
+import { managementAttention } from "@/lib/portfolio-attention";
 import "../roadmap.css";
 
 type Project = PortfolioFields & {
@@ -25,7 +25,6 @@ type Project = PortfolioFields & {
 };
 type LinkRow = { project_id: number; control_id: number };
 type Treatment = { project_id: number; priority: "high" | "medium" | "low" };
-type Attention = { key: string; title: string; detail: string; count: number; level: "decision" | "risk" | "data" };
 
 
 export default function ExecutiveRoadmapPage() {
@@ -87,16 +86,8 @@ export default function ExecutiveRoadmapPage() {
       const items = active.filter((project) => executionYearFor(project.portfolio_priority) === year);
       return { year, items, progress: averageProgress(items) };
     });
-    const unprioritized = active.filter((project) => !project.portfolio_priority);
-    const p1WithoutDuration = active.filter((project) => project.portfolio_priority === "P1" && durationLabel(project) === null);
-    const stopped = active.filter((project) => project.status === "on_hold");
-    // Same scope as every other metric on this page: archived projects never raise alerts.
-    const highTreatmentsWithoutControlLinks = highTreatmentProjectsWithoutDirectLinks(treatments, links, active);
-    const attention: Attention[] = [];
-    if (unprioritized.length) attention.push({ key: "baseline", title: "اعتماد أولويات المشاريع", detail: `${projectCount(unprioritized.length)} مسجلًا بالنموذج السابق بلا أولوية P1/P2/P3، ولذلك لا يظهر في سنوات التنفيذ.`, count: unprioritized.length, level: "decision" });
-    if (p1WithoutDuration.length) attention.push({ key: "duration", title: "استكمال مدد مشاريع السنة الأولى", detail: `${projectCount(p1WithoutDuration.length)} بأولوية P1 بلا مدة مسجلة.`, count: p1WithoutDuration.length, level: "data" });
-    if (stopped.length) attention.push({ key: "stopped", title: "حسم المشاريع المتوقفة", detail: `${projectCount(stopped.length)} متوقفًا يحتاج قرار استئناف أو إعادة تخطيط.`, count: stopped.length, level: "decision" });
-    if (linksReady && treatmentsReady && highTreatmentsWithoutControlLinks.size) attention.push({ key: "mapping", title: "استكمال مواءمة المعالجات والضوابط", detail: `${projectCount(highTreatmentsWithoutControlLinks.size)} لديه معالجة عالية بلا رابط مباشر مسجّل بضابط.`, count: highTreatmentsWithoutControlLinks.size, level: "data" });
+    // Shared rules (lib/portfolio-attention.ts): the analysis view counts the same list.
+    const attention = managementAttention(active, links, treatments, { links: linksReady, treatments: treatmentsReady });
     const activeIds = new Set(active.map((project) => project.id));
     return {
       active,

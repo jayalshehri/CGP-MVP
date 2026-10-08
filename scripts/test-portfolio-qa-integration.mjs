@@ -76,14 +76,20 @@ for (const [year, name] of [[1, 'مشروع أول'], [2, 'مشروع ثان'], 
 }
 check(!html.includes('مشروع تاريخي مؤرشف'), 'roadmap excludes archived');
 equal((html.match(/data-reading-focus="true"/g) || []).length, 1, 'roadmap focus restored on execution year');
-check(html.includes('<span>مشاريع مؤرشفة</span><strong>1</strong>'), 'roadmap reports archived count separately');
+check(html.includes('<dt>مؤرشفة (خارج العرض)</dt><dd><a href="/roadmap?archive=archived"><bdi>1</bdi></a></dd>'), 'roadmap reports archived count separately');
 noLegacyPlanning(html, 'roadmap');
 
 // Portfolio Analysis
 html = page('app/roadmap/analysis/page.tsx', '/roadmap/analysis');
-for (const label of ['الأولوية', 'سنة التنفيذ', 'نوع العمل', 'الجهة المالكة', 'الحالة']) check(html.includes(`aria-label="${label}"`), `analysis breakdown by ${label}`);
-check(html.includes('<td>أخرى</td><td>1</td>') && html.includes('<td>قيد التنفيذ</td><td>1</td>') && html.includes('3 مشاريع — المحفظة النشطة'), 'analysis counts active portfolio only');
-check(html.includes('<span>مشاريع الأولوية P1</span><strong>1</strong>'), 'analysis P1 KPI');
+// UX-2: planned load (owner x execution year, project-months), work type mix, mapping completeness.
+check(html.includes('3 مشاريع — المحفظة النشطة'), 'analysis counts active portfolio only');
+check(html.includes('<span>مشاريع P1</span><strong><bdi>1</bdi>'), 'analysis P1 KPI');
+check(html.includes('<span>الحمل التخطيطي — السنة الأولى</span><strong><bdi>6</bdi><small>مشروع-شهر</small></strong>'), 'year-1 planned load in project-months');
+const loadRow = owner => html.split(`<bdi class="rm-nowrap">${owner}</bdi></th>`)[1]?.split('</tr>')[0] ?? '';
+check(loadRow('Cybersecurity').startsWith('<td><b><bdi>6</bdi></b> <small>شهر · مشروع واحد</small></td>'), 'cybersecurity year-1 load');
+check(loadRow('DMO').includes('<b><bdi>12</bdi></b> <small>شهر · مشروع واحد</small>'), 'year durations counted as 12 months');
+check(loadRow('أخرى').includes('<b><bdi>0</bdi></b> <small>شهر · مشروع واحد</small>') && html.includes('بوحدة يوم/أسبوع غير محتسبة'), 'week durations are not converted and are disclosed');
+check(!html.includes('مشروع تاريخي مؤرشف') && !html.includes('غير محددة</bdi>'), 'archived/unowned projects absent from active load');
 noLegacyPlanning(html, 'analysis');
 
 // Executive view
@@ -93,7 +99,7 @@ check(html.includes('<span>المشاريع السيبرانية</span><strong>3
 noLegacyPlanning(html, 'executive');
 
 // Static guarantees
-const roadmapFiles = ['app/roadmap/page.tsx', 'app/roadmap/[id]/page.tsx', 'app/roadmap/dashboard/page.tsx', 'app/roadmap/analysis/page.tsx', 'app/roadmap/executive/page.tsx', 'app/roadmap/portfolio-metrics.ts', 'app/roadmap/planning-information.tsx', 'lib/strategy-project-fields.ts', 'lib/strategy-navigation.ts', 'lib/portfolio-analytics.ts'];
+const roadmapFiles = ['app/roadmap/page.tsx', 'app/roadmap/[id]/page.tsx', 'app/roadmap/dashboard/page.tsx', 'app/roadmap/analysis/page.tsx', 'app/roadmap/executive/page.tsx', 'app/roadmap/portfolio-metrics.ts', 'app/roadmap/portfolio-ui.tsx', 'lib/roadmap-presentation.ts', 'lib/portfolio-attention.ts', 'lib/strategy-project-fields.ts', 'lib/strategy-navigation.ts', 'lib/portfolio-analytics.ts'];
 for (const path of roadmapFiles) {
   const text = read(path);
   for (const removed of ['planned_quarter', 'planned_year', 'planned_start_date', 'target_end_date', 'forecast_end_date', 'actual_start_date', 'actual_end_date', 'focus_quarter', 'الربع', 'portfolio-model', 'portfolio_import_rows', 'portfolio_control_mapping_reviews']) check(!text.includes(removed), `${path}: no ${removed}`);

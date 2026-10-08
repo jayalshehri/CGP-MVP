@@ -77,14 +77,18 @@ html = render(detail, '/roadmap/37', { project: { ...historical, target_outcome:
 for (const label of ['لا توجد نتيجة مستهدفة مسجلة', 'غير مصنّفة', 'بانتظار التصنيف', 'مؤرشفة — cutover']) check(html.includes(label), `loaded absence/archive: ${label}`);
 html = render(detail, '/roadmap/37', { project: null, error: 'المشروع غير موجود أو ليس ضمن صلاحيتك.' });
 check(!html.includes('لا توجد نتيجة مستهدفة') && !html.includes('بانتظار التصنيف'), 'failed record never becomes missing-field conclusion');
+// UX-2: missing planning fields are an operational register filter ("بيانات ناقصة"),
+// never inferred from a failed or partial project read.
+const registerPath = 'app/roadmap/page.tsx';
+const missingItem = markup => markup.match(/<dt>بيانات ناقصة<\/dt><dd><a [^>]*><bdi>(.*?)<\/bdi>/)?.[1];
 for (const status of ['UNAVAILABLE', 'PARTIAL']) {
+  html = render(registerPath, '/roadmap', { projects: [{ ...project, target_outcome: null }], reads: { projects: status, links: 'COMPLETE', requirements: 'COMPLETE', mapping: 'COMPLETE' } });
+  check(missingItem(html) === undefined && !html.includes('<span>بيانات ناقصة</span>'), `${status}: no missing-data count from failed/partial project read`);
   html = render(analysis, '/roadmap/analysis', { projects: [project], reads: { projects: status, links: 'COMPLETE', treatments: 'COMPLETE' } });
-  const summary = html.split('aria-labelledby="planning-information-title"')[1];
-  check(summary.includes('غير متاح') && !summary.includes('<dd>'), `${status}: no missing counts from failed/partial project read`);
+  check(!html.includes('الحمل التخطيطي للمحفظة</h2>') || html.includes('data-read-status'), `${status}: analysis load not computed from a failed read`);
 }
-html = render(analysis, '/roadmap/analysis', { projects: [project], reads: { projects: 'COMPLETE', links: 'UNAVAILABLE', treatments: 'COMPLETE' } });
-const summary = html.split('aria-labelledby="planning-information-title"')[1];
-check(summary.includes('<dd>0</dd>'), 'independent successful project-field summary survives failed links');
+html = render(registerPath, '/roadmap', { projects: [{ ...project, target_outcome: null }], reads: { projects: 'COMPLETE', links: 'UNAVAILABLE', requirements: 'COMPLETE', mapping: 'COMPLETE' } });
+equal(missingItem(html), '1', 'missing-data count survives failed links (project fields only)');
 html = render(analysis, '/roadmap/analysis', { projects: [historical], reads: { projects: 'COMPLETE', links: 'COMPLETE', treatments: 'COMPLETE' } });
 check(html.includes('0 مشروع — المحفظة النشطة'), 'archived projects excluded from analysis');
 equal(read('lib/strategy-read.ts'), baseline('lib/strategy-read.ts'), 'S1-C paging/read-state contracts byte-identical');

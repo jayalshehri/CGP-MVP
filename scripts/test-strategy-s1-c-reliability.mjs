@@ -48,16 +48,19 @@ check(html.includes('مشروع محدد'), 'register independent projects survi
 equal(strip(html, 'ضوابط بربط مباشر'), 'غير متاح', 'relationship count unavailable');
 check(html.includes('قراءة جزئية'), 'partial read explained safely');
 check(!renderPage('').includes('عبر المتطلبات:'), 'complete empty requirement relationship is not shown as a zero');
+// UX-2 analysis KPI cards: <span>label</span><strong><bdi>value</bdi>…
+const card = (html, label) => html.match(new RegExp(`<span>${label}</span><strong><bdi>(.*?)</bdi>`))?.[1];
 html = renderPage('analysis', { reads: { ...complete, links: 'UNAVAILABLE' } });
-equal(kpi(html, 'اكتمال عناصر التخطيط الخمسة الحالية'), 'غير متاح', 'five-element composite requires direct relationships');
-equal(kpi(html, 'مشاريع الأولوية P1'), '1', 'project-only analysis survives');
-check(!html.includes('مكتملة لجميع المشاريع المعروضة'), 'no false planning completeness');
+equal(card(html, 'بنود تحتاج انتباه الإدارة'), 'غير متاح', 'attention count requires direct relationships');
+equal(card(html, 'مشاريع P1'), '1', 'project-only analysis survives');
+check(!html.includes('لا توجد بنود تحتاج انتباه الإدارة'), 'no false no-attention conclusion');
 html = renderPage('analysis', { reads: { ...complete, treatments: 'UNAVAILABLE' } });
-check(html.includes('<b>غير متاح</b>'), 'treatment count unavailable, not zero');
+equal(card(html, 'بنود تحتاج انتباه الإدارة'), 'غير متاح', 'treatment-dependent attention unavailable, not zero');
+check(html.includes('بعض قواعد التنبيه غير متاحة'), 'partial attention rules explained');
 check(!html.includes('data-read-status="UNAVAILABLE"'), 'independent project analysis still partial not page failure');
 html = renderPage('dashboard', { reads: { ...complete, links: 'UNAVAILABLE' } }, '?focus_year=1');
 check(html.includes('quarterly-project') && html.includes('data-reading-focus="true"'), 'roadmap placement/context survives enrichment failure');
-equal(kpi(html, 'ضوابط ذات ربط مباشر مسجّل'), 'غير متاح', 'roadmap enrichment not zero');
+equal(strip(html, 'ضوابط بربط مباشر'), 'غير متاح', 'roadmap enrichment not zero');
 equal(kpi(html, 'المشاريع المتأخرة'), undefined, 'date-based delay KPI removed with the portfolio model');
 check((html.match(/disabled=""/g) || []).length >= 2, 'both roadmap exports blocked');
 html = renderPage('dashboard', { projects: [], reads: { ...complete, projects: 'UNAVAILABLE' } });
