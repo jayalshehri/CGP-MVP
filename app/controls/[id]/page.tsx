@@ -11,6 +11,7 @@ import { controlPlan } from "@/lib/control-plan";
 import { eccImplementationGuideUrl, eccOfficialControlsUrl, getEccOfficialTitle, getEccStrategyExample } from "@/lib/ecc-strategy-example";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { controlProjectRelationships, type ControlDirectLink as DirectLink, type ControlProjectRequirementLink as ProjectRequirementLink, type ControlRequirementLink as RequirementLink } from "@/lib/control-project-relationships";
 import { frequencyLabels, formatGrcDate, scheduleState, scheduleStateLabels, cycleStage, cycleStageLabels } from "@/lib/grc";
 import "./detail.css";
 
@@ -20,21 +21,13 @@ const applicabilityLabel=(value:string|null|undefined)=>value==="CSP"?"مقدم 
 type Evidence = { link_id:number|null;source_control_id:number;version_number:number;valid_until:string|null;uploader_name:string|null;reviewer_display_name:string|null; is_current?:boolean; uploaded_at?:string|null; file_path?:string|null; review_notes?:string|null; reviewed_at?:string|null; id:number; evidence_name?:string|null; file_name?:string|null; description?:string|null; status?:string|null };
 type AssessmentReflection = {source_framework:string;source_control_code:string;source_control_title:string;assessment_scope:string|null;compliance_status:string;notes:string|null;corrective_action:string|null;expected_compliance_date:string|null;updated_at:string|null};
 type MappedControl = {control_id:number;framework_code:string;control_code:string;control_title:string;relationship_type:string;source_note:string|null};
-type RequirementLink = {
- requirement_id:number; coverage_type:'full'|'partial'|'supporting'; mapping_confidence:'confirmed'|'probable';
- cybersecurity_requirements:{requirement_code:string;title_ar:string} | {requirement_code:string;title_ar:string}[] | null;
-};
-type ProjectRequirementLink = {
- requirement_id:number; project_id:number;
- cybersecurity_projects:{project_code:string;name_ar:string} | {project_code:string;name_ar:string}[] | null;
-};
 const tabs=['نظرة عامة','الأدلة المطلوبة','الضوابط المرتبطة','السجل والمراجعات'];
 const date=(value:string)=>new Date(value).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'});
 const goodStatus=(value:string)=>['verified','approved','accepted','compliant'].includes(value);
 const assessmentStatusText:Record<string,string>={implemented:'مطبق كليًا',partially_implemented:'مطبق جزئيًا',not_implemented:'غير مطبق',not_applicable:'لا ينطبق'};
 const coverageText:Record<string,string>={full:'كاملة',partial:'جزئية',supporting:'داعمة'};
 const mappingConfidenceText:Record<string,string>={confirmed:'مؤكد',probable:'محتمل'};
-const single=<T,>(value:T|T[]|null):T|null=>Array.isArray(value)?value[0]??null:value;
+const sourceText:Record<string,string>={requirement:'متطلب',direct:'مباشر'};
 // title_ar is stored as "{subdomain label} - {control_code}" (a list-display
 // convention, not a header title) -- stripping the trailing code here both
 // recovers the subdomain label for the breadcrumb and avoids ever rendering
@@ -52,6 +45,7 @@ export default function ControlDetailsPage() {
  const [mappedControls,setMappedControls]=useState<MappedControl[]>([]);
  const [requirementLinks,setRequirementLinks]=useState<RequirementLink[]>([]);
  const [projectLinks,setProjectLinks]=useState<ProjectRequirementLink[]>([]);
+ const [directLinks,setDirectLinks]=useState<DirectLink[]>([]);
  const [openCycleDue,setOpenCycleDue]=useState<string|null>(null);
  const [openCycleId,setOpenCycleId]=useState<number|null>(null);
  const [latestRequestStatus,setLatestRequestStatus]=useState<string|undefined>(undefined);
@@ -61,11 +55,12 @@ export default function ControlDetailsPage() {
  useEffect(()=>{let active=true;(async()=>{try{
   const {profile}=await requireProfile();if(!active)return;setRole(profile.role);
   const controlId=Number(id);if(!Number.isSafeInteger(controlId)||controlId<=0)throw new Error('رقم الضابط غير صحيح.');
-  const [c,e,rc,cy]=await Promise.all([
+  const [c,e,rc,cy,dl]=await Promise.all([
    supabase.from('controls').select('*,frameworks(code,name_ar,version,is_active,source_url)').eq('id',controlId).single(),
    supabase.rpc('grc_evidence_register'),
    supabase.from('cybersecurity_requirement_controls').select('requirement_id,coverage_type,mapping_confidence,cybersecurity_requirements(requirement_code,title_ar)').eq('control_id',controlId).eq('mapping_status','active'),
-   supabase.from('control_review_cycles').select('id,reviewer_id,due_date').eq('control_id',controlId).eq('status','open').limit(1)]);
+   supabase.from('control_review_cycles').select('id,reviewer_id,due_date').eq('control_id',controlId).eq('status','open').limit(1),
+   supabase.from('cybersecurity_project_controls').select('project_id,cybersecurity_projects(project_code,name_ar,archived_at)').eq('control_id',controlId)]);
   if(c.error||!c.data)throw new Error('الضابط غير موجود أو ليس ضمن صلاحيتك.');
   if(e.error)throw new Error('تعذر تحميل أدلة الضابط. أعد تحميل الصفحة.');
   if(active){
@@ -81,9 +76,10 @@ export default function ControlDetailsPage() {
    setEvidence((e.data??[]).filter((row: {control_id:number})=>row.control_id===controlId));
    const links=(rc.data??[]) as unknown as RequirementLink[];
    setRequirementLinks(links);
+   setDirectLinks(dl.error?[]:(dl.data??[]) as unknown as DirectLink[]);
    const requirementIds=links.map(l=>l.requirement_id);
    if(requirementIds.length){
-    const pr=await supabase.from('cybersecurity_project_requirements').select('requirement_id,project_id,cybersecurity_projects(project_code,name_ar)').in('requirement_id',requirementIds);
+    const pr=await supabase.from('cybersecurity_project_requirements').select('requirement_id,project_id,cybersecurity_projects(project_code,name_ar,archived_at)').in('requirement_id',requirementIds);
     if(active&&!pr.error)setProjectLinks((pr.data??[]) as unknown as ProjectRequirementLink[]);
    }
    const cycle=(cy.data??[])[0] as {id:number;reviewer_id:string;due_date:string}|undefined;
@@ -98,6 +94,7 @@ export default function ControlDetailsPage() {
  }catch(e){if(active)setError(e instanceof Error?e.message:'تعذر التحميل');const {data}=await supabase.auth.getSession();if(!data.session)router.replace('/login');}
  finally{if(active)setLoading(false);}})();return()=>{active=false;};},[id,router]);
  const archived=control?.frameworks?.is_active===false;
+ const relationships=controlProjectRelationships(requirementLinks,projectLinks,directLinks);
  const canReview=!archived&&(role==='admin'||role==='cybersecurity_team');
  const canUpload=!archived&&(canReview||role==='control_owner');
  useEffect(()=>{let active=true;if(!control||!canReview)return()=>{active=false;};void Promise.all([supabase.rpc('ecc_assessment_reflections',{p_ecc_control_id:control.id}),supabase.rpc('grc_control_mappings',{p_control_id:control.id})]).then(([reflectionResult,mappingResult])=>{if(active){setReflections((reflectionResult.data??[]) as AssessmentReflection[]);setMappedControls((mappingResult.data??[]) as MappedControl[]);}});return()=>{active=false;};},[control,canReview]);
@@ -142,25 +139,18 @@ export default function ControlDetailsPage() {
    {tab===0&&<><ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload}/>
    <section className="detail-card requirements-projects-card">
     <h2>المتطلبات والمشاريع المرتبطة</h2>
-    <p className="detail-hint">العلاقات عبر المتطلبات للقراءة فقط ضمن صلاحياتك. قد يرتبط المتطلب بأكثر من مشروع، وتبقى تغطية المواءمة وجودتها خاصة بكل متطلب وضابط.</p>
-    {!requirementLinks.length?<p>لا يدعم هذا الضابط أي متطلب سيبراني مسجل حاليًا.</p>:
-    <div className="req-proj-table-wrap"><table className="req-proj-table"><thead><tr><th>رمز المتطلب</th><th>المتطلب</th><th>التغطية</th><th>جودة الربط</th><th>رمز المشروع</th><th>المشروع</th></tr></thead><tbody>
-     {requirementLinks.flatMap(link=>{
-      const requirement=single(link.cybersecurity_requirements);
-      const visibleProjects=projectLinks.filter(p=>p.requirement_id===link.requirement_id&&single(p.cybersecurity_projects));
-      return (visibleProjects.length?visibleProjects:[null]).map(projectLink=>{
-      const project=projectLink?single(projectLink.cybersecurity_projects):null;
-      return <tr key={`${link.requirement_id}:${projectLink?.project_id??'none'}`}>
-       <td dir="ltr">{requirement?.requirement_code??'—'}</td>
-       <td>{requirement?.title_ar??'—'}</td>
-       <td><span className={`coverage-pill ${link.coverage_type}`}>{coverageText[link.coverage_type]??link.coverage_type}</span></td>
-       <td><span className={`mapping-pill ${link.mapping_confidence}`}>{mappingConfidenceText[link.mapping_confidence]??link.mapping_confidence}</span></td>
-       <td dir="ltr">{project?.project_code??'—'}</td>
-       <td>{project?<Link href={`/roadmap/${projectLink!.project_id}`}>{project.name_ar}</Link>:'لا يوجد مشروع ظاهر ضمن صلاحياتك'}</td>
-      </tr>;
-      });
-     })}
+    <p className="detail-hint">المشاريع المرتبطة بهذا الضابط عبر المتطلبات أو بربط مباشر، للقراءة فقط ضمن صلاحياتك. المصدران منفصلان ولا يُستنتج أحدهما من الآخر؛ المشاريع المؤرشفة تبقى ظاهرة كتاريخ.</p>
+    {!relationships.projects.length&&!relationships.requirementsWithoutProject.length?<p>لا يرتبط هذا الضابط بأي مشروع أو متطلب سيبراني مسجل حاليًا.</p>:<>
+    {relationships.projects.length>0&&<div className="req-proj-table-wrap"><table className="req-proj-table"><thead><tr><th>المشروع</th><th>المحفظة</th><th>مصدر العلاقة</th><th>المتطلب والتغطية</th></tr></thead><tbody>
+     {relationships.projects.map(row=><tr key={row.project_id} className={row.archived?'req-proj-archived':undefined}>
+      <td><Link href={`/roadmap/${row.project_id}`}>{row.name_ar}</Link><small className="req-proj-code" dir="ltr">{row.project_code}</small></td>
+      <td>{row.archived?<span className="req-proj-badge archived">مؤرشف</span>:<span className="req-proj-badge active">نشط</span>}</td>
+      <td>{row.sources.map(source=><span key={source} className={`req-proj-source ${source}`}>{sourceText[source]}</span>)}</td>
+      <td>{row.requirements.length?row.requirements.map(item=><div key={item.requirement_id} className="req-proj-requirement"><span>{item.title_ar??'—'}</span>{item.requirement_code&&<small dir="ltr">{item.requirement_code}</small>}<span className={`coverage-pill ${item.coverage_type}`}>{coverageText[item.coverage_type]??item.coverage_type}</span><span className={`mapping-pill ${item.mapping_confidence}`}>{mappingConfidenceText[item.mapping_confidence]??item.mapping_confidence}</span></div>):<span className="detail-hint">ربط مباشر دون متطلب</span>}</td>
+     </tr>)}
     </tbody></table></div>}
+    {relationships.requirementsWithoutProject.length>0&&<p className="detail-hint">متطلبات تدعم هذا الضابط بلا مشروع ظاهر ضمن صلاحياتك: {relationships.requirementsWithoutProject.map(link=>{const requirement=Array.isArray(link.cybersecurity_requirements)?link.cybersecurity_requirements[0]:link.cybersecurity_requirements;return requirement?.title_ar??'—';}).join('، ')}</p>}
+    </>}
    </section>
    <section className="detail-card"><h2>{archived?'نص المتطلب في الإصدار السابق':'المتطلب الرسمي'}</h2><p className="detail-official">{officialRequirement}</p>{control.source_page&&<p className="detail-hint">المصدر: {control.frameworks?.code} {control.frameworks?.version} — الصفحة {control.source_page} من الوثيقة الرسمية الصادرة عن الهيئة الوطنية للأمن السيبراني.</p>}{plan.requirements.length>0&&<><h3>المتطلبات الفرعية</h3>{plan.requirements.map(r=><p className="detail-requirement" key={r.key}><b dir="ltr">{r.key}</b> {r.text}</p>)}</>}<a className="detail-back" href={archived&&control.frameworks?.source_url?control.frameworks.source_url:isEcc?eccOfficialControlsUrl:`https://nca.gov.sa/ar/regulatory-documents/controls-list/${frameworkCode}/`} target="_blank" rel="noreferrer">{archived?'مرجع الإصدار السابق':'مرجع الضوابط الرسمية للهيئة'} ↗</a></section>
    {childControls.length>0&&<section className="detail-card"><h2>الضوابط الفرعية ({childControls.length})</h2><p className="detail-hint">بنود تنظيمية رسمية مستقلة ضمن هذا الضابط، كل منها قابل للتقييم بشكل مستقل.</p><ul className="detail-children-list">{childControls.map(k=><li key={k.id}><Link href={`/controls/${k.id}`}><span dir="ltr">{k.control_code}</span> <span>{k.official_text_ar||k.title_ar}</span><StatusBadge status={k.implementation_status}/></Link></li>)}</ul></section>}

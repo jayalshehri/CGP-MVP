@@ -12,6 +12,7 @@ import { projectCount } from "@/lib/arabic-count";
 import { ReadNotice, ReadSection } from "../read-state";
 import { averageProgress } from "../portfolio-metrics";
 import { durationLabel, executionYearFor, executionYearText, executionYears, isArchived, scopedRequirementCounts, type PortfolioFields } from "@/lib/portfolio-analytics";
+import { highTreatmentProjectsWithoutDirectLinks } from "@/lib/portfolio-treatments";
 import "../roadmap.css";
 
 type Project = PortfolioFields & {
@@ -80,8 +81,6 @@ export default function ExecutiveRoadmapPage() {
   }, [router]);
 
   const data = useMemo(() => {
-    const linksByProject = new Map<number, number>();
-    links.forEach((link) => linksByProject.set(link.project_id, (linksByProject.get(link.project_id) ?? 0) + 1));
     // Executive view covers the active (non-archived) portfolio only.
     const active = projects.filter((project) => !isArchived(project));
     const years = executionYears.map((year) => {
@@ -91,11 +90,8 @@ export default function ExecutiveRoadmapPage() {
     const unprioritized = active.filter((project) => !project.portfolio_priority);
     const p1WithoutDuration = active.filter((project) => project.portfolio_priority === "P1" && durationLabel(project) === null);
     const stopped = active.filter((project) => project.status === "on_hold");
-    const highTreatmentsWithoutControlLinks = new Set(
-      treatments
-        .filter((item) => item.priority === "high" && (linksByProject.get(item.project_id) ?? 0) === 0)
-        .map((item) => item.project_id),
-    );
+    // Same scope as every other metric on this page: archived projects never raise alerts.
+    const highTreatmentsWithoutControlLinks = highTreatmentProjectsWithoutDirectLinks(treatments, links, active);
     const attention: Attention[] = [];
     if (unprioritized.length) attention.push({ key: "baseline", title: "اعتماد أولويات المشاريع", detail: `${projectCount(unprioritized.length)} مسجلًا بالنموذج السابق بلا أولوية P1/P2/P3، ولذلك لا يظهر في سنوات التنفيذ.`, count: unprioritized.length, level: "decision" });
     if (p1WithoutDuration.length) attention.push({ key: "duration", title: "استكمال مدد مشاريع السنة الأولى", detail: `${projectCount(p1WithoutDuration.length)} بأولوية P1 بلا مدة مسجلة.`, count: p1WithoutDuration.length, level: "data" });

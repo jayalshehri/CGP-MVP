@@ -60,7 +60,8 @@ equal([forward.linkedControlsCount, forward.verified, forward.confirmedMappings,
 
 const control = readFileSync(new URL('app/controls/[id]/page.tsx', root), 'utf8');
 equal(control.includes('projectLinks.find('), false, 'Control 360 cannot select first project');
-equal(control.includes('visibleProjects.length?visibleProjects:[null]'), true, 'Control 360 renders every visible project');
+// Phase UX-1 (D2): one row per visible project from both sources; behaviour in test-roadmap-ux-phase1-correctness.mjs.
+equal(control.includes('relationships.projects.map(row=>'), true, 'Control 360 renders every visible project');
 const register = readFileSync(new URL('app/roadmap/page.tsx', root), 'utf8');
 equal(register.includes('reqToProject'), false, 'register cannot collapse requirement to one project');
 const detail = readFileSync(new URL('app/roadmap/[id]/page.tsx', root), 'utf8');

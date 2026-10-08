@@ -32,3 +32,8 @@
 .detail-children-list a>span:first-child{color:var(--cgp-teal);font-weight:800;min-width:96px}
 .detail-children-list a>span:nth-child(2){flex:1;line-height:1.6}
 .catalog-applicability{display:inline-block;font-size:11px;font-weight:800;color:#0d4b4d;background:#e8f3f1;border-radius:999px;padding:3px 10px;margin-inline-start:8px;white-space:nowrap}
+.req-proj-code{display:block;color:#586875;font-size:11px;font-weight:700}
+.req-proj-badge,.req-proj-source{display:inline-block;white-space:nowrap;border-radius:20px;padding:3px 9px;font-size:11px;font-weight:800;margin-inline-end:4px}
+.req-proj-badge.active{background:#e7f6f2;color:#0f766e}.req-proj-badge.archived{background:#eef1f3;color:#4b5a66;border:1px solid #cfd8dd}
+.req-proj-source.direct{background:#eaf1fb;color:#1d4f91}.req-proj-source.requirement{background:#f4effa;color:#5b3a8c}
+.req-proj-archived td{color:#586875}.req-proj-requirement{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px}.req-proj-requirement small{color:#586875}

@@ -10,6 +10,7 @@ import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-r
 import { ReadNotice, ReadSection } from "../read-state";
 import { PlanningInformationSummary } from "../planning-information";
 import { planningReadiness, planningReadinessItems } from "../portfolio-metrics";
+import { scopedHighTreatments } from "@/lib/portfolio-treatments";
 import { dimensionOptions, dimensionText, durationBreakdown, isPortfolioScope, matchesPortfolioFilters, matchesScope, portfolioBreakdown, portfolioScopePhrases, portfolioScopes, scopedRequirementCounts, type PortfolioDimension, type PortfolioFields, type PortfolioScope } from "@/lib/portfolio-analytics";
 import { projectCount } from "@/lib/arabic-count";
 import { readCanonicalEdges, type CanonicalEdges } from "@/lib/strategy-portfolio-read";
@@ -111,7 +112,7 @@ export default function PortfolioAnalysisPage() {
       incomplete,
       complete: rows.filter((row) => row.readiness === 100).length,
       linkedControls: new Set(links.filter((link) => scopedIds.has(link.project_id)).map((link) => link.control_id)).size,
-      highTreatments: treatments.filter((item) => item.priority === "high" && scopedIds.has(item.project_id)).length,
+      highTreatments: scopedHighTreatments(treatments, scoped).length,
       p1: scoped.filter((project) => project.portfolio_priority === "P1").length,
       breakdowns: dimensions.map((dimension) => ({ dimension, ...portfolioBreakdown(scoped, dimension) })),
     };
