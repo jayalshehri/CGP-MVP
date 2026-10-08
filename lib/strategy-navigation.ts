@@ -36,6 +36,8 @@ export function registerState(params: Params) {
     duration_min: durationBound(params.get("duration_min")),
     duration_max: durationBound(params.get("duration_max")),
     mapping: choice(params.get("mapping"), ["verified", "partially_mapped", "mapping_pending", "source_error"]),
+    // Register data-quality filter (presentation only): projects missing a planning field.
+    missing: choice(params.get("missing"), ["any", "priority", "owner", "duration", "outcome"]),
     // Absent = active portfolio. "include" shows archived and active together.
     archive: archive === "archived" ? "archived" : archive === "include" ? "all" : "active",
   };
@@ -102,7 +104,7 @@ export function projectView(params: Params, frameworks: readonly string[]) {
   };
 }
 
-export type StrategyQueryKey = "q" | "priority" | "execution_year" | "work_type" | "owner" | "status" | "duration_unit" | "duration_min" | "duration_max" | "mapping" | "archive" | "tab" | "framework" | "coverage" | "verification";
+export type StrategyQueryKey = "q" | "priority" | "execution_year" | "work_type" | "owner" | "status" | "duration_unit" | "duration_min" | "duration_max" | "mapping" | "missing" | "archive" | "tab" | "framework" | "coverage" | "verification";
 
 // Called only by existing presentation controls. Next integrates native history
 // with useSearchParams; replace search keystrokes, push explicit choices.

@@ -32,12 +32,13 @@ const noLegacyPlanning = (html, label) => check(!/Q[1-4]\b|الربع|2027|plann
 let html = page('app/roadmap/page.tsx', '/roadmap');
 for (const name of ['مشروع أول', 'مشروع ثان', 'مشروع ثالث']) check(html.includes(name), `register shows active ${name}`);
 check(!html.includes('مشروع تاريخي مؤرشف'), 'archived hidden by default');
-for (const text of ['6 أشهر', 'أسبوعان', 'سنة واحدة', 'إدارة المشتريات', 'Cybersecurity', 'DMO', 'تغيير تقني / تهيئة', 'السنة الأولى', 'ربط جزئي — مراجع بانتظار المراجعة', '1 من 4 مراجع مصدر']) check(html.includes(text), `register shows ${text}`);
-for (const [label, value] of [['P1', '1'], ['P2', '1'], ['P3', '1'], ['مشاريع النطاق المعروض', '3']]) check(html.includes(`<span>${label}</span><strong>${value}</strong>`), `register KPI ${label}=${value}`);
-for (const label of ['المحفظة', 'الأولوية', 'سنة التنفيذ', 'نوع العمل', 'الجهة المالكة', 'الحالة', 'وحدة المدة', 'اكتمال الربط']) check(html.includes(`<span>${label}</span><select`), `register filter ${label}`);
+for (const text of ['6 أشهر', 'أسبوعان', 'سنة واحدة', 'إدارة المشتريات', 'Cybersecurity', 'DMO', 'تغيير تقني / تهيئة', 'السنة الأولى', 'title="ربط جزئي — مراجع بانتظار المراجعة"', '>1/4<']) check(html.includes(text), `register shows ${text}`);
+// UX-2: one summary strip; priority and execution year are one filter.
+for (const [label, value] of [['P1', '1'], ['P2', '1'], ['P3', '1'], ['المشاريع', '3']]) check(html.includes(`<dt>${label}</dt><dd><bdi>${value}</bdi></dd>`), `register summary ${label}=${value}`);
+for (const label of ['المحفظة', 'الأولوية / سنة التنفيذ', 'نوع العمل', 'الجهة المالكة', 'الحالة', 'وحدة المدة', 'اكتمال الربط']) check(html.includes(`<span>${label}</span><select`), `register filter ${label}`);
 noLegacyPlanning(html, 'register');
 html = page('app/roadmap/page.tsx', '/roadmap?archive=archived');
-check(html.includes('مشروع تاريخي مؤرشف') && !html.includes('مشروع أول') && html.includes('المحفظة المؤرشفة') && html.includes('غير مصنّفة'), 'archived filter');
+check(html.includes('مشروع تاريخي مؤرشف') && !html.includes('مشروع أول') && html.includes('<span class="rm-archived">مؤرشف</span>') && html.includes('غير مصنّفة'), 'archived filter');
 noLegacyPlanning(html, 'archived register');
 check(page('app/roadmap/page.tsx', '/roadmap?archive=include').includes('مشروع تاريخي مؤرشف'), 'all-portfolio filter');
 html = page('app/roadmap/page.tsx', '/roadmap?execution_year=2');

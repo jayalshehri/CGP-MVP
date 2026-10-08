@@ -109,11 +109,14 @@ for (const [route, label] of [
 ]) {
   // Labels only: the release keeps main's navigation groups (the IA-1 regrouping is not shipped).
   includes('components/AppShell.tsx', `{ href: "${route}", label: "${label}", group: "العمليات", subgroup: "إدارة خارطة الطريق", team: true }`);
-  for (const path of [registry, analysis, dashboard]) includes(path, `href="${route}">${label}</Link>`);
+  // UX-2: the view tabs are one shared component (app/roadmap/portfolio-ui.tsx).
+  includes('app/roadmap/portfolio-ui.tsx', `{ href: "${route}", label: "${label}" }`);
+  for (const path of [registry, analysis, dashboard]) equal(read(path).includes(`href="${route}">${label}</Link>`) || read(path).includes('<RoadmapTabs active="'), true, `${path}: view tab ${label}`);
 }
-includes(registry, '<h1>سجل المشاريع السيبرانية</h1>');
-includes(analysis, '<h1>تحليل المحفظة السيبرانية</h1>');
-includes(dashboard, '<h1>خارطة طريق المشاريع</h1>');
+const pageTitle = (path, title) => equal(read(path).includes(`<h1>${title}</h1>`) || read(path).includes(`<PageHeader title="${title}"`), true, `${path}: title ${title}`);
+pageTitle(registry, 'سجل المشاريع السيبرانية');
+pageTitle(analysis, 'تحليل المحفظة السيبرانية');
+pageTitle(dashboard, 'خارطة طريق المشاريع');
 includes(executive, '<h1>ملخص محفظة المشاريع السيبرانية</h1>');
 includes(registry, '"مشروع سيبراني جديد"');
 includes('components/PortfolioProjectFields.tsx', '<label>نوع العمل<select value={form.work_type}');
@@ -126,12 +129,13 @@ includes(executive, 'label="فئات التنبيه الإداري"');
 includes(analysis, 'label="اكتمال عناصر التخطيط الخمسة الحالية"');
 includes(analysis, 'label="ضوابط ذات ربط مباشر مسجّل"');
 includes(dashboard, 'label="ضوابط ذات ربط مباشر مسجّل"');
-includes(registry, 'label="ضوابط ذات ربط مباشر مسجّل"');
-includes(registry, 'label="ضوابط مرتبطة عبر المتطلبات وحالتها متحققة"');
+// UX-2 register: one summary strip; requirement-derived counts only when non-zero.
+includes(registry, '{ label: "ضوابط بربط مباشر", value: summary.direct ?? unavailable }');
+includes(registry, '...(mappingReady && summary.requirements > 0 ? [{ label: "متطلبات مرتبطة", value: summary.requirements }] : [])');
 includes(detail, '<span>نسبة الضوابط المرتبطة التي حالتها متحققة</span>');
 includes(detail, '<span>ضوابط بأدلة مقبولة ولم تُتحقق</span>');
 includes(detail, 'الأدلة المقبولة وحدها لا تثبت أهلية أمر التحقق.');
-includes(registry, 'المصدران منفصلان');
+includes(registry, 'viaRequirements && viaRequirements.requirements > 0 && <small className="rm-sub">عبر المتطلبات:');
 includes(analysis, 'لا يدخل الربط عبر المتطلبات في هذا المؤشر.');
 includes(executive, 'دون دمج علاقات المتطلبات');
 includes(dashboard, '"الضوابط ذات الربط المباشر المسجّل"');

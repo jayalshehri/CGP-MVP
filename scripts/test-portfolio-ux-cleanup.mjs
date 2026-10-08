@@ -109,13 +109,14 @@ const css = read('app/roadmap/roadmap.css');
 const lastRule = selector => css.lastIndexOf(selector);
 check(lastRule('.coverage-legend li{white-space:normal') > lastRule('.coverage-legend li{display:flex;align-items:center;gap:7px;white-space:nowrap}'), 'legend items wrap (later rule overrides nowrap)');
 check(css.includes('.project-summary-grid>*{min-width:0}') && css.includes('.coverage-summary-card,.mapping-quality-card{min-width:0;overflow-wrap:anywhere}'), 'summary cards can shrink below content width');
-check(/\.controls-table-wrap\{overflow-x:auto/.test(css) && /\.portfolio-table-wrap\{overflow-x:auto/.test(css), 'tables scroll inside their own wrapper');
+check(/\.controls-table-wrap\{overflow-x:auto/.test(css) && /\.rm-table-wrap\{overflow-x:auto/.test(css), 'tables scroll inside their own wrapper');
 
-// --- Register: compact relationships cell keeps every count and source.
+// --- Register (UX-2): mapping completeness is a badge with its exact/reference count;
+// direct links are summarised once in the strip; details live on the project page.
 html = render('app/roadmap/page.tsx', '/roadmap', { projects: [{ ...projects[0], import_staging_id: 'x', mapping_reference_count: 6, mapping_exact_count: 1, mapping_completeness: 'partially_mapped' }], reads, links: [{ project_id: 101, control_id: 4 }] });
-const cell = html.split('register-rel"')[1]?.split('</td>')[0] ?? '';
-check(cell.includes('register-rel-badge partially_mapped') && cell.includes('روابط مباشرة: <b>1</b>') && cell.includes('مراجع المصدر: <b><bdi>1/6</bdi></b>'), 'compact summary: badge, direct links, source references');
-check(cell.includes('<details><summary>التفاصيل</summary>') && cell.includes('1 من 6 مراجع مصدر مرتبطة بمطابقة مثبتة؛ 5 بانتظار المراجعة') && cell.includes('اكتمال الربط ليس تحققًا من الامتثال.'), 'secondary details preserved');
+check(html.includes('class="rm-mapping partially_mapped" title="ربط جزئي — مراجع بانتظار المراجعة">ربط جزئي<bdi class="rm-mapping-count">1/6</bdi>'), 'mapping badge with exact/reference count');
+check(html.includes('<dt>ضوابط بربط مباشر</dt><dd><bdi>1</bdi></dd>'), 'direct links counted once in the summary strip');
+check(!html.includes('<details>'), 'no per-row explanatory details in the register');
 
 // --- Executive breadcrumb / title.
 check(read('components/AppShell.tsx').includes('pathname === "/roadmap/executive" ? "ملخص محفظة المشاريع السيبرانية"'), 'executive breadcrumb label');

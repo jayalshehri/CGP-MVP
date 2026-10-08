@@ -7,13 +7,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { archiveQueryValue, portfolioFiltersFrom, projectHref, registerState, updateStrategyQuery, type StrategyQueryKey } from "@/lib/strategy-navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { readStrategyRows, createReadEpoch, unavailable, noRelationship, type ReadStatus } from "@/lib/strategy-read";
+import { readStrategyRows, createReadEpoch, unavailable, type ReadStatus } from "@/lib/strategy-read";
 import { ReadNotice } from "./read-state";
+import { ArchivedBadge, FilterBar, FilterSelect, MappingBadge, PageHeader, PriorityBadge, priorityYearOptions, RoadmapTabs, StatusChip, SummaryStrip, type SummaryItem } from "./portfolio-ui";
+import { missingData, missingFieldLabels, showDurationUnitFilter, showProgress, type MissingField } from "@/lib/roadmap-presentation";
 import { emptyProjectForm, projectToForm, projectWriteFields, type ProjectForm as Form } from "@/lib/strategy-project-fields";
-import { requirementRollup, type CoverageType, type RequirementControlLink, type ProjectRequirementRow } from "./portfolio-metrics";
+import { type CoverageType, type RequirementControlLink, type ProjectRequirementRow } from "./portfolio-metrics";
 import PortfolioProjectFields from "@/components/PortfolioProjectFields";
 import { projectCount } from "@/lib/arabic-count";
-import { durationLabels, formatDuration, mappingCompletenessLabels, matchesPortfolioFilters, ownerLabels, priorityLabels, statusLabels as statusText, workTypeLabels, type PortfolioProject } from "@/lib/project-portfolio";
+import { durationLabels, formatDuration, mappingCompletenessLabels, matchesPortfolioFilters, ownerLabels, statusLabels as statusText, workTypeLabels, type PortfolioProject } from "@/lib/project-portfolio";
 import { canonicalRelationships, legacyRelationships } from "@/lib/strategy-relationships";
 import "./roadmap.css";
 
@@ -22,8 +24,8 @@ type Project = PortfolioProject & { target_outcome: string | null };
 
 type LinkRow = { project_id: number; control_id: number };
 
-const yearText = { "1": "السنة الأولى", "2": "السنة الثانية", "3": "السنة الثالثة" };
-const ownerText = (project: Project) => project.executive_owner_code === "other" ? project.executive_owner_other : project.executive_owner_code ? ownerLabels[project.executive_owner_code] : "بانتظار التصنيف";
+const ownerText = (project: Project) => project.executive_owner_code === "other" ? project.executive_owner_other : project.executive_owner_code ? ownerLabels[project.executive_owner_code] : null;
+const missingOptions: Record<string, string> = { any: "أي حقل ناقص", ...missingFieldLabels };
 
 export default function ProjectRegisterPage() {
   return <Suspense fallback={<p>جاري التحميل...</p>}><ProjectRegisterContent /></Suspense>;
@@ -114,63 +116,37 @@ function ProjectRegisterContent() {
   // Metrics describe the selected portfolio scope (active by default, archived
   // or all); historical relationships stay attached to archived projects.
   const scoped = useMemo(() => projects.filter(project => filters.archive === "all" || (filters.archive === "archived") === Boolean(project.archived_at)), [projects, filters.archive]);
-  const requirementStats = useMemo(() => {
-    if (!mappingReady) return requirementRollup([], []);
-    const visibleProjects = new Set(scoped.map(project => project.id));
-    const scopedRequirements = requirementCoverage.filter(row => row.project_id != null && visibleProjects.has(row.project_id));
-    const requirementIds = new Set(scopedRequirements.map(row => row.requirement_id));
-    return requirementRollup(scopedRequirements, requirementControlLinks.filter(row => requirementIds.has(row.requirement_id)));
-  }, [scoped, requirementCoverage, requirementControlLinks, mappingReady]);
-
   const modern = useMemo(() => mappingReady ? canonicalRelationships(
     scoped.map(project => project.id),
     requirementCoverage.filter((row): row is ProjectRequirementRow & { project_id: number } => row.project_id != null),
     requirementControlLinks,
   ) : null, [mappingReady, scoped, requirementCoverage, requirementControlLinks]);
-  const legacy = useMemo(() => legacyRelationships(
-    scoped.map(project => project.id), linksReady ? links : null, modern?.paths ?? null,
-  ), [scoped, linksReady, links, modern]);
 
-  // Per-project display counts for the register table (Requirements / Controls /
-  // Verified), derived the same way as the project detail page's rollup -- read
-  // only, no new query shape, just a client-side grouping of data already loaded.
-  const perProjectStats = useMemo(() => {
-    const map = new Map<
-      number,
-      { requirementsCount: number; controlsCount: number; verifiedCount: number; confirmedCount: number; probableCount: number; requirementsWithoutMapping: number }
-    >();
-    if (!modern) return map;
-    for (const [projectId, counts] of modern.byProject) {
-      const paths = modern.paths.filter(path => path.project_id === projectId);
-      const verified = new Set(paths.filter(path => path.verification_status === "verified").map(path => path.control_id));
-      const mapped = new Set(paths.map(path => path.requirement_id));
-      map.set(projectId, {
-        requirementsCount: counts.requirements,
-        controlsCount: counts.controls,
-        verifiedCount: verified.size,
-        confirmedCount: paths.filter(path => path.mapping_confidence === "confirmed").length,
-        probableCount: paths.filter(path => path.mapping_confidence === "probable").length,
-        requirementsWithoutMapping: new Set(requirementCoverage.filter(row => row.project_id === projectId && !mapped.has(row.requirement_id)).map(row => row.requirement_id)).size,
-      });
-    }
-    return map;
-  }, [requirementCoverage, modern]);
-
-  const stats = useMemo(() => ({
-    total: scoped.length,
-    planned: scoped.filter((project) => project.status === "planned").length,
-    active: scoped.filter((project) => project.status === "in_progress").length,
-    p1: scoped.filter((project) => project.portfolio_priority === "P1").length,
-    p2: scoped.filter((project) => project.portfolio_priority === "P2").length,
-    p3: scoped.filter((project) => project.portfolio_priority === "P3").length,
-    linked: legacy?.controls ?? 0,
-  }), [scoped, legacy]);
+  // Requirement-derived counts per project (shown only where non-zero).
+  const requirementCounts = useMemo(() => modern?.byProject ?? new Map<number, { requirements: number; controls: number }>(), [modern]);
 
   const filterKey = JSON.stringify(filters);
+  const missingFilter = state.missing;
   const filteredProjects = useMemo(
-    () => projects.filter((project) => matchesPortfolioFilters(project, JSON.parse(filterKey))),
-    [projects, filterKey],
+    () => projects.filter((project) => matchesPortfolioFilters(project, JSON.parse(filterKey))
+      && (missingFilter === "all" || (missingFilter === "any" ? missingData(project).length > 0 : missingData(project).includes(missingFilter as MissingField)))),
+    [projects, filterKey, missingFilter],
   );
+  // Summary strip follows the filtered table; relationships keep their own sources.
+  const summary = useMemo(() => {
+    const ids = filteredProjects.map((project) => project.id);
+    const direct = legacyRelationships(ids, linksReady ? links : null, null);
+    const viaRequirements = mappingReady ? canonicalRelationships(ids, requirementCoverage.filter((row): row is ProjectRequirementRow & { project_id: number } => row.project_id != null), requirementControlLinks).counts : null;
+    return {
+      total: filteredProjects.length,
+      p1: filteredProjects.filter((project) => project.portfolio_priority === "P1").length,
+      p2: filteredProjects.filter((project) => project.portfolio_priority === "P2").length,
+      p3: filteredProjects.filter((project) => project.portfolio_priority === "P3").length,
+      direct: direct?.controls ?? null,
+      requirements: viaRequirements?.requirements ?? 0,
+      incomplete: scoped.filter((project) => missingData(project).length > 0).length,
+    };
+  }, [filteredProjects, linksReady, links, mappingReady, requirementCoverage, requirementControlLinks, scoped]);
 
   function startCreate() {
     setSelected(null);
@@ -221,109 +197,71 @@ function ProjectRegisterContent() {
     return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading">جاري تحميل سجل المشاريع…</p></main>;
   }
 
-  const filterSelect = (label: string, key: StrategyQueryKey, value: string, labels: Record<string, string>, allowUnset = true) =>
-    <label><span>{label}</span><select value={value} onChange={(event) => updateStrategyQuery(key, event.target.value)}>
-      <option value="all">الكل</option>{allowUnset && <option value="unset">غير مصنّف</option>}
-      {Object.entries(labels).map(([option, text]) => <option key={option} value={option}>{text}</option>)}
-    </select></label>;
+  const priorityValue = filters.priority !== "all" ? filters.priority : ({ "1": "P1", "2": "P2", "3": "P3", unset: "unset" } as Record<string, string>)[filters.year] ?? "all";
+  const setPriority = (value: string) => {
+    if (filters.year !== "all") updateStrategyQuery("execution_year", "all");
+    updateStrategyQuery("priority", value);
+  };
+  const query = (key: StrategyQueryKey) => (value: string) => updateStrategyQuery(key, value);
+  const summaryItems: SummaryItem[] = [
+    { label: "المشاريع", value: projectsReady ? summary.total : unavailable },
+    { label: "P1", value: projectsReady ? summary.p1 : unavailable },
+    { label: "P2", value: projectsReady ? summary.p2 : unavailable },
+    { label: "P3", value: projectsReady ? summary.p3 : unavailable },
+    { label: "ضوابط بربط مباشر", value: summary.direct ?? unavailable },
+    ...(mappingReady && summary.requirements > 0 ? [{ label: "متطلبات مرتبطة", value: summary.requirements }] : []),
+    ...(canManage && projectsReady && summary.incomplete > 0 && missingFilter === "all" ? [{ label: "بيانات ناقصة", value: summary.incomplete, href: "?missing=any", tone: "attention" as const }] : []),
+  ];
 
   return (
-    <main className="roadmap-page" dir="rtl">
+    <main className="roadmap-page rm-page" dir="rtl">
       <section className="roadmap-shell">
-        <nav className="roadmap-view-tabs" aria-label="إدارة محفظة الأمن السيبراني">
-          <Link className="active" href="/roadmap">سجل المشاريع السيبرانية</Link>
-          <Link href="/roadmap/analysis">تحليل المحفظة السيبرانية</Link>
-          <Link href="/roadmap/dashboard">خارطة طريق المشاريع</Link>
-        </nav>
-
-        <header className="roadmap-hero project-register-hero">
-          <div>
-            <span>المصدر الرئيسي لبيانات المحفظة</span>
-            <h1>سجل المشاريع السيبرانية</h1>
-            <p>الأولوية وسنة التنفيذ والمدة والتصنيف المعتمد لكل مشروع، وتنعكس على التحليل وخارطة طريق المشاريع.</p>
-          </div>
-          {canManage && <button className="roadmap-primary" onClick={startCreate}>+ مشروع جديد</button>}
-        </header>
+        <RoadmapTabs active="/roadmap" />
+        <PageHeader title="سجل المشاريع السيبرانية" description="المصدر المعتمد لبيانات المشاريع: بحث، فلترة، تعديل ومتابعة." actions={canManage ? <button className="roadmap-primary" onClick={startCreate}>+ مشروع جديد</button> : undefined} />
 
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
         {message && <p className="roadmap-message" role="status">{message}</p>}
         <ReadNotice statuses={Object.values(reads)} />
 
-        <section className="roadmap-metrics register-metrics" aria-label="مؤشرات سجل المشاريع">
-          <Metric label="مشاريع النطاق المعروض" value={projectsReady ? stats.total : unavailable} />
-          <Metric label="مخططة" value={projectsReady ? stats.planned : unavailable} tone="muted" />
-          <Metric label="قيد التنفيذ" value={projectsReady ? stats.active : unavailable} tone="active" />
-          <Metric label="P1" value={projectsReady ? stats.p1 : unavailable} />
-          <Metric label="P2" value={projectsReady ? stats.p2 : unavailable} />
-          <Metric label="P3" value={projectsReady ? stats.p3 : unavailable} />
-          <Metric label="ضوابط ذات ربط مباشر مسجّل" value={linksReady ? stats.linked : unavailable} tone="linked" />
-          <Metric label="متطلبات سيبرانية مميزة مرتبطة" value={modern ? modern.counts.requirements : unavailable} tone="linked" />
-          <Metric label="علاقات مشروع–متطلب" value={modern ? modern.counts.projectRequirementLinks : unavailable} tone="linked" />
-          <Metric label="ضوابط مميزة عبر المتطلبات" value={modern ? modern.counts.controls : unavailable} tone="linked" />
-          <Metric label="ضوابط مرتبطة عبر المتطلبات وحالتها متحققة" value={mappingReady ? requirementStats.verified : unavailable} tone="active" />
-          <Metric label="مواءمات مؤكدة (Confirmed)" value={mappingReady ? requirementStats.confirmedMappings : unavailable} tone="linked" />
-          <Metric label="مواءمات محتملة (Probable)" value={mappingReady ? requirementStats.probableMappings : unavailable} tone="warning" />
-          <Metric label="متطلبات بلا ربط ضوابط" value={mappingReady ? requirementStats.requirementsWithoutMapping : unavailable} tone={requirementStats.requirementsWithoutMapping ? "warning" : "muted"} />
-        </section>
+        <SummaryStrip label="ملخص سجل المشاريع" items={summaryItems} />
 
-        <section className="register-toolbar portfolio-toolbar" aria-label="تصفية سجل المشاريع">
-          <label className="register-search"><span>بحث</span><input value={filters.query} onChange={(event) => updateStrategyQuery("q", event.target.value)} placeholder="اسم المشروع أو رمزه" /></label>
-          <label><span>المحفظة</span><select value={filters.archive} onChange={(event) => updateStrategyQuery("archive", archiveQueryValue(event.target.value))}>
-            <option value="active">النشطة</option><option value="archived">المؤرشفة</option><option value="all">الجميع</option>
-          </select></label>
-          {filterSelect("الأولوية", "priority", filters.priority, priorityLabels)}
-          {filterSelect("سنة التنفيذ", "execution_year", filters.year, yearText)}
-          {filterSelect("نوع العمل", "work_type", filters.workType, workTypeLabels)}
-          {filterSelect("الجهة المالكة", "owner", filters.owner, ownerLabels)}
-          {filterSelect("الحالة", "status", filters.status, statusText, false)}
-          {filterSelect("وحدة المدة", "duration_unit", filters.durationUnit, durationLabels)}
-          {filterSelect("اكتمال الربط", "mapping", filters.mappingCompleteness, mappingCompletenessLabels, false)}
-          <label><span>المدة من</span><input type="number" min="0" step="any" value={filters.durationMin} onChange={(event) => updateStrategyQuery("duration_min", event.target.value)} /></label>
-          <label><span>المدة إلى</span><input type="number" min="0" step="any" value={filters.durationMax} onChange={(event) => updateStrategyQuery("duration_max", event.target.value)} /></label>
-          <strong>{projectsReady ? projectCount(filteredProjects.length) : unavailable}</strong>
-          <small>حدود المدة تقارن القيمة بوحدتها؛ اختر وحدة للمقارنة بين مدد متجانسة.</small>
-        </section>
+        <FilterBar label="تصفية سجل المشاريع" count={projectsReady ? projectCount(filteredProjects.length) : unavailable}>
+          <label className="rm-field rm-search"><span>بحث</span><input value={filters.query} onChange={(event) => updateStrategyQuery("q", event.target.value)} placeholder="اسم المشروع أو رمزه" /></label>
+          <FilterSelect label="المحفظة" value={filters.archive} onChange={(value) => updateStrategyQuery("archive", archiveQueryValue(value))} options={{ active: "النشطة", archived: "المؤرشفة", all: "الكل" }} allLabel={null} />
+          <FilterSelect label="الأولوية / سنة التنفيذ" value={priorityValue} onChange={setPriority} options={{ ...priorityYearOptions, unset: "غير مصنّفة" }} />
+          <FilterSelect label="نوع العمل" value={filters.workType} onChange={query("work_type")} options={{ ...workTypeLabels, unset: "غير مصنّف" }} />
+          <FilterSelect label="الجهة المالكة" value={filters.owner} onChange={query("owner")} options={{ ...ownerLabels, unset: "غير محددة" }} />
+          <FilterSelect label="الحالة" value={filters.status} onChange={query("status")} options={statusText} />
+          <FilterSelect label="اكتمال الربط" value={filters.mappingCompleteness} onChange={query("mapping")} options={mappingCompletenessLabels} />
+          {showDurationUnitFilter(scoped, filters.durationUnit) && <FilterSelect label="وحدة المدة" value={filters.durationUnit} onChange={query("duration_unit")} options={{ ...durationLabels, unset: "غير محددة" }} />}
+          {(filters.durationMin || filters.durationMax) && <>
+            <label className="rm-field"><span>المدة من</span><input type="number" min="0" step="any" value={filters.durationMin} onChange={(event) => updateStrategyQuery("duration_min", event.target.value)} /></label>
+            <label className="rm-field"><span>المدة إلى</span><input type="number" min="0" step="any" value={filters.durationMax} onChange={(event) => updateStrategyQuery("duration_max", event.target.value)} /></label>
+          </>}
+          {(missingFilter !== "all" || (canManage && summary.incomplete > 0)) && <FilterSelect label="بيانات ناقصة" value={missingFilter} onChange={query("missing")} options={missingOptions} />}
+        </FilterBar>
 
-        <div className="portfolio-table-wrap"><table className="portfolio-table">
-          <caption>سجل المشاريع — {projectsReady ? projectCount(filteredProjects.length) : unavailable}</caption>
-          <thead><tr>{["المشروع", "المتطلبات والضوابط", "نوع العمل", "الجهة المالكة", "الأولوية", "مدة المشروع", "سنة التنفيذ", "الحالة", "الإنجاز", "الإجراءات"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
+        <div className="rm-table-wrap"><table className="rm-table">
+          <caption className="rm-visually-hidden">سجل المشاريع — {projectsReady ? projectCount(filteredProjects.length) : unavailable}</caption>
+          <thead><tr>{["المشروع", "الأولوية", "نوع العمل", "الجهة المالكة", "المدة", "الحالة", "اكتمال الربط", "الإجراءات"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
           <tbody>{filteredProjects.map((project) => {
-            const reqStats = perProjectStats.get(project.id);
             const href = projectHref(project.id, "register", params);
-            return <tr key={project.id} className={project.archived_at ? "is-archived" : undefined}>
-              <th scope="row"><Link className="strategy-project-link" href={href}>{project.name_ar}</Link><small dir="ltr">{project.project_code}</small><small>{project.archived_at ? "المحفظة المؤرشفة" : "المحفظة النشطة"}</small></th>
-              <td className="register-req-ctrl-stats register-rel">
-                {/* Compact summary; same counts and sources, explanations under details. */}
-                <span className={`register-rel-badge ${project.mapping_completeness ?? "mapping_pending"}`}>{mappingCompletenessLabels[project.mapping_completeness ?? "mapping_pending"]}</span>
-                <span className="register-rel-counts">
-                  <span>عبر المتطلبات: {!mappingReady ? unavailable : reqStats?.requirementsCount ? <><b>{reqStats.requirementsCount}</b> متطلب · <b>{reqStats.controlsCount}</b> ضابط</> : "—"}</span>
-                  <span>روابط مباشرة: <b>{linksReady ? new Set(links.filter(link => link.project_id === project.id).map(link => link.control_id)).size : unavailable}</b></span>
-                  {project.import_staging_id && <span>مراجع المصدر: <b><bdi>{`${project.mapping_exact_count}/${project.mapping_reference_count}`}</bdi></b></span>}
-                </span>
-                <details>
-                  <summary>التفاصيل</summary>
-                  {mappingReady && !reqStats?.requirementsCount && <p>العلاقات عبر المتطلبات: {noRelationship}</p>}
-                  {mappingReady && Boolean(reqStats?.requirementsCount) && <p>{reqStats?.requirementsCount} متطلب · {reqStats?.controlsCount} ضوابط · {reqStats?.verifiedCount} متحقق عبر المتطلبات.</p>}
-                  {project.import_staging_id && <p>{project.mapping_exact_count} من {project.mapping_reference_count} مراجع مصدر مرتبطة بمطابقة مثبتة؛ {project.mapping_reference_count - project.mapping_exact_count - project.mapping_source_error_count} بانتظار المراجعة، {project.mapping_source_error_count} أخطاء مصدر. العدد المرتبط لا يمثل كامل نطاق الضوابط.</p>}
-                  <p>الروابط المباشرة مصدر مستقل لا يُجمع مع ضوابط المتطلبات. اكتمال الربط ليس تحققًا من الامتثال.</p>
-                </details>
-              </td>
-              <td>{project.work_type ? workTypeLabels[project.work_type] : "بانتظار التصنيف"}</td>
-              <td>{ownerText(project)}</td>
-              <td><span className={`register-priority ${project.portfolio_priority ?? ""}`}>{project.portfolio_priority ?? "غير مصنّفة"}</span></td>
-              <td>{formatDuration(project.duration_value, project.duration_unit)}</td>
-              <td>{project.execution_year ? yearText[String(project.execution_year) as keyof typeof yearText] : "غير محددة"}</td>
-              <td><span className={`roadmap-status ${project.status}`}>{statusText[project.status]}</span></td>
-              <td>{Number(project.progress_percent)}%</td>
-              <td className="register-actions"><Link className="register-action-primary" href={href}>صفحة المشروع ←</Link>{canManage && <button type="button" className="register-action-secondary" onClick={() => openProject(project)}>تعديل</button>}</td>
+            const archived = Boolean(project.archived_at);
+            const owner = ownerText(project);
+            const viaRequirements = mappingReady ? requirementCounts.get(project.id) : undefined;
+            return <tr key={project.id} className={archived ? "is-archived" : undefined}>
+              <th scope="row"><Link className="strategy-project-link" href={href}>{project.name_ar}</Link><span className="rm-code-line"><bdi className="rm-code" dir="ltr">{project.project_code}</bdi>{archived && <ArchivedBadge />}</span></th>
+              <td><PriorityBadge priority={project.portfolio_priority} /></td>
+              <td>{project.work_type ? workTypeLabels[project.work_type] : <span className="rm-muted">—</span>}</td>
+              <td>{owner ? <bdi className="rm-nowrap">{owner}</bdi> : <span className="rm-muted">—</span>}</td>
+              <td className="rm-nowrap">{project.duration_value !== null && project.duration_unit ? <bdi>{formatDuration(project.duration_value, project.duration_unit)}</bdi> : <span className="rm-muted">—</span>}</td>
+              <td><StatusChip status={project.status} />{showProgress(project) && <small className="rm-progress"><bdi>{`${Number(project.progress_percent)}%`}</bdi></small>}</td>
+              <td>{archived && !project.import_staging_id ? <span className="rm-muted">—</span> : <MappingBadge completeness={project.mapping_completeness} exact={project.mapping_exact_count} references={project.import_staging_id ? project.mapping_reference_count : undefined} />}
+                {viaRequirements && viaRequirements.requirements > 0 && <small className="rm-sub">عبر المتطلبات: <bdi>{viaRequirements.requirements}</bdi> متطلب · <bdi>{viaRequirements.controls}</bdi> ضابط</small>}</td>
+              <td className="rm-actions"><Link className="register-action-primary" href={href}>فتح</Link>{canManage && !archived && <button type="button" className="register-action-secondary" onClick={() => openProject(project)}>تعديل</button>}</td>
             </tr>;
           })}</tbody>
         </table>{projectsReady && !filteredProjects.length && <p className="roadmap-empty">لا توجد مشاريع مطابقة للفلاتر الحالية.</p>}</div>
-
-        <aside className="register-integrity-note">
-          <div><strong>تعريف التغطية</strong><p>مؤشر الربط المباشر من سجل علاقات المشروع بالضابط؛ ومؤشرات المتطلبات من مسار المشروع ← المتطلب ← الضابط. المصدران منفصلان، والربط لا يثبت أثر المشروع على حالة الضابط.</p></div>
-          <Link href="/controls">فتح سجل الضوابط ←</Link>
-        </aside>
       </section>
 
       {open && (
@@ -346,8 +284,4 @@ function ProjectRegisterContent() {
       )}
     <AssessmentFindingLinks/></main>
   );
-}
-
-function Metric({ label, value, tone = "" }: { label: string; value: number | string; tone?: string }) {
-  return <article className={`roadmap-metric ${tone}`}><span>{label}</span><strong>{value}</strong></article>;
 }
