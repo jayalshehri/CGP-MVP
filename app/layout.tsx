@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   description: "Cyber Governance Platform for cybersecurity compliance, controls, evidence, and verification workflows.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="ar"
