@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import FeedbackWidget from "@/components/FeedbackWidget";
@@ -129,24 +129,30 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const groupOrder = workspace === "cyber" ? ["الامتثال", "قياس الالتزام", "العمليات", "الإدارة"] : [...new Set(items.map(item=>item.group).filter(Boolean))];
   const groups = groupOrder.filter(group=>items.some(item=>item.group===group));
   const activeGroup = navigation.find(item => item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/"))?.group ?? "";
-  const navigationResults = useMemo(() => {
-    const normalized = searchQuery.trim().toLowerCase();
-    return normalized ? items.filter(item => item.label.toLowerCase().includes(normalized)).slice(0, 5) : [];
-  }, [items, searchQuery]);
+  const normalizedNavigationQuery = searchQuery.trim().toLowerCase();
+  const navigationResults = normalizedNavigationQuery
+    ? items.filter(item => item.label.toLowerCase().includes(normalizedNavigationQuery)).slice(0, 5)
+    : [];
   useEffect(() => {
     const query = searchQuery.trim();
-    // Cybersecurity controls have their own catalog. Keep search results within the current workspace.
-    if (workspace !== "cyber" || query.length < 2) { setControlResults([]); setSearching(false); return; }
-    setSearching(true);
+    let cancelled = false;
+    // Keep synchronous state updates out of effect setup; discard stale searches.
     const timer = window.setTimeout(async () => {
-      // Strip PostgREST filter separators (`,()`) and ILIKE wildcard characters (`%_`)
-      // so a raw search string can't widen the match beyond the typed text.
+      if (workspace !== "cyber" || query.length < 2) {
+        setControlResults([]);
+        setSearching(false);
+        return;
+      }
+      setSearching(true);
       const escaped = query.replace(/[,%()_]/g, " ");
-      const { data } = await supabase.from("controls").select("id,control_code,title_ar,frameworks!inner(is_active)").eq("frameworks.is_active",true).or(`control_code.ilike.%${escaped}%,title_ar.ilike.%${escaped}%`).order("control_code").limit(8);
-      setControlResults((data ?? []) as SearchResult[]);
-      setSearching(false);
+      try {
+        const { data } = await supabase.from("controls").select("id,control_code,title_ar,frameworks!inner(is_active)").eq("frameworks.is_active",true).or(`control_code.ilike.%${escaped}%,title_ar.ilike.%${escaped}%`).order("control_code").limit(8);
+        if (!cancelled) setControlResults((data ?? []) as SearchResult[]);
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
     }, 220);
-    return () => window.clearTimeout(timer);
+    return () => { cancelled = true; window.clearTimeout(timer); };
   }, [searchQuery, workspace]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
