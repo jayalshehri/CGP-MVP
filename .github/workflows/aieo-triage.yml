@@ -1,0 +1,35 @@
+name: AIEO Triage Prototype
+on:
+  push:
+    branches:
+      - aieo/phase3-triage-agent
+    paths:
+      - .github/workflows/aieo-triage.yml
+      - scripts/aieo-triage.mjs
+      - scripts/aieo-triage-fixture.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Analyze synthetic CI results without AI or secrets
+        env:
+          AIEO_USE_MODEL: "false"
+        run: node scripts/aieo-triage.mjs
+      - name: Upload triage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: aieo-triage-report
+          path: aieo-reports/triage.md
+          retention-days: 7
