@@ -2,7 +2,7 @@ name: AIEO Triage Prototype
 on:
   push:
     branches:
-      - aieo/phase3-triage-agent
+      - aieo/phase3-live-ci-triage
     paths:
       - .github/workflows/aieo-triage.yml
       - scripts/aieo-triage.mjs
@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   triage:
@@ -23,9 +24,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - name: Analyze synthetic CI results without AI or secrets
+      - name: Analyze completed CI job conclusions (read only)
         env:
           AIEO_USE_MODEL: "false"
+          AIEO_SOURCE: github
+          AIEO_TARGET_BRANCH: aieo/phase3-triage-agent
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/aieo-triage.mjs
       - name: Upload triage report
         uses: actions/upload-artifact@v4
