@@ -1,0 +1,37 @@
+name: AIEO Auto-Fix Safety Gate
+on:
+  push:
+    branches: [aieo/phase5-autofix-safety-foundation]
+    paths:
+      - .github/workflows/aieo-autofix-policy.yml
+      - scripts/aieo-autofix-policy.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  policy-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Allowed UI-only changes
+        run: node scripts/aieo-autofix-policy.mjs app/alerts/page.tsx components/AppShell.tsx
+      - name: Reject database migrations
+        shell: bash
+        run: |
+          if node scripts/aieo-autofix-policy.mjs supabase/migrations/0001.sql; then exit 1; fi
+      - name: Reject workflow modifications
+        shell: bash
+        run: |
+          if node scripts/aieo-autofix-policy.mjs .github/workflows/ci.yml; then exit 1; fi
+      - name: Reject authentication changes
+        shell: bash
+        run: |
+          if node scripts/aieo-autofix-policy.mjs lib/auth.ts; then exit 1; fi
