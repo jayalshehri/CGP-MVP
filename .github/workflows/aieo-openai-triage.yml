@@ -1,0 +1,50 @@
+name: AIEO OpenAI Triage (protected)
+on:
+  push:
+    branches:
+      - aieo/phase3-openai-integration
+    paths:
+      - .github/workflows/aieo-openai-triage.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  ai-triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: aieo-ai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Require dedicated OpenAI API key
+        env:
+          OPENAI_API_KEY: ${{ secrets.AIEO_OPENAI_API_KEY }}
+        shell: bash
+        run: |
+          if [[ -z "$OPENAI_API_KEY" ]]; then
+            echo "Missing protected AIEO_OPENAI_API_KEY secret"; exit 1
+          fi
+      - name: Analyze sanitized real CI job conclusions with OpenAI
+        env:
+          OPENAI_API_KEY: ${{ secrets.AIEO_OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          AIEO_USE_MODEL: "true"
+          AIEO_SOURCE: github
+          AIEO_MODEL: "gpt-4.1-mini"
+          AIEO_TARGET_BRANCH: aieo/phase3-triage-agent
+        run: node scripts/aieo-triage.mjs
+      - name: Upload analysis report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aieo-openai-triage-report
+          path: aieo-reports/triage.md
+          if-no-files-found: ignore
+          retention-days: 7
