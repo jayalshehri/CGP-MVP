@@ -1,7 +1,27 @@
 // AIEO read-only triage prototype. Never sends raw logs, source code or secrets to a model.
 import fs from 'node:fs/promises';
 const allowed = new Set(['success', 'failure', 'cancelled', 'skipped', 'neutral', 'timed_out', 'action_required', 'unknown']);
-const input = JSON.parse(await fs.readFile(process.env.AIEO_TRIAGE_INPUT || 'scripts/aieo-triage-fixture.json', 'utf8'));
+let input;
+if (process.env.AIEO_SOURCE === 'github') {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!token || !/^[-\w]+\/[-\w.]+$/.test(repo || '')) throw new Error('Missing GitHub read-only context');
+  const url = new URL('https://api.github.com/repos/' + repo + '/actions/runs');
+  url.searchParams.set('branch', process.env.AIEO_TARGET_BRANCH || 'aieo/phase3-triage-agent');
+  url.searchParams.set('per_page', '10');
+  const headers = { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+  const response = await fetch(url, { headers });
+  if (!response.ok) throw new Error('GitHub runs HTTP ' + response.status);
+  const runs = (await response.json()).workflow_runs || [];
+  const selected = runs.find(r => r.status === 'completed' && r.name === 'AIEO CI Foundation');
+  if (!selected) throw new Error('No completed AIEO CI Foundation run found on selected branch');
+  const jobsResponse = await fetch('https://api.github.com/repos/' + repo + '/actions/runs/' + selected.id + '/jobs?per_page=30', { headers });
+  if (!jobsResponse.ok) throw new Error('GitHub jobs HTTP ' + jobsResponse.status);
+  input = { jobs: (await jobsResponse.json()).jobs || [] };
+  console.log('Read completed CI run ' + selected.id + ' (job conclusions only).');
+} else {
+  input = JSON.parse(await fs.readFile(process.env.AIEO_TRIAGE_INPUT || 'scripts/aieo-triage-fixture.json', 'utf8'));
+}
 if (!Array.isArray(input.jobs) || input.jobs.length > 30) throw new Error('Invalid jobs input');
 const jobs = input.jobs.map(j => ({
   name: String(j.name || 'unnamed').slice(0, 80).replace(/[^a-zA-Z0-9 _./-]/g, ''),
