@@ -1,0 +1,23 @@
+name: AIEO Patch Preflight Tests
+on:
+  push:
+    branches: [aieo/phase5-diff-validation]
+    paths:
+      - 'scripts/aieo-patch-preflight.mjs'
+      - 'scripts/aieo-patch-preflight.test.mjs'
+      - '.github/workflows/aieo-patch-preflight-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/aieo-patch-preflight.test.mjs
