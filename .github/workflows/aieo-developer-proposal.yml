@@ -2,7 +2,7 @@ name: AIEO Developer Proposal (read-only)
 on:
   push:
     branches:
-      - aieo/phase4-developer-agent-foundation
+      - aieo/phase4-live-developer-triage
     paths:
       - .github/workflows/aieo-developer-proposal.yml
       - scripts/aieo-developer-proposal.mjs
@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   proposal:
@@ -23,7 +24,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - name: Generate safe developer proposal from fixture
+      - name: Generate developer proposal from real completed CI metadata
+        env:
+          AIEO_SOURCE: github
+          AIEO_TARGET_BRANCH: aieo/phase3-openai-integration
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/aieo-developer-proposal.mjs
       - uses: actions/upload-artifact@v4
         with:
