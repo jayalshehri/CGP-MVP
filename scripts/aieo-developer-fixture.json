@@ -1,0 +1,1 @@
+{"jobs":[{"name":"Lint","conclusion":"success"},{"name":"Typecheck","conclusion":"success"},{"name":"Build","conclusion":"failure"}]}
