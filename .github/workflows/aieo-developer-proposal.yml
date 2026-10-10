@@ -1,0 +1,32 @@
+name: AIEO Developer Proposal (read-only)
+on:
+  push:
+    branches:
+      - aieo/phase4-developer-agent-foundation
+    paths:
+      - .github/workflows/aieo-developer-proposal.yml
+      - scripts/aieo-developer-proposal.mjs
+      - scripts/aieo-developer-fixture.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proposal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Generate safe developer proposal from fixture
+        run: node scripts/aieo-developer-proposal.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-developer-proposal
+          path: aieo-reports/developer-proposal.md
+          retention-days: 7
