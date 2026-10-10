@@ -1,0 +1,47 @@
+name: AIEO QA (isolated)
+on:
+  push:
+    branches:
+      - aieo/phase2-qa-agent-foundation
+    paths:
+      - .github/workflows/aieo-qa.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qa-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: cgp-qa
+    env:
+      CGP_BASE_URL: ${{ vars.CGP_QA_BASE_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.CGP_QA_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.CGP_QA_PUBLISHABLE_KEY }}
+      QA_EMAIL: ${{ secrets.CGP_QA_EMAIL }}
+      QA_PASSWORD: ${{ secrets.CGP_QA_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Validate QA-only configuration (fail closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CGP_BASE_URL" && test -n "$NEXT_PUBLIC_SUPABASE_URL"
+          test -n "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" && test -n "$QA_EMAIL" && test -n "$QA_PASSWORD"
+          if [[ "$CGP_BASE_URL" != "https://cgp-mvp-git-aieo-phase2-qa-agent-foundation-grc13.vercel.app" ]]; then
+            echo "Only the approved AIEO QA Preview is allowed"; exit 1
+          fi
+          case "$NEXT_PUBLIC_SUPABASE_URL" in
+            https://lkozjnpfufdpzqtzdxhe.supabase.co) ;;
+            *) echo "Unapproved QA Supabase target"; exit 1 ;;
+          esac
+      - name: Run QA smoke (authenticated checks mandatory)
+        run: npm run qa
