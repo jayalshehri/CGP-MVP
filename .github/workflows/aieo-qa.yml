@@ -1,5 +1,10 @@
 name: AIEO QA (isolated)
 on:
+  push:
+    branches:
+      - aieo/phase2-qa-agent-foundation
+    paths:
+      - .github/workflows/aieo-qa.yml
   workflow_dispatch:
 
 permissions:
@@ -31,11 +36,11 @@ jobs:
           set -euo pipefail
           test -n "$CGP_BASE_URL" && test -n "$NEXT_PUBLIC_SUPABASE_URL"
           test -n "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" && test -n "$QA_EMAIL" && test -n "$QA_PASSWORD"
-          case "$CGP_BASE_URL" in
-            *cgp-mvp-grc13.vercel.app*) echo "Production target forbidden"; exit 1 ;;
-          esac
+          if [[ "$CGP_BASE_URL" != "https://cgp-mvp-git-aieo-phase2-qa-agent-foundation-grc13.vercel.app" ]]; then
+            echo "Only the approved AIEO QA Preview is allowed"; exit 1
+          fi
           case "$NEXT_PUBLIC_SUPABASE_URL" in
-            *lkozjnpfufdpzqtzdxhe.supabase.co*) ;;
+            https://lkozjnpfufdpzqtzdxhe.supabase.co) ;;
             *) echo "Unapproved QA Supabase target"; exit 1 ;;
           esac
       - name: Run QA smoke (authenticated checks mandatory)
