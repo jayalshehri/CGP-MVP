@@ -1,0 +1,28 @@
+name: AIEO Sandbox Hardening
+on:
+  push:
+    branches: [aieo/phase9-sandbox-hardening]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate approved pinned Docker image
+        env:
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: |
+          [[ "$AIEO_NODE_IMAGE" =~ ^node:24-alpine@sha256:[a-f0-9]{64}$ ]] || { echo "Set repository variable AIEO_NODE_IMAGE to an approved digest"; exit 2; }
+      - name: Pull immutable image
+        env:
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: docker pull "$AIEO_NODE_IMAGE"
+      - name: Run offline fixture
+        env:
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: bash scripts/aieo-sandbox-hardening.sh
