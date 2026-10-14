@@ -1,0 +1,31 @@
+name: AIEO Auto-Fix Dry Run
+on:
+  push:
+    branches: [aieo/phase6-autofix-dry-run]
+    paths:
+      - '.github/workflows/aieo-autofix-dry-run.yml'
+      - 'scripts/aieo-autofix-dry-run.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: aieo-autofix-dry-run-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate deterministic isolated patch
+        run: node scripts/aieo-autofix-dry-run.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-autofix-dry-run-report
+          path: aieo-reports/autofix-dry-run.md
+          retention-days: 7
