@@ -1,0 +1,25 @@
+name: AIEO Full Patch Validation
+on:
+  push:
+    branches: [aieo/phase7-full-patch-validation]
+    paths:
+      - 'scripts/aieo-patch-content-validator.mjs'
+      - 'scripts/aieo-patch-content-validator.test.mjs'
+      - 'scripts/aieo-patch-preflight.mjs'
+      - '.github/workflows/aieo-full-patch-validation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test structural diff inspection (no application, no AI, no writes)
+        run: node --test scripts/aieo-patch-content-validator.test.mjs
