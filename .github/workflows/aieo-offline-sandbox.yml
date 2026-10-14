@@ -1,0 +1,22 @@
+name: AIEO Offline Sandbox Smoke
+on:
+  push:
+    branches: [aieo/phase8-offline-sandbox]
+    paths:
+      - '.github/workflows/aieo-offline-sandbox.yml'
+      - 'scripts/aieo-offline-sandbox-smoke.sh'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pull runtime before offline execution
+        run: docker pull node:24-alpine
+      - name: Verify fixture-only offline Docker sandbox
+        run: bash scripts/aieo-offline-sandbox-smoke.sh
