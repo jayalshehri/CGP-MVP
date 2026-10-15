@@ -6,7 +6,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/input" "$tmp/output"
 printf 'fixture-only\n' > "$tmp/input/fixture.txt"
-chmod -R a-w "$tmp/input"
+# The Docker bind mount is read-only; keep host-side temp dir writable for cleanup.
 docker run --rm \
   --network none \
   --user 65534:65534 \
