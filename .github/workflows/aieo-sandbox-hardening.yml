@@ -1,0 +1,58 @@
+name: AIEO Sandbox Hardening
+on:
+  push:
+    branches: [aieo/phase9-sandbox-hardening]
+  workflow_dispatch:
+    inputs:
+      approved_image:
+        description: 'Reviewed immutable node:24-alpine@sha256 digest (required unless repository variable is configured)'
+        required: false
+        type: string
+permissions:
+  contents: read
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Reject floating Docker image references and unsafe fixture settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/aieo-sandbox-hardening.sh
+          grep -Fq -- '--network none' scripts/aieo-sandbox-hardening.sh
+          grep -Fq -- '--cap-drop ALL' scripts/aieo-sandbox-hardening.sh
+          grep -Fq -- '--read-only' scripts/aieo-sandbox-hardening.sh
+          grep -Fq -- '--security-opt no-new-privileges:true' scripts/aieo-sandbox-hardening.sh
+          grep -Fq -- '--user 65534:65534' scripts/aieo-sandbox-hardening.sh
+          if AIEO_NODE_IMAGE=node:24-alpine bash scripts/aieo-sandbox-hardening.sh > /tmp/aieo-rejection.log 2>&1; then
+            echo 'FAIL: floating tag accepted'; exit 1
+          fi
+          if AIEO_NODE_IMAGE='' bash scripts/aieo-sandbox-hardening.sh >> /tmp/aieo-rejection.log 2>&1; then
+            echo 'FAIL: missing image accepted'; exit 1
+          fi
+          echo 'PASS: static isolation guards and fail-closed image policy'
+  sandbox:
+    needs: policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate approved pinned Docker image
+        env:
+          AIEO_NODE_IMAGE: ${{ inputs.approved_image || vars.AIEO_NODE_IMAGE }}
+        run: |
+          [[ "$AIEO_NODE_IMAGE" =~ ^node:24-alpine@sha256:[a-f0-9]{64}$ ]] || { echo "BLOCKED: Set Actions variable AIEO_NODE_IMAGE or manually supply approved_image with reviewed digest"; exit 2; }
+      - name: Pull immutable image
+        env:
+          AIEO_NODE_IMAGE: ${{ inputs.approved_image || vars.AIEO_NODE_IMAGE }}
+        run: docker pull "$AIEO_NODE_IMAGE"
+      - name: Run offline fixture
+        env:
+          AIEO_NODE_IMAGE: ${{ inputs.approved_image || vars.AIEO_NODE_IMAGE }}
+        run: bash scripts/aieo-sandbox-hardening.sh
