@@ -1,0 +1,29 @@
+name: AIEO Docker Digest Candidate (Read Only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Obtain current official Node digest candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="docker.io/library/node:24-alpine"
+          docker buildx imagetools inspect "$image" > /tmp/aieo-node-manifest.txt
+          digest="$(sed -n 's/^Digest:[[:space:]]*//p' /tmp/aieo-node-manifest.txt | head -n 1)"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Invalid registry digest"; exit 1; }
+          {
+            echo "### Candidate only — NOT approved"
+            echo ""
+            echo "Registry: docker.io/library/node"
+            echo "Tag: 24-alpine"
+            echo "Observed manifest digest: \`$digest\`"
+            echo ""
+            echo "Review publisher, architecture, provenance and vulnerability posture before approval."
+            echo "Then configure repository Actions variable AIEO_NODE_IMAGE to \`node:24-alpine@$digest\`."
+            echo "This job never writes variables, runs untrusted patches, merges, or deploys."
+          } >> "$GITHUB_STEP_SUMMARY"
