@@ -1,0 +1,28 @@
+name: AIEO Phase 10 Controlled Proposal
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ai-proposal:
+    # Protected environment must require manual approval and provide only a scoped API key.
+    environment: aieo-ai
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Synthetic proposal only (never apply)
+        env:
+          AIEO_OPENAI_API_KEY: ${{ secrets.AIEO_OPENAI_API_KEY }}
+          AIEO_MODEL: gpt-4.1-mini
+        run: node scripts/aieo-controlled-proposal.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-phase10-proposal
+          path: aieo-reports/phase10-proposal.md
+          retention-days: 3
