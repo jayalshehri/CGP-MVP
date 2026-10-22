@@ -1,5 +1,8 @@
 name: AIEO Docker Digest Candidate (Read Only)
 on:
+  push:
+    branches: [aieo/phase9-sandbox-hardening]
+    paths: ['.github/workflows/aieo-docker-digest-candidate.yml']
   workflow_dispatch:
 permissions:
   contents: read
