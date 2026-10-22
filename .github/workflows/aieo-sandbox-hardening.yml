@@ -3,6 +3,11 @@ on:
   push:
     branches: [aieo/phase9-sandbox-hardening]
   workflow_dispatch:
+    inputs:
+      approved_image:
+        description: 'Reviewed immutable node:24-alpine@sha256 digest (required unless repository variable is configured)'
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
@@ -40,14 +45,14 @@ jobs:
           persist-credentials: false
       - name: Validate approved pinned Docker image
         env:
-          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+          AIEO_NODE_IMAGE: ${{ inputs.approved_image || vars.AIEO_NODE_IMAGE }}
         run: |
-          [[ "$AIEO_NODE_IMAGE" =~ ^node:24-alpine@sha256:[a-f0-9]{64}$ ]] || { echo "BLOCKED: Configure repository Actions variable AIEO_NODE_IMAGE to a reviewed digest"; exit 2; }
+          [[ "$AIEO_NODE_IMAGE" =~ ^node:24-alpine@sha256:[a-f0-9]{64}$ ]] || { echo "BLOCKED: Set Actions variable AIEO_NODE_IMAGE or manually supply approved_image with reviewed digest"; exit 2; }
       - name: Pull immutable image
         env:
-          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+          AIEO_NODE_IMAGE: ${{ inputs.approved_image || vars.AIEO_NODE_IMAGE }}
         run: docker pull "$AIEO_NODE_IMAGE"
       - name: Run offline fixture
         env:
-          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+          AIEO_NODE_IMAGE: ${{ inputs.approved_image || vars.AIEO_NODE_IMAGE }}
         run: bash scripts/aieo-sandbox-hardening.sh
