@@ -1,0 +1,40 @@
+name: AIEO Phase 10 Fixture Gate
+on:
+  push:
+    branches: [aieo/phase10-controlled-autofix]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate scripts
+        run: |
+          bash -n scripts/aieo-phase10-fixture.sh
+          node --check scripts/aieo-controlled-proposal.mjs
+          node --test scripts/aieo-patch-content-validator.test.mjs
+  isolated-fixture:
+    needs: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require reviewed immutable image
+        env:
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: '[[ "$AIEO_NODE_IMAGE" =~ ^node:24-alpine@sha256:[a-f0-9]{64}$ ]]'
+      - name: Fetch pinned image
+        env:
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: docker pull "$AIEO_NODE_IMAGE"
+      - name: Run synthetic read-only repair simulation
+        env:
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: bash scripts/aieo-phase10-fixture.sh
