@@ -1,0 +1,32 @@
+name: AIEO Phase 13 Offline Proposal-to-Patch
+on:
+  push:
+    branches: [aieo/phase13-patch-pipeline]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  simulated-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate isolated pipeline script
+        run: |
+          bash -n scripts/aieo-phase13-pipeline.sh
+          node --test scripts/aieo-patch-content-validator.test.mjs
+      - name: Pull reviewed pinned image
+        env:
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: |
+          [[ "$AIEO_NODE_IMAGE" =~ ^node:24-alpine@sha256:[a-f0-9]{64}$ ]]
+          docker pull "$AIEO_NODE_IMAGE"
+      - name: Validate and execute synthetic proposal entirely in offline sandbox
+        env:
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: bash scripts/aieo-phase13-pipeline.sh
