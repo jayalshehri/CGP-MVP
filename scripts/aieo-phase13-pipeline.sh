@@ -10,6 +10,8 @@ printf 'export const value = "broken";\n' > "$tmp/input/components/AIEOFixture.t
 AIEO_TEST_MODE=1 node scripts/aieo-phase12-proposal.mjs
 node scripts/aieo-patch-content-validator.mjs < aieo-reports/phase12-model-proposal.patch
 cp aieo-reports/phase12-model-proposal.patch "$tmp/input/fix.patch"
+# Only the disposable synthetic patch is readable by the unprivileged container; mount stays read-only.
+chmod 0644 "$tmp/input/fix.patch"
 cat > "$tmp/input/execute.cjs" <<'JS'
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
