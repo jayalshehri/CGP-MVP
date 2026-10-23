@@ -17,6 +17,21 @@ index 1111111..2222222 100644
 -export const value = "broken";
 +export const value = "fixed";
 PATCH
+cat > "$tmp/input/apply.cjs" <<'JS'
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const patch = fs.readFileSync('/input/fix.patch','utf8');
+const match = /@@ -1 \+1 @@\n-([^\n]+)\n\+([^\n]+)\n$/.exec(patch);
+assert.ok(match, 'Expected one-line unified hunk');
+const path = '/work/components/AIEOFixture.tsx';
+const current = fs.readFileSync(path, 'utf8');
+assert.equal(current, match[1] + '\n');
+fs.writeFileSync(path, match[2] + '\n');
+assert.equal(fs.readFileSync(path, 'utf8'), 'export const value = "fixed";\n');
+assert.equal(process.env.GITHUB_TOKEN, undefined);
+assert.equal(process.env.OPENAI_API_KEY, undefined);
+console.log('PASS: isolated patch applied and verified');
+JS
 node scripts/aieo-patch-content-validator.mjs < "$tmp/input/fix.patch"
 docker run --rm \
  --network none --user 65534:65534 --cap-drop ALL \
@@ -26,12 +41,7 @@ docker run --rm \
  --tmpfs /work:rw,nosuid,size=16m,mode=1777 \
  --mount "type=bind,source=$tmp/input,target=/input,readonly" \
  --workdir /work \
- "$AIEO_NODE_IMAGE" sh -eu -c '
-   mkdir components
-   cp /input/components/AIEOFixture.tsx components/AIEOFixture.tsx
-   node -e "const fs=require('node:fs');const assert=require('node:assert/strict');const patch=fs.readFileSync('/input/fix.patch','utf8');const match=/@@ -1 \\+1 @@\\n-([^\\n]+)\\n\\+([^\\n]+)\\n$/.exec(patch);assert.ok(match,'expected one-line patch');const p='components/AIEOFixture.tsx';const current=fs.readFileSync(p,'utf8');assert.equal(current,match[1]+'\\n');fs.writeFileSync(p,match[2]+'\\n');"
-   node -e "const fs=require(\"node:fs\");const assert=require(\"node:assert/strict\");assert.equal(fs.readFileSync(\"components/AIEOFixture.tsx\",\"utf8\"),\"export const value = \\\"fixed\\\";\\n\");assert.equal(process.env.OPENAI_API_KEY,undefined);assert.equal(process.env.GITHUB_TOKEN,undefined);console.log(\"PASS: patch applied and verified within isolated tmpfs\");"
- '
+ "$AIEO_NODE_IMAGE" sh -eu -c 'mkdir components; cp /input/components/AIEOFixture.tsx components/AIEOFixture.tsx; node /input/apply.cjs'
 # Ensure original host input was never changed.
 test "$(cat "$tmp/input/components/AIEOFixture.tsx")" = 'export const value = "broken";'
 echo 'PASS: source fixture unchanged; only ephemeral container copy was patched'
