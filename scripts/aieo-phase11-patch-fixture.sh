@@ -29,7 +29,7 @@ docker run --rm \
  "$AIEO_NODE_IMAGE" sh -eu -c '
    mkdir components
    cp /input/components/AIEOFixture.tsx components/AIEOFixture.tsx
-   patch -p1 < /input/fix.patch
+   node -e "const fs=require('node:fs');const assert=require('node:assert/strict');const patch=fs.readFileSync('/input/fix.patch','utf8');const match=/@@ -1 \\+1 @@\\n-([^\\n]+)\\n\\+([^\\n]+)\\n$/.exec(patch);assert.ok(match,'expected one-line patch');const p='components/AIEOFixture.tsx';const current=fs.readFileSync(p,'utf8');assert.equal(current,match[1]+'\\n');fs.writeFileSync(p,match[2]+'\\n');"
    node -e "const fs=require(\"node:fs\");const assert=require(\"node:assert/strict\");assert.equal(fs.readFileSync(\"components/AIEOFixture.tsx\",\"utf8\"),\"export const value = \\\"fixed\\\";\\n\");assert.equal(process.env.OPENAI_API_KEY,undefined);assert.equal(process.env.GITHUB_TOKEN,undefined);console.log(\"PASS: patch applied and verified within isolated tmpfs\");"
  '
 # Ensure original host input was never changed.
