@@ -25,7 +25,6 @@ jobs:
           node scripts/aieo-phase12-proposal.mjs
           node scripts/aieo-patch-content-validator.mjs < aieo-reports/phase12-model-proposal.patch
   live-synthetic:
-    if: github.event_name == 'workflow_dispatch'
     needs: static
     environment: aieo-ai
     runs-on: ubuntu-latest
