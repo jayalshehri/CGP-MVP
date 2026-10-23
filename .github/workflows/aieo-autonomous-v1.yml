@@ -51,9 +51,10 @@ jobs:
           # CI runner is isolated from production resources. No production secrets passed.
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          cp scripts/aieo-autonomous-v1.mjs /tmp/aieo-autonomous-v1.mjs
           git fetch origin main
           git checkout -B "aieo/repair-feedback-${GITHUB_RUN_ID}" origin/main
-          AIEO_APPLY=1 node scripts/aieo-autonomous-v1.mjs
+          AIEO_APPLY=1 node /tmp/aieo-autonomous-v1.mjs
           if git diff --quiet; then echo 'No changes needed'; exit 0; fi
           test "$(git diff --name-only)" = 'components/FeedbackWidget.tsx'
           npm ci
@@ -62,5 +63,5 @@ jobs:
           npm run build
           git add -- components/FeedbackWidget.tsx
           git commit -m 'fix(aieo): prevent partial feedback control route matches'
-          git -c credential.helper= push "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" HEAD
+          git -c credential.helper= push "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/aieo/repair-feedback-${GITHUB_RUN_ID}"
           gh pr create --draft --base main --head "aieo/repair-feedback-${GITHUB_RUN_ID}" --title "AIEO: bounded feedback route repair" --body "Autonomous pilot on a strictly approved single-file patch. CI lint, typecheck, and build passed. Human review required. No merge or deployment."
