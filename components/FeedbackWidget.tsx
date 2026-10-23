@@ -13,7 +13,7 @@ export default function FeedbackWidget({ pagePath, visible }: FeedbackWidgetProp
   const [message, setMessage] = useState("");
   const [state, setState] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [error, setError] = useState("");
-  const controlId = useMemo(() => /^\/controls\/(\d+)/.exec(pagePath)?.[1] ?? null, [pagePath]);
+  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);
   if (!visible) return null;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
