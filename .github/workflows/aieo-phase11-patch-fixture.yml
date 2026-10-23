@@ -1,0 +1,31 @@
+name: AIEO Phase 11 Patch Execution Sandbox
+on:
+  push:
+    branches: [aieo/phase11-real-patch-sandbox]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  patch-fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Syntax and patch policy
+        run: |
+          bash -n scripts/aieo-phase11-patch-fixture.sh
+          node --test scripts/aieo-patch-content-validator.test.mjs
+      - name: Enforce reviewed image reference
+        env:
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: '[[ "$AIEO_NODE_IMAGE" =~ ^node:24-alpine@sha256:[a-f0-9]{64}$ ]]'
+      - name: Fetch immutable image
+        env:
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: docker pull "$AIEO_NODE_IMAGE"
+      - name: Apply deterministic patch inside offline, disposable container
+        env:
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: bash scripts/aieo-phase11-patch-fixture.sh
