@@ -28,7 +28,13 @@ if(process.env.AIEO_TEST_MODE==='1'){
   if(!res.ok) throw Error('OpenAI HTTP '+res.status);
   const data=await res.json();
   const output=(data.output||[]).flatMap(x=>x.content||[]).filter(x=>x.type==='output_text').map(x=>x.text||'').join('');
-  proposed=JSON.parse(output);
+  // Accept only a single JSON object, optionally enclosed in one Markdown JSON fence.
+  // Validation below still rejects every unexpected field or edit.
+  const trimmed=output.trim();
+  const fenced=/^```(?:json)?\\s*\\n([\\s\\S]*?)\\n```$/.exec(trimmed);
+  const clean=fenced ? fenced[1].trim() : trimmed;
+  if(clean.length>2000 || !clean.startsWith('{') || !clean.endsWith('}')) throw Error('Invalid proposal envelope');
+  proposed=JSON.parse(clean);
  }finally{clearTimeout(timer)}
 }
 validate(proposed);
