@@ -1,0 +1,49 @@
+name: AIEO Phase 14 Live Synthetic AI Gate
+on:
+  push:
+    branches: [aieo/phase14-live-proposal-gate]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Syntax and offline proposal fixture
+        env:
+          AIEO_TEST_MODE: '1'
+        run: |
+          bash -n scripts/aieo-phase14-live-synthetic.sh
+          node --check scripts/aieo-phase12-proposal.mjs
+          node scripts/aieo-phase12-proposal.mjs
+          node scripts/aieo-patch-content-validator.mjs < aieo-reports/phase12-model-proposal.patch
+  live-synthetic:
+    needs: static
+    environment: aieo-ai
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Retrieve approved image
+        env:
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: |
+          [[ "$AIEO_NODE_IMAGE" =~ ^node:24-alpine@sha256:[a-f0-9]{64}$ ]]
+          docker pull "$AIEO_NODE_IMAGE"
+      - name: Live AI proposal then offline sandbox validation
+        env:
+          AIEO_OPENAI_API_KEY: ${{ secrets.AIEO_OPENAI_API_KEY }}
+          AIEO_NODE_IMAGE: ${{ vars.AIEO_NODE_IMAGE }}
+        run: bash scripts/aieo-phase14-live-synthetic.sh
