@@ -21,6 +21,9 @@ jobs:
           node --check scripts/aieo-autonomous-v1.mjs
           node scripts/aieo-autonomous-v1.mjs
       - name: Package and static checks
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
         run: |
           npm ci
           npm run lint
@@ -57,10 +60,10 @@ jobs:
           AIEO_APPLY=1 node /tmp/aieo-autonomous-v1.mjs
           if git diff --quiet; then echo 'No changes needed'; exit 0; fi
           test "$(git diff --name-only)" = 'components/FeedbackWidget.tsx'
-          npm ci
-          npm run lint
-          npx tsc --noEmit
-          npm run build
+          NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_aieo_build_only npm ci
+          NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_aieo_build_only npm run lint
+          NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_aieo_build_only npx tsc --noEmit
+          NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_aieo_build_only npm run build
           git add -- components/FeedbackWidget.tsx
           git commit -m 'fix(aieo): prevent partial feedback control route matches'
           git -c credential.helper= push "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/aieo/repair-feedback-${GITHUB_RUN_ID}"
