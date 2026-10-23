@@ -1,0 +1,49 @@
+name: AIEO Phase 12 Model Proposal
+on:
+  push:
+    branches: [aieo/phase12-model-patch-proposal]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate bounded synthetic proposal without API
+        env:
+          AIEO_TEST_MODE: '1'
+        run: |
+          node --check scripts/aieo-phase12-proposal.mjs
+          node scripts/aieo-phase12-proposal.mjs
+          node scripts/aieo-patch-content-validator.mjs < aieo-reports/phase12-model-proposal.patch
+  ai-proposal:
+    if: github.event_name == 'workflow_dispatch'
+    needs: offline-gate
+    environment: aieo-ai
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Generate synthetic proposal with protected API key
+        env:
+          AIEO_OPENAI_API_KEY: ${{ secrets.AIEO_OPENAI_API_KEY }}
+        run: |
+          node scripts/aieo-phase12-proposal.mjs
+          node scripts/aieo-patch-content-validator.mjs < aieo-reports/phase12-model-proposal.patch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-phase12-synthetic-proposal
+          path: aieo-reports/phase12-model-proposal.patch
+          retention-days: 2
