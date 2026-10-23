@@ -20,7 +20,7 @@ if(process.env.AIEO_TEST_MODE==='1'){
    method:'POST',signal:abort.signal,
    headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
    body:JSON.stringify({
-    model:'gpt-4.1-mini',store:false,max_output_tokens:150,
+    model:'gpt-4.1-mini',store:false,max_output_tokens:400,\n    text:{format:{type:'json_schema',name:'synthetic_patch',strict:true,schema:{type:'object',additionalProperties:false,required:['path','before','after'],properties:{path:{type:'string'},before:{type:'string'},after:{type:'string'}}}}},
     instructions:'Respond with JSON only: keys path, before, after. This is a synthetic fixture; propose only changing broken to fixed. No other fields or prose.',
     input:'File components/AIEOFixture.tsx contains: '+expectedBefore+' Suggest the exact single-line replacement.'
    })
