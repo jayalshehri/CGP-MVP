@@ -1,0 +1,4 @@
+/home/runner/work/CGP-MVP/CGP-MVP/components/AppShell.tsx
+  139:54  error  Error: Calling setState synchronously within an effect can trigger cascading renders  react-hooks/set-state-in-effect
+/home/runner/work/CGP-MVP/CGP-MVP/components/AppShell.tsx
+  135:7  error  Compilation Skipped: Existing memoization could not be preserved  react-hooks/preserve-manual-memoization
