@@ -1,0 +1,21 @@
+name: AIEO QA End-to-End Audit v11
+on:
+  push:
+    branches: [aieo/qa-audit-v11]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: End-to-end mocked gateway and fail-closed tests
+        run: |
+          node --test scripts/aieo-qa-audit-v11.test.mjs
+          git diff --exit-code
