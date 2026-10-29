@@ -1,0 +1,28 @@
+name: AIEO Review Gate v5
+on:
+  push:
+    branches: [aieo/review-gate-v5]
+permissions:
+  contents: read
+jobs:
+  review-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test candidate safety gate
+        run: node --test scripts/aieo-review-gate-v5.test.mjs
+      - name: Produce review report without source writes
+        run: |
+          node scripts/aieo-review-gate-v5.mjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-review-v5
+          path: aieo-output/review-v5.json
+          retention-days: 7
