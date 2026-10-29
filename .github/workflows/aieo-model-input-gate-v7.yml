@@ -1,0 +1,28 @@
+name: AIEO Model Output Gate v7 Offline
+on:
+  push:
+    branches: [aieo/model-input-gate-v7]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate untrusted candidate gate
+        run: node --test scripts/aieo-model-input-gate-v7.test.mjs
+      - name: Produce offline model-response review
+        run: |
+          node scripts/aieo-model-input-gate-v7.mjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-model-review-v7
+          path: aieo-output/model-review-v7.json
+          retention-days: 7
