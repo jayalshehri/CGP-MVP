@@ -1,0 +1,21 @@
+name: AIEO Gateway Integration v8 (Mock Only)
+on:
+  push:
+    branches: [aieo/gateway-integration-v8]
+permissions:
+  contents: read
+jobs:
+  contract-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test gateway request and safety contracts with mocks
+        run: |
+          node --test scripts/aieo-gateway-v8.test.mjs
+          git diff --exit-code
