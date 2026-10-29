@@ -1,7 +1,7 @@
 name: AIEO Feedback Fix CI
 on:
   push:
-    branches: [aieo/feedback-boundary-fix]
+    branches: [aieo/feedback-full-lint-fix]
 permissions:
   contents: read
 jobs:
@@ -28,8 +28,8 @@ jobs:
           assert.equal(regex.exec('/controls/123junk'),null);
           NODE
       - run: npm ci
-      - name: Lint changed application file
-        run: npx eslint components/FeedbackWidget.tsx
+      - name: Full repository lint
+        run: npm run lint
       - run: npx next typegen
       - run: npx tsc --noEmit
       - name: Build with synthetic credentials
