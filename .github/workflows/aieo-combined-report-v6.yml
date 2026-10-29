@@ -1,0 +1,33 @@
+name: AIEO Combined Review v6
+on:
+  push:
+    branches: [aieo/combined-report-v6]
+permissions:
+  contents: read
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - name: Validate combined review
+        run: node --test scripts/aieo-combined-report-v6.test.mjs
+      - name: Collect real ESLint diagnostics
+        run: |
+          mkdir -p aieo-output
+          npm run lint -- --format json --output-file aieo-output/eslint.json || test -s aieo-output/eslint.json
+      - name: Produce safe combined report
+        run: |
+          node scripts/aieo-combined-report-v6.mjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-combined-review-v6
+          path: aieo-output/combined-report-v6.json
+          retention-days: 7
