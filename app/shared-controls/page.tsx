@@ -42,7 +42,7 @@ export default function SharedControlsPage() {
     }
   }
 
-  useEffect(() => { let active = true; load(active).catch(async (cause) => { if (active) { setError(cause instanceof Error ? cause.message : "تعذر تحميل الكتالوج"); const { data } = await supabase.auth.getSession(); if (!data.session) router.replace("/login"); } }).finally(() => active && setLoading(false)); return () => { active = false; }; }, [router]);
+  useEffect(() => { let active = true; Promise.resolve().then(() => { if (active) return load(active); }).catch(async (cause) => { if (active) { setError(cause instanceof Error ? cause.message : "تعذر تحميل الكتالوج"); const { data } = await supabase.auth.getSession(); if (!data.session) router.replace("/login"); } }).finally(() => active && setLoading(false)); return () => { active = false; }; }, [router]);
 
   const visible = useMemo(() => shared.filter(item => `${item.shared_control_code} ${item.title_ar}`.toLowerCase().includes(query.toLowerCase())), [query, shared]);
   const count = (id: number) => mappings.filter(item => item.shared_control_id === id).length;
