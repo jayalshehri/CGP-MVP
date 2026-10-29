@@ -1,0 +1,28 @@
+name: AIEO Diagnostics v3 Read Only
+on:
+  push:
+    branches: [aieo/diagnostics-v3]
+permissions:
+  contents: read
+jobs:
+  diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify diagnostic parser
+        run: node --test scripts/aieo-diagnostics-v3.test.mjs
+      - name: Produce diagnostic report using synthetic fixture
+        run: |
+          node scripts/aieo-diagnostics-v3.mjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-diagnostics-v3
+          path: aieo-output/diagnostics-v3.json
+          retention-days: 7
