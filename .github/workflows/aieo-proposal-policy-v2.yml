@@ -1,0 +1,28 @@
+name: AIEO Proposal Policy v2 Read Only
+on:
+  push:
+    branches: [aieo/proposal-policy-v2]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Policy negative and positive tests
+        run: node --test scripts/aieo-proposal-policy-v2.test.mjs
+      - name: Produce proposal report
+        run: |
+          node scripts/aieo-proposal-policy-v2.mjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-policy-proposals-v2
+          path: aieo-output/proposals-v2.json
+          retention-days: 7
