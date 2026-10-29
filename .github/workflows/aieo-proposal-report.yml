@@ -1,0 +1,29 @@
+name: AIEO Read-Only Proposal Report
+on:
+  push:
+    branches:
+      - aieo/proposal-report-v1
+permissions:
+  contents: read
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Generate bounded proposal without modifying source
+        run: |
+          node --check scripts/aieo-proposal-report.mjs
+          node scripts/aieo-proposal-report.mjs
+          git diff --exit-code
+      - name: Upload proposal report
+        uses: actions/upload-artifact@v4
+        with:
+          name: aieo-proposals
+          path: aieo-output/proposals.json
+          retention-days: 7
