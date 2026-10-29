@@ -1,0 +1,28 @@
+name: AIEO CGP Real File Review v14
+on:
+  push:
+    branches: [aieo/cgp-realfile-review-v14]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test review-only rules
+        run: node --test scripts/aieo-cgp-realfile-v14.test.mjs
+      - name: Inspect actual checked-out CGP file
+        run: |
+          node scripts/aieo-cgp-realfile-v14.mjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-cgp-realfile-v14-report
+          path: aieo-output/cgp-realfile-v14.json
+          retention-days: 7
