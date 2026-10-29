@@ -1,0 +1,45 @@
+name: AIEO Synthetic Live Smoke v12 (Manual, QA Only)
+on:
+  push:
+    branches: [aieo/live-smoke-v12]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test scripts/aieo-live-smoke-v12.test.mjs
+  live:
+    needs: tests
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/aieo/live-smoke-v12'
+    environment: aieo-ai
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Exactly one synthetic model query
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+          AIEO_MODEL_ID: ${{ vars.AIEO_MODEL_ID }}
+          AIEO_ENABLE_LIVE_AI: 'true'
+        run: node scripts/aieo-live-smoke-v12.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aieo-synthetic-smoke-v12
+          path: aieo-output/smoke-v12.json
+          retention-days: 3
