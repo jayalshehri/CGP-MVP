@@ -1,5 +1,9 @@
 name: AIEO Guarded Draft Manual Launcher
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/aieo-guarded-draft-manual.yml'
+      - 'scripts/aieo-autonomous-v1.mjs'
   workflow_dispatch:
 concurrency:
   group: aieo-guarded-draft-manual
