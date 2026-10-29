@@ -1,0 +1,21 @@
+name: AIEO OpenRouter Free v13 Mock Validation
+on:
+  push:
+    branches: [aieo/openrouter-free-v13]
+permissions:
+  contents: read
+jobs:
+  mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate OpenRouter free model safety contract
+        run: |
+          node --test scripts/aieo-openrouter-v13.test.mjs
+          git diff --exit-code
