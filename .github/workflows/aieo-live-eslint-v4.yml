@@ -1,0 +1,35 @@
+name: AIEO Live ESLint Analysis v4
+on:
+  push:
+    branches: [aieo/live-eslint-link-v4]
+permissions:
+  contents: read
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - name: Validate correlation policy
+        run: node --test scripts/aieo-live-eslint-v4.test.mjs
+      - name: Collect actual ESLint JSON (nonzero lint allowed for analysis)
+        run: |
+          mkdir -p aieo-output
+          npm run lint -- --format json --output-file aieo-output/eslint.json || test -s aieo-output/eslint.json
+      - name: Correlate diagnostics to allowlisted proposals
+        run: |
+          node scripts/aieo-live-eslint-v4.mjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-live-eslint-analysis-v4
+          path: |
+            aieo-output/eslint.json
+            aieo-output/live-analysis-v4.json
+          retention-days: 7
