@@ -1,0 +1,29 @@
+name: CGP Required CI
+on:
+  push:
+    branches: [aieo/feedback-boundary-fix]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  static-checks:
+    name: Static checks and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm run lint
+      - run: npx next typegen
+      - run: npx tsc --noEmit
+      - name: Build with synthetic values
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
+        run: npm run build
