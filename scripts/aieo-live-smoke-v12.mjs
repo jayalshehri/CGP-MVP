@@ -1,12 +1,10 @@
 // AIEO v12: one synthetic live AI smoke test, no repo data or source-code transmission.
 // Only invokes a gateway when explicitly authorized in a manual QA context.
-import {qaReadiness} from './aieo-qa-readiness-v9.mjs';
 import {writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const URL='https://ai-gateway.vercel.sh/v1/chat/completions';
 export async function smoke({env,ref,event,transport=fetch}){
- const gate=qaReadiness(env,'refs/heads/aieo/qa-live-gate-v9'===ref?ref:'',event);
  // v12 branch is purpose-built, still require manual opt-in, no broad bypass.
  if(ref!=='refs/heads/aieo/live-smoke-v12'||event!=='workflow_dispatch'||!env?.AI_GATEWAY_API_KEY||env.AIEO_ENABLE_LIVE_AI!=='true'||!/^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/i.test(env.AIEO_MODEL_ID||'')){
   return {status:'blocked',reason:'QA manual authorization or configuration missing'};
