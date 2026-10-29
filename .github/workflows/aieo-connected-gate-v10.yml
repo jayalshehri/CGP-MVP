@@ -1,0 +1,21 @@
+name: AIEO Connected QA Gate v10 (Mock CI)
+on:
+  push:
+    branches: [aieo/qa-connected-gate-v10]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test readiness-to-model sequencing with mock only
+        run: |
+          node --test scripts/aieo-connected-gate-v10.test.mjs
+          git diff --exit-code
