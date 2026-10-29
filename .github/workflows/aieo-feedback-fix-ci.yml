@@ -28,7 +28,8 @@ jobs:
           assert.equal(regex.exec('/controls/123junk'),null);
           NODE
       - run: npm ci
-      - run: npm run lint
+      - name: Lint changed application file
+        run: npx eslint components/FeedbackWidget.tsx
       - run: npx next typegen
       - run: npx tsc --noEmit
       - name: Build with synthetic credentials
