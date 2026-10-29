@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "candidates": [
+    {
+      "id": "remove-unused-mkdir-import",
+      "path": "scripts/aieo-autonomous-v1.mjs",
+      "before": "import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';",
+      "after": "import {readFileSync,writeFileSync} from 'node:fs';",
+      "rationale": "Remove unused import in response to lint finding"
+    }
+  ]
+}
