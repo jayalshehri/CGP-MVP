@@ -1,0 +1,28 @@
+name: AIEO Sanitized Review v15
+on:
+  push:
+    branches: [aieo/sanitized-review-v15]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate sanitization
+        run: node --test scripts/aieo-sanitized-review-v15.test.mjs
+      - name: Produce synthetic-only task from actual CGP finding
+        run: |
+          node scripts/aieo-sanitized-review-v15.mjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-sanitized-review-v15
+          path: aieo-output/sanitized-v15.json
+          retention-days: 7
