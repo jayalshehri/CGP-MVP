@@ -129,15 +129,16 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const groupOrder = workspace === "cyber" ? ["الامتثال", "قياس الالتزام", "العمليات", "الإدارة"] : [...new Set(items.map(item=>item.group).filter(Boolean))];
   const groups = groupOrder.filter(group=>items.some(item=>item.group===group));
   const activeGroup = navigation.find(item => item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/"))?.group ?? "";
-  const navigationResults = useMemo(() => {
-    const normalized = searchQuery.trim().toLowerCase();
-    return normalized ? items.filter(item => item.label.toLowerCase().includes(normalized)).slice(0, 5) : [];
-  }, [items, searchQuery]);
+  const normalized = searchQuery.trim().toLowerCase();
+  const navigationResults = normalized ? items.filter(item => item.label.toLowerCase().includes(normalized)).slice(0, 5) : [];
   useEffect(() => {
     const query = searchQuery.trim();
     // Cybersecurity controls have their own catalog. Keep search results within the current workspace.
-    if (workspace !== "cyber" || query.length < 2) { setControlResults([]); setSearching(false); return; }
-    setSearching(true);
+    if (workspace !== "cyber" || query.length < 2) {
+      const reset = window.setTimeout(() => { setControlResults([]); setSearching(false); }, 0);
+      return () => window.clearTimeout(reset);
+    }
+    const begin = window.setTimeout(() => setSearching(true), 0);
     const timer = window.setTimeout(async () => {
       // Strip PostgREST filter separators (`,()`) and ILIKE wildcard characters (`%_`)
       // so a raw search string can't widen the match beyond the typed text.
@@ -146,7 +147,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       setControlResults((data ?? []) as SearchResult[]);
       setSearching(false);
     }, 220);
-    return () => window.clearTimeout(timer);
+    return () => { window.clearTimeout(begin); window.clearTimeout(timer); };
   }, [searchQuery, workspace]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
