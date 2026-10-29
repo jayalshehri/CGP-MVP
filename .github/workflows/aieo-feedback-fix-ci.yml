@@ -1,0 +1,38 @@
+name: AIEO Feedback Fix CI
+on:
+  push:
+    branches: [aieo/feedback-boundary-fix]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate route regex behavior
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import assert from 'node:assert/strict';
+          const src=readFileSync('components/FeedbackWidget.tsx','utf8');
+          assert.ok(src.includes('(?:\\/|$)'));
+          const regex=/^\/controls\/(\d+)(?:\/|$)/;
+          assert.equal(regex.exec('/controls/123')?.[1],'123');
+          assert.equal(regex.exec('/controls/123/assign')?.[1],'123');
+          assert.equal(regex.exec('/controls/123junk'),null);
+          NODE
+      - run: npm ci
+      - run: npm run lint
+      - run: npx next typegen
+      - run: npx tsc --noEmit
+      - name: Build with synthetic credentials
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
+        run: npm run build
