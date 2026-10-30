@@ -80,8 +80,8 @@ jobs:
       - name: Commit approved fix and open human-controlled Draft PR
         if: steps.proposal.outputs.changed == 'true'
         env:
-          ${{ github.token }}: ${{ github.token }}
-          ${{ github.repository }}: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           branch="aieo/repair-feedback-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
