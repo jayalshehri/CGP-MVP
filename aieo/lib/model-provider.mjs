@@ -13,8 +13,8 @@ const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fe
 
 // Even without fetch(), JSX links, images, forms and CSS can transmit data to external hosts.
 // Deliberately reject new outbound-capable markup in this one-file proposal workflow.
-const outboundMarkup = /<\\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\\b(?:(?!>).){0,350}?\\b(?:href|src|srcSet|action|formAction|data)\\s*=/is;
-const outboundCss = /\\burl\\s*\\(|\\bbackgroundImage\\s*:/i;
+const outboundMarkup = /<\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\b(?:(?!>).){0,350}?\b(?:href|src|srcSet|action|formAction|data)\s*=/is;
+const outboundCss = /\burl\s*\(|\bbackgroundImage\s*:/i;
 
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
