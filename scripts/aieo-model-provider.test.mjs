@@ -59,7 +59,7 @@ test('mock provider call sends bounded source and returns validated proposal onl
     assert.equal(opts.headers.Authorization, 'Bearer synthetic-key-not-real');
     const body = JSON.parse(opts.body);
     assert.equal(body.model, env.OPENROUTER_MODEL_ID);
-    assert.ok(JSON.stringify(body).includes(source));
+    assert.ok(body.messages[1].content.includes(source));
     assert.equal(JSON.stringify(body).includes(env.OPENROUTER_API_KEY), false);
     return { ok: true, text: async () => JSON.stringify({ choices: [{ message: { content: proposal } }] }) };
   };
