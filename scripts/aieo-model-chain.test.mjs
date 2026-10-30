@@ -86,9 +86,25 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
       'if [ "$1" = "pr" ] && [ "$2" = "view" ]; then\n' +
       "  printf '%s\\n' '" + view + "' | sed \"s/AIEO_HEAD_SHA_PLACEHOLDER/$(git rev-parse HEAD)/g\"\nfi\n");
     chmodSync(gh, 0o755);
+    // The published code must resolve a canonical GitHub push URL. This
+    // fixture's Git transport uses a local bare remote, so a test-only shim
+    // attests the canonical URL during the successful rehearsal.
+    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+    const shim = join(bin, 'git');
+    writeFileSync(shim, [
+      '#!/bin/sh',
+      'if [ "$1" = "remote" ] && [ "$2" = "get-url" ] && [ "$3" = "--push" ] && [ "$4" = "origin" ] && [ "$AIEO_FIXTURE_ATTEST_PUSH" = "true" ]; then',
+      '  printf "%s\\n" "https://github.com/jayalshehri/CGP-MVP.git"',
+      '  exit 0',
+      'fi',
+      'exec ' + JSON.stringify(realGit) + ' "$@"',
+      ''
+    ].join('\n'));
+    chmodSync(shim, 0o755);
     const env = {
       ...process.env, PATH: bin + delimiter + process.env.PATH,
       AIEO_FAKE_GH_LOG: ghLog,
+      AIEO_FIXTURE_ATTEST_PUSH: 'true',
       GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
       GITHUB_EVENT_NAME: 'workflow_dispatch',
       GITHUB_REF: 'refs/heads/main',
