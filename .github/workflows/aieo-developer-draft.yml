@@ -1,0 +1,96 @@
+name: AIEO Guarded Developer Draft
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/aieo-developer-draft.yml'
+      - 'aieo/**'
+      - 'scripts/aieo-*.mjs'
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Bounded defect class to repair
+        required: true
+        type: choice
+        options: [feedback-control-route-boundary]
+concurrency:
+  group: aieo-guarded-draft-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  preflight:
+    name: Read-only AIEO policy preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test scripts/aieo-agent.test.mjs
+      - run: node scripts/aieo-runner.mjs
+      - run: git diff --exit-code -- components/FeedbackWidget.tsx
+  create-draft:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: preflight
+    name: Bounded patch and Draft PR only
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Prepare trusted one-file patch
+        id: proposal
+        env:
+          AIEO_APPLY: '1'
+          AIEO_TRUSTED_WORKFLOW: '1'
+          AIEO_TASK: ${{ inputs.task }}
+        run: |
+          set -euo pipefail
+          node scripts/aieo-runner.mjs
+          git diff --check
+          if git diff --quiet -- components/FeedbackWidget.tsx; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo 'No approved defect remains; no branch or PR created.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            test "$(git diff --name-only)" = 'components/FeedbackWidget.tsx'
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run application gates on candidate
+        if: steps.proposal.outputs.changed == 'true'
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npx next typegen
+          npx tsc --noEmit
+          npm run build
+      - name: Commit approved fix and open human-controlled Draft PR
+        if: steps.proposal.outputs.changed == 'true'
+        env:
+          ${{ github.token }}: ${{ github.token }}
+          ${{ github.repository }}: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          branch="aieo/repair-feedback-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git add -- components/FeedbackWidget.tsx
+          test "$(git diff --cached --name-only)" = 'components/FeedbackWidget.tsx'
+          git commit -m 'fix(aieo): approved bounded feedback route repair'
+          gh auth setup-git
+          git push origin "HEAD:refs/heads/$branch"
+          gh pr create --draft --base main --head "$branch" --title "AIEO: bounded FeedbackWidget repair" --body "Bounded deterministic repair. Tests, lint, typecheck and build passed. Human must approve any merge; no production deployment."
