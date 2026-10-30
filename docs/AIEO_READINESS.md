@@ -38,6 +38,11 @@ The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist on
 - The publisher now confirms that the new commit's sole parent is the trusted `GITHUB_SHA`, the committed source bytes match the independently reviewed candidate, and the committed changed-file list contains only `components/FeedbackWidget.tsx`. This runs **before** GitHub authentication setup, any push, or PR creation.
 - A real local Git pre-commit hook test mutates the staged source and verifies the publisher fails without pushing or invoking `gh`. This remains an **offline fixture**, not proof of an Actions-created real PR.
 
+## Git hook isolation in publisher (stacked Draft, 2026-10-30)
+- Attesting the final commit **after** `git commit` cannot prevent earlier side effects from a malicious `post-checkout`, `pre-commit`, `post-commit`, or `pre-push` hook that was installed during build or via runner-local Git configuration. A hook could run with the publisher job's scoped `GH_TOKEN` even if the resulting commit were later rejected.
+- For the publisher's hook-capable operations (`switch`, `add`, `commit`, `push`), use `git -c core.hooksPath=/dev/null` instead of allowing local or overridden hook paths. Retain the post-commit tree/source/parent attestation, remote destination checks, and Draft PR verification; this is a defense-in-depth control, not a replacement for protected credentials or human approval.
+- Isolated local tests install deliberately failing `post-checkout`, `pre-commit` and `pre-push` hooks in both default and custom hook directories and verify that none executes while the bounded reviewed candidate can still be published to a **temporary local** Git remote with a mocked `gh`. This remains no proof of live GitHub Actions publication or OpenRouter source-approved repair.
+
 ## Next safe milestones
 1. Continue hardening read-only and mocked integration tests on the feature branch.
 2. Check final CI conclusions against the *current branch HEAD*, not earlier successful commits.
