@@ -14,12 +14,15 @@ The existing FeedbackWidget fix has already merged. Running against current CGP 
 
 ## How to verify
 
-GitHub Actions workflow "AIEO Multi-Agent Foundation" executes:
-- node --test scripts/aieo-agent.test.mjs
-- node scripts/aieo-runner.mjs
-- git diff --exit-code -- components/FeedbackWidget.tsx
+GitHub Actions workflow "AIEO Multi-Agent Foundation" has **five separate jobs**:
+- Orchestrator preflight (negative safety tests and real-source read-only check).
+- Developer Agent (emits source-hash-bound redacted proposal status).
+- QA Agent and Security Agent (run in parallel on independent runners; validate the Developer artifact).
+- Reviewer Agent (downloads and cross-checks all three verdict artifacts; never submits an approval).
 
-Its GitHub token has read-only repository permissions and it receives no external API keys. The normal "CGP Required CI" separately handles lint, typecheck and build.
+Each agent is a deterministic control, not yet a separate LLM. Source changes, full patches and tokens are not included in reports. The job permissions are read-only and receive no external API keys. The normal "CGP Required CI" separately handles lint, typecheck and build.
+
+A second workflow, "AIEO Guarded Developer Draft", is prepared for **manual dispatch on main after this PR is human-merged**. It can attempt only the specifically approved FeedbackWidget replacement, then run full app checks, push a separate branch and create a Draft PR. It is not auto-dispatched, cannot merge, and does nothing if the fix is already present. Its candidate write path has not yet been exercised live.
 
 ## Safety
 
