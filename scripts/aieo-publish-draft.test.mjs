@@ -254,7 +254,7 @@ test('committed candidate attestation rejects altered source, scope or base comm
   }
 });
 
-test('publisher never executes post-checkout, pre-commit or pre-push hooks with its token', () => {
+test('publisher never executes configured Git checkout, index, commit or push hooks with its token', () => {
   // Local test only: malicious hooks fail if invoked and leave an execution marker.
   // Test both Git's default hook directory and an attacker-configured core.hooksPath.
   for (const configured of [false, true]) {
@@ -264,7 +264,8 @@ test('publisher never executes post-checkout, pre-commit or pre-push hooks with 
       const hookDir = configured ? join(f.root, 'custom-hooks') : join(f.workspace, '.git', 'hooks');
       mkdirSync(hookDir, { recursive: true });
       if (configured) git(f.workspace, 'config', 'core.hooksPath', hookDir);
-      for (const name of ['post-checkout', 'pre-commit', 'pre-push']) {
+      for (const name of ['post-checkout', 'post-index-change', 'pre-commit', 'prepare-commit-msg',
+        'commit-msg', 'post-commit', 'pre-push']) {
         const hook = join(hookDir, name);
         writeFileSync(hook, '#!/bin/sh\nprintf "hook fired\\n" >> "$AIEO_TEST_HOOK_MARKER"\nexit 1\n');
         chmodSync(hook, 0o755);
