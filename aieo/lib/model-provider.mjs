@@ -107,6 +107,11 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
   const patchedSource = source.replace(find, replace);
+  // A short replacement may only add an attribute inside an existing JSX tag.
+  // Scan the assembled candidate, not just the replacement fragment.
+  if (unsafeJsxMarkup(patchedSource)) {
+    return { status: 'rejected', reason: 'Potentially unsafe JSX in patched source' };
+  }
   return {
     status: 'proposed', path, sourceHash: sha256(source),
     proposedHash: sha256(patchedSource), patchedSource,

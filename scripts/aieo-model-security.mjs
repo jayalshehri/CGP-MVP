@@ -79,7 +79,9 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   const additions = typeof diff === 'string' ? diff.split('\n').filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1)) : [];
   if (additions.length > 20) findings.push('Too many new code lines');
   if (additions.some((line) => suspect.test(line) || browserExfil.test(line) || indirectBrowserAccess.test(line)) ||
-      unsafeJsxMarkup(additions.join('\n')) || outboundCss.test(additions.join('\n'))) {
+      unsafeJsxMarkup(additions.join('\n')) ||
+      (typeof actual === 'string' && unsafeJsxMarkup(actual)) ||
+      outboundCss.test(additions.join('\n'))) {
     findings.push('Potentially unsafe new code');
   }
   if (typeof original === 'string' && typeof actual === 'string') {

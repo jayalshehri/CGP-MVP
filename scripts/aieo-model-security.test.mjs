@@ -192,3 +192,19 @@ test('independent Security detects URL sinks beyond quoted angles, arrow functio
   }
   assert.equal(inspectModelDiff({ ...input, diff: '+<span title="one > two">Safe label</span>' }).status, 'passed');
 });
+
+test('independent Security checks assembled JSX when added diff line omits opening tag', () => {
+  const original = 'const view = <img\\n  alt="safe"\\n/>;\\n'.replaceAll('\\n', '\n');
+  const fragment = '  alt="safe"';
+  const inspect = (replace) => {
+    const actual = original.replace(fragment, replace);
+    return inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -2 +2 @@\n-' + fragment + '\n+' + replace + '\n',
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+  };
+  assert.equal(inspect('  alt="safe" src={token}').status, 'failed');
+  assert.equal(inspect('  alt="safe" {...forwardedProps}').status, 'failed');
+  assert.equal(inspect('  alt="updated safe"').status, 'passed');
+});
