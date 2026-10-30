@@ -84,7 +84,7 @@ jobs:
           npx next typegen
           npx tsc --noEmit
           npm run build
-      - name: Create Draft PR and dispatch independent status checks
+      - name: Create Draft PR and dispatch required application checks
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -101,4 +101,3 @@ jobs:
           git push origin "HEAD:refs/heads/$branch"
           gh pr create --draft --base main --head "$branch" --title "AIEO: bounded model proposal for review" --body "User explicitly approved sharing one source file with OpenRouter. Model output was structurally validated, exact patch audited, lint/typecheck/build passed. This is a DRAFT only; human merge required. No production deployment."
           gh workflow run cgp-required-ci.yml --ref "$branch"
-          gh workflow run aieo-multi-agent.yml --ref "$branch"
