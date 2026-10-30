@@ -29,7 +29,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node --test scripts/aieo-agent.test.mjs scripts/aieo-model-provider.test.mjs
+      - run: node --test scripts/aieo-agent.test.mjs scripts/aieo-handoff.test.mjs scripts/aieo-model-provider.test.mjs
       - run: node scripts/aieo-runner.mjs
       - run: git diff --exit-code -- components/FeedbackWidget.tsx
   create-draft:
