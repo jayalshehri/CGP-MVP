@@ -35,7 +35,8 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
   if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace) ||
-      outboundMarkup.test(replace) || outboundCss.test(replace)) {
+      outboundMarkup.test(replace) || outboundCss.test(replace) ||
+      replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
   const patchedSource = source.replace(find, replace);
