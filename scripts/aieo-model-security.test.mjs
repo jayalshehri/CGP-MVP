@@ -167,3 +167,15 @@ test('independent Security rejects CSS imports and image-set URLs without fetch 
     assert.equal(inspectModelDiff({ ...input, diff: addition }).status, 'failed', addition);
   }
 });
+
+test('independent Security rejects long padded JSX sinks and opaque spreads', () => {
+  for (const addition of [
+    '+<img ' + ' '.repeat(360) + 'src={unsafeUrl} />',
+    '+<a ' + ' '.repeat(360) + 'href={unsafeUrl}>Open</a>',
+    '+<img {...{ src: unsafeUrl }} />',
+    '+<a {...untrustedProps}>Open</a>'
+  ]) {
+    assert.equal(inspectModelDiff({ ...input, diff: addition }).status, 'failed', addition.slice(0, 50));
+  }
+  assert.equal(inspectModelDiff(input).status, 'passed');
+});

@@ -56,3 +56,8 @@ The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist on
 4. Once authorized, validate real source consent, environment protection and a single live Draft PR workflow run. Keep merge and production deployment human-only.
 
 Do not claim MVP completion before the pending end-to-end proofs succeed.
+
+## Long-form JSX outbound and spread guard (stacked Draft, 2026-10-30)
+- The previously bounded HTML/JSX attribute scanner only examined 350 characters after an opening tag. Padded markup could introduce an outbound `src` or `href` beyond that window. Both the model proposal validator and independently run Security gate now inspect the complete tag (within existing input/diff size bounds), with regression tests.
+- Opaque JSX spread props such as `<img {...untrustedProps} />` are also rejected in both layers: a spread can hide network-bearing attributes from the static attribute scanner. A clean static edit remains permitted.
+- These are conservative pattern checks, not a complete JavaScript/JSX parser or proof of a secure arbitrary patch. Live OpenRouter generation and Actions-created Draft PR remain **unverified** and human-gated.

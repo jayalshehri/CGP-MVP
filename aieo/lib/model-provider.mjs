@@ -13,7 +13,9 @@ const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fe
 
 // Even without fetch(), JSX links, images, forms and CSS can transmit data to external hosts.
 // Deliberately reject new outbound-capable markup in this one-file proposal workflow.
-const outboundMarkup = /<\s*(?:a|area|img|image|use|feImage|iframe|script|link|form|button|input|video|audio|source|track|embed|object|base|meta)\b(?:(?!>).){0,350}?\b(?:href|xlink:href|src|srcSet|srcDoc|ping|poster|action|formAction|data|httpEquiv|http-equiv)\s*=/is;
+const outboundMarkup = /<\s*(?:a|area|img|image|use|feImage|iframe|script|link|form|button|input|video|audio|source|track|embed|object|base|meta)\b(?:(?!>).)*?\b(?:href|xlink:href|src|srcSet|srcDoc|ping|poster|action|formAction|data|httpEquiv|http-equiv)\s*=/is;
+// Reject opaque JSX spreads that could hide src, href or other network-bearing props.
+const jsxSpread = /<\s*[A-Za-z][\w.:-]*\b(?:(?!>).)*?\{\s*\.\.\./is;
 const outboundCss = /\burl\s*\(|\bimage-set\s*\(|@import\b|\bbackgroundImage\s*:/i;
 // Reject optional chaining, computed property access and aliases for browser/network APIs.
 // This deliberately errs on the side of refusing a model-generated UI change.
@@ -70,7 +72,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
   if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace) ||
-      outboundMarkup.test(replace) || outboundCss.test(replace) || indirectBrowserAccess.test(replace) ||
+      outboundMarkup.test(replace) || jsxSpread.test(replace) || outboundCss.test(replace) || indirectBrowserAccess.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
