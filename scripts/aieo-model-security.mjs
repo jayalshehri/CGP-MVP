@@ -5,7 +5,15 @@ import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 
 const hash = (content) => createHash('sha256').update(content).digest('hex');
-const suspect = /\b(?:eval|Function|child_process|process\.env|XMLHttpRequest|fetch)\s*(?:\(|\.)|gh[pousr]_[a-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i;
+// Scan only new lines; a bounded UI repair must not introduce active browser exfiltration,
+// dynamic code execution, credentials or raw HTML rendering.
+const suspect = /\b(?:eval|Function)\s*\(|\b(?:child_process|process\.env|document\.cookie|localStorage|sessionStorage|dangerouslySetInnerHTML)\b|\b(?:XMLHttpRequest|fetch|WebSocket|EventSource|postMessage|sendBeacon|require|import)\s*\(|\bimport\s+(?:[\w{*]|["'])|\b(?:innerHTML|outerHTML)\s*=|gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-[a-z0-9]{20,}|(?:sk-proj-|sk-live-|sb_secret_)[a-z0-9_-]{20,}|\bBearer\s+[a-z0-9._~+/-]{16,}|AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i;
+const protectedFeedbackInvariants = [
+  'await supabase.auth.getUser()',
+  'if (!auth.user)',
+  'created_by: auth.user.id',
+  'supabase.from("feedback").insert('
+];
 
 export function inspectModelDiff({ original, actual, changedPaths, diff, report }) {
   const findings = [];
@@ -18,6 +26,10 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   const additions = typeof diff === 'string' ? diff.split('\n').filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1)) : [];
   if (additions.length > 20) findings.push('Too many new code lines');
   if (additions.some((line) => suspect.test(line))) findings.push('Potentially unsafe new code');
+  if (typeof original === 'string' && typeof actual === 'string' &&
+      protectedFeedbackInvariants.some((line) => original.includes(line) && !actual.includes(line))) {
+    findings.push('Existing feedback authentication or ownership guard was removed');
+  }
   return { status: findings.length ? 'failed' : 'passed', findings, addedLines: additions.length };
 }
 
