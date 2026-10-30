@@ -115,6 +115,16 @@ export function verifyNoGitFilter(path, effectiveFilter) {
   return true;
 }
 
+// core.fsmonitor is a separate executable hook used during index refreshes.
+// core.hooksPath=/dev/null, --no-ext-diff and filter checks do not disable it.
+// Check effective config before ANY publisher operation that reads the index.
+export function verifyNoGitFsmonitor(effectiveSetting) {
+  if (effectiveSetting !== 'false') {
+    fail('untrusted Git fsmonitor configuration');
+  }
+  return true;
+}
+
 // A Git hook or local Git config can mutate the index/tree after source gates run.
 // Recheck the exact committed tree and single parent *before* any remote write.
 export function verifyCommittedCandidate({ baseSha, parentSha, reviewedSource, committedSource, changedPaths }) {
@@ -128,6 +138,8 @@ export function verifyCommittedCandidate({ baseSha, parentSha, reviewedSource, c
 
 export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
+  // Reading config is index-free; reject an executable fsmonitor before diff/add.
+  verifyNoGitFsmonitor(command('git', ['config', '--get', '--default', 'false', 'core.fsmonitor']).trim());
   verifyTrustedCheckout({
     env,
     checkedOutSha: command('git', ['rev-parse', 'HEAD']).trim(),

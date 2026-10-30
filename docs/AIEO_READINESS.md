@@ -49,6 +49,12 @@ The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist on
 - Offline tests introduce deliberately failing external diff, textconv, and clean-filter helpers, and assert no helper executes and the unsafe filter path fails closed. **GitHub CI validation is required for the exact new branch HEAD before treating these changes as verified**.
 - These checks do not authorize real provider source sharing, GitHub Actions-created PR publication, merging or production deployment.
 
+## Git fsmonitor execution guard (stacked Draft, 2026-10-31)
+- A runner-local or repository Git `core.fsmonitor` helper can execute during index refreshes, including `git diff`, while the Draft publisher has `GH_TOKEN`. Disabling ordinary Git hooks, external diff drivers and clean filters does **not** disable this separate hook mechanism.
+- The publisher now checks the **effective** `core.fsmonitor` value using an index-free Git config read **before** diff, add, commit or remote writes. Only the explicitly disabled value `false` (including the absent-key default) is accepted. Unexpected values fail closed without attempting to run the helper.
+- A negative isolated fixture installs an executable fsmonitor that would leave a marker and fail, then verifies the publisher refuses the run before marker creation, branch write, `gh` call or push. The fixtures remain offline; exact-head CI must verify this change before any safety claim.
+- This does not establish live GitHub Actions Draft publication or a consented OpenRouter model run, and it does not claim all Git configuration execution risks are eliminated.
+
 ## Next safe milestones
 1. Continue hardening read-only and mocked integration tests on the feature branch.
 2. Check final CI conclusions against the *current branch HEAD*, not earlier successful commits.

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -252,6 +252,36 @@ test('committed candidate attestation rejects altered source, scope or base comm
     assert.throws(() => verifyCommittedCandidate({ ...args, ...changed }),
       /Committed patch does not match the reviewed candidate/);
   }
+});
+
+test('publisher rejects a non-disabled effective Git fsmonitor setting', () => {
+  assert.equal(verifyNoGitFsmonitor('false'), true);
+  for (const value of ['true', '/tmp/untrusted-fsmonitor.sh', '', '1']) {
+    assert.throws(() => verifyNoGitFsmonitor(value), /untrusted Git fsmonitor configuration/);
+  }
+});
+
+test('publisher blocks executable fsmonitor before Git index reads and remote writes', () => {
+  // core.fsmonitor can run during git diff even when core.hooksPath is disabled.
+  const f = fixture();
+  try {
+    const marker = join(f.root, 'fsmonitor-invoked');
+    const helper = join(f.root, 'untrusted-fsmonitor.sh');
+    writeFileSync(helper, ['#!/bin/sh', 'echo invoked >> "$AIEO_TEST_FSMONITOR_MARKER"', 'exit 1', ''].join('\n'));
+    chmodSync(helper, 0o755);
+    git(f.workspace, 'config', 'core.fsmonitor', helper);
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace,
+      env: { ...f.env, AIEO_TEST_FSMONITOR_MARKER: marker },
+      encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0);
+    assert.match(child.stderr, /untrusted Git fsmonitor configuration/);
+    assert.equal(existsSync(marker), false, 'fsmonitor helper must never execute');
+    assert.equal(existsSync(f.log), false, 'gh must not run');
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote), /model-proposal/);
+  } finally { rmSync(f.root, { force: true, recursive: true }); }
 });
 
 test('publisher never executes configured Git checkout, index, commit or push hooks with its token', () => {
