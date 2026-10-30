@@ -12,9 +12,39 @@ const suspect = /\b(?:eval|Function)\s*\(|\b(?:child_process|process\.env|docume
 const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fetch|WebSocket)["']\s*\])\s*\(|\bnavigator\s*(?:\.\s*sendBeacon|\[\s*["']sendBeacon["']\s*\])\s*\(|\b(?:window\s*\.\s*)?location\s*(?:\.\s*(?:assign|replace)\s*\(|\.\s*href\b|\[\s*["'](?:href|assign|replace)["']\s*\])|\bnew\s+(?:Image|Worker|SharedWorker)\s*\(|\bdocument\s*\.\s*createElement\s*\(\s*["'](?:iframe|script|img)["']/i;
 
 // Browser data can also leave through markup attributes and CSS, without an explicit fetch().
-const outboundMarkup = /<\s*(?:a|area|img|image|use|feImage|iframe|script|link|form|button|input|video|audio|source|track|embed|object|base|meta)\b(?:(?!>).)*?\b(?:href|xlink:href|src|srcSet|srcDoc|ping|poster|action|formAction|data|httpEquiv|http-equiv)\s*=/is;
-// JSX spread attributes can conceal outbound URLs in untrusted prop objects.
-const jsxSpread = /<\s*[A-Za-z][\w.:-]*\b(?:(?!>).)*?\{\s*\.\.\./is;
+// Scan the full JSX opening tag. An early '>' inside quoted attributes or a
+// JSX expression is not the end of the tag; regexes stopping at '>' miss sinks.
+const outboundTagNames = /^(?:a|area|img|image|use|feImage|iframe|script|link|form|button|input|video|audio|source|track|embed|object|base|meta)$/i;
+const outboundAttributes = /\b(?:href|xlink:href|src|srcSet|srcDoc|ping|poster|action|formAction|data|httpEquiv|http-equiv)\s*=/i;
+function unsafeJsxMarkup(text) {
+  const openings = /<\s*([A-Za-z][\w.:-]*)\b/g;
+  let opening;
+  while ((opening = openings.exec(text)) !== null) {
+    let quote = null;
+    let braces = 0;
+    let end = openings.lastIndex;
+    for (; end < text.length; end++) {
+      const ch = text[end];
+      if (quote !== null) {
+        if (ch === '\\') { end++; continue; }
+        if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'" || ch.charCodeAt(0) === 96) {
+        quote = ch;
+      } else if (ch === '{') {
+        braces++;
+      } else if (ch === '}' && braces > 0) {
+        braces--;
+      } else if (ch === '>' && braces === 0) {
+        break;
+      }
+    }
+    const attributes = text.slice(openings.lastIndex, end);
+    // Also inspect nested JSX: an outer expression can contain a network tag.
+    if (/\{\s*\.\.\./.test(attributes) ||
+        (outboundTagNames.test(opening[1]) && outboundAttributes.test(attributes))) return true;
+  }
+  return false;
+}
 const outboundCss = /\burl\s*\(|\bimage-set\s*\(|@import\b|\bbackgroundImage\s*:/i;
 // Reject optional chaining, computed property access and aliases for browser/network APIs.
 // This deliberately errs on the side of refusing a model-generated UI change.
@@ -49,7 +79,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   const additions = typeof diff === 'string' ? diff.split('\n').filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1)) : [];
   if (additions.length > 20) findings.push('Too many new code lines');
   if (additions.some((line) => suspect.test(line) || browserExfil.test(line) || indirectBrowserAccess.test(line)) ||
-      outboundMarkup.test(additions.join('\n')) || jsxSpread.test(additions.join('\n')) || outboundCss.test(additions.join('\n'))) {
+      unsafeJsxMarkup(additions.join('\n')) || outboundCss.test(additions.join('\n'))) {
     findings.push('Potentially unsafe new code');
   }
   if (typeof original === 'string' && typeof actual === 'string') {
