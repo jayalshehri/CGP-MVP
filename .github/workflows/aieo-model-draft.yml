@@ -5,6 +5,7 @@ on:
       - '.github/workflows/aieo-model-draft.yml'
       - 'aieo/**'
       - 'scripts/aieo-model-*.mjs'
+      - 'scripts/aieo-publish-draft*.mjs'
   workflow_dispatch:
     inputs:
       task:
