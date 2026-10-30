@@ -53,8 +53,19 @@ function fixture() {
   }
   const log = join(root, 'fake-gh.log');
   const gh = join(bin, 'gh');
+  const view = {
+    number: 123, url: 'https://github.com/jayalshehri/CGP-MVP/pull/123',
+    isDraft: true, state: 'OPEN', baseRefName: 'main',
+    headRefName: 'aieo/model-proposal-99123-1'
+  };
   writeFileSync(gh, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$AIEO_FAKE_GH_LOG"\n' +
-    'if [ "$1" = "pr" ] && [ "$2" = "create" ]; then printf "https://github.com/example/draft/123\\n"; fi\n');
+    'if [ "$1" = "pr" ] && [ "$2" = "create" ]; then printf "https://github.com/jayalshehri/CGP-MVP/pull/123\\n"; fi\n' +
+    'if [ "$1" = "pr" ] && [ "$2" = "view" ]; then\n' +
+    '  if [ "$AIEO_FAKE_GH_UNVERIFIED" = "1" ]; then\n' +
+    "    printf '%s\\n' '" + JSON.stringify({ ...view, isDraft: false }) + "'\n" +
+    '  else\n' +
+    "    printf '%s\\n' '" + JSON.stringify(view) + "'\n" +
+    '  fi\nfi\n');
   chmodSync(gh, 0o755);
   const env = { ...process.env,
     PATH: bin + ':' + process.env.PATH, AIEO_FAKE_GH_LOG: log,
@@ -115,6 +126,7 @@ test('publisher pushes a scoped candidate branch and invokes only Draft PR comma
     assert.equal(git(f.workspace, 'diff', 'main', 'HEAD', '--name-only'), MODEL_ALLOWED_PATH);
     const commands = readFileSync(f.log, 'utf8');
     assert.match(commands, /pr create --draft --base main --head aieo\/model-proposal-99123-1/);
+    assert.match(commands, /pr view https:\/\/github.com\/jayalshehri\/CGP-MVP\/pull\/123/);
     assert.match(commands, /workflow run cgp-required-ci.yml --ref aieo\/model-proposal-99123-1/);
     assert.doesNotMatch(commands, /(?:^|\n).*?(?:pr merge|deployment|release)(?: |$)/);
   } finally { rmSync(f.root, { force: true, recursive: true }); }
@@ -130,5 +142,22 @@ test('tampered model QA evidence stops before any push or PR operation', () => {
     assert.notEqual(child.status, 0);
     assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
     assert.equal(git(f.workspace, 'ls-remote', '--heads', f.remote).includes('model-proposal-99123-1'), false);
+  } finally { rmSync(f.root, { force: true, recursive: true }); }
+});
+
+test('publisher blocks success and follow-up CI if GitHub does not confirm an open Draft PR', () => {
+  const f = fixture();
+  try {
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: { ...f.env, AIEO_FAKE_GH_UNVERIFIED: '1' },
+      encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0, 'a non-draft PR must fail publication');
+    assert.match(child.stderr, /Remote PR is not a matching open Draft/);
+    const commands = readFileSync(f.log, 'utf8');
+    assert.match(commands, /pr create --draft/);
+    assert.match(commands, /pr view https:\/\/github.com\/jayalshehri\/CGP-MVP\/pull\/123/);
+    assert.doesNotMatch(commands, /workflow run/);
+    assert.equal(git(f.workspace, 'show', 'main:' + MODEL_ALLOWED_PATH).includes('sample = 1'), true);
   } finally { rmSync(f.root, { force: true, recursive: true }); }
 });
