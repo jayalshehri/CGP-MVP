@@ -254,28 +254,36 @@ test('committed candidate attestation rejects altered source, scope or base comm
   }
 });
 
-test('Git pre-commit hook mutation cannot publish code different from the reviewed candidate', () => {
-  const f = fixture();
-  try {
-    const hook = join(f.workspace, '.git', 'hooks', 'pre-commit');
-    writeFileSync(hook, [
-      '#!/bin/sh',
-      'node -e \'const fs=require("node:fs"); const p="components/FeedbackWidget.tsx"; fs.writeFileSync(p, fs.readFileSync(p,"utf8").replace("sample = 2","sample = 99"));\'',
-      'git add -- components/FeedbackWidget.tsx',
-      ''
-    ].join('\n'));
-    chmodSync(hook, 0o755);
-    const child = spawnSync(process.execPath, [publisher], {
-      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
-    });
-    assert.notEqual(child.status, 0);
-    assert.match(child.stderr, /Committed patch does not match the reviewed candidate/);
-    assert.equal(existsSync(f.log), false, 'gh must not run after a changed commit');
-    assert.equal(git(f.workspace, 'ls-remote', '--heads', f.remote)
-      .includes('model-proposal-99123-1'), false, 'no candidate branch may be pushed');
-    assert.equal(git(f.workspace, 'show', 'main:' + MODEL_ALLOWED_PATH)
-      .includes('sample = 1'), true, 'base branch remains unchanged');
-  } finally { rmSync(f.root, { force: true, recursive: true }); }
+test('publisher never executes configured Git checkout, index, commit or push hooks with its token', () => {
+  // Local test only: malicious hooks fail if invoked and leave an execution marker.
+  // Test both Git's default hook directory and an attacker-configured core.hooksPath.
+  for (const configured of [false, true]) {
+    const f = fixture();
+    try {
+      const marker = join(f.root, 'hook-executed');
+      const hookDir = configured ? join(f.root, 'custom-hooks') : join(f.workspace, '.git', 'hooks');
+      mkdirSync(hookDir, { recursive: true });
+      if (configured) git(f.workspace, 'config', 'core.hooksPath', hookDir);
+      for (const name of ['post-checkout', 'post-index-change', 'pre-commit', 'prepare-commit-msg',
+        'commit-msg', 'post-commit', 'pre-push']) {
+        const hook = join(hookDir, name);
+        writeFileSync(hook, '#!/bin/sh\nprintf "hook fired\\n" >> "$AIEO_TEST_HOOK_MARKER"\nexit 1\n');
+        chmodSync(hook, 0o755);
+      }
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: { ...f.env, AIEO_TEST_HOOK_MARKER: marker },
+        encoding: 'utf8', timeout: 20000
+      });
+      assert.equal(child.status, 0, child.stderr);
+      assert.equal(existsSync(marker), false, 'Git hooks must not execute during publication');
+      assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+      assert.ok(git(f.workspace, 'ls-remote', '--heads', f.remote)
+        .includes('refs/heads/aieo/model-proposal-99123-1'));
+      assert.ok(git(f.workspace, 'show', 'HEAD:' + MODEL_ALLOWED_PATH).includes('sample = 2'),
+        'final commit must still contain only the independently reviewed source');
+      assert.ok(readFileSync(f.log, 'utf8').includes('pr create --draft'));
+    } finally { rmSync(f.root, { force: true, recursive: true }); }
+  }
 });
 
 test('publisher pushes a scoped candidate branch and invokes only Draft PR commands in isolated Git remote', () => {

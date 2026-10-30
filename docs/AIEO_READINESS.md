@@ -36,7 +36,12 @@ The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist on
 ## Post-commit tree attestation (stacked Draft, 2026-10-30)
 - A Git pre-commit hook or local Git configuration can change staged source after the model/QA/Security/Reviewer gates. Checking the pre-commit workspace alone is insufficient to prove the final Git commit contains the reviewed bytes.
 - The publisher now confirms that the new commit's sole parent is the trusted `GITHUB_SHA`, the committed source bytes match the independently reviewed candidate, and the committed changed-file list contains only `components/FeedbackWidget.tsx`. This runs **before** GitHub authentication setup, any push, or PR creation.
-- A real local Git pre-commit hook test mutates the staged source and verifies the publisher fails without pushing or invoking `gh`. This remains an **offline fixture**, not proof of an Actions-created real PR.
+- The post-commit source/parent/scope verification remains in place even after disabling local Git hooks. Earlier local hook-mutation tests motivated this additional preventive control; current isolated hook tests assert **no hook invocation at all** (see below). These remain **offline fixtures**, not proof of an Actions-created real PR.
+
+## Git hook isolation in publisher (stacked Draft, 2026-10-30)
+- Attesting the final commit **after** `git commit` cannot prevent earlier side effects from a malicious `post-checkout`, `pre-commit`, `post-commit`, or `pre-push` hook that was installed during build or via runner-local Git configuration. A hook could run with the publisher job's scoped `GH_TOKEN` even if the resulting commit were later rejected.
+- For the publisher's hook-capable operations (`switch`, `add`, `commit`, `push`), use `git -c core.hooksPath=/dev/null` instead of allowing local or overridden hook paths. Retain the post-commit tree/source/parent attestation, remote destination checks, and Draft PR verification; this is a defense-in-depth control, not a replacement for protected credentials or human approval.
+- Isolated local tests install deliberately failing checkout, index-update, commit, and push hooks (`post-checkout`, `post-index-change`, `pre-commit`, `prepare-commit-msg`, `commit-msg`, `post-commit`, `pre-push`) in both default and custom hook directories and verify that none executes while the bounded reviewed candidate can still be published to a **temporary local** Git remote with a mocked `gh`. This remains no proof of live GitHub Actions publication or OpenRouter source-approved repair.
 
 ## Next safe milestones
 1. Continue hardening read-only and mocked integration tests on the feature branch.
