@@ -31,9 +31,11 @@ test('QA checks corrected source and five route examples', () => {
 });
 test('security blocks unauthorized replacement and credentials', () => {
   const good = developerAgent({ task: APPROVED_TASK, source: original });
-  assert.equal(securityAgent({ developer: good }).status, 'passed');
-  assert.equal(securityAgent({ developer: { ...good, path: 'supabase/migrations/unsafe.sql' } }).status, 'failed');
-  assert.equal(securityAgent({ developer: { ...good, addedLines: ['ghp_' + 'a'.repeat(30)] } }).status, 'failed');
+  assert.equal(securityAgent({ developer: good, source: original }).status, 'passed');
+  assert.equal(securityAgent({ developer: { ...good, patchedSource: good.patchedSource + 'malicious' }, source: original }).status, 'failed');
+  assert.equal(securityAgent({ developer: { ...good, sourceHash: 'wrong' }, source: original }).status, 'failed');
+  assert.equal(securityAgent({ developer: { ...good, path: 'supabase/migrations/unsafe.sql' }, source: original }).status, 'failed');
+  assert.equal(securityAgent({ developer: { ...good, addedLines: ['ghp_' + 'a'.repeat(30)] }, source: original }).status, 'failed');
 });
 test('reviewer never authorizes merging; blocks on any failed verdict', () => {
   const good = orchestrate({ source: original });
