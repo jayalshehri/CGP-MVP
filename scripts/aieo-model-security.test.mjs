@@ -200,7 +200,7 @@ test('independent Security checks assembled JSX when added diff line omits openi
     const actual = original.replace(fragment, replace);
     return inspectModelDiff({
       original, actual, changedPaths: [MODEL_ALLOWED_PATH],
-      diff: '@@ -2 +2 @@\\n-' + fragment + '\\n+' + replace + '\\n',
+      diff: '@@ -2 +2 @@\n-' + fragment + '\n+' + replace + '\n',
       report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
     });
   };
