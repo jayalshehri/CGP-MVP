@@ -66,3 +66,9 @@ Do not claim MVP completion before the pending end-to-end proofs succeed.
 - Earlier pattern matching stopped at the first literal `>`, including when it appeared in quoted attribute values or inside JSX expressions. That allowed a later `src` / `href` URL sink or opaque prop spread to avoid detection.
 - The model proposal validator and independent Security gate now scan the complete JSX opening-tag boundary while respecting quotes, nested braces and expression arrow operators; nested JSX openings are also examined.
 - Added provider and Security negative fixtures for quoted angles, arrow expressions, nested outbound JSX and hidden prop spreads, plus a benign quoted-angle positive fixture. This remains bounded static protection, not a full TypeScript/JSX AST safety proof or live OpenRouter/GitHub Actions publication.
+
+## Full JSX candidate scan for partial-attribute edits (stacked Draft, 2026-10-31)
+- A model can replace only an interior JSX attribute of a pre-existing tag. In such a case the replacement fragment and a zero-context Git diff omit the opening `<img` or `<a`, so earlier checks could miss added outbound attributes or an opaque prop spread.
+- The model proposal validator now screens the **entire assembled candidate** for disallowed JSX markup after applying the bounded replacement. The independently executed Security gate screens the complete `actual` file as well as additions. A pre-existing outbound sink also blocks automated candidate acceptance (intentional fail-closed behavior in the single allowlisted file).
+- Separate regression tests verify rejection of a partial `src` edit and an opaque spread while accepting an ordinary `alt` label edit. This remains static scanning, not a complete JSX/TypeScript parser; successful CI is still required on the exact new commit.
+- No real external-model call, bot-authored PR, default-branch activation, merge, production deployment, or source-sharing permission is provided by this change.
