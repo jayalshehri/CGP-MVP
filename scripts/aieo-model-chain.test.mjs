@@ -93,7 +93,7 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     const shim = join(bin, 'git');
     writeFileSync(shim, [
       '#!/bin/sh',
-      'if [ "$1" = "remote" ] && [ "$2" = "get-url" ] && [ "$3" = "--push" ] && [ "$4" = "origin" ] && [ "$AIEO_FIXTURE_ATTEST_PUSH" = "true" ]; then',
+      'if [ "$1" = "remote" ] && [ "$2" = "get-url" ] && [ "$3" = "--push" ] && [ "$4" = "--all" ] && [ "$5" = "origin" ] && [ "$AIEO_FIXTURE_ATTEST_PUSH" = "true" ]; then',
       '  printf "%s\\n" "https://github.com/jayalshehri/CGP-MVP.git"',
       '  exit 0',
       'fi',
