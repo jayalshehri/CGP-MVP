@@ -7,7 +7,7 @@ import { inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
 
 function command(binary, args) {
-  return execFileSync(binary, args, { encoding: 'utf8', stdio: 'pipe' }).trim();
+  return execFileSync(binary, args, { encoding: 'utf8', stdio: 'pipe' });
 }
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
@@ -67,15 +67,15 @@ export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
   const path = MODEL_ALLOWED_PATH;
   // Refuse pre-staged changes, untracked files and whitespace errors before any write.
-  if (command('git', ['diff', '--cached', '--name-only'])) fail('unexpected staged files');
+  if (command('git', ['diff', '--cached', '--name-only']).trim()) fail('unexpected staged files');
   if (command('git', ['ls-files', '--others', '--exclude-standard'])
       .split('\n').filter(Boolean).some((p) => p !== 'aieo-output' && !p.startsWith('aieo-output/'))) {
     fail('unexpected untracked repository files');
   }
   command('git', ['diff', '--check']);
-  const original = command('git', ['show', 'HEAD:' + path]) + '\n';
+  const original = command('git', ['show', 'HEAD:' + path]);
   const actual = readFileSync(path, 'utf8');
-  const changedPaths = command('git', ['diff', '--name-only']).split('\n').filter(Boolean);
+  const changedPaths = command('git', ['diff', '--name-only']).trim().split('\n').filter(Boolean);
   const diff = command('git', ['diff', '--unified=0', '--', path]);
   const reports = mode === 'model' ? {
     proposal: readJson('aieo-output/model-proposal.json'),
@@ -90,14 +90,14 @@ export function publishDraft({ env = process.env } = {}) {
   command('git', ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com']);
   command('git', ['switch', '-c', branch]);
   command('git', ['add', '--', path]);
-  if (command('git', ['diff', '--cached', '--name-only']) !== path) fail('unexpected staged scope');
+  if (command('git', ['diff', '--cached', '--name-only']).trim() !== path) fail('unexpected staged scope');
   command('git', ['commit', '-m', 'feat(aieo): bounded candidate for human review']);
   command('gh', ['auth', 'setup-git']);
   command('git', ['push', 'origin', 'HEAD:refs/heads/' + branch]);
   const body = 'Candidate scope, independent checks and build were verified before publishing. ' +
     'DRAFT only. No automatic approval, merge or production deployment.';
   const pr = command('gh', ['pr', 'create', '--draft', '--base', 'main', '--head', branch,
-    '--title', 'AIEO: bounded ' + mode + ' proposal for review', '--body', body]);
+    '--title', 'AIEO: bounded ' + mode + ' proposal for review', '--body', body]).trim();
   if (mode === 'model') command('gh', ['workflow', 'run', 'cgp-required-ci.yml', '--ref', branch]);
   return { status: 'draft-pr-created', branch, pr, requiresHumanMerge: true };
 }
