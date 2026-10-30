@@ -45,3 +45,15 @@ test('publisher cannot bypass human review or invoke model from untrusted PR', (
   assert.ok(provider.includes("env.AIEO_SOURCE_SHARING_APPROVED !== 'true'"));
   assert.ok(provider.includes("env.GITHUB_EVENT_NAME !== 'workflow_dispatch'"));
 });
+
+test('required app CI covers stacked AIEO PRs with read-only permissions', () => {
+  const requiredCI = read('.github/workflows/cgp-required-ci.yml');
+  assert.ok(requiredCI.includes("branches: [main, 'aieo/**']"), 'stacked development PRs must run app checks');
+  assert.ok(requiredCI.includes('permissions:\n  contents: read'));
+  assert.doesNotMatch(requiredCI, /pull_request_target\s*:/);
+  assert.doesNotMatch(requiredCI, /(?:contents|actions|pull-requests|id-token): write/);
+  assert.ok(requiredCI.includes('persist-credentials: false'));
+  for (const check of ['npm ci', 'npm run lint', 'npx next typegen', 'npx tsc --noEmit', 'npm run build']) {
+    assert.ok(requiredCI.includes(check), 'missing app CI step: ' + check);
+  }
+});
