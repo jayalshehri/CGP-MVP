@@ -15,6 +15,9 @@ const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fe
 // Deliberately reject new outbound-capable markup in this one-file proposal workflow.
 const outboundMarkup = /<\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\b(?:(?!>).){0,350}?\b(?:href|src|srcSet|action|formAction|data)\s*=/is;
 const outboundCss = /\burl\s*\(|\bbackgroundImage\s*:/i;
+// Reject optional chaining, computed property access and aliases for browser/network APIs.
+// This deliberately errs on the side of refusing a model-generated UI change.
+const indirectBrowserAccess = /\b(?:window|globalThis|self|navigator|document|location|history)\s*(?:\.|\?\.|\[)|\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|WebTransport|sendBeacon|postMessage|Worker|SharedWorker|Image|eval|Function|require|import)\s*(?:\(|\?\.|\[)|(?:=\s*|\breturn\s+)(?:fetch|navigator|window|globalThis|document|location)\b/i;
 
 // Never buffer an unbounded provider response: real fetch supplies a readable byte stream.
 const MAX_PROVIDER_BYTES = 18000;
@@ -67,7 +70,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
   if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace) ||
-      outboundMarkup.test(replace) || outboundCss.test(replace) ||
+      outboundMarkup.test(replace) || outboundCss.test(replace) || indirectBrowserAccess.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }

