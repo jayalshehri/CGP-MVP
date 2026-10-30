@@ -38,8 +38,22 @@ export function qaAgent({ developer, source }) {
   return { status: passed ? 'passed' : 'failed', checks: ['single-corrected-source-line', 'five-route-boundary-regressions'], casesPassed: caseResults.filter(Boolean).length, casesTotal: cases.length };
 }
 
-export function securityAgent({ developer }) {
+export function securityAgent({ developer, source }) {
   const findings = [];
+  if (typeof source !== 'string') {
+    findings.push('Trusted source is missing');
+  } else {
+    const hash = createHash('sha256').update(source).digest('hex');
+    if (developer?.sourceHash !== hash) findings.push('Candidate is based on different source');
+    if (developer?.status === 'proposed' &&
+        (count(source, ORIGINAL) !== 1 || developer.patchedSource !== source.replace(ORIGINAL, CORRECTED))) {
+      findings.push('Patch changes more than the approved one-line replacement');
+    }
+    if (developer?.status === 'no-change' &&
+        (count(source, CORRECTED) !== 1 || count(source, ORIGINAL) !== 0)) {
+      findings.push('No-change claim is not supported by actual source');
+    }
+  }
   if (!developer || !['proposed', 'no-change'].includes(developer.status)) {
     findings.push('No approved candidate');
   } else if (developer.path !== APPROVED_PATH) {
@@ -75,7 +89,7 @@ export function reviewerAgent({ developer, qa, security }) {
 export function orchestrate({ task = APPROVED_TASK, source, path = APPROVED_PATH }) {
   const developer = developerAgent({ task, source, path });
   const qa = qaAgent({ developer, source });
-  const security = securityAgent({ developer });
+  const security = securityAgent({ developer, source });
   const reviewer = reviewerAgent({ developer, qa, security });
   return { developer, qa, security, reviewer };
 }
