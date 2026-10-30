@@ -74,3 +74,31 @@ test('provider errors do not expose source or credentials', async () => {
   const malformed = await requestModelPatch({ source, task, env, transport: async () => ({ ok: true, text: async () => 'garbage' }) });
   assert.equal(malformed.status, 'rejected');
 });
+
+test('modern provider keys and bearer tokens are rejected before external source disclosure', async () => {
+  const examples = [
+    'sk-or-v1-' + 'a'.repeat(40),
+    'github_pat_' + 'b'.repeat(42),
+    'sk-proj-' + 'c'.repeat(42),
+    'sb_secret_' + 'd'.repeat(36),
+    'Bearer ' + 'e'.repeat(48)
+  ];
+  let sent = 0;
+  const transport = async () => { sent += 1; throw new Error('source must not be sent'); };
+  for (const marker of examples) {
+    const unsafeSource = source + '\n// ' + marker;
+    assert.throws(() => buildModelRequest({
+      source: unsafeSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.equal((await requestModelPatch({ source: unsafeSource, task, env, transport })).status, 'blocked');
+    const unsafeProposal = JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace: '  const sample = "' + marker + '";',
+      explanation: 'synthetic marker only'
+    });
+    assert.equal(validateModelPatch({ response: unsafeProposal, source }).status, 'rejected');
+  }
+  assert.equal(sent, 0, 'privacy rejection must happen before any HTTP attempt');
+});
