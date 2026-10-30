@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -56,7 +56,10 @@ function fixture() {
   const view = {
     number: 123, url: 'https://github.com/jayalshehri/CGP-MVP/pull/123',
     isDraft: true, state: 'OPEN', baseRefName: 'main',
-    headRefName: 'aieo/model-proposal-99123-1'
+    headRefName: 'aieo/model-proposal-99123-1',
+    headRefOid: 'AIEO_HEAD_SHA_PLACEHOLDER',
+    headRepositoryOwner: { login: 'jayalshehri' },
+    isCrossRepository: false
   };
   writeFileSync(gh, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$AIEO_FAKE_GH_LOG"\n' +
     'if [ "$1" = "pr" ] && [ "$2" = "create" ]; then printf "https://github.com/jayalshehri/CGP-MVP/pull/123\\n"; fi\n' +
@@ -64,7 +67,7 @@ function fixture() {
     '  if [ "$AIEO_FAKE_GH_UNVERIFIED" = "1" ]; then\n' +
     "    printf '%s\\n' '" + JSON.stringify({ ...view, isDraft: false }) + "'\n" +
     '  else\n' +
-    "    printf '%s\\n' '" + JSON.stringify(view) + "'\n" +
+    "    printf '%s\\n' '" + JSON.stringify(view) + "' | sed \"s/AIEO_HEAD_SHA_PLACEHOLDER/$(git rev-parse HEAD)/g\"\n" +
     '  fi\nfi\n');
   chmodSync(gh, 0o755);
   const env = { ...process.env,
@@ -94,6 +97,39 @@ test('publisher rejects unsafe dispatch contexts and missing source consent', ()
     { AIEO_SOURCE_SHARING_APPROVED: 'false' },
     { AIEO_MODEL_ENABLED: 'false' }
   ]) assert.throws(() => validateDispatch({ ...env, ...overrides }));
+});
+
+
+test('remote Draft verifier binds the PR to the reviewed commit and same repository', () => {
+  const commitSha = 'a'.repeat(40);
+  const url = 'https://github.com/jayalshehri/CGP-MVP/pull/123';
+  const branch = 'aieo/model-proposal-99123-1';
+  const remote = {
+    number: 123, url, isDraft: true, state: 'OPEN',
+    baseRefName: 'main', headRefName: branch, headRefOid: commitSha,
+    headRepositoryOwner: { login: 'jayalshehri' }, isCrossRepository: false
+  };
+  const verify = (overrides) => verifyRemoteDraft({
+    remote: { ...remote, ...overrides }, url, branch, commitSha
+  });
+  assert.equal(verify({}), true);
+  for (const untrusted of [
+    { headRefOid: 'b'.repeat(40) },
+    { headRefOid: null },
+    { headRepositoryOwner: { login: 'untrusted-fork' } },
+    { headRepositoryOwner: null },
+    { isCrossRepository: true },
+    { isCrossRepository: undefined },
+    { isDraft: false },
+    { state: 'CLOSED' },
+    { baseRefName: 'aieo/other' },
+    { headRefName: 'aieo/wrong-branch' },
+    { number: 124 },
+    { url: 'https://github.com/jayalshehri/CGP-MVP/pull/124' }
+  ]) assert.throws(() => verify(untrusted));
+  assert.throws(() => verifyRemoteDraft({
+    remote, url: 'https://github.com/another/repo/pull/123', branch, commitSha
+  }));
 });
 
 test('publisher independently recomputes model handoffs and blocks forged evidence', () => {

@@ -63,6 +63,22 @@ export function verifyCandidate({ mode, original, actual, changedPaths, diff, re
   return true;
 }
 
+// The PR URL alone cannot attest to the actual branch owner or exact code.
+export function verifyRemoteDraft({ remote, url, branch, commitSha }) {
+  const canonical = /^https:\/\/github\.com\/jayalshehri\/CGP-MVP\/pull\/([1-9]\d*)$/.exec(url);
+  if (!canonical) fail('Draft PR creation did not return a canonical repository URL');
+  if (!remote || !Number.isSafeInteger(remote.number) ||
+      remote.number !== Number(canonical[1]) || remote.url !== url ||
+      remote.isDraft !== true || remote.state !== 'OPEN' ||
+      remote.baseRefName !== 'main' || remote.headRefName !== branch ||
+      remote.headRefOid !== commitSha ||
+      remote.headRepositoryOwner?.login !== 'jayalshehri' ||
+      remote.isCrossRepository !== false) {
+    fail('Remote PR is not a matching open Draft at the pushed commit');
+  }
+  return true;
+}
+
 export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
   const path = MODEL_ALLOWED_PATH;
@@ -94,6 +110,11 @@ export function publishDraft({ env = process.env } = {}) {
   command('git', ['commit', '-m', 'feat(aieo): bounded candidate for human review']);
   command('gh', ['auth', 'setup-git']);
   command('git', ['push', 'origin', 'HEAD:refs/heads/' + branch]);
+  const committedSha = command('git', ['rev-parse', 'HEAD']).trim();
+  const pushedRef = command('git', ['ls-remote', 'origin', 'refs/heads/' + branch]).trim();
+  if (pushedRef !== committedSha + '\trefs/heads/' + branch) {
+    fail('Remote branch does not point to the reviewed commit');
+  }
   const body = 'Candidate scope, independent checks and build were verified before publishing. ' +
     'DRAFT only. No automatic approval, merge or production deployment.';
   const pr = command('gh', ['pr', 'create', '--draft', '--base', 'main', '--head', branch,
@@ -101,23 +122,16 @@ export function publishDraft({ env = process.env } = {}) {
   // A zero exit from gh is not proof that a new PR is actually Draft. Verify
   // the remote PR's identity and protection-relevant fields before reporting
   // success or dispatching any follow-up CI. Never fall back to a ready PR.
-  const canonical = /^https:\/\/github\.com\/jayalshehri\/CGP-MVP\/pull\/([1-9]\d*)$/.exec(pr);
-  if (!canonical) fail('Draft PR creation did not return a canonical repository URL');
   let remote;
   try {
     remote = JSON.parse(command('gh', [
       'pr', 'view', pr, '--repo', env.GITHUB_REPOSITORY,
-      '--json', 'number,url,isDraft,state,baseRefName,headRefName'
+      '--json', 'number,url,isDraft,state,baseRefName,headRefName,headRefOid,headRepositoryOwner,isCrossRepository'
     ]));
   } catch {
     fail('Created PR could not be independently verified');
   }
-  if (!remote || !Number.isSafeInteger(remote.number) ||
-      remote.number !== Number(canonical[1]) || remote.url !== pr ||
-      remote.isDraft !== true || remote.state !== 'OPEN' ||
-      remote.baseRefName !== 'main' || remote.headRefName !== branch) {
-    fail('Remote PR is not a matching open Draft targeting main');
-  }
+  verifyRemoteDraft({ remote, url: pr, branch, commitSha: committedSha });
   if (mode === 'model') command('gh', ['workflow', 'run', 'cgp-required-ci.yml', '--ref', branch]);
   return { status: 'draft-pr-created', branch, pr, requiresHumanMerge: true };
 }

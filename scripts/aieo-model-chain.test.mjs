@@ -71,13 +71,16 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     const view = JSON.stringify({
       number: 777, url: 'https://github.com/jayalshehri/CGP-MVP/pull/777',
       isDraft: true, state: 'OPEN', baseRefName: 'main',
-      headRefName: 'aieo/model-proposal-77331-1'
+      headRefName: 'aieo/model-proposal-77331-1',
+      headRefOid: 'AIEO_HEAD_SHA_PLACEHOLDER',
+      headRepositoryOwner: { login: 'jayalshehri' },
+      isCrossRepository: false
     });
     writeFileSync(gh, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$AIEO_FAKE_GH_LOG"\n' +
       'if [ "$1" = "pr" ] && [ "$2" = "create" ]; then\n' +
       '  printf "https://github.com/jayalshehri/CGP-MVP/pull/777\\n"\nfi\n' +
       'if [ "$1" = "pr" ] && [ "$2" = "view" ]; then\n' +
-      "  printf '%s\\n' '" + view + "'\nfi\n");
+      "  printf '%s\\n' '" + view + "' | sed \"s/AIEO_HEAD_SHA_PLACEHOLDER/$(git rev-parse HEAD)/g\"\nfi\n");
     chmodSync(gh, 0o755);
     const env = {
       ...process.env, PATH: bin + delimiter + process.env.PATH,
