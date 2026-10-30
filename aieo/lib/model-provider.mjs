@@ -3,7 +3,9 @@ import { createHash } from 'node:crypto';
 
 export const MODEL_ALLOWED_PATH = 'components/FeedbackWidget.tsx';
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
-const credentials = /gh[pousr]_[a-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:service_role|password|api[_-]?key|client_secret)\s*[:=]\s*["'][^"']{8,}/i;
+// Conservative scan before sending source or task text to an external provider.
+// Pattern matching cannot guarantee that all secret formats have been detected.
+const credentials = /gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-[a-z0-9]{20,}|(?:sk-proj-|sk-live-|sb_secret_)[a-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:service_role|password|api[_-]?key|client_secret)\s*[:=]\s*["'][^"']{8,}|\bBearer\s+[a-z0-9._~+/-]{16,}/i;
 const forbidden = /(?:\beval\s*\(|\bFunction\s*\(|\bchild_process\b|\bprocess\.env\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bimport\s+|\brequire\s*\()/i;
 
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
