@@ -8,6 +8,7 @@ Updated 2026-10-30. Development source: `aieo/multi-agent-foundation`; review: D
 - The optional provider adapter supports a **single allowlisted file** only, sends nothing unless a manual and explicit source-sharing opt-in is supplied, and validates the returned exact-string patch before applying it locally.
 - The Draft PR publisher is limited to a manual main-branch dispatch with a repository-scoped token; independent safety verdicts and build gates are checked before any branch/PR write. Local tests emulate Git remote and `gh`, **not live Actions publication**.
 - CI now checks external-provider token patterns and regression-tests workflow permission/approval boundaries. Neither these static tests nor synthetic fixtures constitute proof of arbitrary autonomous development.
+- Bounded model changes now preserve the full existing feedback submission handler and form submission binding; added tests target commented-out authentication guards and block-comment bypasses. These defenses reduce a specific bypass risk but do **not** certify arbitrary model-generated code as safe.
 
 ## Not yet established
 - [ ] One real, explicitly source-approved OpenRouter request for a new legitimate defect.
