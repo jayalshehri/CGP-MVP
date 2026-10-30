@@ -1,52 +1,50 @@
-// Run exactly one independent AIEO role per CI job using redacted artifact handoffs.
+// Each CI job independently rechecks the source and validates prior artifact evidence.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { APPROVED_PATH, APPROVED_TASK, orchestrate, publicReport } from '../aieo/lib/engine.mjs';
+import { buildHandoffArtifact, verifyHandoffArtifact } from '../aieo/lib/handoff.mjs';
 
 const role = process.argv[2];
 if (!['developer', 'qa', 'security', 'reviewer'].includes(role)) {
   throw new Error('Expected one of: developer, qa, security, reviewer');
 }
+
 const source = readFileSync(APPROVED_PATH, 'utf8');
 const task = process.env.AIEO_TASK || APPROVED_TASK;
 const local = orchestrate({ task, source });
 const safe = publicReport(local);
-const hash = local.developer.sourceHash;
+const sourceHash = local.developer.sourceHash;
+const candidateHash = local.developer.candidateHash;
+if (!sourceHash || !candidateHash) throw new Error('No valid source and candidate attestation');
 
 function readPrior(prior) {
-  const data = JSON.parse(readFileSync('aieo-output/' + prior + '.json', 'utf8'));
-  if (data.schemaVersion !== 1 || data.role !== prior || data.sourceHash !== hash ||
-      data.task !== task || typeof data.status !== 'string') {
-    throw new Error('Invalid, stale, or mismatched ' + prior + ' handoff artifact');
-  }
-  return data;
+  // Artifacts can be altered independently of the checked-out repository.
+  // Never consume patches, commands or success claims supplied by an artifact.
+  const artifact = JSON.parse(readFileSync('aieo-output/' + prior + '.json', 'utf8'));
+  return verifyHandoffArtifact({
+    artifact, role: prior, task, sourceHash, candidateHash,
+    expected: safe[prior]
+  });
 }
 
-let result;
+let verdict;
 if (role === 'developer') {
-  result = { ...safe.developer, bounded: true };
+  verdict = { ...safe.developer, bounded: true };
 } else if (role === 'qa') {
-  const developer = readPrior('developer');
-  if (developer.status !== safe.developer.status) throw new Error('Developer verdict mismatch');
-  result = { ...safe.qa };
+  readPrior('developer');
+  verdict = { ...safe.qa };
 } else if (role === 'security') {
-  const developer = readPrior('developer');
-  if (developer.status !== safe.developer.status) throw new Error('Developer verdict mismatch');
-  result = { ...safe.security };
+  readPrior('developer');
+  verdict = { ...safe.security };
 } else {
-  const developer = readPrior('developer');
-  const qa = readPrior('qa');
-  const security = readPrior('security');
-  if (developer.status !== safe.developer.status ||
-      qa.status !== safe.qa.status || security.status !== safe.security.status) {
-    throw new Error('Reviewer received conflicting agent verdicts');
-  }
-  result = { ...safe.reviewer, handoffValidated: true };
+  readPrior('developer');
+  readPrior('qa');
+  readPrior('security');
+  verdict = { ...safe.reviewer, handoffValidated: true };
 }
-
-const artifact = { schemaVersion: 1, role, task, sourceHash: hash, ...result };
+const artifact = buildHandoffArtifact({ role, task, sourceHash, candidateHash, verdict });
 mkdirSync('aieo-output', { recursive: true });
 writeFileSync('aieo-output/' + role + '.json', JSON.stringify(artifact, null, 2) + '\n');
-console.log(JSON.stringify({ role, status: result.status, handoff: 'validated', writesToProduction: false }));
+console.log(JSON.stringify({ role, status: verdict.status, handoff: 'verified-against-source', writesToProduction: false }));
 
 const allowed = {
   developer: ['proposed', 'no-change'],
@@ -54,4 +52,4 @@ const allowed = {
   security: ['passed'],
   reviewer: ['draft-pr-eligible', 'verified-no-change']
 };
-if (!allowed[role].includes(result.status)) process.exitCode = 1;
+if (!allowed[role].includes(verdict.status)) process.exitCode = 1;
