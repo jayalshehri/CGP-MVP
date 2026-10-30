@@ -145,3 +145,51 @@ test('model proposal rejects block comment delimiters that could neutralize acti
     assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected');
   }
 });
+
+test('provider source sharing refuses redirects and strips referrers', async () => {
+  const result = await requestModelPatch({
+    source, task, env,
+    transport: async (url, opts) => {
+      assert.equal(url, 'https://openrouter.ai/api/v1/chat/completions');
+      assert.equal(opts.redirect, 'error');
+      assert.equal(opts.referrerPolicy, 'no-referrer');
+      return { ok: true, redirected: true, text: async () => { throw new Error('redirect body must not be read'); } };
+    }
+  });
+  assert.equal(result.status, 'failed');
+});
+
+test('provider reads bounded streamed responses and rejects oversized bodies without buffering them', async () => {
+  const encoded = new TextEncoder();
+  const response = JSON.stringify({ choices: [{ message: { content: proposal } }] });
+  const streamOf = (value) => new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoded.encode(value));
+      controller.close();
+    }
+  });
+  const good = await requestModelPatch({
+    source, task, env,
+    transport: async () => ({ ok: true, body: streamOf(response) })
+  });
+  assert.equal(good.status, 'proposed');
+  assert.equal(good.patchedSource, source.replace(find, replacement));
+
+  const tooLarge = await requestModelPatch({
+    source, task, env,
+    transport: async () => ({ ok: true, body: streamOf('x'.repeat(18001)) })
+  });
+  assert.equal(tooLarge.status, 'rejected');
+  assert.equal(tooLarge.reason, 'Provider response too large');
+
+  let readBody = false;
+  const declaredOversize = await requestModelPatch({
+    source, task, env,
+    transport: async () => ({
+      ok: true, headers: { get: () => '20000' },
+      text: async () => { readBody = true; throw new Error('oversize body must not be read'); }
+    })
+  });
+  assert.equal(declaredOversize.status, 'rejected');
+  assert.equal(readBody, false);
+});
