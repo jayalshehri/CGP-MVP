@@ -98,6 +98,26 @@ export function publishDraft({ env = process.env } = {}) {
     'DRAFT only. No automatic approval, merge or production deployment.';
   const pr = command('gh', ['pr', 'create', '--draft', '--base', 'main', '--head', branch,
     '--title', 'AIEO: bounded ' + mode + ' proposal for review', '--body', body]).trim();
+  // A zero exit from gh is not proof that a new PR is actually Draft. Verify
+  // the remote PR's identity and protection-relevant fields before reporting
+  // success or dispatching any follow-up CI. Never fall back to a ready PR.
+  const canonical = /^https:\/\/github\.com\/jayalshehri\/CGP-MVP\/pull\/([1-9]\d*)$/.exec(pr);
+  if (!canonical) fail('Draft PR creation did not return a canonical repository URL');
+  let remote;
+  try {
+    remote = JSON.parse(command('gh', [
+      'pr', 'view', pr, '--repo', env.GITHUB_REPOSITORY,
+      '--json', 'number,url,isDraft,state,baseRefName,headRefName'
+    ]));
+  } catch {
+    fail('Created PR could not be independently verified');
+  }
+  if (!remote || !Number.isSafeInteger(remote.number) ||
+      remote.number !== Number(canonical[1]) || remote.url !== pr ||
+      remote.isDraft !== true || remote.state !== 'OPEN' ||
+      remote.baseRefName !== 'main' || remote.headRefName !== branch) {
+    fail('Remote PR is not a matching open Draft targeting main');
+  }
   if (mode === 'model') command('gh', ['workflow', 'run', 'cgp-required-ci.yml', '--ref', branch]);
   return { status: 'draft-pr-created', branch, pr, requiresHumanMerge: true };
 }
