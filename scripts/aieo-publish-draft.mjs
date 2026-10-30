@@ -106,6 +106,15 @@ export function verifyTrustedCheckout({ env, checkedOutSha, originUrl, effective
   return true;
 }
 
+// Git attributes may execute arbitrary clean filters during git add even when
+// hooks are disabled. Reject effective filter drivers on the allowlisted source.
+export function verifyNoGitFilter(path, effectiveFilter) {
+  if (path !== MODEL_ALLOWED_PATH || effectiveFilter !== path + ': filter: unspecified') {
+    fail('Git attributes enable an untrusted clean filter on the reviewed file');
+  }
+  return true;
+}
+
 // A Git hook or local Git config can mutate the index/tree after source gates run.
 // Recheck the exact committed tree and single parent *before* any remote write.
 export function verifyCommittedCandidate({ baseSha, parentSha, reviewedSource, committedSource, changedPaths }) {
@@ -126,18 +135,21 @@ export function publishDraft({ env = process.env } = {}) {
     effectivePushUrls: command('git', ['remote', 'get-url', '--push', '--all', 'origin'])
       .trim().split('\n').filter(Boolean)
   });
+  // Git diff can execute external diff drivers or textconv converters;
+  // disallow both for every comparison with the publisher's GH_TOKEN.
   const path = MODEL_ALLOWED_PATH;
+  verifyNoGitFilter(path, command('git', ['check-attr', 'filter', '--', path]).trim());
   // Refuse pre-staged changes, untracked files and whitespace errors before any write.
-  if (command('git', ['diff', '--cached', '--name-only']).trim()) fail('unexpected staged files');
+  if (command('git', ['diff', '--no-ext-diff', '--no-textconv', '--cached', '--name-only']).trim()) fail('unexpected staged files');
   if (command('git', ['ls-files', '--others', '--exclude-standard'])
       .split('\n').filter(Boolean).some((p) => p !== 'aieo-output' && !p.startsWith('aieo-output/'))) {
     fail('unexpected untracked repository files');
   }
-  command('git', ['diff', '--check']);
+  command('git', ['diff', '--no-ext-diff', '--no-textconv', '--check']);
   const original = command('git', ['show', 'HEAD:' + path]);
   const actual = readFileSync(path, 'utf8');
-  const changedPaths = command('git', ['diff', '--name-only']).trim().split('\n').filter(Boolean);
-  const diff = command('git', ['diff', '--unified=0', '--', path]);
+  const changedPaths = command('git', ['diff', '--no-ext-diff', '--no-textconv', '--name-only']).trim().split('\n').filter(Boolean);
+  const diff = command('git', ['diff', '--no-ext-diff', '--no-textconv', '--unified=0', '--', path]);
   const reports = mode === 'model' ? {
     proposal: readJson('aieo-output/model-proposal.json'),
     qa: readJson('aieo-output/model-qa.json'),
@@ -151,7 +163,7 @@ export function publishDraft({ env = process.env } = {}) {
   command('git', ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com']);
   gitNoHooks(['switch', '-c', branch]);
   gitNoHooks(['add', '--', path]);
-  if (command('git', ['diff', '--cached', '--name-only']).trim() !== path) fail('unexpected staged scope');
+  if (command('git', ['diff', '--no-ext-diff', '--no-textconv', '--cached', '--name-only']).trim() !== path) fail('unexpected staged scope');
   gitNoHooks(['commit', '-m', 'feat(aieo): bounded candidate for human review']);
   const committedSha = command('git', ['rev-parse', 'HEAD']).trim();
   verifyCommittedCandidate({
