@@ -101,6 +101,17 @@ export function verifyTrustedCheckout({ env, checkedOutSha, originUrl, effective
   return true;
 }
 
+// A Git hook or local Git config can mutate the index/tree after source gates run.
+// Recheck the exact committed tree and single parent *before* any remote write.
+export function verifyCommittedCandidate({ baseSha, parentSha, reviewedSource, committedSource, changedPaths }) {
+  if (parentSha !== baseSha || committedSource !== reviewedSource ||
+      !Array.isArray(changedPaths) || changedPaths.length !== 1 ||
+      changedPaths[0] !== MODEL_ALLOWED_PATH) {
+    fail('Committed patch does not match the reviewed candidate');
+  }
+  return true;
+}
+
 export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
   verifyTrustedCheckout({
@@ -137,9 +148,17 @@ export function publishDraft({ env = process.env } = {}) {
   command('git', ['add', '--', path]);
   if (command('git', ['diff', '--cached', '--name-only']).trim() !== path) fail('unexpected staged scope');
   command('git', ['commit', '-m', 'feat(aieo): bounded candidate for human review']);
+  const committedSha = command('git', ['rev-parse', 'HEAD']).trim();
+  verifyCommittedCandidate({
+    baseSha: env.GITHUB_SHA,
+    parentSha: command('git', ['rev-parse', 'HEAD^']).trim(),
+    reviewedSource: actual,
+    committedSource: command('git', ['show', 'HEAD:' + path]),
+    changedPaths: command('git', ['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'])
+      .trim().split('\n').filter(Boolean)
+  });
   command('gh', ['auth', 'setup-git']);
   command('git', ['push', 'origin', 'HEAD:refs/heads/' + branch]);
-  const committedSha = command('git', ['rev-parse', 'HEAD']).trim();
   const pushedRef = command('git', ['ls-remote', 'origin', 'refs/heads/' + branch]).trim();
   if (pushedRef !== committedSha + '\trefs/heads/' + branch) {
     fail('Remote branch does not point to the reviewed commit');
