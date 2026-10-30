@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -233,6 +233,48 @@ test('publisher independently recomputes model handoffs and blocks forged eviden
     assert.throws(() => verifyCandidate({ mode: 'model', ...f.args,
       changedPaths: [MODEL_ALLOWED_PATH, 'package.json'],
       reports: { proposal: f.args.proposal, qa: f.qa, security: f.security, reviewer: f.reviewer } }));
+  } finally { rmSync(f.root, { force: true, recursive: true }); }
+});
+
+test('committed candidate attestation rejects altered source, scope or base commit', () => {
+  const baseSha = 'a'.repeat(40);
+  const args = { baseSha, parentSha: baseSha,
+    reviewedSource: 'reviewed', committedSource: 'reviewed',
+    changedPaths: [MODEL_ALLOWED_PATH] };
+  assert.equal(verifyCommittedCandidate(args), true);
+  for (const changed of [
+    { parentSha: 'b'.repeat(40) },
+    { committedSource: 'unreviewed' },
+    { changedPaths: ['package.json'] },
+    { changedPaths: [MODEL_ALLOWED_PATH, 'package.json'] },
+    { changedPaths: [] }
+  ]) {
+    assert.throws(() => verifyCommittedCandidate({ ...args, ...changed }),
+      /Committed patch does not match the reviewed candidate/);
+  }
+});
+
+test('Git pre-commit hook mutation cannot publish code different from the reviewed candidate', () => {
+  const f = fixture();
+  try {
+    const hook = join(f.workspace, '.git', 'hooks', 'pre-commit');
+    writeFileSync(hook, [
+      '#!/bin/sh',
+      'node -e \'const fs=require("node:fs"); const p="components/FeedbackWidget.tsx"; fs.writeFileSync(p, fs.readFileSync(p,"utf8").replace("sample = 2","sample = 99"));\'',
+      'git add -- components/FeedbackWidget.tsx',
+      ''
+    ].join('\n'));
+    chmodSync(hook, 0o755);
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0);
+    assert.match(child.stderr, /Committed patch does not match the reviewed candidate/);
+    assert.equal(existsSync(f.log), false, 'gh must not run after a changed commit');
+    assert.equal(git(f.workspace, 'ls-remote', '--heads', f.remote)
+      .includes('model-proposal-99123-1'), false, 'no candidate branch may be pushed');
+    assert.equal(git(f.workspace, 'show', 'main:' + MODEL_ALLOWED_PATH)
+      .includes('sample = 1'), true, 'base branch remains unchanged');
   } finally { rmSync(f.root, { force: true, recursive: true }); }
 });
 
