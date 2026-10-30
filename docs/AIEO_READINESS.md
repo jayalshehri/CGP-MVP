@@ -61,3 +61,8 @@ Do not claim MVP completion before the pending end-to-end proofs succeed.
 - The previously bounded HTML/JSX attribute scanner only examined 350 characters after an opening tag. Padded markup could introduce an outbound `src` or `href` beyond that window. Both the model proposal validator and independently run Security gate now inspect the complete tag (within existing input/diff size bounds), with regression tests.
 - Opaque JSX spread props such as `<img {...untrustedProps} />` are also rejected in both layers: a spread can hide network-bearing attributes from the static attribute scanner. A clean static edit remains permitted.
 - These are conservative pattern checks, not a complete JavaScript/JSX parser or proof of a secure arbitrary patch. Live OpenRouter generation and Actions-created Draft PR remain **unverified** and human-gated.
+
+## JSX quoted-angle boundary guard (stacked Draft, 2026-10-30)
+- Earlier pattern matching stopped at the first literal `>`, including when it appeared in quoted attribute values or inside JSX expressions. That allowed a later `src` / `href` URL sink or opaque prop spread to avoid detection.
+- The model proposal validator and independent Security gate now scan the complete JSX opening-tag boundary while respecting quotes, nested braces and expression arrow operators; nested JSX openings are also examined.
+- Added provider and Security negative fixtures for quoted angles, arrow expressions, nested outbound JSX and hidden prop spreads, plus a benign quoted-angle positive fixture. This remains bounded static protection, not a full TypeScript/JSX AST safety proof or live OpenRouter/GitHub Actions publication.
