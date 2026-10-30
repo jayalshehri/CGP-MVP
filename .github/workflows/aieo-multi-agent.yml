@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: '24'
       - name: Run negative, safety and handoff tests
-        run: node --test scripts/aieo-agent.test.mjs scripts/aieo-model-provider.test.mjs
+        run: node --test scripts/aieo-agent.test.mjs scripts/aieo-handoff.test.mjs scripts/aieo-model-provider.test.mjs
       - name: Verify real source in read-only mode
         run: node scripts/aieo-runner.mjs
       - name: Ensure source unchanged
