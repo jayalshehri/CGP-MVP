@@ -12,8 +12,11 @@ const suspect = /\b(?:eval|Function)\s*\(|\b(?:child_process|process\.env|docume
 const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fetch|WebSocket)["']\s*\])\s*\(|\bnavigator\s*(?:\.\s*sendBeacon|\[\s*["']sendBeacon["']\s*\])\s*\(|\b(?:window\s*\.\s*)?location\s*(?:\.\s*(?:assign|replace)\s*\(|\.\s*href\b|\[\s*["'](?:href|assign|replace)["']\s*\])|\bnew\s+(?:Image|Worker|SharedWorker)\s*\(|\bdocument\s*\.\s*createElement\s*\(\s*["'](?:iframe|script|img)["']/i;
 
 // Browser data can also leave through markup attributes and CSS, without an explicit fetch().
-const outboundMarkup = /<\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\b(?:(?!>).){0,350}?\b(?:href|src|srcSet|action|formAction|data)\s*=/is;
-const outboundCss = /\burl\s*\(|\bbackgroundImage\s*:/i;
+const outboundMarkup = /<\s*(?:a|area|img|image|use|feImage|iframe|script|link|form|button|input|video|audio|source|track|embed|object|base|meta)\b(?:(?!>).){0,350}?\b(?:href|xlink:href|src|srcSet|srcDoc|ping|poster|action|formAction|data|httpEquiv|http-equiv)\s*=/is;
+const outboundCss = /\burl\s*\(|\bimage-set\s*\(|@import\b|\bbackgroundImage\s*:/i;
+// Reject optional chaining, computed property access and aliases for browser/network APIs.
+// This deliberately errs on the side of refusing a model-generated UI change.
+const indirectBrowserAccess = /\b(?:window|globalThis|self|navigator|document|location|history)\s*(?:\.|\?\.|\[)|\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|WebTransport|sendBeacon|postMessage|Worker|SharedWorker|Image|eval|Function|require|import)\s*(?:\(|\?\.|\[)|(?:=\s*|\breturn\s+)(?:fetch|navigator|window|globalThis|document|location)\b/i;
 
 // The source-bearing submit handler is security-critical. Preserve its complete body,
 // not only snippets that could survive inside comments or unreachable branches.
@@ -43,7 +46,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   if (typeof diff !== 'string' || diff.length > 20000) findings.push('Invalid or oversized source delta');
   const additions = typeof diff === 'string' ? diff.split('\n').filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1)) : [];
   if (additions.length > 20) findings.push('Too many new code lines');
-  if (additions.some((line) => suspect.test(line) || browserExfil.test(line)) ||
+  if (additions.some((line) => suspect.test(line) || browserExfil.test(line) || indirectBrowserAccess.test(line)) ||
       outboundMarkup.test(additions.join('\n')) || outboundCss.test(additions.join('\n'))) {
     findings.push('Potentially unsafe new code');
   }

