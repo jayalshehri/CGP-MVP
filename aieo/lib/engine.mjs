@@ -13,13 +13,14 @@ export function developerAgent({ task, source, path = APPROVED_PATH }) {
   }
   const sourceHash = createHash('sha256').update(source).digest('hex');
   if (count(source, CORRECTED) === 1 && count(source, ORIGINAL) === 0) {
-    return { status: 'no-change', reason: 'Approved fix is already present', path, sourceHash };
+    return { status: 'no-change', reason: 'Approved fix is already present', path, sourceHash, candidateHash: sourceHash };
   }
   if (count(source, ORIGINAL) !== 1 || count(source, CORRECTED) !== 0) {
     return { status: 'blocked', reason: 'Unexpected source or multiple replacement candidates', path, sourceHash };
   }
   const patchedSource = source.replace(ORIGINAL, CORRECTED);
-  return { status: 'proposed', reason: 'One bounded route-boundary fix', path, sourceHash, patchedSource, addedLines: [CORRECTED] };
+  return { status: 'proposed', reason: 'One bounded route-boundary fix', path, sourceHash,
+    candidateHash: createHash('sha256').update(patchedSource).digest('hex'), patchedSource, addedLines: [CORRECTED] };
 }
 
 export function qaAgent({ developer, source }) {
