@@ -82,8 +82,9 @@ export function verifyRemoteDraft({ remote, url, branch, commitSha }) {
 // The event name and ref alone do not prove which code was checked out.
 // Attest the runner's exact trusted event commit and the actual Git-resolved push target.
 // A canonical remote.origin.url alone is insufficient: pushurl and url.* rewrites can redirect pushes.
+// Git can push to multiple configured pushurls: require exactly one resolved destination.
 // Do not echo origin URLs: a misconfigured origin can contain credentials.
-export function verifyTrustedCheckout({ env, checkedOutSha, originUrl, effectivePushUrl }) {
+export function verifyTrustedCheckout({ env, checkedOutSha, originUrl, effectivePushUrls }) {
   const trustedOrigins = new Set([
     'https://github.com/jayalshehri/CGP-MVP',
     'https://github.com/jayalshehri/CGP-MVP.git',
@@ -93,7 +94,8 @@ export function verifyTrustedCheckout({ env, checkedOutSha, originUrl, effective
   ]);
   if (!/^[a-f0-9]{40}$/.test(env.GITHUB_SHA || '') ||
       checkedOutSha !== env.GITHUB_SHA || !trustedOrigins.has(originUrl) ||
-      !trustedOrigins.has(effectivePushUrl)) {
+      !Array.isArray(effectivePushUrls) || effectivePushUrls.length !== 1 ||
+      !trustedOrigins.has(effectivePushUrls[0])) {
     fail('untrusted source checkout or Git push destination');
   }
   return true;
@@ -105,7 +107,8 @@ export function publishDraft({ env = process.env } = {}) {
     env,
     checkedOutSha: command('git', ['rev-parse', 'HEAD']).trim(),
     originUrl: command('git', ['config', '--get', 'remote.origin.url']).trim(),
-    effectivePushUrl: command('git', ['remote', 'get-url', '--push', 'origin']).trim()
+    effectivePushUrls: command('git', ['remote', 'get-url', '--push', '--all', 'origin'])
+      .trim().split('\n').filter(Boolean)
   });
   const path = MODEL_ALLOWED_PATH;
   // Refuse pre-staged changes, untracked files and whitespace errors before any write.

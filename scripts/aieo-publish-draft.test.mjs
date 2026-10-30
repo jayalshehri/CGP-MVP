@@ -82,7 +82,7 @@ function fixture() {
   const shim = join(bin, 'git');
   writeFileSync(shim, [
     '#!/bin/sh',
-    'if [ "$1" = "remote" ] && [ "$2" = "get-url" ] && [ "$3" = "--push" ] && [ "$4" = "origin" ] && [ "$AIEO_FIXTURE_ATTEST_PUSH" = "true" ]; then',
+    'if [ "$1" = "remote" ] && [ "$2" = "get-url" ] && [ "$3" = "--push" ] && [ "$4" = "--all" ] && [ "$5" = "origin" ] && [ "$AIEO_FIXTURE_ATTEST_PUSH" = "true" ]; then',
     '  printf "%s\\n" "https://github.com/jayalshehri/CGP-MVP.git"',
     '  exit 0',
     'fi',
@@ -123,7 +123,7 @@ test('publisher rejects unsafe dispatch contexts and missing source consent', ()
 });
 
 
-test('publisher verifies exact GitHub event commit and a canonical same-repo origin', () => {
+test('publisher verifies exact commit and exactly one resolved same-repo push destination', () => {
   const sha = 'a'.repeat(40);
   const env = { GITHUB_SHA: sha };
   for (const originUrl of [
@@ -131,7 +131,7 @@ test('publisher verifies exact GitHub event commit and a canonical same-repo ori
     'https://github.com/jayalshehri/CGP-MVP.git',
     'git@github.com:jayalshehri/CGP-MVP.git'
   ]) {
-    assert.equal(verifyTrustedCheckout({ env, checkedOutSha: sha, originUrl, effectivePushUrl: originUrl }), true);
+    assert.equal(verifyTrustedCheckout({ env, checkedOutSha: sha, originUrl, effectivePushUrls: [originUrl] }), true);
   }
   for (const untrusted of [
     { env: { GITHUB_SHA: 'b'.repeat(40) } },
@@ -141,20 +141,23 @@ test('publisher verifies exact GitHub event commit and a canonical same-repo ori
     { originUrl: 'file:///tmp/untrusted.git' },
     { originUrl: 'https://github.com/attacker/CGP-MVP.git' },
     { originUrl: 'https://github.com/jayalshehri/CGP-MVP.git@attacker.invalid' },
-    { effectivePushUrl: 'file:///tmp/attacker.git' },
-    { effectivePushUrl: 'https://github.com/attacker/CGP-MVP.git' },
-    { effectivePushUrl: undefined }
+    { effectivePushUrls: ['file:///tmp/attacker.git'] },
+    { effectivePushUrls: ['https://github.com/attacker/CGP-MVP.git'] },
+    { effectivePushUrls: [] },
+    { effectivePushUrls: undefined },
+    { effectivePushUrls: ['https://github.com/jayalshehri/CGP-MVP.git', 'file:///tmp/attacker.git'] },
+    { effectivePushUrls: ['https://github.com/jayalshehri/CGP-MVP.git', 'https://github.com/jayalshehri/CGP-MVP.git'] }
   ]) {
     assert.throws(() => verifyTrustedCheckout({
       env, checkedOutSha: sha, originUrl: 'https://github.com/jayalshehri/CGP-MVP.git',
-      effectivePushUrl: 'https://github.com/jayalshehri/CGP-MVP.git',
+      effectivePushUrls: ['https://github.com/jayalshehri/CGP-MVP.git'],
       ...untrusted
     }), /untrusted source checkout or Git push destination/);
   }
 });
 
 test('swapped checkout or destination fails before Git writes or gh invocation', () => {
-  for (const kind of ['wrong-sha', 'wrong-origin', 'url-rewrite', 'pushurl']) {
+  for (const kind of ['wrong-sha', 'wrong-origin', 'url-rewrite', 'pushurl', 'multi-pushurl']) {
     const f = fixture();
     try {
       if (kind === 'wrong-origin') {
@@ -163,9 +166,16 @@ test('swapped checkout or destination fails before Git writes or gh invocation',
       if (kind === 'pushurl') {
         git(f.workspace, 'config', 'remote.origin.pushurl', 'file://' + f.remote);
       }
+      if (kind === 'multi-pushurl') {
+        git(f.workspace, 'config', '--add', 'remote.origin.pushurl',
+          'https://github.com/jayalshehri/CGP-MVP.git');
+        git(f.workspace, 'config', '--add', 'remote.origin.pushurl', 'file://' + f.remote);
+        assert.equal(git(f.workspace, 'remote', 'get-url', '--push', '--all', 'origin')
+          .split('\n').length, 2, 'Git exposes both configured push destinations');
+      }
       const env = { ...f.env,
         ...(kind === 'wrong-sha' ? { GITHUB_SHA: 'f'.repeat(40) } : {}),
-        ...(kind === 'url-rewrite' || kind === 'pushurl' ?
+        ...(['url-rewrite', 'pushurl', 'multi-pushurl'].includes(kind) ?
           { AIEO_FIXTURE_ATTEST_PUSH: 'false' } : {})
       };
       const child = spawnSync(process.execPath, [publisher], {
