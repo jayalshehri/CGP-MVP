@@ -179,3 +179,16 @@ test('independent Security rejects long padded JSX sinks and opaque spreads', ()
   }
   assert.equal(inspectModelDiff(input).status, 'passed');
 });
+
+test('independent Security detects URL sinks beyond quoted angles, arrow functions and nested JSX', () => {
+  for (const addition of [
+    '+<img alt="one > two" src={unsafeUrl} />',
+    "+<a title='left > right' href={unsafeUrl}>Open</a>",
+    '+<img onLoad={() => 1 > 0} src={unsafeUrl} />',
+    '+<div content={<img src={unsafeUrl} />} />',
+    '+<Widget title="one > two" {...unsafeProps} />'
+  ]) {
+    assert.equal(inspectModelDiff({ ...input, diff: addition }).status, 'failed', addition);
+  }
+  assert.equal(inspectModelDiff({ ...input, diff: '+<span title="one > two">Safe label</span>' }).status, 'passed');
+});
