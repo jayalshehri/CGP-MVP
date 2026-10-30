@@ -42,10 +42,11 @@ test('publisher cannot bypass human review or invoke model from untrusted PR', (
   assert.ok(publisher.includes("env.GITHUB_REPOSITORY !== 'jayalshehri/CGP-MVP'"));
   assert.ok(publisher.includes("checkedOutSha: command('git', ['rev-parse', 'HEAD']).trim()"));
   assert.ok(publisher.includes("originUrl: command('git', ['config', '--get', 'remote.origin.url']).trim()"));
-  assert.ok(publisher.includes("effectivePushUrl: command('git', ['remote', 'get-url', '--push', 'origin']).trim()"));
+  assert.ok(publisher.includes("effectivePushUrls: command('git', ['remote', 'get-url', '--push', '--all', 'origin'])"));
+  assert.ok(publisher.includes('effectivePushUrls.length !== 1'));
   assert.ok(publisher.includes('checkedOutSha !== env.GITHUB_SHA'));
   assert.ok(publisher.includes('!trustedOrigins.has(originUrl)'));
-  assert.ok(publisher.includes('!trustedOrigins.has(effectivePushUrl)'));
+  assert.ok(publisher.includes('!trustedOrigins.has(effectivePushUrls[0])'));
   assert.ok(publisher.includes("'--draft'"));
   assert.doesNotMatch(publisher, /(?:['"]pr merge['"]|--auto-merge|--force-with-lease)/);
   assert.ok(provider.includes("env.AIEO_SOURCE_SHARING_APPROVED !== 'true'"));
