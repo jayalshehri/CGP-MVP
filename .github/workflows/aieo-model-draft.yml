@@ -37,7 +37,7 @@ jobs:
         with:
           node-version: '24'
       - name: Run model adapter and independent security unit tests (mock only)
-        run: node --test scripts/aieo-model-provider.test.mjs scripts/aieo-model-security.test.mjs scripts/aieo-model-gates.test.mjs scripts/aieo-model-e2e.test.mjs
+        run: node --test scripts/aieo-model-provider.test.mjs scripts/aieo-model-security.test.mjs scripts/aieo-model-gates.test.mjs scripts/aieo-model-e2e.test.mjs scripts/aieo-publish-draft.test.mjs
       - name: Assert no source changed
         run: git diff --exit-code -- components/FeedbackWidget.tsx
 
@@ -86,20 +86,10 @@ jobs:
           npx next typegen
           npx tsc --noEmit
           npm run build
-      - name: Create Draft PR and dispatch required application checks
+      - name: Publish independently verified candidate as Draft PR only
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          branch="aieo/model-proposal-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git switch -c "$branch"
-          git add -- components/FeedbackWidget.tsx
-          test "$(git diff --cached --name-only)" = 'components/FeedbackWidget.tsx'
-          git commit -m 'feat(aieo): scoped model proposal for human review'
-          gh auth setup-git
-          git push origin "HEAD:refs/heads/$branch"
-          gh pr create --draft --base main --head "$branch" --title "AIEO: bounded model proposal for review" --body "User explicitly approved sharing one source file with OpenRouter. Model output was structurally validated, exact patch audited, lint/typecheck/build passed. This is a DRAFT only; human merge required. No production deployment."
-          gh workflow run cgp-required-ci.yml --ref "$branch"
+          AIEO_PUBLISH_MODE: model
+          AIEO_MODEL_ENABLED: 'true'
+          AIEO_SOURCE_SHARING_APPROVED: 'true'
+        run: node scripts/aieo-publish-draft.mjs
