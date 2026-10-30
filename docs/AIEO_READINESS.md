@@ -43,6 +43,12 @@ The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist on
 - For the publisher's hook-capable operations (`switch`, `add`, `commit`, `push`), use `git -c core.hooksPath=/dev/null` instead of allowing local or overridden hook paths. Retain the post-commit tree/source/parent attestation, remote destination checks, and Draft PR verification; this is a defense-in-depth control, not a replacement for protected credentials or human approval.
 - Isolated local tests install deliberately failing checkout, index-update, commit, and push hooks (`post-checkout`, `post-index-change`, `pre-commit`, `prepare-commit-msg`, `commit-msg`, `post-commit`, `pre-push`) in both default and custom hook directories and verify that none executes while the bounded reviewed candidate can still be published to a **temporary local** Git remote with a mocked `gh`. This remains no proof of live GitHub Actions publication or OpenRouter source-approved repair.
 
+## Git external-command isolation (stacked Draft, 2026-10-30)
+- Git can execute a configured external diff command via `GIT_EXTERNAL_DIFF` / `diff.external` during a source comparison, and `git add` can execute a clean filter configured via Git attributes even with Git hooks disabled. These commands would run in the publisher step that has `GH_TOKEN`.
+- The publisher now adds `--no-ext-diff` to every `git diff` invocation and refuses any effective `filter` attribute on the single allowlisted file before creating a branch, staging, authenticating or pushing. This includes hidden `.git/info/attributes` which is outside the ordinary working-tree diff.
+- Offline tests introduce a deliberately failing external diff helper and a hidden clean filter, and assert no helper executes and the unsafe filter path fails closed. **GitHub CI validation is required for the exact new branch HEAD before treating these changes as verified**.
+- These checks do not authorize real provider source sharing, GitHub Actions-created PR publication, merging or production deployment.
+
 ## Next safe milestones
 1. Continue hardening read-only and mocked integration tests on the feature branch.
 2. Check final CI conclusions against the *current branch HEAD*, not earlier successful commits.
