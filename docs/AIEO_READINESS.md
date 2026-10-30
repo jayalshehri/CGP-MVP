@@ -36,7 +36,7 @@ The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist on
 ## Post-commit tree attestation (stacked Draft, 2026-10-30)
 - A Git pre-commit hook or local Git configuration can change staged source after the model/QA/Security/Reviewer gates. Checking the pre-commit workspace alone is insufficient to prove the final Git commit contains the reviewed bytes.
 - The publisher now confirms that the new commit's sole parent is the trusted `GITHUB_SHA`, the committed source bytes match the independently reviewed candidate, and the committed changed-file list contains only `components/FeedbackWidget.tsx`. This runs **before** GitHub authentication setup, any push, or PR creation.
-- A real local Git pre-commit hook test mutates the staged source and verifies the publisher fails without pushing or invoking `gh`. This remains an **offline fixture**, not proof of an Actions-created real PR.
+- The post-commit source/parent/scope verification remains in place even after disabling local Git hooks. Earlier local hook-mutation tests motivated this additional preventive control; current isolated hook tests assert **no hook invocation at all** (see below). These remain **offline fixtures**, not proof of an Actions-created real PR.
 
 ## Git hook isolation in publisher (stacked Draft, 2026-10-30)
 - Attesting the final commit **after** `git commit` cannot prevent earlier side effects from a malicious `post-checkout`, `pre-commit`, `post-commit`, or `pre-push` hook that was installed during build or via runner-local Git configuration. A hook could run with the publisher job's scoped `GH_TOKEN` even if the resulting commit were later rejected.
