@@ -1,0 +1,32 @@
+# AIEO multi-agent readiness (non-production)
+
+Updated 2026-10-30. Development source: `aieo/multi-agent-foundation`; review: Draft PR #61.
+
+## Confirmed capabilities
+- Developer, QA, Security and Reviewer execute in separate GitHub Actions jobs, with source/candidate SHA-256 handoffs and independent verification for the **bounded deterministic** defect class.
+- A deliberately altered **temporary Git fixture** exercises a proposed patch through separate QA, Security and Reviewer CLI processes. Adversarial evidence and out-of-scope changes fail closed.
+- The optional provider adapter supports a **single allowlisted file** only, sends nothing unless a manual and explicit source-sharing opt-in is supplied, and validates the returned exact-string patch before applying it locally.
+- The Draft PR publisher is limited to a manual main-branch dispatch with a repository-scoped token; independent safety verdicts and build gates are checked before any branch/PR write. Local tests emulate Git remote and `gh`, **not live Actions publication**.
+- CI now checks external-provider token patterns and regression-tests workflow permission/approval boundaries. Neither these static tests nor synthetic fixtures constitute proof of arbitrary autonomous development.
+- Bounded model changes now preserve the full existing feedback submission handler and form submission binding; added tests target commented-out authentication guards and block-comment bypasses. These defenses reduce a specific bypass risk but do **not** certify arbitrary model-generated code as safe.
+
+## Not yet established
+- [ ] One real, explicitly source-approved OpenRouter request for a new legitimate defect.
+- [ ] A real model-generated patch passing independent QA, Security, Reviewer and application CI end to end.
+- [ ] An actual **GitHub Actions** publisher run that pushes the model-generated candidate and opens a Draft PR (rather than the local mocked `gh` rehearsal).
+- [ ] Demonstrated general-purpose autonomous programming across multiple tasks; current producer is deliberately bounded.
+- [ ] Verified that the repository's `aieo-ai` environment, protected secret and release approvals are configured. Secrets are never to be printed or added to the repository.
+
+## GitHub-specific activation boundary
+GitHub documents that `workflow_dispatch` only receives trigger events when the workflow file is on the **default branch**:
+https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow
+
+The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist only in PR #61. The read-only PR checks can run, but the privileged manual jobs **cannot be proven from this feature branch as a new workflow**. Only a deliberate human review and merge of approved workflow definitions to `main` can activate that route. The automation must **never merge PR #61 for this purpose** without explicit authorization.
+
+## Next safe milestones
+1. Continue hardening read-only and mocked integration tests on the feature branch.
+2. Check final CI conclusions against the *current branch HEAD*, not earlier successful commits.
+3. Request a human-controlled activation decision only when code and tests are ready; do not bypass default-branch workflow requirements with PR-triggered write permissions.
+4. Once authorized, validate real source consent, environment protection and a single live Draft PR workflow run. Keep merge and production deployment human-only.
+
+Do not claim MVP completion before the pending end-to-end proofs succeed.
