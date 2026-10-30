@@ -2,11 +2,18 @@
   "schema_version": 1,
   "default_execution": "propose_only",
   "orchestrator": {
-    "trigger": "workflow_dispatch",
+    "trigger": [
+      "push",
+      "pull_request",
+      "workflow_dispatch"
+    ],
     "max_parallel_agents": 3,
     "branch_prefix": "aieo/",
     "production_access": false,
-    "can_merge": false
+    "can_merge": false,
+    "default_read_only": true,
+    "model_external_sharing_requires_explicit_consent": true,
+    "workflow_write_requires_trusted_main_manual_dispatch": true
   },
   "agents": [
     {
@@ -92,5 +99,15 @@
     "secrets": "environment-scoped, never included in PR logs or model prompts",
     "target_branch": "main",
     "draft_pr_first": true
+  },
+  "capability_status": {
+    "four_role_jobs": "tested_in_ci",
+    "bounded_developer": "implemented",
+    "general_developer": "not_yet_proven",
+    "external_model_adapter": "mock_tested_only",
+    "model_source_sharing": "opt_in_required",
+    "draft_pr_creation": "implemented_but_not_live_verified",
+    "human_merge_required": true,
+    "production_deploy": false
   }
 }
