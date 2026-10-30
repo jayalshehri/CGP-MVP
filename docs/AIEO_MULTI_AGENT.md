@@ -42,3 +42,13 @@ The write flag does not commit, push, create a pull request, merge or deploy. It
 - A proven full novel-defect-to-Draft-PR cycle.
 
 Until these are tested, do **not** describe the system as a fully autonomous coding team.
+
+## Optional OpenRouter adapter (not live tested)
+
+The separate "AIEO Opt-in Model Draft" workflow is designed to run **only after manual dispatch on main** and after explicit confirmation that one allowlisted source file may be shared with an external AI provider. It requires a configured GitHub environment named "aieo-ai", an OPENROUTER_API_KEY secret and an AIEO_MODEL_ID variable. The adapter does not run on pull_request or push.
+
+It permits exactly one bounded find/replace in components/FeedbackWidget.tsx and rejects unknown files, ambiguous matches, oversized edits, credential-like text and common dangerous code patterns. An independent diff verifier checks the original and proposed SHA-256, file scope and added lines. Full application lint, typecheck and build must pass before the action creates a Draft PR.
+
+GitHub workflows created or changed through GITHUB_TOKEN do not always trigger ordinary follow-on CI events. This workflow explicitly dispatches the required application-check workflow on the generated branch. A human still decides whether anything is merged. Model-provider tests use a mock transport; **no real provider call, new-model patch, or bot-created PR has been demonstrated yet**.
+
+Never put production secrets or confidential business data into an external model prompt. The current file is code-only allowlisted, but this is a conservative first-phase policy, not a guarantee that an arbitrary file is safe to share.
