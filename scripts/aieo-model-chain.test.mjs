@@ -49,6 +49,10 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     git('commit', '-qm', 'fixture source');
     git('branch', '-M', 'main');
     git('push', '-q', '-u', 'origin', 'main');
+    // Exercise canonical origin validation while all Git traffic remains local.
+    git('config', 'remote.origin.url', 'https://github.com/jayalshehri/CGP-MVP.git');
+    git('config', 'url.file://' + remote + '.insteadOf',
+      'https://github.com/jayalshehri/CGP-MVP.git');
 
     // Preload only a local transport stub. A production API is never contacted.
     writeFileSync(shimPath, [
@@ -89,6 +93,7 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
       GITHUB_EVENT_NAME: 'workflow_dispatch',
       GITHUB_REF: 'refs/heads/main',
       GITHUB_RUN_ID: '77331', GITHUB_RUN_ATTEMPT: '1',
+      GITHUB_SHA: git('rev-parse', 'HEAD').trim(),
       OPENROUTER_API_KEY: 'synthetic-only-do-not-use',
       OPENROUTER_MODEL_ID: 'provider/fixture',
       AIEO_MODEL_ENABLED: 'true',

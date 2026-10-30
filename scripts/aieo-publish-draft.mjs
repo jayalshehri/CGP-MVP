@@ -79,8 +79,31 @@ export function verifyRemoteDraft({ remote, url, branch, commitSha }) {
   return true;
 }
 
+// The event name and ref alone do not prove which code was checked out.
+// Attest the runner's exact trusted event commit and reject alternate push targets.
+// Do not echo origin URLs: a misconfigured origin can contain credentials.
+export function verifyTrustedCheckout({ env, checkedOutSha, originUrl }) {
+  const trustedOrigins = new Set([
+    'https://github.com/jayalshehri/CGP-MVP',
+    'https://github.com/jayalshehri/CGP-MVP.git',
+    'git@github.com:jayalshehri/CGP-MVP',
+    'git@github.com:jayalshehri/CGP-MVP.git',
+    'ssh://git@github.com/jayalshehri/CGP-MVP.git'
+  ]);
+  if (!/^[a-f0-9]{40}$/.test(env.GITHUB_SHA || '') ||
+      checkedOutSha !== env.GITHUB_SHA || !trustedOrigins.has(originUrl)) {
+    fail('untrusted source checkout or Git push destination');
+  }
+  return true;
+}
+
 export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
+  verifyTrustedCheckout({
+    env,
+    checkedOutSha: command('git', ['rev-parse', 'HEAD']).trim(),
+    originUrl: command('git', ['config', '--get', 'remote.origin.url']).trim()
+  });
   const path = MODEL_ALLOWED_PATH;
   // Refuse pre-staged changes, untracked files and whitespace errors before any write.
   if (command('git', ['diff', '--cached', '--name-only']).trim()) fail('unexpected staged files');
