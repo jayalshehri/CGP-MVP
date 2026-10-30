@@ -23,6 +23,11 @@ https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows
 
 The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist only in PR #61. The read-only PR checks can run, but the privileged manual jobs **cannot be proven from this feature branch as a new workflow**. Only a deliberate human review and merge of approved workflow definitions to `main` can activate that route. The automation must **never merge PR #61 for this purpose** without explicit authorization.
 
+## Git push target hardening (stacked Draft, 2026-10-30)
+- Publisher now validates both the canonical raw `remote.origin.url` and Git's **resolved push target** from `git remote get-url --push origin` before any branch or PR write. This rejects `remote.origin.pushurl`, `url.*.insteadOf`, and `url.*.pushInsteadOf` redirects to unapproved destinations even when the raw origin looks trustworthy.
+- Unit and subprocess negative tests cover redirects and verify **no push, branch creation, or GitHub CLI invocation** when attestation fails. Successful full-chain test still uses an **explicit test-only fake destination attestation** with a local Git remote and fake GitHub CLI; it does **not** demonstrate remote GitHub publication or provider-generated repair.
+- This additional check cannot substitute for human-controlled GitHub Actions activation, scoped external-source consent, or a real independently verified PR-generating workflow run.
+
 ## Next safe milestones
 1. Continue hardening read-only and mocked integration tests on the feature branch.
 2. Check final CI conclusions against the *current branch HEAD*, not earlier successful commits.
