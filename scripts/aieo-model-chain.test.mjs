@@ -68,9 +68,16 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     ].join('\n'));
 
     const gh = join(bin, 'gh');
+    const view = JSON.stringify({
+      number: 777, url: 'https://github.com/jayalshehri/CGP-MVP/pull/777',
+      isDraft: true, state: 'OPEN', baseRefName: 'main',
+      headRefName: 'aieo/model-proposal-77331-1'
+    });
     writeFileSync(gh, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$AIEO_FAKE_GH_LOG"\n' +
       'if [ "$1" = "pr" ] && [ "$2" = "create" ]; then\n' +
-      '  printf "https://github.com/example/draft/777\\n"\nfi\n');
+      '  printf "https://github.com/jayalshehri/CGP-MVP/pull/777\\n"\nfi\n' +
+      'if [ "$1" = "pr" ] && [ "$2" = "view" ]; then\n' +
+      "  printf '%s\\n' '" + view + "'\nfi\n");
     chmodSync(gh, 0o755);
     const env = {
       ...process.env, PATH: bin + delimiter + process.env.PATH,
@@ -134,6 +141,7 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     assert.match(git('ls-remote', '--heads', remote), /refs\/heads\/aieo\/model-proposal-77331-1/);
     const ghCommands = readFileSync(ghLog, 'utf8');
     assert.match(ghCommands, /pr create --draft --base main --head aieo\/model-proposal-77331-1/);
+    assert.match(ghCommands, /pr view https:\/\/github.com\/jayalshehri\/CGP-MVP\/pull\/777/);
     assert.match(ghCommands, /workflow run cgp-required-ci.yml --ref aieo\/model-proposal-77331-1/);
     assert.doesNotMatch(ghCommands, /^pr merge\b|^release create\b|^deploy\b|--auto-merge\b/m);
   } finally {
