@@ -267,7 +267,7 @@ test('publisher blocks executable fsmonitor before Git index reads and remote wr
   try {
     const marker = join(f.root, 'fsmonitor-invoked');
     const helper = join(f.root, 'untrusted-fsmonitor.sh');
-    writeFileSync(helper, '#!/bin/sh\\nprintf "invoked\\n" >> "$AIEO_TEST_FSMONITOR_MARKER"\\nexit 1\\n');
+    writeFileSync(helper, ['#!/bin/sh', 'echo invoked >> "$AIEO_TEST_FSMONITOR_MARKER"', 'exit 1', ''].join('\n'));
     chmodSync(helper, 0o755);
     git(f.workspace, 'config', 'core.fsmonitor', helper);
     const child = spawnSync(process.execPath, [publisher], {
