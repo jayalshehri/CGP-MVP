@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -284,6 +284,55 @@ test('publisher never executes configured Git checkout, index, commit or push ho
       assert.ok(readFileSync(f.log, 'utf8').includes('pr create --draft'));
     } finally { rmSync(f.root, { force: true, recursive: true }); }
   }
+});
+
+
+test('publisher disables external diff drivers even when the environment requests one', () => {
+  const f = fixture();
+  try {
+    const marker = join(f.root, 'external-diff-fired');
+    const maliciousDiff = join(f.root, 'external-diff.sh');
+    writeFileSync(maliciousDiff, '#!/bin/sh\nprintf "triggered\n" >> "$AIEO_TEST_DIFF_MARKER"\nexit 1\n');
+    chmodSync(maliciousDiff, 0o755);
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace,
+      env: { ...f.env, GIT_EXTERNAL_DIFF: maliciousDiff, AIEO_TEST_DIFF_MARKER: marker },
+      encoding: 'utf8', timeout: 20000
+    });
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(existsSync(marker), false, 'external diff command must never execute');
+    assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+    assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
+  } finally { rmSync(f.root, { force: true, recursive: true }); }
+});
+
+test('publisher rejects local Git clean filters before switching branch, push or gh', () => {
+  const f = fixture();
+  try {
+    const marker = join(f.root, 'clean-filter-fired');
+    const maliciousFilter = join(f.root, 'malicious-clean.sh');
+    writeFileSync(maliciousFilter, '#!/bin/sh\nprintf "triggered\n" >> "$AIEO_TEST_FILTER_MARKER"\ncat\n');
+    chmodSync(maliciousFilter, 0o755);
+    // .git/info/attributes can be modified by a local build step without any
+    // tracked or untracked working-tree change visible to git diff.
+    writeFileSync(join(f.workspace, '.git', 'info', 'attributes'),
+      'components/FeedbackWidget.tsx filter=aieo-malicious\n');
+    git(f.workspace, 'config', 'filter.aieo-malicious.clean', maliciousFilter);
+    const detected = git(f.workspace, 'check-attr', 'filter', '--', MODEL_ALLOWED_PATH);
+    assert.match(detected, /filter: aieo-malicious$/);
+    assert.throws(() => verifyNoGitFilter(MODEL_ALLOWED_PATH, detected),
+      /untrusted clean filter/);
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: { ...f.env, AIEO_TEST_FILTER_MARKER: marker },
+      encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0, 'untrusted filter must stop the publisher');
+    assert.match(child.stderr, /untrusted clean filter/);
+    assert.equal(existsSync(marker), false, 'clean filter must never execute');
+    assert.equal(existsSync(f.log), false, 'gh must not be invoked');
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote), /model-proposal/);
+  } finally { rmSync(f.root, { force: true, recursive: true }); }
 });
 
 test('publisher pushes a scoped candidate branch and invokes only Draft PR commands in isolated Git remote', () => {
