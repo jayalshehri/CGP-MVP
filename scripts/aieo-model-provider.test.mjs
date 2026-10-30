@@ -270,3 +270,20 @@ test('model proposal blocks long padded outbound JSX attributes and hidden sprea
   });
   assert.equal(validateModelPatch({ response, source }).status, 'proposed');
 });
+
+test('quoted angle brackets, arrow expressions and nested JSX cannot conceal URL sinks', () => {
+  const unsafe = [
+    '<img alt="one > two" src={unsafeUrl} />',
+    "<a title='left > right' href={unsafeUrl}>Open</a>",
+    '<img onLoad={() => 1 > 0} src={unsafeUrl} />',
+    '<div content={<img src={unsafeUrl} />} />',
+    '<Widget title="one > two" {...unsafeProps} />'
+  ];
+  for (const replace of unsafe) {
+    const candidate = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace, explanation: 'quoted angle regression' });
+    assert.equal(validateModelPatch({ response: candidate, source }).status, 'rejected', replace);
+  }
+  const replace = '<span title="one > two">Safe label</span>';
+  const candidate = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace, explanation: 'benign angle bracket' });
+  assert.equal(validateModelPatch({ response: candidate, source }).status, 'proposed');
+});
