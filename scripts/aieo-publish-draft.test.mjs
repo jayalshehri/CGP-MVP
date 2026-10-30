@@ -306,6 +306,28 @@ test('publisher disables external diff drivers even when the environment request
   } finally { rmSync(f.root, { force: true, recursive: true }); }
 });
 
+test('publisher disables Git textconv drivers from hidden local attributes', () => {
+  const f = fixture();
+  try {
+    const marker = join(f.root, 'textconv-fired');
+    const converter = join(f.root, 'malicious-textconv.sh');
+    writeFileSync(converter,
+      '#!/bin/sh\nprintf "triggered\n" >> "$AIEO_TEST_TEXTCONV_MARKER"\ncat "$1"\n');
+    chmodSync(converter, 0o755);
+    writeFileSync(join(f.workspace, '.git', 'info', 'attributes'),
+      'components/FeedbackWidget.tsx diff=aieo-malicious\n');
+    git(f.workspace, 'config', 'diff.aieo-malicious.textconv', converter);
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace,
+      env: { ...f.env, AIEO_TEST_TEXTCONV_MARKER: marker },
+      encoding: 'utf8', timeout: 20000
+    });
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(existsSync(marker), false, 'textconv must never execute');
+    assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+  } finally { rmSync(f.root, { force: true, recursive: true }); }
+});
+
 test('publisher rejects local Git clean filters before switching branch, push or gh', () => {
   const f = fixture();
   try {
