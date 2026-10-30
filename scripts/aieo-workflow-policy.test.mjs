@@ -46,6 +46,12 @@ test('publisher cannot bypass human review or invoke model from untrusted PR', (
   assert.ok(publisher.includes('effectivePushUrls.length !== 1'));
   assert.ok(publisher.includes('checkedOutSha !== env.GITHUB_SHA'));
   assert.ok(publisher.includes('verifyCommittedCandidate({'));
+  assert.ok(publisher.includes("command('git', ['-c', 'core.hooksPath=/dev/null', ...args])"),
+    'publisher Git hooks must be disabled regardless of runner Git config');
+  for (const operation of ['switch', 'add', 'commit', 'push']) {
+    assert.ok(publisher.includes("gitNoHooks(['" + operation + "'"),
+      'hook-capable Git operation must use hookless publisher wrapper: ' + operation);
+  }
   assert.ok(publisher.includes("command('git', ['show', 'HEAD:' + path])"));
   assert.ok(publisher.includes("command('git', ['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'])"));
   assert.ok(publisher.includes('!trustedOrigins.has(originUrl)'));
