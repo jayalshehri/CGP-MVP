@@ -1,5 +1,6 @@
 name: AIEO Multi-Agent Foundation
 on:
+  workflow_dispatch:
   push:
     branches: [aieo/multi-agent-foundation]
     paths:
