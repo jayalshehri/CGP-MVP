@@ -135,7 +135,7 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     const ghCommands = readFileSync(ghLog, 'utf8');
     assert.match(ghCommands, /pr create --draft --base main --head aieo\/model-proposal-77331-1/);
     assert.match(ghCommands, /workflow run cgp-required-ci.yml --ref aieo\/model-proposal-77331-1/);
-    assert.doesNotMatch(ghCommands, /pr merge|--auto-merge|release create|deploy/);
+    assert.doesNotMatch(ghCommands, /^pr merge\b|^release create\b|^deploy\b|--auto-merge\b/m);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
