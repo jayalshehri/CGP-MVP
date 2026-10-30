@@ -250,3 +250,23 @@ test('model proposal refuses CSS imports and image-set network fetches', () => {
   });
   assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
 });
+
+test('model proposal blocks long padded outbound JSX attributes and hidden spread props', () => {
+  for (const replacement of [
+    '<img ' + ' '.repeat(360) + 'src={unsafeUrl} />',
+    '<a ' + ' '.repeat(360) + 'href={unsafeUrl}>Open</a>',
+    '<img {...{ src: unsafeUrl }} />',
+    '<a {...untrustedProps}>Open</a>'
+  ]) {
+    const response = JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace: replacement,
+      explanation: 'negative JSX outbound regression'
+    });
+    assert.equal(validateModelPatch({ response, source }).status, 'rejected', replacement.slice(0, 50));
+  }
+  const response = JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: '  const sample = 103;',
+    explanation: 'safe, bounded fixture'
+  });
+  assert.equal(validateModelPatch({ response, source }).status, 'proposed');
+});
