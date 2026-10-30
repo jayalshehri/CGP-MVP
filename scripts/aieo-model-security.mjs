@@ -32,7 +32,10 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   if (typeof diff !== 'string' || diff.length > 20000) findings.push('Invalid or oversized source delta');
   const additions = typeof diff === 'string' ? diff.split('\n').filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1)) : [];
   if (additions.length > 20) findings.push('Too many new code lines');
-  if (additions.some((line) => suspect.test(line) || browserExfil.test(line)) ||\n      outboundMarkup.test(additions.join('\n')) || outboundCss.test(additions.join('\\n'))) {\n    findings.push('Potentially unsafe new code');\n  }
+  if (additions.some((line) => suspect.test(line) || browserExfil.test(line)) ||
+      outboundMarkup.test(additions.join('\n')) || outboundCss.test(additions.join('\n'))) {
+    findings.push('Potentially unsafe new code');
+  }
   if (typeof original === 'string' && typeof actual === 'string' &&
       protectedFeedbackInvariants.some((line) => original.includes(line) && !actual.includes(line))) {
     findings.push('Existing feedback authentication or ownership guard was removed');
