@@ -12,8 +12,8 @@ const suspect = /\b(?:eval|Function)\s*\(|\b(?:child_process|process\.env|docume
 const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fetch|WebSocket)["']\s*\])\s*\(|\bnavigator\s*(?:\.\s*sendBeacon|\[\s*["']sendBeacon["']\s*\])\s*\(|\b(?:window\s*\.\s*)?location\s*(?:\.\s*(?:assign|replace)\s*\(|\.\s*href\b|\[\s*["'](?:href|assign|replace)["']\s*\])|\bnew\s+(?:Image|Worker|SharedWorker)\s*\(|\bdocument\s*\.\s*createElement\s*\(\s*["'](?:iframe|script|img)["']/i;
 
 // Browser data can also leave through markup attributes and CSS, without an explicit fetch().
-const outboundMarkup = /<\\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\\b(?:(?!>).){0,350}?\\b(?:href|src|srcSet|action|formAction|data)\\s*=/is;
-const outboundCss = /\\burl\\s*\\(|\\bbackgroundImage\\s*:/i;
+const outboundMarkup = /<\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\b(?:(?!>).){0,350}?\b(?:href|src|srcSet|action|formAction|data)\s*=/is;
+const outboundCss = /\burl\s*\(|\bbackgroundImage\s*:/i;
 
 const protectedFeedbackInvariants = [
   'await supabase.auth.getUser()',
@@ -32,7 +32,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   if (typeof diff !== 'string' || diff.length > 20000) findings.push('Invalid or oversized source delta');
   const additions = typeof diff === 'string' ? diff.split('\n').filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1)) : [];
   if (additions.length > 20) findings.push('Too many new code lines');
-  if (additions.some((line) => suspect.test(line) || browserExfil.test(line)) ||\n      outboundMarkup.test(additions.join('\\n')) || outboundCss.test(additions.join('\\n'))) {\n    findings.push('Potentially unsafe new code');\n  }
+  if (additions.some((line) => suspect.test(line) || browserExfil.test(line)) ||\n      outboundMarkup.test(additions.join('\n')) || outboundCss.test(additions.join('\\n'))) {\n    findings.push('Potentially unsafe new code');\n  }
   if (typeof original === 'string' && typeof actual === 'string' &&
       protectedFeedbackInvariants.some((line) => original.includes(line) && !actual.includes(line))) {
     findings.push('Existing feedback authentication or ownership guard was removed');
