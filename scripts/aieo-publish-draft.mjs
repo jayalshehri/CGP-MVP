@@ -9,6 +9,11 @@ import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
 function command(binary, args) {
   return execFileSync(binary, args, { encoding: 'utf8', stdio: 'pipe' });
 }
+// All Git operations that can trigger hooks must ignore runner-local hooks.
+// Build/install steps may have created hooks; they must not run with GH_TOKEN.
+function gitNoHooks(args) {
+  return command('git', ['-c', 'core.hooksPath=/dev/null', ...args]);
+}
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
@@ -144,10 +149,10 @@ export function publishDraft({ env = process.env } = {}) {
     env.GITHUB_RUN_ID + '-' + env.GITHUB_RUN_ATTEMPT;
   command('git', ['config', 'user.name', 'github-actions[bot]']);
   command('git', ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com']);
-  command('git', ['switch', '-c', branch]);
-  command('git', ['add', '--', path]);
+  gitNoHooks(['switch', '-c', branch]);
+  gitNoHooks(['add', '--', path]);
   if (command('git', ['diff', '--cached', '--name-only']).trim() !== path) fail('unexpected staged scope');
-  command('git', ['commit', '-m', 'feat(aieo): bounded candidate for human review']);
+  gitNoHooks(['commit', '-m', 'feat(aieo): bounded candidate for human review']);
   const committedSha = command('git', ['rev-parse', 'HEAD']).trim();
   verifyCommittedCandidate({
     baseSha: env.GITHUB_SHA,
@@ -158,7 +163,7 @@ export function publishDraft({ env = process.env } = {}) {
       .trim().split('\n').filter(Boolean)
   });
   command('gh', ['auth', 'setup-git']);
-  command('git', ['push', 'origin', 'HEAD:refs/heads/' + branch]);
+  gitNoHooks(['push', 'origin', 'HEAD:refs/heads/' + branch]);
   const pushedRef = command('git', ['ls-remote', 'origin', 'refs/heads/' + branch]).trim();
   if (pushedRef !== committedSha + '\trefs/heads/' + branch) {
     fail('Remote branch does not point to the reviewed commit');
