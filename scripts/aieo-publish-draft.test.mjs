@@ -75,8 +75,24 @@ function fixture() {
     "    printf '%s\\n' '" + JSON.stringify(view) + "' | sed \"s/AIEO_HEAD_SHA_PLACEHOLDER/$(git rev-parse HEAD)/g\"\n" +
     '  fi\nfi\n');
   chmodSync(gh, 0o755);
+  // The isolated fixture uses a fake destination attestation only for successful
+  // local Git push rehearsals. Negative cases disable the shim to exercise the
+  // real Git-resolved URL (including url.* rewrites and remote pushurl).
+  const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+  const shim = join(bin, 'git');
+  writeFileSync(shim, [
+    '#!/bin/sh',
+    'if [ "$1" = "remote" ] && [ "$2" = "get-url" ] && [ "$3" = "--push" ] && [ "$4" = "origin" ] && [ "$AIEO_FIXTURE_ATTEST_PUSH" = "true" ]; then',
+    '  printf "%s\\n" "https://github.com/jayalshehri/CGP-MVP.git"',
+    '  exit 0',
+    'fi',
+    'exec ' + JSON.stringify(realGit) + ' "$@"',
+    ''
+  ].join('\n'));
+  chmodSync(shim, 0o755);
   const env = { ...process.env,
     PATH: bin + ':' + process.env.PATH, AIEO_FAKE_GH_LOG: log,
+    AIEO_FIXTURE_ATTEST_PUSH: 'true',
     GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main',
     GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
     GITHUB_RUN_ID: '99123', GITHUB_RUN_ATTEMPT: '1',
@@ -115,7 +131,7 @@ test('publisher verifies exact GitHub event commit and a canonical same-repo ori
     'https://github.com/jayalshehri/CGP-MVP.git',
     'git@github.com:jayalshehri/CGP-MVP.git'
   ]) {
-    assert.equal(verifyTrustedCheckout({ env, checkedOutSha: sha, originUrl }), true);
+    assert.equal(verifyTrustedCheckout({ env, checkedOutSha: sha, originUrl, effectivePushUrl: originUrl }), true);
   }
   for (const untrusted of [
     { env: { GITHUB_SHA: 'b'.repeat(40) } },
@@ -124,24 +140,34 @@ test('publisher verifies exact GitHub event commit and a canonical same-repo ori
     { checkedOutSha: 'b'.repeat(40) },
     { originUrl: 'file:///tmp/untrusted.git' },
     { originUrl: 'https://github.com/attacker/CGP-MVP.git' },
-    { originUrl: 'https://github.com/jayalshehri/CGP-MVP.git@attacker.invalid' }
+    { originUrl: 'https://github.com/jayalshehri/CGP-MVP.git@attacker.invalid' },
+    { effectivePushUrl: 'file:///tmp/attacker.git' },
+    { effectivePushUrl: 'https://github.com/attacker/CGP-MVP.git' },
+    { effectivePushUrl: undefined }
   ]) {
     assert.throws(() => verifyTrustedCheckout({
       env, checkedOutSha: sha, originUrl: 'https://github.com/jayalshehri/CGP-MVP.git',
+      effectivePushUrl: 'https://github.com/jayalshehri/CGP-MVP.git',
       ...untrusted
     }), /untrusted source checkout or Git push destination/);
   }
 });
 
 test('swapped checkout or destination fails before Git writes or gh invocation', () => {
-  for (const kind of ['wrong-sha', 'wrong-origin']) {
+  for (const kind of ['wrong-sha', 'wrong-origin', 'url-rewrite', 'pushurl']) {
     const f = fixture();
     try {
       if (kind === 'wrong-origin') {
         git(f.workspace, 'config', 'remote.origin.url', f.remote);
       }
-      const env = kind === 'wrong-sha' ?
-        { ...f.env, GITHUB_SHA: 'f'.repeat(40) } : f.env;
+      if (kind === 'pushurl') {
+        git(f.workspace, 'config', 'remote.origin.pushurl', 'file://' + f.remote);
+      }
+      const env = { ...f.env,
+        ...(kind === 'wrong-sha' ? { GITHUB_SHA: 'f'.repeat(40) } : {}),
+        ...(kind === 'url-rewrite' || kind === 'pushurl' ?
+          { AIEO_FIXTURE_ATTEST_PUSH: 'false' } : {})
+      };
       const child = spawnSync(process.execPath, [publisher], {
         cwd: f.workspace, env, encoding: 'utf8', timeout: 20000
       });
