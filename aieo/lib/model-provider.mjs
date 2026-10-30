@@ -8,6 +8,9 @@ const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 const credentials = /gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-[a-z0-9]{20,}|(?:sk-proj-|sk-live-|sb_secret_)[a-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:service_role|password|api[_-]?key|client_secret)\s*[:=]\s*["'][^"']{8,}|\bBearer\s+[a-z0-9._~+/-]{16,}/i;
 const forbidden = /(?:\beval\s*\(|\bFunction\s*\(|\bchild_process\b|\bprocess\.env\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bimport\s+|\brequire\s*\()/i;
 
+// Block browser navigation and side-channel transports in even a one-line UI patch.
+const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fetch|WebSocket)["']\s*\])\s*\(|\bnavigator\s*(?:\.\s*sendBeacon|\[\s*["']sendBeacon["']\s*\])\s*\(|\b(?:window\s*\.\s*)?location\s*(?:\.\s*(?:assign|replace)\s*\(|\.\s*href\b|\[\s*["'](?:href|assign|replace)["']\s*\])|\bnew\s+(?:Image|Worker|SharedWorker)\s*\(|\bdocument\s*\.\s*createElement\s*\(\s*["'](?:iframe|script|img)["']/i;
+
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
 export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH }) {
@@ -26,7 +29,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     return { status: 'rejected', reason: 'Proposed edit outside bounded size limits' };
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
-  if (credentials.test(replace) || forbidden.test(replace)) {
+  if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace)) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
   const patchedSource = source.replace(find, replace);
