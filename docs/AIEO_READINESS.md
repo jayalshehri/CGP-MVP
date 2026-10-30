@@ -28,6 +28,11 @@ The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist on
 - Unit and subprocess negative tests cover redirects and verify **no push, branch creation, or GitHub CLI invocation** when attestation fails. Successful full-chain test still uses an **explicit test-only fake destination attestation** with a local Git remote and fake GitHub CLI; it does **not** demonstrate remote GitHub publication or provider-generated repair.
 - This additional check cannot substitute for human-controlled GitHub Actions activation, scoped external-source consent, or a real independently verified PR-generating workflow run.
 
+## Multi-push destination fail-closed check (stacked Draft, 2026-10-30)
+- A Git remote may contain **multiple** `remote.origin.pushurl` entries; ordinary Git push can send commits to more than one destination. Checking only the first resolved URL misses this exfiltration path.
+- Publisher now enumerates `git remote get-url --push --all origin` and requires **exactly one** allowlisted destination; zero, duplicate or mixed trusted/untrusted targets fail closed. Negative tests verify no branch creation or `gh` call for multiple configured destinations.
+- The local fixture's Git shim supports this new attestation solely to keep its transport offline. This is not proof of a live GitHub Actions-published PR or live OpenRouter repair.
+
 ## Next safe milestones
 1. Continue hardening read-only and mocked integration tests on the feature branch.
 2. Check final CI conclusions against the *current branch HEAD*, not earlier successful commits.
