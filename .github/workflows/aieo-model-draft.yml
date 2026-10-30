@@ -37,7 +37,7 @@ jobs:
         with:
           node-version: '24'
       - name: Run model adapter and independent security unit tests (mock only)
-        run: node --test scripts/aieo-model-provider.test.mjs scripts/aieo-model-security.test.mjs
+        run: node --test scripts/aieo-model-provider.test.mjs scripts/aieo-model-security.test.mjs scripts/aieo-model-gates.test.mjs
       - name: Assert no source changed
         run: git diff --exit-code -- components/FeedbackWidget.tsx
 
@@ -70,7 +70,9 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/aieo-model-proposal.mjs
+          node scripts/aieo-model-gates.mjs qa
           node scripts/aieo-model-security.mjs
+          node scripts/aieo-model-gates.mjs reviewer
           git diff --check
           test "$(git diff --name-only)" = 'components/FeedbackWidget.tsx'
       - name: Independently verify application build

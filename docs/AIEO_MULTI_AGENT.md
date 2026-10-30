@@ -52,3 +52,9 @@ It permits exactly one bounded find/replace in components/FeedbackWidget.tsx and
 GitHub workflows created or changed through GITHUB_TOKEN do not always trigger ordinary follow-on CI events. This workflow explicitly dispatches the required application-check workflow on the generated branch. A human still decides whether anything is merged. Model-provider tests use a mock transport; **no real provider call, new-model patch, or bot-created PR has been demonstrated yet**.
 
 Never put production secrets or confidential business data into an external model prompt. The current file is code-only allowlisted, but this is a conservative first-phase policy, not a guarantee that an arbitrary file is safe to share.
+
+## Independent model-candidate gates (2026-10-30)
+
+The optional model-Draft workflow now launches **separate QA, Security and Reviewer CLI processes** after the provider produces a proposed file. QA independently verifies the source/candidate hashes, exactly one allowlisted changed file, and preservation of the already-fixed control-route boundary. Security independently reads the real Git delta and rejects unsafe changes. Reviewer **recomputes** QA and Security evidence against the actual working tree, rejecting forged or stale reports before any commit or Draft PR is allowed. Negative tests cover forged hashes and verdicts, changed file scope, and route guard removal.
+
+These checks are deliberately limited: preserving known invariants and passing lint/typecheck/build **does not prove a novel model-generated fix is semantically correct**. The provider-backed Draft PR path still has not been exercised live; an environment-scoped external sharing opt-in remains mandatory. No human GitHub approval, merge or production permission is delegated.
