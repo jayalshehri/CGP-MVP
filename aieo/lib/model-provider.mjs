@@ -11,6 +11,11 @@ const forbidden = /(?:\beval\s*\(|\bFunction\s*\(|\bchild_process\b|\bprocess\.e
 // Block browser navigation and side-channel transports in even a one-line UI patch.
 const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fetch|WebSocket)["']\s*\])\s*\(|\bnavigator\s*(?:\.\s*sendBeacon|\[\s*["']sendBeacon["']\s*\])\s*\(|\b(?:window\s*\.\s*)?location\s*(?:\.\s*(?:assign|replace)\s*\(|\.\s*href\b|\[\s*["'](?:href|assign|replace)["']\s*\])|\bnew\s+(?:Image|Worker|SharedWorker)\s*\(|\bdocument\s*\.\s*createElement\s*\(\s*["'](?:iframe|script|img)["']/i;
 
+// Even without fetch(), JSX links, images, forms and CSS can transmit data to external hosts.
+// Deliberately reject new outbound-capable markup in this one-file proposal workflow.
+const outboundMarkup = /<\\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\\b(?:(?!>).){0,350}?\\b(?:href|src|srcSet|action|formAction|data)\\s*=/is;
+const outboundCss = /\\burl\\s*\\(|\\bbackgroundImage\\s*:/i;
+
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
 export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH }) {
@@ -29,7 +34,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     return { status: 'rejected', reason: 'Proposed edit outside bounded size limits' };
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
-  if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace)) {
+  if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace) ||\n      outboundMarkup.test(replace) || outboundCss.test(replace)) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
   const patchedSource = source.replace(find, replace);
