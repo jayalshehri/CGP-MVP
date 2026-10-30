@@ -16,6 +16,38 @@ const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fe
 const outboundMarkup = /<\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\b(?:(?!>).){0,350}?\b(?:href|src|srcSet|action|formAction|data)\s*=/is;
 const outboundCss = /\burl\s*\(|\bbackgroundImage\s*:/i;
 
+// Never buffer an unbounded provider response: real fetch supplies a readable byte stream.
+const MAX_PROVIDER_BYTES = 18000;
+async function readLimitedProviderBody(response) {
+  const declared = response.headers?.get?.('content-length');
+  if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_PROVIDER_BYTES) return null;
+  if (typeof response.body?.getReader !== 'function') {
+    // Only for injected test transports. Real HTTP responses use the streaming path.
+    const text = await response.text();
+    return Buffer.byteLength(text, 'utf8') <= MAX_PROVIDER_BYTES ? text : null;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const fragments = [];
+  let bytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > MAX_PROVIDER_BYTES) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      fragments.push(decoder.decode(value, { stream: true }));
+    }
+    fragments.push(decoder.decode());
+    return fragments.join('');
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
 export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH }) {
@@ -82,20 +114,26 @@ export async function requestModelPatch({ source, path = MODEL_ALLOWED_PATH, tas
   }
   const abort = new AbortController();
   const timeout = setTimeout(() => abort.abort(), 20000);
-  let result;
+  let text;
   try {
-    result = await transport(ENDPOINT, {
+    const result = await transport(ENDPOINT, {
       method: 'POST', signal: abort.signal,
+      // Source sharing is approved only to this endpoint, never a redirect target.
+      redirect: 'error', referrerPolicy: 'no-referrer',
       headers: { Authorization: 'Bearer ' + env.OPENROUTER_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+    if (!result?.ok || result.redirected === true) {
+      return { status: 'failed', reason: 'Provider did not accept request' };
+    }
+    text = await readLimitedProviderBody(result);
   } catch {
     return { status: 'failed', reason: 'Provider request failed or timed out' };
-  } finally { clearTimeout(timeout); }
-  if (!result?.ok) return { status: 'failed', reason: 'Provider did not accept request' };
-  let text;
-  try { text = await result.text(); } catch { return { status: 'failed', reason: 'Provider response unavailable' }; }
-  if (text.length > 18000) return { status: 'rejected', reason: 'Provider response too large' };
+  } finally {
+    // Keep the timeout active throughout streaming, not just the response headers.
+    clearTimeout(timeout);
+  }
+  if (text === null) return { status: 'rejected', reason: 'Provider response too large' };
   let data;
   try { data = JSON.parse(text); } catch { return { status: 'rejected', reason: 'Invalid provider envelope' }; }
   const answer = data?.choices?.[0]?.message?.content;
