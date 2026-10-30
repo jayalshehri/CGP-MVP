@@ -42,7 +42,7 @@ export function buildModelRequest({ source, path = MODEL_ALLOWED_PATH, task, mod
       credentials.test(source) || /(?:\.env|secrets\/|service_role)/i.test(path)) {
     throw new Error('Source cannot be shared with an external model');
   }
-  if (typeof task !== 'string' || task.length < 12 || task.length > 500 ||
+  if (typeof task !== 'string' || task.length < 12 || task.length > 500 || credentials.test(task) ||
       typeof model !== 'string' || !/^[a-z0-9_.-]+\/[a-z0-9_.:-]+$/i.test(model)) {
     throw new Error('Invalid task or configured model');
   }
