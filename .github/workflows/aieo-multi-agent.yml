@@ -1,0 +1,40 @@
+name: AIEO Multi-Agent Foundation
+on:
+  push:
+    branches: [aieo/multi-agent-foundation]
+    paths:
+      - 'aieo/**'
+      - 'scripts/aieo-*.mjs'
+      - '.github/workflows/aieo-multi-agent.yml'
+  pull_request:
+    paths:
+      - 'aieo/**'
+      - 'scripts/aieo-*.mjs'
+      - '.github/workflows/aieo-multi-agent.yml'
+permissions:
+  contents: read
+jobs:
+  four-agent-check:
+    name: Four-agent orchestration and policy tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify four agents and failure modes
+        run: node --test scripts/aieo-agent.test.mjs
+      - name: Orchestrate on the real CGP source (read-only)
+        run: node scripts/aieo-runner.mjs
+      - name: Verify no source edits
+        run: git diff --exit-code -- components/FeedbackWidget.tsx
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aieo-four-agent-report
+          path: aieo-output/multi-agent-report.json
+          if-no-files-found: ignore
+          retention-days: 7
