@@ -13,9 +13,10 @@ on:
       - '.github/workflows/aieo-multi-agent.yml'
 permissions:
   contents: read
+
 jobs:
-  four-agent-check:
-    name: Four-agent orchestration and policy tests
+  orchestrator-preflight:
+    name: AIEO orchestrator preflight
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -25,16 +26,105 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Verify four agents and failure modes
+      - name: Run negative, safety and handoff tests
         run: node --test scripts/aieo-agent.test.mjs
-      - name: Orchestrate on the real CGP source (read-only)
+      - name: Verify real source in read-only mode
         run: node scripts/aieo-runner.mjs
-      - name: Verify no source edits
+      - name: Ensure source unchanged
         run: git diff --exit-code -- components/FeedbackWidget.tsx
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: aieo-four-agent-report
+          name: aieo-orchestrator-report
           path: aieo-output/multi-agent-report.json
           if-no-files-found: ignore
+          retention-days: 7
+
+  developer:
+    name: AIEO Developer Agent
+    needs: orchestrator-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/aieo-role.mjs developer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-developer
+          path: aieo-output/developer.json
+          retention-days: 7
+
+  qa:
+    name: AIEO QA Agent
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: aieo-developer
+          path: aieo-output
+      - run: node scripts/aieo-role.mjs qa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-qa
+          path: aieo-output/qa.json
+          retention-days: 7
+
+  security:
+    name: AIEO Security Agent
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: aieo-developer
+          path: aieo-output
+      - run: node scripts/aieo-role.mjs security
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-security
+          path: aieo-output/security.json
+          retention-days: 7
+
+  reviewer:
+    name: AIEO Reviewer Agent
+    needs: [qa, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: aieo-*
+          path: aieo-output
+          merge-multiple: true
+      - run: node scripts/aieo-role.mjs reviewer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-reviewer
+          path: aieo-output/reviewer.json
           retention-days: 7
