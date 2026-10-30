@@ -29,7 +29,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node --test scripts/aieo-agent.test.mjs scripts/aieo-handoff.test.mjs scripts/aieo-e2e.test.mjs scripts/aieo-model-provider.test.mjs
+      - run: node --test scripts/aieo-agent.test.mjs scripts/aieo-handoff.test.mjs scripts/aieo-e2e.test.mjs scripts/aieo-model-provider.test.mjs scripts/aieo-publish-draft.test.mjs
       - run: node scripts/aieo-runner.mjs
       - run: git diff --exit-code -- components/FeedbackWidget.tsx
   create-draft:
@@ -77,20 +77,9 @@ jobs:
           npx next typegen
           npx tsc --noEmit
           npm run build
-      - name: Commit approved fix and open human-controlled Draft PR
+      - name: Publish verified bounded fix as Draft PR only
         if: steps.proposal.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          branch="aieo/repair-feedback-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git switch -c "$branch"
-          git add -- components/FeedbackWidget.tsx
-          test "$(git diff --cached --name-only)" = 'components/FeedbackWidget.tsx'
-          git commit -m 'fix(aieo): approved bounded feedback route repair'
-          gh auth setup-git
-          git push origin "HEAD:refs/heads/$branch"
-          gh pr create --draft --base main --head "$branch" --title "AIEO: bounded FeedbackWidget repair" --body "Bounded deterministic repair. Tests, lint, typecheck and build passed. Human must approve any merge; no production deployment."
+          AIEO_PUBLISH_MODE: deterministic
+        run: node scripts/aieo-publish-draft.mjs
