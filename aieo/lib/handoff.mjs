@@ -17,8 +17,8 @@ export function buildHandoffArtifact({ role, task, sourceHash, candidateHash, ve
     throw new Error('Cannot construct invalid AIEO handoff');
   }
   return {
-    schemaVersion: HANDOFF_SCHEMA_VERSION, role, task, sourceHash, candidateHash,
-    ...verdict
+    ...verdict,
+    schemaVersion: HANDOFF_SCHEMA_VERSION, role, task, sourceHash, candidateHash
   };
 }
 
