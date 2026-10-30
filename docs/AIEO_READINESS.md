@@ -33,6 +33,11 @@ The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist on
 - Publisher now enumerates `git remote get-url --push --all origin` and requires **exactly one** allowlisted destination; zero, duplicate or mixed trusted/untrusted targets fail closed. Negative tests verify no branch creation or `gh` call for multiple configured destinations.
 - The local fixture's Git shim supports this new attestation solely to keep its transport offline. This is not proof of a live GitHub Actions-published PR or live OpenRouter repair.
 
+## Post-commit tree attestation (stacked Draft, 2026-10-30)
+- A Git pre-commit hook or local Git configuration can change staged source after the model/QA/Security/Reviewer gates. Checking the pre-commit workspace alone is insufficient to prove the final Git commit contains the reviewed bytes.
+- The publisher now confirms that the new commit's sole parent is the trusted `GITHUB_SHA`, the committed source bytes match the independently reviewed candidate, and the committed changed-file list contains only `components/FeedbackWidget.tsx`. This runs **before** GitHub authentication setup, any push, or PR creation.
+- A real local Git pre-commit hook test mutates the staged source and verifies the publisher fails without pushing or invoking `gh`. This remains an **offline fixture**, not proof of an Actions-created real PR.
+
 ## Next safe milestones
 1. Continue hardening read-only and mocked integration tests on the feature branch.
 2. Check final CI conclusions against the *current branch HEAD*, not earlier successful commits.

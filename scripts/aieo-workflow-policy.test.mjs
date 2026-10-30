@@ -45,6 +45,9 @@ test('publisher cannot bypass human review or invoke model from untrusted PR', (
   assert.ok(publisher.includes("effectivePushUrls: command('git', ['remote', 'get-url', '--push', '--all', 'origin'])"));
   assert.ok(publisher.includes('effectivePushUrls.length !== 1'));
   assert.ok(publisher.includes('checkedOutSha !== env.GITHUB_SHA'));
+  assert.ok(publisher.includes('verifyCommittedCandidate({'));
+  assert.ok(publisher.includes("command('git', ['show', 'HEAD:' + path])"));
+  assert.ok(publisher.includes("command('git', ['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'])"));
   assert.ok(publisher.includes('!trustedOrigins.has(originUrl)'));
   assert.ok(publisher.includes('!trustedOrigins.has(effectivePushUrls[0])'));
   assert.ok(publisher.includes("'--draft'"));
