@@ -287,3 +287,20 @@ test('quoted angle brackets, arrow expressions and nested JSX cannot conceal URL
   const candidate = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace, explanation: 'benign angle bracket' });
   assert.equal(validateModelPatch({ response: candidate, source }).status, 'proposed');
 });
+
+test('model validator inspects complete JSX tags when replacement starts inside an existing tag', () => {
+  const markup = 'const view = <img\\n  alt="safe"\\n/>;\\n'.replaceAll('\\n', '\n');
+  const fragment = '  alt="safe"';
+  for (const replacement of [
+    '  alt="safe" src={token}',
+    '  alt="safe" {...forwardedProps}'
+  ]) {
+    const response = JSON.stringify({ path: MODEL_ALLOWED_PATH, find: fragment, replace: replacement, explanation: 'partial tag regression' });
+    assert.equal(validateModelPatch({ response, source: markup }).status, 'rejected', replacement);
+  }
+  const response = JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find: fragment,
+    replace: '  alt="updated safe"', explanation: 'ordinary label edit'
+  });
+  assert.equal(validateModelPatch({ response, source: markup }).status, 'proposed');
+});
