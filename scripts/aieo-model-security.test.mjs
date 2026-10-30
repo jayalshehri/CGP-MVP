@@ -94,3 +94,34 @@ test('security refuses removal of existing feedback authentication and ownership
     assert.ok(result.findings.some((value) => value.includes('authentication or ownership')));
   }
 });
+
+test('security freezes submit handler against comment-only auth bypass while allowing UI text edits', () => {
+  const base = [
+    'export default function FeedbackWidget() {',
+    '  async function submit(event: FormEvent<HTMLFormElement>) {',
+    '    const { data: auth } = await supabase.auth.getUser();',
+    '    if (!auth.user) { return; }',
+    '    await supabase.from("feedback").insert({ created_by: auth.user.id });',
+    '  }',
+    '  return <>',
+    '    <form onSubmit={submit}><span>Old label</span></form>',
+    '  </>;',
+    '}',
+    ''
+  ].join(String.fromCharCode(10));
+  const assess = (actual, diff) => inspectModelDiff({
+    original: base, actual, changedPaths: [MODEL_ALLOWED_PATH], diff,
+    report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(actual) }
+  });
+  const safe = base.replace('Old label', 'New label');
+  assert.equal(assess(safe, '+    <form onSubmit={submit}><span>New label</span></form>').status, 'passed');
+  // The old substring-only guard accepted commented-out auth checks.
+  const commented = base.replace('    if (!auth.user)', '    // if (!auth.user)');
+  const commentResult = assess(commented, '+    // if (!auth.user) { return; }');
+  assert.equal(commentResult.status, 'failed');
+  assert.ok(commentResult.findings.some((finding) => finding.includes('submit handler')));
+  const reassigned = base.replace('<form onSubmit={submit}>', '<form onSubmit={() => {}}>');
+  assert.equal(assess(reassigned, '+    <form onSubmit={() => {}}><span>Old label</span></form>').status, 'failed');
+  const blockComment = base.replace('    if (!auth.user)', '    /* if (!auth.user)');
+  assert.equal(assess(blockComment, '+    /* if (!auth.user) { return; }').status, 'failed');
+});
