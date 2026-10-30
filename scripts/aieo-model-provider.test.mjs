@@ -131,3 +131,17 @@ test('modern provider keys and bearer tokens are rejected before external source
   }
   assert.equal(sent, 0, 'privacy rejection must happen before any HTTP attempt');
 });
+
+test('model proposal rejects block comment delimiters that could neutralize active code', () => {
+  for (const replacement of [
+    '  /* const sample = 101; */',
+    '  const sample = 101; /* disabled auth guard */',
+    '  const sample = 101; */'
+  ]) {
+    const attempted = JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace: replacement,
+      explanation: 'synthetic comment bypass attempt'
+    });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected');
+  }
+});
