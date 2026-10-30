@@ -40,6 +40,10 @@ test('publisher cannot bypass human review or invoke model from untrusted PR', (
   assert.ok(publisher.includes("env.GITHUB_EVENT_NAME !== 'workflow_dispatch'"));
   assert.ok(publisher.includes("env.GITHUB_REF !== 'refs/heads/main'"));
   assert.ok(publisher.includes("env.GITHUB_REPOSITORY !== 'jayalshehri/CGP-MVP'"));
+  assert.ok(publisher.includes("checkedOutSha: command('git', ['rev-parse', 'HEAD']).trim()"));
+  assert.ok(publisher.includes("originUrl: command('git', ['config', '--get', 'remote.origin.url']).trim()"));
+  assert.ok(publisher.includes('checkedOutSha !== env.GITHUB_SHA'));
+  assert.ok(publisher.includes('!trustedOrigins.has(originUrl)'));
   assert.ok(publisher.includes("'--draft'"));
   assert.doesNotMatch(publisher, /(?:['"]pr merge['"]|--auto-merge|--force-with-lease)/);
   assert.ok(provider.includes("env.AIEO_SOURCE_SHARING_APPROVED !== 'true'"));
