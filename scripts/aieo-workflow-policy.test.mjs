@@ -48,8 +48,8 @@ test('publisher cannot bypass human review or invoke model from untrusted PR', (
   assert.ok(publisher.includes('verifyCommittedCandidate({'));
   assert.ok(publisher.includes("verifyNoGitFilter(path, command('git', ['check-attr', 'filter', '--', path]).trim())"));
   for (const operation of ['--check', '--name-only', '--unified=0', '--cached']) {
-    assert.ok(publisher.includes("'--no-ext-diff', '" + operation + "'"),
-      'publisher must disable external diff driver for ' + operation);
+    assert.ok(publisher.includes("'--no-ext-diff', '--no-textconv', '" + operation + "'"),
+      'publisher must disable external diff and textconv for ' + operation);
   }
   assert.ok(publisher.includes("command('git', ['-c', 'core.hooksPath=/dev/null', ...args])"),
     'publisher Git hooks must be disabled regardless of runner Git config');
