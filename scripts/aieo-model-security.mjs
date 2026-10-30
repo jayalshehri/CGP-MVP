@@ -18,7 +18,7 @@ const outboundCss = /\burl\s*\(|\bbackgroundImage\s*:/i;
 // The source-bearing submit handler is security-critical. Preserve its complete body,
 // not only snippets that could survive inside comments or unreachable branches.
 const submitStart = '  async function submit(event: FormEvent<HTMLFormElement>) {';
-const submitEnd = '\\n  return <>';
+const submitEnd = String.fromCharCode(10) + '  return <>';
 function protectedSubmit(source) {
   const start = source.indexOf(submitStart);
   if (start < 0 || source.indexOf(submitStart, start + 1) !== -1) return null;
