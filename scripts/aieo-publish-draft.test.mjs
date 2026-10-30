@@ -2,14 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -38,6 +38,11 @@ function fixture() {
   git(workspace, 'commit', '-qm', 'fixture');
   git(workspace, 'branch', '-M', 'main');
   git(workspace, 'push', '-q', '-u', 'origin', 'main');
+  // Keep the exact official origin in config while transparently routing fixture
+  // Git transport to a local bare repository. No public network is contacted.
+  git(workspace, 'config', 'remote.origin.url', 'https://github.com/jayalshehri/CGP-MVP.git');
+  git(workspace, 'config', 'url.file://' + remote + '.insteadOf',
+    'https://github.com/jayalshehri/CGP-MVP.git');
   writeFileSync(target, candidate);
   const proposal = { schemaVersion: 1, status: 'proposed', path: MODEL_ALLOWED_PATH,
     sourceHash: hash(source), proposedHash: hash(candidate) };
@@ -75,6 +80,7 @@ function fixture() {
     GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main',
     GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
     GITHUB_RUN_ID: '99123', GITHUB_RUN_ATTEMPT: '1',
+    GITHUB_SHA: git(workspace, 'rev-parse', 'HEAD'),
     GH_TOKEN: 'placeholder-not-a-real-secret',
     AIEO_PUBLISH_MODE: 'model', AIEO_MODEL_ENABLED: 'true',
     AIEO_SOURCE_SHARING_APPROVED: 'true'
@@ -85,6 +91,7 @@ function fixture() {
 test('publisher rejects unsafe dispatch contexts and missing source consent', () => {
   const env = { GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main',
     GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP', GITHUB_RUN_ID: '77',
+    GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ATTEMPT: '1', GH_TOKEN: 'synthetic', AIEO_PUBLISH_MODE: 'model',
     AIEO_MODEL_ENABLED: 'true', AIEO_SOURCE_SHARING_APPROVED: 'true' };
   assert.equal(validateDispatch(env), 'model');
@@ -99,6 +106,53 @@ test('publisher rejects unsafe dispatch contexts and missing source consent', ()
   ]) assert.throws(() => validateDispatch({ ...env, ...overrides }));
 });
 
+
+test('publisher verifies exact GitHub event commit and a canonical same-repo origin', () => {
+  const sha = 'a'.repeat(40);
+  const env = { GITHUB_SHA: sha };
+  for (const originUrl of [
+    'https://github.com/jayalshehri/CGP-MVP',
+    'https://github.com/jayalshehri/CGP-MVP.git',
+    'git@github.com:jayalshehri/CGP-MVP.git'
+  ]) {
+    assert.equal(verifyTrustedCheckout({ env, checkedOutSha: sha, originUrl }), true);
+  }
+  for (const untrusted of [
+    { env: { GITHUB_SHA: 'b'.repeat(40) } },
+    { env: { GITHUB_SHA: 'not-a-commit' } },
+    { env: {} },
+    { checkedOutSha: 'b'.repeat(40) },
+    { originUrl: 'file:///tmp/untrusted.git' },
+    { originUrl: 'https://github.com/attacker/CGP-MVP.git' },
+    { originUrl: 'https://github.com/jayalshehri/CGP-MVP.git@attacker.invalid' }
+  ]) {
+    assert.throws(() => verifyTrustedCheckout({
+      env, checkedOutSha: sha, originUrl: 'https://github.com/jayalshehri/CGP-MVP.git',
+      ...untrusted
+    }), /untrusted source checkout or Git push destination/);
+  }
+});
+
+test('swapped checkout or destination fails before Git writes or gh invocation', () => {
+  for (const kind of ['wrong-sha', 'wrong-origin']) {
+    const f = fixture();
+    try {
+      if (kind === 'wrong-origin') {
+        git(f.workspace, 'config', 'remote.origin.url', f.remote);
+      }
+      const env = kind === 'wrong-sha' ?
+        { ...f.env, GITHUB_SHA: 'f'.repeat(40) } : f.env;
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env, encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0);
+      assert.match(child.stderr, /untrusted source checkout or Git push destination/);
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.equal(git(f.workspace, 'ls-remote', '--heads', f.remote).includes('model-proposal-'), false);
+      assert.equal(existsSync(f.log), false, 'gh must not be invoked');
+    } finally { rmSync(f.root, { force: true, recursive: true }); }
+  }
+});
 
 test('remote Draft verifier binds the PR to the reviewed commit and same repository', () => {
   const commitSha = 'a'.repeat(40);
