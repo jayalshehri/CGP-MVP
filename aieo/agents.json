@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "default_execution": "propose_only",
+  "orchestrator": {
+    "trigger": "workflow_dispatch",
+    "max_parallel_agents": 3,
+    "branch_prefix": "aieo/",
+    "production_access": false,
+    "can_merge": false
+  },
+  "agents": [
+    {
+      "id": "developer",
+      "purpose": "Find and implement scoped code fixes",
+      "inputs": [
+        "issue",
+        "repository snapshot"
+      ],
+      "outputs": [
+        "patch",
+        "test plan",
+        "draft PR"
+      ],
+      "permissions": [
+        "contents:read",
+        "pull-requests:write"
+      ],
+      "can_merge": false
+    },
+    {
+      "id": "qa",
+      "purpose": "Reproduce defects and independently verify fixes",
+      "inputs": [
+        "PR diff",
+        "test suite"
+      ],
+      "outputs": [
+        "test results",
+        "regression report"
+      ],
+      "permissions": [
+        "contents:read",
+        "checks:read"
+      ],
+      "can_merge": false
+    },
+    {
+      "id": "security",
+      "purpose": "Review security changes and detect leaked secrets or unsafe dependencies",
+      "inputs": [
+        "PR diff",
+        "dependency manifest"
+      ],
+      "outputs": [
+        "risk findings",
+        "security verdict"
+      ],
+      "permissions": [
+        "contents:read"
+      ],
+      "can_merge": false
+    },
+    {
+      "id": "reviewer",
+      "purpose": "Review implementation against acceptance criteria; never claim GitHub independent approval",
+      "inputs": [
+        "PR diff",
+        "QA verdict",
+        "security verdict"
+      ],
+      "outputs": [
+        "review report",
+        "merge recommendation"
+      ],
+      "permissions": [
+        "contents:read",
+        "pull-requests:read"
+      ],
+      "can_merge": false
+    }
+  ],
+  "gates": {
+    "required": [
+      "npm run lint",
+      "npx tsc --noEmit",
+      "npm run build",
+      "QA PASS",
+      "Security PASS"
+    ],
+    "on_failure": "block_handoff",
+    "handoff": "human_merges",
+    "secrets": "environment-scoped, never included in PR logs or model prompts",
+    "target_branch": "main",
+    "draft_pr_first": true
+  }
+}
