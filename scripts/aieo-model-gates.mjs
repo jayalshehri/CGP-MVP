@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
+import { attestModelReviewWorkspace } from '../aieo/lib/model-workspace-attestation.mjs';
 
 // A repository/runner fsmonitor executable is independent of diff drivers and
 // can run during index reads while this job carries the model provider secret.
@@ -11,6 +12,7 @@ const safeGit = (args) => execFileSync('git', ['-c', 'core.fsmonitor=false', ...
 
 const role = process.argv[2];
 if (!['qa', 'reviewer'].includes(role)) throw new Error('Expected qa or reviewer');
+attestModelReviewWorkspace(MODEL_ALLOWED_PATH);
 const original = safeGit(['show', 'HEAD:' + MODEL_ALLOWED_PATH]);
 const actual = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
 // Independently calculate candidate scope and patch without executing any

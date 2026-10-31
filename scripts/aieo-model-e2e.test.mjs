@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync, renameSync, symlinkSync, linkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -106,6 +106,71 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
       assert.notEqual(verdict.status, role === 'reviewer' ? 'draft-pr-eligible' : 'passed');
       assert.ok(verdict.findings.some((finding) => /scope|file changes/i.test(finding)),
         (role || name) + ' must independently report out-of-scope change');
+    }
+    // Restore the baseline fixture: workspace integrity checks below must
+    // identify unsafe paths, not fail due to the staged README test above.
+    git('-c', 'core.fsmonitor=false', 'reset', '-q', 'HEAD', '--', 'README.md');
+    writeFileSync(join(root, 'README.md'), 'Tracked fixture file\n');
+    for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
+      const child = run(name, role);
+      assert.equal(child.status, 0, (role || name) + ' must pass on clean local files: ' + child.stderr);
+    }
+    // A symlinked artifact directory can redirect reads/writes outside the
+    // trusted checkout even if untracked aieo-output is excluded from scope.
+    const redirected = mkdtempSync(join(tmpdir(), 'aieo-review-redirect-'));
+    try {
+      const actualOutput = join(redirected, 'real-output');
+      renameSync(output, actualOutput);
+      symlinkSync(actualOutput, output, 'dir');
+      try {
+        for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
+          const child = run(name, role);
+          assert.notEqual(child.status, 0, (role || name) + ' must reject symlinked output directory');
+          assert.match(child.stderr, /Unsafe model review workspace entry: aieo-output/);
+        }
+      } finally {
+        rmSync(output);
+        renameSync(actualOutput, output);
+      }
+      // Individually redirected verdicts are also dangerous. Check symlinks
+      // and hardlinks separately and verify the external file is untouched.
+      const externalReport = join(redirected, 'external-report.json');
+      writeFileSync(externalReport, 'KEEP THIS FILE\n');
+      const qaBefore = readFileSync(artifact('qa'), 'utf8');
+      rmSync(artifact('qa'));
+      symlinkSync(externalReport, artifact('qa'));
+      try {
+        for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
+          const child = run(name, role);
+          assert.notEqual(child.status, 0, (role || name) + ' must reject redirected QA verdict');
+          assert.match(child.stderr, /Unsafe model review workspace entry: aieo-output\/model-qa.json/);
+        }
+        assert.equal(readFileSync(externalReport, 'utf8'), 'KEEP THIS FILE\n');
+      } finally {
+        rmSync(artifact('qa'));
+        writeFileSync(artifact('qa'), qaBefore);
+      }
+      const securityBefore = readFileSync(artifact('security'), 'utf8');
+      rmSync(artifact('security'));
+      linkSync(externalReport, artifact('security'));
+      try {
+        for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
+          const child = run(name, role);
+          assert.notEqual(child.status, 0, (role || name) + ' must reject multiply linked Security verdict');
+          assert.match(child.stderr, /Unsafe model review workspace entry: aieo-output\/model-security.json/);
+        }
+        assert.equal(readFileSync(externalReport, 'utf8'), 'KEEP THIS FILE\n');
+      } finally {
+        rmSync(artifact('security'));
+        writeFileSync(artifact('security'), securityBefore);
+      }
+    } finally {
+      rmSync(redirected, { recursive: true, force: true });
+    }
+    // No unsafe-path tests should weaken the passing ordinary review chain.
+    for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
+      const child = run(name, role);
+      assert.equal(child.status, 0, (role || name) + ' must pass after restoring genuine inputs: ' + child.stderr);
     }
     assert.equal(readFileSync(path, 'utf8'), actual);
   } finally {
