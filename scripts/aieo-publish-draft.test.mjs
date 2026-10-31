@@ -294,9 +294,9 @@ test('authenticated Git resets configured executable helpers, including URL-spec
     git(f.workspace, 'config', 'credential.helper', '!' + malicious);
     git(f.workspace, 'config', 'credential.https://github.com.helper', '!' + malicious);
 
-    // The actual CLI helper is replaced only inside this local test sandbox.
+    // The GitHub CLI helper is replaced only inside this isolated test fixture.
     const gh = join(f.root, 'bin', 'gh');
-    writeFileSync(gh, '#!/bin/sh\nif [ "$1" = "auth" ] && [ "$2" = "git-credential" ] && [ "$3" = "get" ]; then\n  printf "username=fixture\\\npassword=synthetic\\\n"\nfi\n');
+    writeFileSync(gh, '#!/bin/sh\nif [ "$1" = "auth" ] && [ "$2" = "git-credential" ] && [ "$3" = "get" ]; then\n  printf "username=fixture\\npassword=synthetic\\n"\nfi\n');
     chmodSync(gh, 0o755);
     const child = spawnSync('git', authenticatedGitArgs(['credential', 'fill']), {
       cwd: f.workspace, env: { ...f.env, GIT_TERMINAL_PROMPT: '0' },
