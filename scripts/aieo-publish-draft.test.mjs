@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, verifyNoGitCommitSigning, verifyGitHttpsTls, verifyNoGitDiagnosticExport, verifyNoGitHubCliRoutingOverride, authenticatedGitArgs } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, verifyNoGitCommitSigning, verifyGitHttpsTls, verifyNoGitDiagnosticExport, verifyNoGitHubCliRoutingOverride, verifyNoGitRepositoryEnvironmentOverride, authenticatedGitArgs } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -366,6 +366,45 @@ test('insecure Git HTTPS configuration fails before Draft branch, GitHub CLI or 
       assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
         /model-proposal/, 'No candidate may be pushed');
     } finally { rmSync(f.root, { force: true, recursive: true }); }
+  }
+});
+
+test('publisher refuses inherited Git repository, object and index routing overrides', () => {
+  assert.equal(verifyNoGitRepositoryEnvironmentOverride({}), true);
+  assert.equal(verifyNoGitRepositoryEnvironmentOverride({ GIT_INDEX_FILE: '' }), true);
+  for (const key of [
+    'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
+    'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE'
+  ]) {
+    assert.throws(
+      () => verifyNoGitRepositoryEnvironmentOverride({ [key]: '/tmp/untrusted-repository' }),
+      /untrusted Git repository or index environment override/, key
+    );
+  }
+});
+
+test('repository and index redirects block token-bearing publisher before Git or gh writes', () => {
+  for (const key of [
+    'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
+    'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE'
+  ]) {
+    const f = fixture();
+    try {
+      const outsideIndex = join(f.root, 'external-index');
+      const override = key === 'GIT_INDEX_FILE' ? outsideIndex :
+        key === 'GIT_NAMESPACE' ? 'foreign-namespace' : f.root;
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: { ...f.env, [key]: override },
+        encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, key + ' must fail closed');
+      assert.match(child.stderr, /untrusted Git repository or index environment override/, key);
+      assert.equal(existsSync(outsideIndex), false, 'external index must remain absent');
+      assert.equal(existsSync(f.log), false, 'GitHub CLI must not be invoked');
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /model-proposal/, 'no remote candidate branch is allowed');
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
   }
 });
 
