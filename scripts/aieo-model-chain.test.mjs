@@ -114,6 +114,7 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
       OPENROUTER_MODEL_ID: 'provider/fixture',
       AIEO_MODEL_ENABLED: 'true',
       AIEO_SOURCE_SHARING_APPROVED: 'true',
+      AIEO_APPROVED_SOURCE_SHA256: hash(original),
       AIEO_MODEL_TASK: 'Correct the stale status label in this temporary fixture.',
       AIEO_MODEL_APPLY: '1',
       AIEO_PUBLISH_MODE: 'model',
@@ -129,6 +130,12 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     });
     assert.notEqual(denied.status, 0, 'Unapproved external source sharing must be blocked');
     assert.equal(existsSync(transportCalls), false, 'Transport must not be invoked without opt-in');
+    assert.equal(readFileSync(target, 'utf8'), original);
+    const deniedHash = run(['--import', shimPath, proposal], {
+      AIEO_APPROVED_SOURCE_SHA256: '0'.repeat(64)
+    });
+    assert.notEqual(deniedHash.status, 0, 'Source mismatch must block the provider');
+    assert.equal(existsSync(transportCalls), false, 'Mismatched source consent must not call the provider');
     assert.equal(readFileSync(target, 'utf8'), original);
 
     const proposed = run(['--import', shimPath, proposal]);
