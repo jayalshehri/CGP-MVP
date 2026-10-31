@@ -289,18 +289,18 @@ test('authenticated Git resets configured executable helpers, including URL-spec
   try {
     const marker = join(f.root, 'untrusted-helper-ran');
     const malicious = join(f.root, 'malicious-helper.sh');
-    writeFileSync(malicious, '#!/bin/sh\\nprintf invoked >> ' + JSON.stringify(marker) + '\\n');
+    writeFileSync(malicious, '#!/bin/sh\nprintf invoked >> ' + JSON.stringify(marker) + '\n');
     chmodSync(malicious, 0o755);
     git(f.workspace, 'config', 'credential.helper', '!' + malicious);
     git(f.workspace, 'config', 'credential.https://github.com.helper', '!' + malicious);
 
     // The actual CLI helper is replaced only inside this local test sandbox.
     const gh = join(f.root, 'bin', 'gh');
-    writeFileSync(gh, '#!/bin/sh\\nif [ "$1" = "auth" ] && [ "$2" = "git-credential" ] && [ "$3" = "get" ]; then\\n  printf "username=fixture\\\\npassword=synthetic\\\\n"\\nfi\\n');
+    writeFileSync(gh, '#!/bin/sh\nif [ "$1" = "auth" ] && [ "$2" = "git-credential" ] && [ "$3" = "get" ]; then\n  printf "username=fixture\\\npassword=synthetic\\\n"\nfi\n');
     chmodSync(gh, 0o755);
     const child = spawnSync('git', authenticatedGitArgs(['credential', 'fill']), {
       cwd: f.workspace, env: { ...f.env, GIT_TERMINAL_PROMPT: '0' },
-      input: 'protocol=https\\nhost=github.com\\n\\n',
+      input: 'protocol=https\nhost=github.com\n\n',
       encoding: 'utf8', timeout: 20000
     });
     assert.equal(child.status, 0, 'only the trusted fixture helper should supply credentials: ' + child.stderr);
