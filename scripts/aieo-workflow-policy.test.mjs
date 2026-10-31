@@ -15,6 +15,8 @@ test('provider-backed source sharing stays manual, explicit, and environment-sco
   const guard = "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true";
   assert.ok(model.includes(guard), 'model write job must require trusted manual main dispatch and opt-in');
   assert.match(model, /approve_external_source_sharing:\s*\n(?:.*\n){0,6}\s*default: false/m);
+  assert.ok(model.includes('approved_source_sha256:'), 'manual approval must bind the exact source snapshot');
+  assert.ok(model.includes('AIEO_APPROVED_SOURCE_SHA256: ' + '$' + '{{ inputs.approved_source_sha256 }}'));
   assert.ok(model.includes('environment: aieo-ai'), 'provider credentials must remain environment-scoped');
   assert.ok(model.includes('OPENROUTER_API_KEY: ' + '$' + '{{ secrets.OPENROUTER_API_KEY }}'));
   assert.ok(model.includes("AIEO_SOURCE_SHARING_APPROVED: 'true'"));
@@ -84,6 +86,7 @@ test('publisher cannot bypass human review or invoke model from untrusted PR', (
   assert.ok(publisher.includes("'--draft'"));
   assert.doesNotMatch(publisher, /(?:['"]pr merge['"]|--auto-merge|--force-with-lease)/);
   assert.ok(provider.includes("env.AIEO_SOURCE_SHARING_APPROVED !== 'true'"));
+  assert.ok(provider.includes('env.AIEO_APPROVED_SOURCE_SHA256'));
   assert.ok(provider.includes("env.GITHUB_EVENT_NAME !== 'workflow_dispatch'"));
 });
 
