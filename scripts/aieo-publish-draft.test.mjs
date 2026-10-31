@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, authenticatedGitArgs } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, verifyNoGitCommitSigning, authenticatedGitArgs } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -355,6 +355,36 @@ test('custom Git remote helper fails closed before execution or any remote write
     assert.notEqual(child.status, 0);
     assert.match(child.stderr, /untrusted Git remote helper override/);
     assert.equal(existsSync(marker), false, 'untrusted git-remote helper must never execute');
+    assert.equal(existsSync(f.log), false, 'gh must not run');
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote), /model-proposal/);
+  } finally { rmSync(f.root, { force: true, recursive: true }); }
+});
+
+test('publisher rejects commit signing rather than invoking external Git signing drivers', () => {
+  assert.equal(verifyNoGitCommitSigning('false'), true);
+  for (const value of ['true', '1', '', 'on']) {
+    assert.throws(() => verifyNoGitCommitSigning(value),
+      /untrusted Git commit signing configuration/);
+  }
+});
+
+test('Git commit signing executable fails closed before branch creation, gh or remote writes', () => {
+  const f = fixture();
+  try {
+    const marker = join(f.root, 'gpg-program-invoked');
+    const executable = join(f.root, 'untrusted-gpg.sh');
+    writeFileSync(executable, '#!/bin/sh\\necho invoked >> ' + JSON.stringify(marker) + '\\nexit 1\\n');
+    chmodSync(executable, 0o755);
+    git(f.workspace, 'config', 'commit.gpgSign', 'true');
+    git(f.workspace, 'config', 'gpg.program', executable);
+    assert.equal(git(f.workspace, 'config', '--bool', '--get', 'commit.gpgSign'), 'true');
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0);
+    assert.match(child.stderr, /untrusted Git commit signing configuration/);
+    assert.equal(existsSync(marker), false, 'untrusted signing driver must not execute');
     assert.equal(existsSync(f.log), false, 'gh must not run');
     assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
     assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote), /model-proposal/);

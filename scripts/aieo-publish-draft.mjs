@@ -164,6 +164,17 @@ export function verifyNoGitRemoteHelper(effectiveVcs) {
   return true;
 }
 
+// git commit can invoke an executable signing driver (gpg.program, gpg.ssh.program,
+// etc.) while GH_TOKEN is available. A runner requesting signed commits must
+// fail closed rather than silently bypass its signing policy or execute a
+// configurable external signer. --bool canonicalizes Git's true/on/1 values.
+export function verifyNoGitCommitSigning(effectiveSetting) {
+  if (effectiveSetting !== 'false') {
+    fail('untrusted Git commit signing configuration');
+  }
+  return true;
+}
+
 // A Git hook or local Git config can mutate the index/tree after source gates run.
 // Recheck the exact committed tree and single parent *before* any remote write.
 export function verifyCommittedCandidate({ baseSha, parentSha, reviewedSource, committedSource, changedPaths }) {
@@ -185,6 +196,9 @@ export function publishDraft({ env = process.env } = {}) {
   });
   // A Git remote.vcs override can execute git-remote-<vcs> during a trusted-URL push.
   verifyNoGitRemoteHelper(command('git', ['config', '--get', '--default', '', 'remote.origin.vcs']).trim());
+  // A signed git commit may execute arbitrary configured signing software with
+  // GH_TOKEN. Refuse signing requirements instead of weakening the configuration.
+  verifyNoGitCommitSigning(command('git', ['config', '--bool', '--get', '--default', 'false', 'commit.gpgSign']).trim());
   // Reading config is index-free; reject an executable fsmonitor before diff/add.
   verifyNoGitFsmonitor(command('git', ['config', '--get', '--default', 'false', 'core.fsmonitor']).trim());
   verifyTrustedCheckout({
