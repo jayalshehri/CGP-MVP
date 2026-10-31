@@ -304,3 +304,24 @@ test('model validator inspects complete JSX tags when replacement starts inside 
   });
   assert.equal(validateModelPatch({ response, source: markup }).status, 'proposed');
 });
+
+
+test('custom JSX components cannot introduce URL-bearing props', () => {
+  const attemptedReplacements = [
+    '<RemoteImage src={privateUrl} />',
+    '<RouterLink href={privateUrl}>Follow</RouterLink>',
+    '<Widget xlink:href={privateUrl} />',
+    '<Card title="safe" srcSet={privateUrl} />'
+  ];
+  for (const replace of attemptedReplacements) {
+    const response = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'synthetic custom JSX URL regression' });
+    assert.equal(validateModelPatch({ response, source }).status, 'rejected', replace);
+  }
+  const partialSource = 'const node = <RemoteImage alt="safe" />;\n';
+  const partial = JSON.stringify({ path: MODEL_ALLOWED_PATH, find: 'alt="safe image"',
+    replace: 'alt="safe image" src={privateUrl}', explanation: 'partial attr injection' });
+  assert.equal(validateModelPatch({ response: partial, source: partialSource.replace('alt="safe"', 'alt="safe image"') }).status, 'rejected');
+  assert.equal(validateModelPatch({ response: JSON.stringify({ path: MODEL_ALLOWED_PATH,
+    find, replace: '<Display label="safe" />', explanation: 'safe custom component' }), source }).status, 'proposed');
+});
