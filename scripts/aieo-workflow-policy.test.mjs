@@ -50,6 +50,9 @@ test('publisher cannot bypass human review or invoke model from untrusted PR', (
   for (const variable of ['GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS']) {
     assert.ok(publisher.includes(variable), 'missing executable transport guard: ' + variable);
   }
+  assert.ok(publisher.includes('verifyGitHttpsTls({ env, effectiveSslVerify: '), 'publisher must reject disabled Git HTTPS TLS');
+  assert.ok(publisher.includes("'--get-urlmatch', 'http.sslVerify'"), 'publisher must read URL-scoped TLS verification config');
+  assert.ok(publisher.includes('GIT_SSL_NO_VERIFY'), 'publisher must reject insecure TLS environment overrides');
   assert.ok(publisher.includes('verifyCommittedCandidate({'));
   assert.ok(publisher.includes("verifyNoGitFilter(path, command('git', ['check-attr', 'filter', '--', path]).trim())"));
   for (const operation of ['--check', '--name-only', '--unified=0', '--cached']) {
