@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, verifyNoGitCommitSigning, verifyGitHttpsTls, verifyNoGitDiagnosticExport, authenticatedGitArgs } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, verifyNoGitCommitSigning, verifyGitHttpsTls, verifyNoGitDiagnosticExport, verifyNoGitHubCliRoutingOverride, authenticatedGitArgs } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -405,6 +405,40 @@ test('Git tracing cannot export token-bearing transport diagnostics or publish a
   }
 });
 
+test('GitHub CLI host and repository overrides must never select publication targets', () => {
+  assert.equal(verifyNoGitHubCliRoutingOverride({}), true);
+  for (const override of [
+    { GH_REPO: 'attacker/other-repository' },
+    { GH_REPO: 'jayalshehri/CGP-MVP' },
+    { GH_HOST: 'github.example.invalid' },
+    { GH_HOST: 'github.com' }
+  ]) {
+    assert.throws(() => verifyNoGitHubCliRoutingOverride(override),
+      /untrusted GitHub CLI repository or host routing/);
+  }
+});
+
+test('inherited GH_REPO or GH_HOST stops before branch creation, push or PR command', () => {
+  for (const override of [
+    { GH_REPO: 'attacker/other-repository' },
+    { GH_HOST: 'github.example.invalid' }
+  ]) {
+    const f = fixture();
+    try {
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: { ...f.env, ...override },
+        encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0);
+      assert.match(child.stderr, /untrusted GitHub CLI repository or host routing/);
+      assert.equal(existsSync(f.log), false, 'GitHub CLI must not be invoked');
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /model-proposal/, 'no proposal branch may be pushed');
+    } finally { rmSync(f.root, { force: true, recursive: true }); }
+  }
+});
+
 test('custom Git remote helper must not be configured for Draft publishing', () => {
   assert.equal(verifyNoGitRemoteHelper(''), true);
   for (const helper of ['git', 'aieo-unsafe', 'ext', 'ssh']) {
@@ -636,9 +670,9 @@ test('publisher pushes a scoped candidate branch and invokes only Draft PR comma
     assert.ok(remoteHeads.includes('refs/heads/main'));
     assert.equal(git(f.workspace, 'diff', 'main', 'HEAD', '--name-only'), MODEL_ALLOWED_PATH);
     const commands = readFileSync(f.log, 'utf8');
-    assert.match(commands, /pr create --draft --base main --head aieo\/model-proposal-99123-1/);
+    assert.match(commands, /pr create --draft --repo jayalshehri\/CGP-MVP --base main --head aieo\/model-proposal-99123-1/);
     assert.match(commands, /pr view https:\/\/github.com\/jayalshehri\/CGP-MVP\/pull\/123/);
-    assert.match(commands, /workflow run cgp-required-ci.yml --ref aieo\/model-proposal-99123-1/);
+    assert.match(commands, /workflow run cgp-required-ci.yml --repo jayalshehri\/CGP-MVP --ref aieo\/model-proposal-99123-1/);
     assert.doesNotMatch(commands, /(?:^|\n).*?(?:pr merge|deployment|release)(?: |$)/);
   } finally { rmSync(f.root, { force: true, recursive: true }); }
 });
