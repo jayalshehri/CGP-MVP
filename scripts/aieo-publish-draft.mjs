@@ -181,9 +181,15 @@ function effectiveGitSslVerify(url) {
 
 // TLS verification can remain enabled while an inherited custom CA and proxy
 // trust a local interception endpoint. Never publish with Git-configured
-// proxy routes or additional trust roots. These settings can be URL-specific.
+// proxy routes, environment-configured curl proxies or additional trust roots.
+// Git's URL-matched config cannot detect HTTP(S)_PROXY or ALL_PROXY inherited
+// by libcurl or gh; reject these before the first Git subprocess.
 export function verifyNoGitHttpsTrustOverride({ env, effectiveProxy, effectiveCaInfo, effectiveCaPath }) {
-  if (['GIT_SSL_CAINFO', 'GIT_SSL_CAPATH', 'CURL_CA_BUNDLE'].some((key) =>
+  if ([
+    'GIT_SSL_CAINFO', 'GIT_SSL_CAPATH', 'CURL_CA_BUNDLE',
+    'HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy',
+    'ALL_PROXY', 'all_proxy'
+  ].some((key) =>
       typeof env[key] === 'string' && env[key].length > 0) ||
       effectiveProxy !== '' || effectiveCaInfo !== '' || effectiveCaPath !== '') {
     fail('untrusted Git HTTPS proxy or CA override');
