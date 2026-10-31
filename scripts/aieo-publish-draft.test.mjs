@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync, renameSync, symlinkSync, linkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -705,4 +705,69 @@ test('publisher blocks success and follow-up CI if GitHub does not confirm an op
     assert.doesNotMatch(commands, /workflow run/);
     assert.equal(git(f.workspace, 'show', 'main:' + MODEL_ALLOWED_PATH).includes('sample = 1'), true);
   } finally { rmSync(f.root, { force: true, recursive: true }); }
+});
+
+
+test('publisher independently rejects redirected model reports before branch creation or GitHub writes', () => {
+  for (const kind of ['directory-symlink', 'verdict-symlink', 'verdict-hardlink']) {
+    const f = fixture();
+    try {
+      const artifactDir = join(f.workspace, 'aieo-output');
+      const qaPath = join(artifactDir, 'model-qa.json');
+      const reviewerPath = join(artifactDir, 'model-reviewer.json');
+      let sentinel;
+      let original;
+      if (kind === 'directory-symlink') {
+        const externalDir = join(f.root, 'external-artifacts');
+        original = readFileSync(qaPath, 'utf8');
+        renameSync(artifactDir, externalDir);
+        symlinkSync(externalDir, artifactDir, 'dir');
+        sentinel = join(externalDir, 'model-qa.json');
+      } else if (kind === 'verdict-symlink') {
+        original = readFileSync(reviewerPath, 'utf8');
+        sentinel = join(f.root, 'outside-reviewer.json');
+        writeFileSync(sentinel, original);
+        rmSync(reviewerPath);
+        symlinkSync(sentinel, reviewerPath);
+      } else {
+        original = readFileSync(qaPath, 'utf8');
+        sentinel = join(f.root, 'outside-qa.json');
+        writeFileSync(sentinel, original);
+        rmSync(qaPath);
+        linkSync(sentinel, qaPath);
+      }
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, kind + ' must fail closed');
+      assert.match(child.stderr, /Unsafe model review workspace entry/, kind);
+      assert.equal(readFileSync(sentinel, 'utf8'), original, 'outside content must remain unchanged');
+      assert.equal(existsSync(f.log), false, 'GitHub CLI must not be invoked');
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote), /model-proposal/);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  }
+});
+
+test('publisher source attestation rejects an outside linked component in both modes', () => {
+  for (const mode of ['model', 'deterministic']) {
+    const f = fixture();
+    try {
+      const outside = join(f.root, 'outside-component.tsx');
+      const original = readFileSync(f.target, 'utf8');
+      writeFileSync(outside, original);
+      rmSync(f.target);
+      symlinkSync(outside, f.target);
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: { ...f.env, AIEO_PUBLISH_MODE: mode },
+        encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0);
+      assert.match(child.stderr, /Unsafe model review workspace entry/);
+      assert.equal(readFileSync(outside, 'utf8'), original);
+      assert.equal(existsSync(f.log), false, 'no Draft PR command is allowed');
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote), /model-proposal|repair-feedback/);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  }
 });

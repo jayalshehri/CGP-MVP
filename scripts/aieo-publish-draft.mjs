@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
+import { attestModelSourceFile, attestModelReviewWorkspace } from '../aieo/lib/model-workspace-attestation.mjs';
 import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
 
 function command(binary, args) {
@@ -240,6 +241,12 @@ export function publishDraft({ env = process.env } = {}) {
   // GIT_EXEC_PATH can substitute remote-https when credentials are available.
   verifyNoGitTransportOverride({ env, effectiveSshCommand: '' });
   verifyNoGitDiagnosticExport(env);
+  // Re-attest filesystem boundaries in the token-bearing publisher, not just
+  // the earlier QA/Security/Reviewer processes. A replaced verdict symlink or
+  // multiply-linked report must fail before any authenticated Git/gh writes.
+  // Deterministic repairs need only the source check (no model reports exist).
+  if (mode === 'model') attestModelReviewWorkspace(MODEL_ALLOWED_PATH);
+  else attestModelSourceFile(MODEL_ALLOWED_PATH);
   // Reject a disabled SSL check even before running git. Git config can hold
   // a host- or path-specific override that takes precedence over global SSL.
   verifyGitHttpsTls({ env, effectiveSslVerify: 'true' });
