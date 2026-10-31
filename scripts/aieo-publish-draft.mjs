@@ -190,6 +190,20 @@ export function verifyNoGitHubCliRoutingOverride(env) {
   return true;
 }
 
+// Git repository, index and object-store environment variables can redirect
+// otherwise trusted Git commands to a different worktree or mutable index.
+// Refuse inherited overrides before ANY Git subprocess has access to GH_TOKEN.
+export function verifyNoGitRepositoryEnvironmentOverride(env) {
+  const overrides = [
+    'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
+    'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE'
+  ];
+  if (overrides.some((key) => typeof env[key] === 'string' && env[key].length > 0)) {
+    fail('untrusted Git repository or index environment override');
+  }
+  return true;
+}
+
 // Git trace exports may write HTTP headers (including credentials if trace
 // redaction is disabled) or patch/source data into attacker-chosen files.
 // Never inherit diagnostic logging in a token-bearing publish process.
@@ -236,6 +250,7 @@ export function verifyCommittedCandidate({ baseSha, parentSha, reviewedSource, c
 
 export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
+  verifyNoGitRepositoryEnvironmentOverride(env);
   verifyNoGitHubCliRoutingOverride(env);
   // Reject executable environment overrides before even invoking Git. A custom
   // GIT_EXEC_PATH can substitute remote-https when credentials are available.
