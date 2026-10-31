@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, verifyNoGitCommitSigning, verifyGitHttpsTls, authenticatedGitArgs } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, verifyNoGitCommitSigning, verifyGitHttpsTls, verifyNoGitDiagnosticExport, authenticatedGitArgs } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -365,6 +365,42 @@ test('insecure Git HTTPS configuration fails before Draft branch, GitHub CLI or 
       assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
       assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
         /model-proposal/, 'No candidate may be pushed');
+    } finally { rmSync(f.root, { force: true, recursive: true }); }
+  }
+});
+
+test('Git diagnostic exports are refused before a token-bearing subprocess', () => {
+  assert.equal(verifyNoGitDiagnosticExport({}), true);
+  assert.equal(verifyNoGitDiagnosticExport({ GIT_TRACE: '' }), true);
+  for (const key of [
+    'GIT_TRACE', 'GIT_TRACE_CURL', 'GIT_TRACE_PACKET', 'GIT_TRACE_SETUP',
+    'GIT_TRACE2', 'GIT_TRACE2_EVENT', 'GIT_TRACE2_PERF',
+    'GIT_TRACE_REDACT', 'GIT_CURL_VERBOSE'
+  ]) {
+    assert.throws(() => verifyNoGitDiagnosticExport({ [key]: '1' }),
+      /untrusted Git diagnostics configuration/, key);
+  }
+});
+
+test('Git tracing cannot export token-bearing transport diagnostics or publish a branch', () => {
+  for (const kind of ['GIT_TRACE', 'GIT_TRACE_CURL', 'GIT_TRACE2_EVENT', 'GIT_CURL_VERBOSE', 'GIT_TRACE_REDACT']) {
+    const f = fixture();
+    try {
+      const tracePath = join(f.root, 'git-diagnostics-exported');
+      const setting = kind === 'GIT_CURL_VERBOSE' ? '1' :
+        kind === 'GIT_TRACE_REDACT' ? '0' : tracePath;
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace,
+        env: { ...f.env, [kind]: setting },
+        encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, kind + ' must fail before any Git call');
+      assert.match(child.stderr, /untrusted Git diagnostics configuration/);
+      assert.equal(existsSync(tracePath), false, 'trace file must not be created');
+      assert.equal(existsSync(f.log), false, 'GitHub CLI must not be invoked');
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /model-proposal/, 'No candidate branch may be pushed');
     } finally { rmSync(f.root, { force: true, recursive: true }); }
   }
 });
