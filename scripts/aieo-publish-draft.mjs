@@ -125,6 +125,21 @@ export function verifyNoGitFsmonitor(effectiveSetting) {
   return true;
 }
 
+// Git can invoke a runner-configured SSH or askpass program with GH_TOKEN in the
+// environment. The publisher has no need to execute transport overrides supplied
+// by repository or runner configuration. Reject them before any authenticated push.
+export function verifyNoGitTransportOverride({ env, effectiveSshCommand }) {
+  const executableEnv = [
+    'GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_ASKPASS', 'SSH_ASKPASS',
+    'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS'
+  ];
+  if (effectiveSshCommand !== '' ||
+      executableEnv.some((key) => typeof env[key] === 'string' && env[key].length > 0)) {
+    fail('untrusted Git transport executable override');
+  }
+  return true;
+}
+
 // A Git hook or local Git config can mutate the index/tree after source gates run.
 // Recheck the exact committed tree and single parent *before* any remote write.
 export function verifyCommittedCandidate({ baseSha, parentSha, reviewedSource, committedSource, changedPaths }) {
@@ -138,6 +153,12 @@ export function verifyCommittedCandidate({ baseSha, parentSha, reviewedSource, c
 
 export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
+  // Git config reads do not refresh the index or launch the requested transport.
+  // Both configuration and environment command overrides must fail closed.
+  verifyNoGitTransportOverride({
+    env,
+    effectiveSshCommand: command('git', ['config', '--get', '--default', '', 'core.sshCommand']).trim()
+  });
   // Reading config is index-free; reject an executable fsmonitor before diff/add.
   verifyNoGitFsmonitor(command('git', ['config', '--get', '--default', 'false', 'core.fsmonitor']).trim());
   verifyTrustedCheckout({

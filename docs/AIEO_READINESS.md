@@ -55,6 +55,11 @@ The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist on
 - A negative isolated fixture installs an executable fsmonitor that would leave a marker and fail, then verifies the publisher refuses the run before marker creation, branch write, `gh` call or push. The fixtures remain offline; exact-head CI must verify this change before any safety claim.
 - This does not establish live GitHub Actions Draft publication or a consented OpenRouter model run, and it does not claim all Git configuration execution risks are eliminated.
 
+## Git SSH/askpass transport command guard (stacked Draft, 2026-10-31)
+- Even when the resolved Git remote targets the approved repository, a runner-configured `core.sshCommand`, `GIT_SSH_COMMAND` or `GIT_SSH` can execute an arbitrary local program during an SSH push. `GIT_ASKPASS` / `SSH_ASKPASS` and Git configuration environment overrides are additional command or configuration injection surfaces in a publisher step carrying `GH_TOKEN`.
+- The Draft publisher now refuses a configured SSH command and non-empty `GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_ASKPASS`, `SSH_ASKPASS`, `GIT_CONFIG_COUNT` or `GIT_CONFIG_PARAMETERS` before performing any network operation or branch write. The normal checkout/HTTPS GitHub authentication route is not otherwise changed.
+- Negative unit tests and temporary Git-process fixtures check the refusal occurs before a malicious marker program, `gh` invocation or branch creation. This control does not address all possible Git credential-helper execution surfaces, and these are simulated fixtures, not a live Actions-published PR or real OpenRouter request. Exact-head GitHub CI must pass before relying on this change.
+
 ## Next safe milestones
 1. Continue hardening read-only and mocked integration tests on the feature branch.
 2. Check final CI conclusions against the *current branch HEAD*, not earlier successful commits.
