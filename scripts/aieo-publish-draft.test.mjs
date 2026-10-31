@@ -374,7 +374,7 @@ test('Git commit signing executable fails closed before branch creation, gh or r
   try {
     const marker = join(f.root, 'gpg-program-invoked');
     const executable = join(f.root, 'untrusted-gpg.sh');
-    writeFileSync(executable, '#!/bin/sh\\necho invoked >> ' + JSON.stringify(marker) + '\\nexit 1\\n');
+    writeFileSync(executable, '#!/bin/sh\necho invoked >> ' + JSON.stringify(marker) + '\nexit 1\n');
     chmodSync(executable, 0o755);
     git(f.workspace, 'config', 'commit.gpgSign', 'true');
     git(f.workspace, 'config', 'gpg.program', executable);
