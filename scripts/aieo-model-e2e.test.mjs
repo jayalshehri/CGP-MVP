@@ -51,7 +51,7 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     // A hostile fsmonitor also runs on index reads, independently of any
     // external diff driver. Prove that an ordinary diff invokes it, then
     // require all three agent processes to avoid it without disabling checks.
-    writeFileSync(fsmonitor, '#!/bin/sh\\nprintf invoked >> '+JSON.stringify(fsmonitorSentinel)+'\\nexit 93\\n');
+    writeFileSync(fsmonitor, '#!/bin/sh\nprintf invoked >> ' + JSON.stringify(fsmonitorSentinel) + '\nexit 93\n');
     chmodSync(fsmonitor, 0o755);
     git('config', 'core.fsmonitor', fsmonitor);
     spawnSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--name-only'],
@@ -59,7 +59,7 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     assert.equal(existsSync(fsmonitorSentinel), true,
       'control must prove Git runs an inherited fsmonitor');
     rmSync(fsmonitorSentinel);
-    writeFileSync(artifact('proposal', JSON.stringify({
+    writeFileSync(artifact('proposal'), JSON.stringify({
       schemaVersion: 1, status: 'proposed', path: 'components/FeedbackWidget.tsx',
       sourceHash: sha(original), proposedHash: sha(actual)
     }));
