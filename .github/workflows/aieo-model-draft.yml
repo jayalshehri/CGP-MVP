@@ -64,7 +64,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Request one bounded model suggestion and audit its exact source diff
+      # The OpenRouter credential exists only in this proposal step.
+      # Independent reviewers execute in separate Actions steps without the key.
+      - name: Request one bounded model suggestion with scoped provider credential
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL_ID: ${{ vars.AIEO_MODEL_ID }}
@@ -76,9 +78,15 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/aieo-model-proposal.mjs
-          node scripts/aieo-model-gates.mjs qa
-          node scripts/aieo-model-security.mjs
-          node scripts/aieo-model-gates.mjs reviewer
+      - name: Independently run model QA without provider credential
+        run: node scripts/aieo-model-gates.mjs qa
+      - name: Independently run model Security without provider credential
+        run: node scripts/aieo-model-security.mjs
+      - name: Independently run model Reviewer without provider credential
+        run: node scripts/aieo-model-gates.mjs reviewer
+      - name: Attest candidate diff scope after independent reviews
+        run: |
+          set -euo pipefail
           git diff --check
           test "$(git diff --name-only)" = 'components/FeedbackWidget.tsx'
       - name: Independently verify application build
