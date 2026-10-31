@@ -42,7 +42,8 @@ function unsafeJsxMarkup(text) {
     const attributes = text.slice(openings.lastIndex, end);
     // Also inspect nested JSX: an outer expression can contain a network tag.
     if (/\{\s*\.\.\./.test(attributes) ||
-        urlAttributes.test(attributes) ||\n        (outboundTagNames.test(opening[1]) && nativeOnlyAttributes.test(attributes))) return true;
+        urlAttributes.test(attributes) ||
+        (outboundTagNames.test(opening[1]) && nativeOnlyAttributes.test(attributes))) return true;
   }
   return false;
 }
