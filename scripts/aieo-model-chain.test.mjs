@@ -136,6 +136,8 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     });
     assert.notEqual(deniedHash.status, 0, 'Source mismatch must block the provider');
     assert.equal(existsSync(transportCalls), false, 'Mismatched source consent must not call the provider');
+    assert.equal(JSON.parse(readFileSync(report('proposal'), 'utf8')).sourceShared, false,
+      'Blocked consent must never be reported as a source-sharing attempt');
     assert.equal(readFileSync(target, 'utf8'), original);
 
     const proposed = run(['--import', shimPath, proposal]);
