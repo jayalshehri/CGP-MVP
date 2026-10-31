@@ -128,8 +128,7 @@ test('publisher verifies exact commit and exactly one resolved same-repo push de
   const env = { GITHUB_SHA: sha };
   for (const originUrl of [
     'https://github.com/jayalshehri/CGP-MVP',
-    'https://github.com/jayalshehri/CGP-MVP.git',
-    'git@github.com:jayalshehri/CGP-MVP.git'
+    'https://github.com/jayalshehri/CGP-MVP.git'
   ]) {
     assert.equal(verifyTrustedCheckout({ env, checkedOutSha: sha, originUrl, effectivePushUrls: [originUrl] }), true);
   }
@@ -139,6 +138,9 @@ test('publisher verifies exact commit and exactly one resolved same-repo push de
     { env: {} },
     { checkedOutSha: 'b'.repeat(40) },
     { originUrl: 'file:///tmp/untrusted.git' },
+    { originUrl: 'git@github.com:jayalshehri/CGP-MVP.git' },
+    { originUrl: 'ssh://git@github.com/jayalshehri/CGP-MVP.git' },
+    { effectivePushUrls: ['git@github.com:jayalshehri/CGP-MVP.git'] },
     { originUrl: 'https://github.com/attacker/CGP-MVP.git' },
     { originUrl: 'https://github.com/jayalshehri/CGP-MVP.git@attacker.invalid' },
     { effectivePushUrls: ['file:///tmp/attacker.git'] },
@@ -157,7 +159,7 @@ test('publisher verifies exact commit and exactly one resolved same-repo push de
 });
 
 test('swapped checkout or destination fails before Git writes or gh invocation', () => {
-  for (const kind of ['wrong-sha', 'wrong-origin', 'url-rewrite', 'pushurl', 'multi-pushurl']) {
+  for (const kind of ['wrong-sha', 'wrong-origin', 'ssh-origin', 'ssh-pushurl', 'url-rewrite', 'pushurl', 'multi-pushurl']) {
     const f = fixture();
     try {
       if (kind === 'wrong-origin') {
@@ -165,6 +167,12 @@ test('swapped checkout or destination fails before Git writes or gh invocation',
       }
       if (kind === 'pushurl') {
         git(f.workspace, 'config', 'remote.origin.pushurl', 'file://' + f.remote);
+      }
+      if (kind === 'ssh-origin') {
+        git(f.workspace, 'config', 'remote.origin.url', 'git@github.com:jayalshehri/CGP-MVP.git');
+      }
+      if (kind === 'ssh-pushurl') {
+        git(f.workspace, 'config', 'remote.origin.pushurl', 'git@github.com:jayalshehri/CGP-MVP.git');
       }
       if (kind === 'multi-pushurl') {
         git(f.workspace, 'config', '--add', 'remote.origin.pushurl',
@@ -175,7 +183,7 @@ test('swapped checkout or destination fails before Git writes or gh invocation',
       }
       const env = { ...f.env,
         ...(kind === 'wrong-sha' ? { GITHUB_SHA: 'f'.repeat(40) } : {}),
-        ...(['url-rewrite', 'pushurl', 'multi-pushurl'].includes(kind) ?
+        ...(['url-rewrite', 'pushurl', 'multi-pushurl', 'ssh-pushurl'].includes(kind) ?
           { AIEO_FIXTURE_ATTEST_PUSH: 'false' } : {})
       };
       const child = spawnSync(process.execPath, [publisher], {
