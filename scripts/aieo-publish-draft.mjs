@@ -14,6 +14,19 @@ function command(binary, args) {
 function gitNoHooks(args) {
   return command('git', ['-c', 'core.hooksPath=/dev/null', ...args]);
 }
+// Credential helpers may be executable programs from local/global Git config.
+// Reset the helper chain for EACH authenticated network operation, then add only
+// the GitHub CLI helper backed by the narrowly-scoped GH_TOKEN environment.
+// Avoid gh auth setup-git: it mutates persistent config and can leave an
+// untrusted pre-existing helper in the chain.
+export function authenticatedGitArgs(args) {
+  return ['-c', 'core.hooksPath=/dev/null',
+    '-c', 'credential.helper=',
+    '-c', 'credential.helper=!gh auth git-credential', ...args];
+}
+function gitAuthenticated(args) {
+  return command('git', authenticatedGitArgs(args));
+}
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
@@ -207,9 +220,9 @@ export function publishDraft({ env = process.env } = {}) {
     changedPaths: command('git', ['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'])
       .trim().split('\n').filter(Boolean)
   });
-  command('gh', ['auth', 'setup-git']);
-  gitNoHooks(['push', 'origin', 'HEAD:refs/heads/' + branch]);
-  const pushedRef = command('git', ['ls-remote', 'origin', 'refs/heads/' + branch]).trim();
+  // Do not inherit arbitrary credential helpers or modify runner Git config.
+  gitAuthenticated(['push', 'origin', 'HEAD:refs/heads/' + branch]);
+  const pushedRef = gitAuthenticated(['ls-remote', 'origin', 'refs/heads/' + branch]).trim();
   if (pushedRef !== committedSha + '\trefs/heads/' + branch) {
     fail('Remote branch does not point to the reviewed commit');
   }
