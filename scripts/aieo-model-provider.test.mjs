@@ -1,14 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH, validateModelPatch, buildModelRequest, requestModelPatch } from '../aieo/lib/model-provider.mjs';
 
 const source = 'function demo() {\n  const sample = 100;\n}\n';
 const find = '  const sample = 100;';
 const replacement = '  const sample = 101;';
 const proposal = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace: replacement, explanation: 'Correct a simple constant' });
+const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 const env = {
   AIEO_MODEL_ENABLED: 'true',
   AIEO_SOURCE_SHARING_APPROVED: 'true',
+  AIEO_APPROVED_SOURCE_SHA256: sha256(source),
   GITHUB_EVENT_NAME: 'workflow_dispatch',
   GITHUB_REF: 'refs/heads/main',
   OPENROUTER_API_KEY: 'synthetic-key-not-real',
@@ -45,9 +48,13 @@ test('manual restrictions block all network calls on PR, missing secret, or miss
     { ...env, GITHUB_EVENT_NAME: 'pull_request' },
     { ...env, OPENROUTER_API_KEY: '' },
     { ...env, AIEO_SOURCE_SHARING_APPROVED: 'false' },
-    { ...env, GITHUB_REF: 'refs/heads/feature' }
+    { ...env, GITHUB_REF: 'refs/heads/feature' },
+    { ...env, AIEO_APPROVED_SOURCE_SHA256: '' },
+    { ...env, AIEO_APPROVED_SOURCE_SHA256: '0'.repeat(64) },
+    { ...env, AIEO_APPROVED_SOURCE_SHA256: 'A'.repeat(64) }
   ];
   for (const current of variants) assert.equal((await requestModelPatch({ source, task, env: current, transport })).status, 'blocked');
+  assert.equal((await requestModelPatch({ source: source + '// modified after consent', task, env, transport })).status, 'blocked');
   assert.equal(calls, 0);
 });
 test('mock provider call sends bounded source and returns validated proposal only', async () => {
