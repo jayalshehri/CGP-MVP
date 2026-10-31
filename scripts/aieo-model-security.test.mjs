@@ -114,7 +114,7 @@ test('security freezes submit handler against comment-only auth bypass while all
     report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(actual) }
   });
   const safe = base.replace('Old label', 'New label');
-  assert.equal(assess(safe, '+    <form onSubmit={submit}><span>New label</span></form>').status, 'passed');
+  assert.equal(assess(safe, '@@ -8 +8 @@\n-    <form onSubmit={submit}><span>Old label</span></form>\n+    <form onSubmit={submit}><span>New label</span></form>\n').status, 'passed');
   // The old substring-only guard accepted commented-out auth checks.
   const commented = base.replace('    if (!auth.user)', '    // if (!auth.user)');
   const commentResult = assess(commented, '+    // if (!auth.user) { return; }');
@@ -284,10 +284,66 @@ test('Security independently binds reported added lines to actual source, includ
   assert.ok(omitted.findings.includes('Potentially unsafe new code'));
 
   const duplicated = base + 'const status = "ok";\n';
-  const noDuplicate = assess(duplicated, '@@ -1 +1 @@\n-const status = "ok";\n+const status = "ok";\n');
+  const noDuplicate = assess(duplicated, '@@ -1,0 +2 @@\n+const status = "ok";\n');
   assert.equal(noDuplicate.status, 'passed', 'a correctly reported duplicate is permitted');
   assert.ok(noDuplicate.findings.includes('Reported diff omits newly introduced source lines') === false, 'one reported duplicate is covered');
   const missingDuplicate = assess(duplicated, '@@ -1 +0,0 @@\n');
   assert.equal(missingDuplicate.status, 'failed');
   assert.ok(missingDuplicate.findings.includes('Reported diff omits newly introduced source lines'));
+});
+
+
+test('Security requires the entire zero-context diff to reconstruct the exact candidate', () => {
+  const base = 'const a = 1;\nconst b = 2;\nconst c = 3;\n';
+  const assess = (next, diff) => inspectModelDiff({
+    original: base, actual: next, changedPaths: [MODEL_ALLOWED_PATH], diff,
+    report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(next) }
+  });
+  const updated = base.replace('const b = 2;', 'const b = 4;');
+  const correct = '@@ -2 +2 @@\n-const b = 2;\n+const b = 4;\n';
+  assert.equal(assess(updated, correct).status, 'passed');
+  const withGitHeaders = [
+    'diff --git a/components/FeedbackWidget.tsx b/components/FeedbackWidget.tsx',
+    'index 0000000..1111111 100644',
+    '--- a/components/FeedbackWidget.tsx',
+    '+++ b/components/FeedbackWidget.tsx',
+    correct.trimEnd(), ''
+  ].join('\n');
+  assert.equal(assess(updated, withGitHeaders).status, 'passed');
+
+  for (const fabricated of [
+    '@@ -2 +2 @@\n-const a = 1;\n+const b = 4;\n',
+    '@@ -1 +1 @@\n-const b = 2;\n+const b = 4;\n',
+    'diff --git a/README.md b/README.md\n' + correct,
+    '@@ -2 +2 @@\n-const b = 2;\n+const b = 4;\n+const extra = "hidden";\n'
+  ]) {
+    const observed = assess(updated, fabricated);
+    assert.equal(observed.status, 'failed', fabricated);
+    assert.ok(observed.findings.includes('Reported diff does not reconstruct candidate source'));
+  }
+
+  const reordered = 'const b = 2;\nconst a = 1;\nconst c = 3;\n';
+  const forgedReorder = '@@ -1 +1 @@\n-const a = 1;\n+const a = 1;\n';
+  const reorderResult = assess(reordered, forgedReorder);
+  assert.equal(reorderResult.status, 'failed', 'a line multiset cannot attest relative order');
+  assert.ok(reorderResult.findings.includes('Reported diff does not reconstruct candidate source'));
+
+  const deleted = base.replace('const b = 2;\n', '');
+  const trueDeletion = '@@ -2 +1,0 @@\n-const b = 2;\n';
+  assert.equal(assess(deleted, trueDeletion).status, 'passed');
+  assert.equal(assess(deleted, forgedReorder).status, 'failed',
+    'a fabricated no-op hunk cannot conceal removal of existing source lines');
+  assert.equal(assess(updated.trimEnd(), correct).status, 'failed',
+    'changed final newline must fail closed rather than misparse Git patch metadata');
+});
+
+test('Security reconstructs separated clean hunks with precise old and new offsets', () => {
+  const base = 'const a = 1;\nconst middle = 2;\nconst c = 3;\n';
+  const next = 'const a = 4;\nconst middle = 2;\nconst c = 5;\n';
+  const patch = '@@ -1 +1 @@\n-const a = 1;\n+const a = 4;\n@@ -3 +3 @@\n-const c = 3;\n+const c = 5;\n';
+  const verdict = inspectModelDiff({
+    original: base, actual: next, changedPaths: [MODEL_ALLOWED_PATH], diff: patch,
+    report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(next) }
+  });
+  assert.equal(verdict.status, 'passed');
 });
