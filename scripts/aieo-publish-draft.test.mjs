@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, verifyNoGitCommitSigning, verifyGitHttpsTls, verifyNoGitDiagnosticExport, verifyNoGitHubCliRoutingOverride, verifyNoGitRepositoryEnvironmentOverride, authenticatedGitArgs } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, verifyNoGitCommitSigning, verifyGitHttpsTls, verifyNoGitHttpsTrustOverride, verifyNoGitDiagnosticExport, verifyNoGitHubCliRoutingOverride, verifyNoGitRepositoryEnvironmentOverride, authenticatedGitArgs } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -365,6 +365,60 @@ test('insecure Git HTTPS configuration fails before Draft branch, GitHub CLI or 
       assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
       assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
         /model-proposal/, 'No candidate may be pushed');
+    } finally { rmSync(f.root, { force: true, recursive: true }); }
+  }
+});
+
+test('publisher refuses Git custom CA trust roots and URL-matched proxy routes', () => {
+  const safe = { env: {}, effectiveProxy: '', effectiveCaInfo: '', effectiveCaPath: '' };
+  assert.equal(verifyNoGitHttpsTrustOverride(safe), true);
+  for (const setting of [
+    { effectiveProxy: 'http://127.0.0.1:3128' },
+    { effectiveCaInfo: '/tmp/untrusted-ca.pem' },
+    { effectiveCaPath: '/tmp/untrusted-ca-directory' },
+    { env: { GIT_SSL_CAINFO: '/tmp/untrusted-ca.pem' } },
+    { env: { GIT_SSL_CAPATH: '/tmp/untrusted-ca-directory' } },
+    { env: { CURL_CA_BUNDLE: '/tmp/untrusted-ca.pem' } }
+  ]) {
+    assert.throws(() => verifyNoGitHttpsTrustOverride({ ...safe, ...setting }),
+      /untrusted Git HTTPS proxy or CA override/);
+  }
+});
+
+test('Git proxy/CA override fails closed before branch creation, remote push or gh', () => {
+  for (const kind of [
+    'host-proxy', 'repository-ca', 'host-capath',
+    'env-cainfo', 'env-capath', 'env-curl-ca-bundle'
+  ]) {
+    const f = fixture();
+    try {
+      const untrustedPath = join(f.root, 'untrusted-ca.pem');
+      if (kind === 'host-proxy') {
+        git(f.workspace, 'config', 'http.https://github.com/.proxy',
+          'http://127.0.0.1:30222');
+      }
+      if (kind === 'repository-ca') {
+        git(f.workspace, 'config',
+          'http.https://github.com/jayalshehri/CGP-MVP.git.sslCAInfo', untrustedPath);
+      }
+      if (kind === 'host-capath') {
+        git(f.workspace, 'config', 'http.https://github.com/.sslCAPath', f.root);
+      }
+      const overrides = {
+        ...(kind === 'env-cainfo' ? { GIT_SSL_CAINFO: untrustedPath } : {}),
+        ...(kind === 'env-capath' ? { GIT_SSL_CAPATH: f.root } : {}),
+        ...(kind === 'env-curl-ca-bundle' ? { CURL_CA_BUNDLE: untrustedPath } : {})
+      };
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: { ...f.env, ...overrides },
+        encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, kind + ' must fail closed');
+      assert.match(child.stderr, /untrusted Git HTTPS proxy or CA override/, kind);
+      assert.equal(existsSync(f.log), false, 'GitHub CLI must not be called');
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /model-proposal/, 'No candidate branch may be pushed');
     } finally { rmSync(f.root, { force: true, recursive: true }); }
   }
 });
