@@ -142,10 +142,12 @@ export function verifyNoGitFsmonitor(effectiveSetting) {
 // Git can invoke a runner-configured SSH or askpass program with GH_TOKEN in the
 // environment. The publisher has no need to execute transport overrides supplied
 // by repository or runner configuration. Reject them before any authenticated push.
+// GIT_EXEC_PATH may replace Git's HTTPS remote helper with an executable from
+// an attacker-controlled directory, despite a canonical GitHub remote URL.
 export function verifyNoGitTransportOverride({ env, effectiveSshCommand }) {
   const executableEnv = [
     'GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_ASKPASS', 'SSH_ASKPASS',
-    'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS'
+    'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS', 'GIT_EXEC_PATH'
   ];
   if (effectiveSshCommand !== '' ||
       executableEnv.some((key) => typeof env[key] === 'string' && env[key].length > 0)) {
@@ -188,6 +190,9 @@ export function verifyCommittedCandidate({ baseSha, parentSha, reviewedSource, c
 
 export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
+  // Reject executable environment overrides before even invoking Git. A custom
+  // GIT_EXEC_PATH can substitute remote-https when credentials are available.
+  verifyNoGitTransportOverride({ env, effectiveSshCommand: '' });
   // Git config reads do not refresh the index or launch the requested transport.
   // Both configuration and environment command overrides must fail closed.
   verifyNoGitTransportOverride({

@@ -322,7 +322,7 @@ test('publisher refuses executable SSH and askpass configuration overrides', () 
   assert.equal(verifyNoGitTransportOverride(args), true);
   for (const key of [
     'GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_ASKPASS', 'SSH_ASKPASS',
-    'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS'
+    'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS', 'GIT_EXEC_PATH'
   ]) {
     assert.throws(() => verifyNoGitTransportOverride({
       ...args, env: { [key]: key === 'GIT_CONFIG_COUNT' ? '1' : '/tmp/not-trusted' }
@@ -386,6 +386,28 @@ test('Git commit signing executable fails closed before branch creation, gh or r
     assert.match(child.stderr, /untrusted Git commit signing configuration/);
     assert.equal(existsSync(marker), false, 'untrusted signing driver must not execute');
     assert.equal(existsSync(f.log), false, 'gh must not run');
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote), /model-proposal/);
+  } finally { rmSync(f.root, { force: true, recursive: true }); }
+});
+
+test('Git executable helper-path override fails before GitHub CLI or remote branch writes', () => {
+  const f = fixture();
+  try {
+    const marker = join(f.root, 'git-remote-https-invoked');
+    const maliciousBin = join(f.root, 'malicious-git-exec');
+    mkdirSync(maliciousBin);
+    const helper = join(maliciousBin, 'git-remote-https');
+    writeFileSync(helper, '#!/bin/sh\nprintf invoked >> ' + JSON.stringify(marker) + '\nexit 1\n');
+    chmodSync(helper, 0o755);
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: { ...f.env, GIT_EXEC_PATH: maliciousBin },
+      encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0);
+    assert.match(child.stderr, /untrusted Git transport executable override/);
+    assert.equal(existsSync(marker), false, 'untrusted Git HTTPS helper must never run');
+    assert.equal(existsSync(f.log), false, 'GitHub CLI must not run');
     assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
     assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote), /model-proposal/);
   } finally { rmSync(f.root, { force: true, recursive: true }); }
