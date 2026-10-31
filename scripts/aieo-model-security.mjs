@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
+import { attestModelReviewWorkspace } from '../aieo/lib/model-workspace-attestation.mjs';
 
 const hash = (content) => createHash('sha256').update(content).digest('hex');
 // Disable executable fsmonitor configuration on every independent Git read;
@@ -223,6 +224,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
 // textconv executable while this process still has provider credentials.
 // Use Git's built-in diff exclusively in this independent review process.
 if (process.argv[1]?.endsWith('/aieo-model-security.mjs')) {
+  attestModelReviewWorkspace(MODEL_ALLOWED_PATH);
   const original = safeGit(['show', 'HEAD:' + MODEL_ALLOWED_PATH]);
   const actual = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
   // Independent scope attestation must cover unstaged, staged AND non-ignored
