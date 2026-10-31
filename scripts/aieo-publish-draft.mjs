@@ -156,6 +156,28 @@ export function verifyNoGitTransportOverride({ env, effectiveSshCommand }) {
   return true;
 }
 
+// Git normally verifies HTTPS certificates. Local/runner config or environment
+// overrides can silently disable verification for the credential-bearing push,
+// letting a TLS-intercepting endpoint receive the GitHub token.
+// Check the effective URL-matched setting for both accepted origin spellings.
+export function verifyGitHttpsTls({ env, effectiveSslVerify }) {
+  if (effectiveSslVerify !== 'true' ||
+      (typeof env.GIT_SSL_NO_VERIFY === 'string' && env.GIT_SSL_NO_VERIFY.length > 0)) {
+    fail('untrusted Git HTTPS TLS verification');
+  }
+  return true;
+}
+function effectiveGitSslVerify(url) {
+  try {
+    return command('git', ['config', '--bool', '--get-urlmatch', 'http.sslVerify', url]).trim();
+  } catch (error) {
+    // No matching config is Git's documented secure-by-default behavior.
+    // Reject parse errors or other failures instead of treating them as safe.
+    if (error?.status === 1) return 'true';
+    throw error;
+  }
+}
+
 // A custom remote.origin.vcs value selects an arbitrary git-remote-<vcs> executable,
 // even when the origin and resolved push URL are the canonical GitHub HTTPS URL.
 // Reject it before git index reads, branch creation or any authenticated push.
@@ -193,6 +215,13 @@ export function publishDraft({ env = process.env } = {}) {
   // Reject executable environment overrides before even invoking Git. A custom
   // GIT_EXEC_PATH can substitute remote-https when credentials are available.
   verifyNoGitTransportOverride({ env, effectiveSshCommand: '' });
+  // Reject a disabled SSL check even before running git. Git config can hold
+  // a host- or path-specific override that takes precedence over global SSL.
+  verifyGitHttpsTls({ env, effectiveSslVerify: 'true' });
+  for (const url of [
+    'https://github.com/jayalshehri/CGP-MVP',
+    'https://github.com/jayalshehri/CGP-MVP.git'
+  ]) verifyGitHttpsTls({ env, effectiveSslVerify: effectiveGitSslVerify(url) });
   // Git config reads do not refresh the index or launch the requested transport.
   // Both configuration and environment command overrides must fail closed.
   verifyNoGitTransportOverride({
