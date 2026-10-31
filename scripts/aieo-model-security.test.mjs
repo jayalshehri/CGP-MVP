@@ -347,3 +347,23 @@ test('Security reconstructs separated clean hunks with precise old and new offse
   });
   assert.equal(verdict.status, 'passed');
 });
+
+test('Security bounds deletion-only model patches without blocking small verified edits', () => {
+  const lines = Array.from({ length: 25 }, (_, index) => 'const label' + index + ' = ' + index + ';');
+  const base = lines.join('\n') + '\n';
+  const reviewDeletion = (count) => {
+    const next = lines.slice(count).join('\n') + '\n';
+    const patch = '@@ -1,' + count + ' +0,0 @@\n' +
+      lines.slice(0, count).map((line) => '-' + line + '\n').join('');
+    return inspectModelDiff({
+      original: base, actual: next, changedPaths: [MODEL_ALLOWED_PATH], diff: patch,
+      report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(next) }
+    });
+  };
+  assert.equal(reviewDeletion(20).status, 'passed', 'a genuine 20-line deletion is within scope');
+  const excessive = reviewDeletion(21);
+  assert.equal(excessive.status, 'failed', 'deletion-only proposals must have a removal budget');
+  assert.ok(excessive.findings.includes('Too many deleted code lines'));
+  assert.ok(!excessive.findings.includes('Reported diff does not reconstruct candidate source'),
+    'the rejected 21-line patch is genuine, not a forged diff');
+});
