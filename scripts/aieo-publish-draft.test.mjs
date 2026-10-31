@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, verifyNoGitCommitSigning, authenticatedGitArgs } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, verifyNoGitCommitSigning, verifyGitHttpsTls, authenticatedGitArgs } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -331,6 +331,42 @@ test('publisher refuses executable SSH and askpass configuration overrides', () 
   assert.throws(() => verifyNoGitTransportOverride({
     ...args, effectiveSshCommand: '/tmp/not-trusted'
   }), /untrusted Git transport executable override/);
+});
+
+test('GitHub HTTPS certificate verification is mandatory for a credential-bearing push', () => {
+  assert.equal(verifyGitHttpsTls({ env: {}, effectiveSslVerify: 'true' }), true);
+  for (const value of ['false', '', 'off', '0']) {
+    assert.throws(() => verifyGitHttpsTls({ env: {}, effectiveSslVerify: value }),
+      /untrusted Git HTTPS TLS verification/);
+  }
+  for (const setting of ['1', 'true', 'false']) {
+    assert.throws(() => verifyGitHttpsTls({
+      env: { GIT_SSL_NO_VERIFY: setting }, effectiveSslVerify: 'true'
+    }), /untrusted Git HTTPS TLS verification/);
+  }
+});
+
+test('insecure Git HTTPS configuration fails before Draft branch, GitHub CLI or push', () => {
+  for (const kind of ['global', 'host', 'repo-url', 'environment']) {
+    const f = fixture();
+    try {
+      if (kind === 'global') git(f.workspace, 'config', 'http.sslVerify', 'false');
+      if (kind === 'host') git(f.workspace, 'config', 'http.https://github.com/.sslVerify', 'false');
+      if (kind === 'repo-url') {
+        git(f.workspace, 'config', 'http.https://github.com/jayalshehri/CGP-MVP.git.sslVerify', 'false');
+      }
+      const env = { ...f.env, ...(kind === 'environment' ? { GIT_SSL_NO_VERIFY: '1' } : {}) };
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env, encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, kind + ' must fail closed');
+      assert.match(child.stderr, /untrusted Git HTTPS TLS verification/);
+      assert.equal(existsSync(f.log), false, 'GitHub CLI must not run');
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /model-proposal/, 'No candidate may be pushed');
+    } finally { rmSync(f.root, { force: true, recursive: true }); }
+  }
 });
 
 test('custom Git remote helper must not be configured for Draft publishing', () => {
