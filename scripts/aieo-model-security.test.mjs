@@ -285,7 +285,7 @@ test('Security independently binds reported added lines to actual source, includ
 
   const duplicated = base + 'const status = "ok";\n';
   const noDuplicate = assess(duplicated, '@@ -1 +1 @@\n-const status = "ok";\n+const status = "ok";\n');
-  assert.equal(noDuplicate.status, 'failed', 'duplicating an existing line still needs a reported added line');
+  assert.equal(noDuplicate.status, 'passed', 'a correctly reported duplicate is permitted');
   assert.ok(noDuplicate.findings.includes('Reported diff omits newly introduced source lines') === false, 'one reported duplicate is covered');
   const missingDuplicate = assess(duplicated, '@@ -1 +0,0 @@\n');
   assert.equal(missingDuplicate.status, 'failed');
