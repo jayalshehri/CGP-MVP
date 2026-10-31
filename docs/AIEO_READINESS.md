@@ -60,6 +60,11 @@ The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist on
 - The Draft publisher now refuses a configured SSH command and non-empty `GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_ASKPASS`, `SSH_ASKPASS`, `GIT_CONFIG_COUNT` or `GIT_CONFIG_PARAMETERS` before performing any network operation or branch write. The normal checkout/HTTPS GitHub authentication route is not otherwise changed.
 - Negative unit tests and temporary Git-process fixtures check the refusal occurs before a malicious marker program, `gh` invocation or branch creation. This control does not address all possible Git credential-helper execution surfaces, and these are simulated fixtures, not a live Actions-published PR or real OpenRouter request. Exact-head GitHub CI must pass before relying on this change.
 
+## Isolated publisher Git credential helper (stacked Draft, 2026-10-31)
+- With HTTPS Git remotes, a configured `credential.helper` or URL-specific `credential.https://github.com.helper` can run an arbitrary command during push/remote verification while the publisher has `GH_TOKEN`. Calling `gh auth setup-git` does not guarantee that every previously configured helper is removed.
+- The publisher no longer writes a persistent Git credential configuration with `gh auth setup-git`. It adds two **command-scoped** Git configuration values for **both** authenticated push and remote-HEAD attestation: an empty `credential.helper` to reset inherited helpers, followed by only `!gh auth git-credential` as the permitted helper. Git hooks remain disabled on push. This preserves the manual dispatch, exact-commit and Draft-only verification boundaries.
+- An isolated negative fixture configures an executable global/local-style helper and URL-specific helper, proves Git's credential protocol obtains only the synthetic GitHub CLI response, and asserts the malicious helper is never invoked. The local model/Git workflow still uses a mocked GitHub CLI and temporary bare Git remote; this is **not** evidence of live GitHub Actions Draft publication or OpenRouter-generated code. CI must pass on the exact new HEAD before treating the change as validated.
+
 ## Next safe milestones
 1. Continue hardening read-only and mocked integration tests on the feature branch.
 2. Check final CI conclusions against the *current branch HEAD*, not earlier successful commits.
