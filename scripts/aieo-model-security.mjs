@@ -176,7 +176,15 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   if (!exactDiffReconstructs(original, actual, diff)) {
     findings.push('Reported diff does not reconstruct candidate source');
   }
+  // Bound destructive changes as well as insertions. A zero-addition diff can
+  // otherwise erase arbitrarily large sections of UI while passing the
+  // existing 20-new-line budget. Exact reconstruction above attests that the
+  // deleted lines are real, not merely metadata supplied by a proposal.
+  const deletions = typeof diff === 'string'
+    ? diff.split('\n').filter((line) => line.startsWith('-') && !line.startsWith('---'))
+    : [];
   if (additions.length > 20 || actualAdditions.length > 20) findings.push('Too many new code lines');
+  if (deletions.length > 20) findings.push('Too many deleted code lines');
   const checkedAdditions = additions.concat(actualAdditions);
   if (checkedAdditions.some((line) => suspect.test(line) || privilegedClientReuse.test(line) || browserExfil.test(line) || indirectBrowserAccess.test(line)) ||
       unsafeJsxMarkup(checkedAdditions.join('\n')) ||
