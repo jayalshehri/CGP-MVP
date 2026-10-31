@@ -15,7 +15,10 @@ const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fe
 // Scan the full JSX opening tag. An early '>' inside quoted attributes or a
 // JSX expression is not the end of the tag; regexes stopping at '>' miss sinks.
 const outboundTagNames = /^(?:a|area|img|image|use|feImage|iframe|script|link|form|button|input|video|audio|source|track|embed|object|base|meta)$/i;
-const outboundAttributes = /\b(?:href|xlink:href|src|srcSet|srcDoc|ping|poster|action|formAction|data|httpEquiv|http-equiv)\s*=/i;
+// URL-bearing attributes are also dangerous on custom React components (e.g. Link/Image).
+// Keep native-only attributes separate to avoid rejecting ordinary custom `data` props.
+const urlAttributes = /\b(?:href|xlink:href|src|srcSet|srcDoc|ping|poster|action|formAction)\s*=/i;
+const nativeOnlyAttributes = /\b(?:data|httpEquiv|http-equiv)\s*=/i;
 function unsafeJsxMarkup(text) {
   const openings = /<\s*([A-Za-z][\w.:-]*)\b/g;
   let opening;
@@ -41,7 +44,8 @@ function unsafeJsxMarkup(text) {
     const attributes = text.slice(openings.lastIndex, end);
     // Also inspect nested JSX: an outer expression can contain a network tag.
     if (/\{\s*\.\.\./.test(attributes) ||
-        (outboundTagNames.test(opening[1]) && outboundAttributes.test(attributes))) return true;
+        urlAttributes.test(attributes) ||
+        (outboundTagNames.test(opening[1]) && nativeOnlyAttributes.test(attributes))) return true;
   }
   return false;
 }
