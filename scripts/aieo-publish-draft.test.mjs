@@ -14,6 +14,9 @@ import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedChec
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
 const hash = (source) => createHash('sha256').update(source).digest('hex');
+const PROXY_ENV_KEYS = [
+  'HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy'
+];
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 
 function fixture() {
@@ -101,6 +104,9 @@ function fixture() {
     AIEO_PUBLISH_MODE: 'model', AIEO_MODEL_ENABLED: 'true',
     AIEO_SOURCE_SHARING_APPROVED: 'true'
   };
+  // These are negative-test inputs, not ambient runner dependencies. Clean the
+  // positive fixture so its result does not vary with CI host proxy settings.
+  for (const key of PROXY_ENV_KEYS) delete env[key];
   return { root, workspace, remote, log, env, target, args, qa, security, reviewer };
 }
 
@@ -378,7 +384,8 @@ test('publisher refuses Git custom CA trust roots and URL-matched proxy routes',
     { effectiveCaPath: '/tmp/untrusted-ca-directory' },
     { env: { GIT_SSL_CAINFO: '/tmp/untrusted-ca.pem' } },
     { env: { GIT_SSL_CAPATH: '/tmp/untrusted-ca-directory' } },
-    { env: { CURL_CA_BUNDLE: '/tmp/untrusted-ca.pem' } }
+    { env: { CURL_CA_BUNDLE: '/tmp/untrusted-ca.pem' } },
+    ...PROXY_ENV_KEYS.map((key) => ({ env: { [key]: 'http://127.0.0.1:3128' } }))
   ]) {
     assert.throws(() => verifyNoGitHttpsTrustOverride({ ...safe, ...setting }),
       /untrusted Git HTTPS proxy or CA override/);
@@ -388,7 +395,8 @@ test('publisher refuses Git custom CA trust roots and URL-matched proxy routes',
 test('Git proxy/CA override fails closed before branch creation, remote push or gh', () => {
   for (const kind of [
     'host-proxy', 'repository-ca', 'host-capath',
-    'env-cainfo', 'env-capath', 'env-curl-ca-bundle'
+    'env-cainfo', 'env-capath', 'env-curl-ca-bundle',
+    ...PROXY_ENV_KEYS.map((key) => 'env-proxy-' + key)
   ]) {
     const f = fixture();
     try {
@@ -407,7 +415,9 @@ test('Git proxy/CA override fails closed before branch creation, remote push or 
       const overrides = {
         ...(kind === 'env-cainfo' ? { GIT_SSL_CAINFO: untrustedPath } : {}),
         ...(kind === 'env-capath' ? { GIT_SSL_CAPATH: f.root } : {}),
-        ...(kind === 'env-curl-ca-bundle' ? { CURL_CA_BUNDLE: untrustedPath } : {})
+        ...(kind === 'env-curl-ca-bundle' ? { CURL_CA_BUNDLE: untrustedPath } : {}),
+        ...(kind.startsWith('env-proxy-') ?
+          { [kind.slice('env-proxy-'.length)]: 'http://127.0.0.1:30222' } : {})
       };
       const child = spawnSync(process.execPath, [publisher], {
         cwd: f.workspace, env: { ...f.env, ...overrides },
