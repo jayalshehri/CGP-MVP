@@ -20,12 +20,19 @@ function attestEntry(path, kind, required = true) {
   }
 }
 
+// The privileged publisher also serves deterministic repairs, where no model
+// verdict directory exists. Both modes must independently attest the source
+// file rather than trusting the previous stage's filesystem check.
+export function attestModelSourceFile(sourcePath) {
+  attestEntry(sourcePath, 'file');
+}
+
 // Call before any Git read, model artifact read or verdict write. Existing
 // optional verdict files may come from an earlier stage; if present, they too
 // must be ordinary local files. This is a local containment check, not a
 // defense against a hostile actor concurrently mutating the checkout.
 export function attestModelReviewWorkspace(sourcePath) {
-  attestEntry(sourcePath, 'file');
+  attestModelSourceFile(sourcePath);
   attestEntry('aieo-output', 'directory');
   attestEntry('aieo-output/model-proposal.json', 'file');
   for (const stage of ['qa', 'security', 'reviewer']) {
