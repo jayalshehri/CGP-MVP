@@ -82,25 +82,30 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     const security = JSON.parse(readFileSync(artifact('security'), 'utf8'));
     writeFileSync(artifact('security'), JSON.stringify({ ...security, addedLines: 0 }));
     assert.notEqual(run('gates', 'reviewer').status, 0, 'Forged security evidence must fail');
+    writeFileSync(artifact('security'), JSON.stringify(security));
     // Regression: Git diff --name-only silently omits non-ignored untracked
     // source files and separately staged tracked changes. All three independent
     // review processes must reject both, not just the final publisher.
     const unexpected = join(root, 'components', 'Unexpected.tsx');
-    writeFileSync(unexpected, 'export const unexpected = true;\\n'.replace('\\\\n', '\\n'));
+    writeFileSync(unexpected, 'export const unexpected = true;\n');
     for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
       const child = run(name, role);
       assert.notEqual(child.status, 0, (role || name) + ' must reject an untracked source file');
       const verdict = JSON.parse(readFileSync(artifact(role || name), 'utf8'));
       assert.notEqual(verdict.status, role === 'reviewer' ? 'draft-pr-eligible' : 'passed');
+      assert.ok(verdict.findings.some((finding) => /scope|file changes/i.test(finding)),
+        (role || name) + ' must independently report out-of-scope change');
     }
     rmSync(unexpected);
-    writeFileSync(join(root, 'README.md'), 'Changed but staged fixture\\n'.replace('\\\\n', '\\n'));
+    writeFileSync(join(root, 'README.md'), 'Changed but staged fixture\n');
     git('-c', 'core.fsmonitor=false', 'add', 'README.md');
     for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
       const child = run(name, role);
       assert.notEqual(child.status, 0, (role || name) + ' must reject separately staged files');
       const verdict = JSON.parse(readFileSync(artifact(role || name), 'utf8'));
       assert.notEqual(verdict.status, role === 'reviewer' ? 'draft-pr-eligible' : 'passed');
+      assert.ok(verdict.findings.some((finding) => /scope|file changes/i.test(finding)),
+        (role || name) + ' must independently report out-of-scope change');
     }
     assert.equal(readFileSync(path, 'utf8'), actual);
   } finally {
