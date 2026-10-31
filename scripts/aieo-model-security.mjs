@@ -216,11 +216,14 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   return { status: findings.length ? 'failed' : 'passed', findings, addedLines: additions.length };
 }
 
+// A Git diff configured by the repository/runner can invoke a diff.external or
+// textconv executable while this process still has provider credentials.
+// Use Git's built-in diff exclusively in this independent review process.
 if (process.argv[1]?.endsWith('/aieo-model-security.mjs')) {
   const original = execFileSync('git', ['show', 'HEAD:' + MODEL_ALLOWED_PATH], { encoding: 'utf8' });
   const actual = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
-  const changedPaths = execFileSync('git', ['diff', '--name-only'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-  const diff = execFileSync('git', ['diff', '--unified=0', '--', MODEL_ALLOWED_PATH], { encoding: 'utf8' });
+  const changedPaths = execFileSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--name-only'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+  const diff = execFileSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--unified=0', '--', MODEL_ALLOWED_PATH], { encoding: 'utf8' });
   const report = JSON.parse(readFileSync('aieo-output/model-proposal.json', 'utf8'));
   const result = inspectModelDiff({ original, actual, changedPaths, diff, report });
   mkdirSync('aieo-output', { recursive: true });

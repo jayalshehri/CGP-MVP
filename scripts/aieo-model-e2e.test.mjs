@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,11 +17,14 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
   const root = mkdtempSync(join(tmpdir(), 'aieo-model-e2e-'));
   const path = join(root, 'components', 'FeedbackWidget.tsx');
   const output = join(root, 'aieo-output');
+  const externalDiff = join(root, 'untrusted-diff.sh');
+  const diffSentinel = join(root, 'external-diff-ran');
+  const guardedEnv = { ...process.env, GIT_EXTERNAL_DIFF: externalDiff, AIEO_TEST_DIFF_SENTINEL: diffSentinel };
   const artifact = (name) => join(output, 'model-' + name + '.json');
   const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe', encoding: 'utf8' });
   const run = (name, role) => spawnSync(process.execPath,
     [join(scriptRoot, 'aieo-model-' + name + '.mjs'), ...(role ? [role] : [])],
-    { cwd: root, timeout: 15000, encoding: 'utf8' });
+    { cwd: root, timeout: 15000, encoding: 'utf8', env: guardedEnv });
   try {
     assert.ok(readFileSync(join(repositoryRoot, 'components', 'FeedbackWidget.tsx'), 'utf8').includes(route),
       'Fixture invariant must match actual CGP source');
@@ -34,6 +37,15 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     git('add', 'components/FeedbackWidget.tsx');
     git('-c', 'user.email=aieo@example.invalid', '-c', 'user.name=AIEO Test', 'commit', '-qm', 'fixture');
     writeFileSync(path, actual);
+    // Prove the fixture actually executes an inherited GIT_EXTERNAL_DIFF when
+    // --no-ext-diff is omitted. Then require every independent role to avoid it.
+    writeFileSync(externalDiff, '#!/bin/sh\nprintf invoked > "$AIEO_TEST_DIFF_SENTINEL"\nexit 93\n');
+    chmodSync(externalDiff, 0o755);
+    const unguarded = spawnSync('git', ['diff', '--unified=0', '--', 'components/FeedbackWidget.tsx'],
+      { cwd: root, encoding: 'utf8', env: guardedEnv, timeout: 10000 });
+    assert.notEqual(unguarded.status, 0, 'control must reject malicious external diff failure');
+    assert.equal(existsSync(diffSentinel), true, 'control must prove unguarded Git executes the helper');
+    rmSync(diffSentinel);
     writeFileSync(artifact('proposal'), JSON.stringify({
       schemaVersion: 1, status: 'proposed', path: 'components/FeedbackWidget.tsx',
       sourceHash: sha(original), proposedHash: sha(actual)
@@ -41,6 +53,8 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
       const child = run(name, role);
       assert.equal(child.status, 0, (role || name) + ': ' + child.stderr);
+      assert.equal(existsSync(diffSentinel), false,
+        (role || name) + ' must not execute untrusted Git diff driver');
     }
     const reviewer = JSON.parse(readFileSync(artifact('reviewer'), 'utf8'));
     assert.equal(reviewer.status, 'draft-pr-eligible');
