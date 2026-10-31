@@ -16,7 +16,7 @@ const redacted = {
   sourceHash: createHash('sha256').update(source).digest('hex'),
   proposedHash: result.proposedHash || null,
   changedBytes: result.changedBytes ?? null,
-  sourceShared: process.env.AIEO_SOURCE_SHARING_APPROVED === 'true'
+  sourceShared: result.status !== 'blocked' // transport attempted, not merely user opt-in
 };
 mkdirSync('aieo-output', { recursive: true });
 writeFileSync('aieo-output/model-proposal.json', JSON.stringify(redacted, null, 2) + '\n');
