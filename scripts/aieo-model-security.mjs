@@ -5,6 +5,33 @@ import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 
 const hash = (content) => createHash('sha256').update(content).digest('hex');
+
+// The diff is a report, not an independent source of truth. A forged/partial
+// diff must not hide newly introduced executable lines from Security or Reviewer.
+// Count duplicate lines as well so an inserted copy cannot hide behind an
+// identical line elsewhere in the original source.
+function introducedLines(original, actual) {
+  const remaining = new Map();
+  for (const line of original.split('\n')) remaining.set(line, (remaining.get(line) || 0) + 1);
+  const introduced = [];
+  for (const line of actual.split('\n')) {
+    const count = remaining.get(line) || 0;
+    if (count) remaining.set(line, count - 1);
+    else introduced.push(line);
+  }
+  return introduced;
+}
+
+function coversIntroducedLines(diffAdditions, introduced) {
+  const counts = new Map();
+  for (const line of diffAdditions) counts.set(line, (counts.get(line) || 0) + 1);
+  return introduced.every((line) => {
+    const count = counts.get(line) || 0;
+    if (!count) return false;
+    counts.set(line, count - 1);
+    return true;
+  });
+}
 // Scan only new lines; a bounded UI repair must not introduce active browser exfiltration,
 // dynamic code execution, credentials or raw HTML rendering.
 const suspect = /\b(?:eval|Function)\s*\(|\b(?:child_process|process\.env|document\.cookie|localStorage|sessionStorage|dangerouslySetInnerHTML)\b|\b(?:XMLHttpRequest|fetch|WebSocket|EventSource|postMessage|sendBeacon|require|import)\s*\(|\bimport\s+(?:[\w{*]|["'])|\b(?:innerHTML|outerHTML)\s*=|gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-[a-z0-9]{20,}|(?:sk-proj-|sk-live-|sb_secret_)[a-z0-9_-]{20,}|\bBearer\s+[a-z0-9._~+/-]{16,}|AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i;
@@ -86,11 +113,17 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   }
   if (typeof diff !== 'string' || diff.length > 20000) findings.push('Invalid or oversized source delta');
   const additions = typeof diff === 'string' ? diff.split('\n').filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1)) : [];
-  if (additions.length > 20) findings.push('Too many new code lines');
-  if (additions.some((line) => suspect.test(line) || privilegedClientReuse.test(line) || browserExfil.test(line) || indirectBrowserAccess.test(line)) ||
-      unsafeJsxMarkup(additions.join('\n')) ||
+  const actualAdditions = typeof original === 'string' && typeof actual === 'string'
+    ? introducedLines(original, actual) : [];
+  if (!coversIntroducedLines(additions, actualAdditions)) {
+    findings.push('Reported diff omits newly introduced source lines');
+  }
+  if (additions.length > 20 || actualAdditions.length > 20) findings.push('Too many new code lines');
+  const checkedAdditions = additions.concat(actualAdditions);
+  if (checkedAdditions.some((line) => suspect.test(line) || privilegedClientReuse.test(line) || browserExfil.test(line) || indirectBrowserAccess.test(line)) ||
+      unsafeJsxMarkup(checkedAdditions.join('\n')) ||
       (typeof actual === 'string' && unsafeJsxMarkup(actual)) ||
-      outboundCss.test(additions.join('\n'))) {
+      outboundCss.test(checkedAdditions.join('\n'))) {
     findings.push('Potentially unsafe new code');
   }
   if (typeof original === 'string' && typeof actual === 'string') {
