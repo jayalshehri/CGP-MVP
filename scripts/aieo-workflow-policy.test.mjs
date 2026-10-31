@@ -71,6 +71,9 @@ test('publisher cannot bypass human review or invoke model from untrusted PR', (
     'SSH transport must not be allowlisted in the token-bearing Draft publisher');
   assert.ok(!publisher.includes("'ssh://git@github.com/jayalshehri/CGP-MVP.git'"),
     'SSH ProxyCommand/Match exec routes must not be allowlisted');
+  assert.ok(publisher.includes('verifyNoGitHubCliRoutingOverride(env)'), 'inherited GH_REPO/GH_HOST must be rejected before Git commands');
+  assert.ok(publisher.includes("'pr', 'create', '--draft', '--repo', env.GITHUB_REPOSITORY"), 'PR creation must explicitly target expected repository');
+  assert.ok(publisher.includes("'--repo', env.GITHUB_REPOSITORY, '--ref', branch"), 'follow-up CI must target expected repository');
   assert.ok(publisher.includes("gitAuthenticated(['push', 'origin'"), 'push must use isolated Git authentication');
   assert.ok(publisher.includes("gitAuthenticated(['ls-remote', 'origin'"), 'post-push attestation must use isolated Git authentication');
   assert.ok(!publisher.includes("command('gh', ['auth', 'setup-git'])"), 'no persistent Git credential configuration');
