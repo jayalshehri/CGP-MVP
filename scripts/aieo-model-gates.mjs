@@ -8,8 +8,10 @@ const role = process.argv[2];
 if (!['qa', 'reviewer'].includes(role)) throw new Error('Expected qa or reviewer');
 const original = execFileSync('git', ['show', 'HEAD:' + MODEL_ALLOWED_PATH], { encoding: 'utf8' });
 const actual = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
-const changedPaths = execFileSync('git', ['diff', '--name-only'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-const diff = execFileSync('git', ['diff', '--unified=0', '--', MODEL_ALLOWED_PATH], { encoding: 'utf8' });
+// Independently calculate candidate scope and patch without executing any
+// configured external diff/textconv command from the checkout or runner.
+const changedPaths = execFileSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--name-only'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+const diff = execFileSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--unified=0', '--', MODEL_ALLOWED_PATH], { encoding: 'utf8' });
 const proposal = JSON.parse(readFileSync('aieo-output/model-proposal.json', 'utf8'));
 
 const result = role === 'qa'
