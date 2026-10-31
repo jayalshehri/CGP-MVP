@@ -17,6 +17,10 @@ on:
         required: true
         type: boolean
         default: false
+      approved_source_sha256:
+        description: SHA-256 of the exact FeedbackWidget source approved for OpenRouter
+        required: true
+        type: string
 
 concurrency:
   group: aieo-model-draft-${{ github.ref }}
@@ -66,6 +70,7 @@ jobs:
           OPENROUTER_MODEL_ID: ${{ vars.AIEO_MODEL_ID }}
           AIEO_MODEL_ENABLED: 'true'
           AIEO_SOURCE_SHARING_APPROVED: 'true'
+          AIEO_APPROVED_SOURCE_SHA256: ${{ inputs.approved_source_sha256 }}
           AIEO_MODEL_TASK: ${{ inputs.task }}
           AIEO_MODEL_APPLY: '1'
         run: |
