@@ -17,10 +17,10 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
   const root = mkdtempSync(join(tmpdir(), 'aieo-model-e2e-'));
   const path = join(root, 'components', 'FeedbackWidget.tsx');
   const output = join(root, 'aieo-output');
-  const externalDiff = join(root, 'untrusted-diff.sh');
-  const diffSentinel = join(root, 'external-diff-ran');
-  const fsmonitor = join(root, 'untrusted-fsmonitor.sh');
-  const fsmonitorSentinel = join(root, 'fsmonitor-ran');
+  const externalDiff = join(output, 'untrusted-diff.sh');
+  const diffSentinel = join(output, 'external-diff-ran');
+  const fsmonitor = join(output, 'untrusted-fsmonitor.sh');
+  const fsmonitorSentinel = join(output, 'fsmonitor-ran');
   const guardedEnv = { ...process.env, GIT_EXTERNAL_DIFF: externalDiff, AIEO_TEST_DIFF_SENTINEL: diffSentinel };
   const artifact = (name) => join(output, 'model-' + name + '.json');
   const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe', encoding: 'utf8' });
@@ -36,7 +36,8 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     const actual = original.replace('  const sample = 1;', '  const sample = 2;');
     git('init', '-q');
     writeFileSync(path, original);
-    git('add', 'components/FeedbackWidget.tsx');
+    writeFileSync(join(root, 'README.md'), 'Tracked fixture file\n');
+    git('add', 'components/FeedbackWidget.tsx', 'README.md');
     git('-c', 'user.email=aieo@example.invalid', '-c', 'user.name=AIEO Test', 'commit', '-qm', 'fixture');
     writeFileSync(path, actual);
     // Prove the fixture actually executes an inherited GIT_EXTERNAL_DIFF when
@@ -81,6 +82,31 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     const security = JSON.parse(readFileSync(artifact('security'), 'utf8'));
     writeFileSync(artifact('security'), JSON.stringify({ ...security, addedLines: 0 }));
     assert.notEqual(run('gates', 'reviewer').status, 0, 'Forged security evidence must fail');
+    writeFileSync(artifact('security'), JSON.stringify(security));
+    // Regression: Git diff --name-only silently omits non-ignored untracked
+    // source files and separately staged tracked changes. All three independent
+    // review processes must reject both, not just the final publisher.
+    const unexpected = join(root, 'components', 'Unexpected.tsx');
+    writeFileSync(unexpected, 'export const unexpected = true;\n');
+    for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
+      const child = run(name, role);
+      assert.notEqual(child.status, 0, (role || name) + ' must reject an untracked source file');
+      const verdict = JSON.parse(readFileSync(artifact(role || name), 'utf8'));
+      assert.notEqual(verdict.status, role === 'reviewer' ? 'draft-pr-eligible' : 'passed');
+      assert.ok(verdict.findings.some((finding) => /scope|file changes/i.test(finding)),
+        (role || name) + ' must independently report out-of-scope change');
+    }
+    rmSync(unexpected);
+    writeFileSync(join(root, 'README.md'), 'Changed but staged fixture\n');
+    git('-c', 'core.fsmonitor=false', 'add', 'README.md');
+    for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
+      const child = run(name, role);
+      assert.notEqual(child.status, 0, (role || name) + ' must reject separately staged files');
+      const verdict = JSON.parse(readFileSync(artifact(role || name), 'utf8'));
+      assert.notEqual(verdict.status, role === 'reviewer' ? 'draft-pr-eligible' : 'passed');
+      assert.ok(verdict.findings.some((finding) => /scope|file changes/i.test(finding)),
+        (role || name) + ' must independently report out-of-scope change');
+    }
     assert.equal(readFileSync(path, 'utf8'), actual);
   } finally {
     rmSync(root, { recursive: true, force: true });

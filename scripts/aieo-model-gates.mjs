@@ -15,7 +15,15 @@ const original = safeGit(['show', 'HEAD:' + MODEL_ALLOWED_PATH]);
 const actual = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
 // Independently calculate candidate scope and patch without executing any
 // configured external diff/textconv command from the checkout or runner.
-const changedPaths = safeGit(['diff', '--no-ext-diff', '--no-textconv', '--name-only']).trim().split('\n').filter(Boolean);
+// Independent scope attestation must cover unstaged, staged AND non-ignored
+// untracked files. Plain "git diff --name-only" silently omits the latter two.
+// Only aieo-output is an allowed untracked artifact directory, never source.
+const gitPaths = (args) => safeGit(args).split('\0').filter(Boolean);
+const tracked = gitPaths(['diff', '--no-ext-diff', '--no-textconv', '--name-only', '-z']);
+const staged = gitPaths(['diff', '--no-ext-diff', '--no-textconv', '--cached', '--name-only', '-z']);
+const untracked = gitPaths(['ls-files', '--others', '--exclude-standard', '-z'])
+  .filter((path) => !path.startsWith('aieo-output/'));
+const changedPaths = [...new Set([...tracked, ...staged, ...untracked])].sort();
 const diff = safeGit(['diff', '--no-ext-diff', '--no-textconv', '--unified=0', '--', MODEL_ALLOWED_PATH]);
 const proposal = JSON.parse(readFileSync('aieo-output/model-proposal.json', 'utf8'));
 
