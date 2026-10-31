@@ -45,6 +45,11 @@ test('publisher cannot bypass human review or invoke model from untrusted PR', (
   assert.ok(publisher.includes("effectivePushUrls: command('git', ['remote', 'get-url', '--push', '--all', 'origin'])"));
   assert.ok(publisher.includes('effectivePushUrls.length !== 1'));
   assert.ok(publisher.includes('checkedOutSha !== env.GITHUB_SHA'));
+  assert.ok(publisher.includes('verifyNoGitTransportOverride({'));
+  assert.ok(publisher.includes("effectiveSshCommand: command('git', ['config', '--get', '--default', '', 'core.sshCommand']).trim()"));
+  for (const variable of ['GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS']) {
+    assert.ok(publisher.includes(variable), 'missing executable transport guard: ' + variable);
+  }
   assert.ok(publisher.includes('verifyCommittedCandidate({'));
   assert.ok(publisher.includes("verifyNoGitFilter(path, command('git', ['check-attr', 'filter', '--', path]).trim())"));
   for (const operation of ['--check', '--name-only', '--unified=0', '--cached']) {
