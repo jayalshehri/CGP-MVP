@@ -129,7 +129,7 @@ test('modern provider keys and bearer tokens are rejected before external source
     assert.throws(() => buildModelRequest({
       source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
     }));
-    assert.equal((await requestModelPatch({ source: unsafeSource, task, env, transport })).status, 'blocked');
+    assert.equal((await requestModelPatch({ source: unsafeSource, task, env: { ...env, AIEO_APPROVED_SOURCE_SHA256: sha256(unsafeSource) }, transport })).status, 'blocked');
     const unsafeProposal = JSON.stringify({
       path: MODEL_ALLOWED_PATH, find, replace: '  const sample = "' + marker + '";',
       explanation: 'synthetic marker only'
