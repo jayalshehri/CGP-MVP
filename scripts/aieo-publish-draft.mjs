@@ -179,6 +179,27 @@ function effectiveGitSslVerify(url) {
   }
 }
 
+// TLS verification can remain enabled while an inherited custom CA and proxy
+// trust a local interception endpoint. Never publish with Git-configured
+// proxy routes or additional trust roots. These settings can be URL-specific.
+export function verifyNoGitHttpsTrustOverride({ env, effectiveProxy, effectiveCaInfo, effectiveCaPath }) {
+  if (['GIT_SSL_CAINFO', 'GIT_SSL_CAPATH', 'CURL_CA_BUNDLE'].some((key) =>
+      typeof env[key] === 'string' && env[key].length > 0) ||
+      effectiveProxy !== '' || effectiveCaInfo !== '' || effectiveCaPath !== '') {
+    fail('untrusted Git HTTPS proxy or CA override');
+  }
+  return true;
+}
+function effectiveGitHttpSetting(key, url) {
+  try {
+    return command('git', ['config', '--get-urlmatch', key, url]).trim();
+  } catch (error) {
+    // An absent URL-matched setting is the only accepted nonzero status.
+    if (error?.status === 1) return '';
+    throw error;
+  }
+}
+
 // The GitHub CLI can silently select a different repository via GH_REPO or
 // an alternate host via GH_HOST. Reject inherited routing overrides before
 // the first Git subprocess; all later gh operations also name the repository.
@@ -265,10 +286,21 @@ export function publishDraft({ env = process.env } = {}) {
   // Reject a disabled SSL check even before running git. Git config can hold
   // a host- or path-specific override that takes precedence over global SSL.
   verifyGitHttpsTls({ env, effectiveSslVerify: 'true' });
+  verifyNoGitHttpsTrustOverride({
+    env, effectiveProxy: '', effectiveCaInfo: '', effectiveCaPath: ''
+  });
   for (const url of [
     'https://github.com/jayalshehri/CGP-MVP',
     'https://github.com/jayalshehri/CGP-MVP.git'
-  ]) verifyGitHttpsTls({ env, effectiveSslVerify: effectiveGitSslVerify(url) });
+  ]) {
+    verifyGitHttpsTls({ env, effectiveSslVerify: effectiveGitSslVerify(url) });
+    verifyNoGitHttpsTrustOverride({
+      env,
+      effectiveProxy: effectiveGitHttpSetting('http.proxy', url),
+      effectiveCaInfo: effectiveGitHttpSetting('http.sslCAInfo', url),
+      effectiveCaPath: effectiveGitHttpSetting('http.sslCAPath', url)
+    });
+  }
   // Git config reads do not refresh the index or launch the requested transport.
   // Both configuration and environment command overrides must fail closed.
   verifyNoGitTransportOverride({
