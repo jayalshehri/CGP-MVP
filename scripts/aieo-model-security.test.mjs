@@ -208,3 +208,23 @@ test('independent Security checks assembled JSX when added diff line omits openi
   assert.equal(inspect('  alt="safe" {...forwardedProps}').status, 'failed');
   assert.equal(inspect('  alt="updated safe"').status, 'passed');
 });
+
+
+test('independent Security rejects URL-bearing props on custom JSX components', () => {
+  for (const addition of [
+    '+<RemoteImage src={privateUrl} />',
+    '+<RouterLink href={privateUrl}>Follow</RouterLink>',
+    '+<Widget xlink:href={privateUrl} />',
+    '+<Card title="safe" srcSet={privateUrl} />'
+  ]) {
+    assert.equal(inspectModelDiff({ ...input, diff: addition }).status, 'failed', addition);
+  }
+  const original = 'const node = <RemoteImage alt="safe image" />;\n';
+  const actual = original.replace('alt="safe image"', 'alt="safe image" src={privateUrl}');
+  const changed = inspectModelDiff({ original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-alt="safe image"\n+alt="safe image" src={privateUrl}\n',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) } });
+  assert.equal(changed.status, 'failed');
+  const benign = '<Display label="safe" />';
+  assert.equal(inspectModelDiff({ ...input, diff: '+' + benign }).status, 'passed');
+});
