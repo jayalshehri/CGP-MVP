@@ -139,6 +139,10 @@ function unsafeJsxMarkup(text) {
 const outboundCss = /\burl\s*\(|\bimage-set\s*\(|@import\b|\bbackgroundImage\s*:/i;
 // Reject optional chaining, computed property access and aliases for browser/network APIs.
 // This deliberately errs on the side of refusing a model-generated UI change.
+// For this bounded UI proposal, a new bare browser global or reflective lookup
+// is unsafe too: (0, fetch) and Reflect.get(globalThis, 'fetch') bypass
+// call/member-access-only lexical checks. This deliberately rejects more edits.
+const unsafeGlobalIdentifiers = /\b(?:Reflect|Proxy|constructor|__proto__|prototype|globalThis|window|self|document|navigator|location|history|fetch|XMLHttpRequest|WebSocket|EventSource|WebTransport|sendBeacon|postMessage|Worker|SharedWorker|Image)\b/i;
 const indirectBrowserAccess = /\b(?:window|globalThis|self|navigator|document|location|history)\s*(?:\.|\?\.|\[)|\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|WebTransport|sendBeacon|postMessage|Worker|SharedWorker|Image|eval|Function|require|import)\s*(?:\(|\?\.|\[)|(?:=\s*|\breturn\s+)(?:fetch|navigator|window|globalThis|document|location)\b/i;
 
 // The source-bearing submit handler is security-critical. Preserve its complete body,
@@ -186,7 +190,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   if (additions.length > 20 || actualAdditions.length > 20) findings.push('Too many new code lines');
   if (deletions.length > 20) findings.push('Too many deleted code lines');
   const checkedAdditions = additions.concat(actualAdditions);
-  if (checkedAdditions.some((line) => suspect.test(line) || privilegedClientReuse.test(line) || browserExfil.test(line) || indirectBrowserAccess.test(line)) ||
+  if (checkedAdditions.some((line) => suspect.test(line) || privilegedClientReuse.test(line) || browserExfil.test(line) || indirectBrowserAccess.test(line) || unsafeGlobalIdentifiers.test(line)) ||
       unsafeJsxMarkup(checkedAdditions.join('\n')) ||
       (typeof actual === 'string' && unsafeJsxMarkup(actual)) ||
       outboundCss.test(checkedAdditions.join('\n'))) {

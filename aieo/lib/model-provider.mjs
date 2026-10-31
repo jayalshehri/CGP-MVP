@@ -58,6 +58,10 @@ function unsafeJsxMarkup(text) {
 const outboundCss = /\burl\s*\(|\bimage-set\s*\(|@import\b|\bbackgroundImage\s*:/i;
 // Reject optional chaining, computed property access and aliases for browser/network APIs.
 // This deliberately errs on the side of refusing a model-generated UI change.
+// For this bounded UI proposal, a new bare browser global or reflective lookup
+// is unsafe too: (0, fetch) and Reflect.get(globalThis, 'fetch') bypass
+// call/member-access-only lexical checks. This deliberately rejects more edits.
+const unsafeGlobalIdentifiers = /\b(?:Reflect|Proxy|constructor|__proto__|prototype|globalThis|window|self|document|navigator|location|history|fetch|XMLHttpRequest|WebSocket|EventSource|WebTransport|sendBeacon|postMessage|Worker|SharedWorker|Image)\b/i;
 const indirectBrowserAccess = /\b(?:window|globalThis|self|navigator|document|location|history)\s*(?:\.|\?\.|\[)|\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|WebTransport|sendBeacon|postMessage|Worker|SharedWorker|Image|eval|Function|require|import)\s*(?:\(|\?\.|\[)|(?:=\s*|\breturn\s+)(?:fetch|navigator|window|globalThis|document|location)\b/i;
 
 // Never buffer an unbounded provider response: real fetch supplies a readable byte stream.
@@ -111,7 +115,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
   if (credentials.test(replace) || forbidden.test(replace) || privilegedClientReuse.test(replace) || browserExfil.test(replace) ||
-      unsafeJsxMarkup(replace) || outboundCss.test(replace) || indirectBrowserAccess.test(replace) ||
+      unsafeJsxMarkup(replace) || outboundCss.test(replace) || indirectBrowserAccess.test(replace) || unsafeGlobalIdentifiers.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
