@@ -32,6 +32,61 @@ function coversIntroducedLines(diffAdditions, introduced) {
     return true;
   });
 }
+// A line multiset alone cannot attest source order, deleted lines, or hunk
+// positions. Reconstruct the entire candidate from the reported zero-context
+// unified diff and the original source. A forged or incomplete diff fails closed.
+// This bounded model workflow deliberately refuses changes to final newlines or
+// non-text/mode-only diffs instead of guessing how to apply them.
+function exactDiffReconstructs(original, actual, diff) {
+  if (typeof original !== 'string' || typeof actual !== 'string' ||
+      typeof diff !== 'string' || !original.endsWith('\n') || !actual.endsWith('\n')) return false;
+  const source = original.slice(0, -1).split('\n');
+  const lines = diff.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  let index = 0;
+  const metadata = /^(?:diff --git a\/components\/FeedbackWidget\.tsx b\/components\/FeedbackWidget\.tsx|index [0-9a-f]{7,64}\.\.[0-9a-f]{7,64}(?: 100644)?|--- a\/components\/FeedbackWidget\.tsx|\+\+\+ b\/components\/FeedbackWidget\.tsx)$/;
+  while (index < lines.length && !lines[index].startsWith('@@ ')) {
+    if (!metadata.test(lines[index++])) return false;
+  }
+  const candidate = [];
+  let oldCursor = 0;
+  let hunks = 0;
+  while (index < lines.length) {
+    const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$/.exec(lines[index++]);
+    if (!match) return false;
+    const oldStart = Number(match[1]);
+    const oldCount = match[2] === undefined ? 1 : Number(match[2]);
+    const newStart = Number(match[3]);
+    const newCount = match[4] === undefined ? 1 : Number(match[4]);
+    const oldIndex = oldCount === 0 ? oldStart : oldStart - 1;
+    const newIndex = newCount === 0 ? newStart : newStart - 1;
+    if (![oldStart, oldCount, newStart, newCount, oldIndex, newIndex].every(Number.isSafeInteger) ||
+        oldIndex < oldCursor || oldIndex > source.length) return false;
+    candidate.push(...source.slice(oldCursor, oldIndex));
+    if (newIndex !== candidate.length) return false;
+    oldCursor = oldIndex;
+    const oldHunkStart = oldCursor;
+    const newHunkStart = candidate.length;
+    while (index < lines.length && !lines[index].startsWith('@@ ')) {
+      const line = lines[index++];
+      if (line.startsWith('-') || line.startsWith(' ')) {
+        if (source[oldCursor] !== line.slice(1)) return false;
+        oldCursor++;
+        if (line.startsWith(' ')) candidate.push(line.slice(1));
+      } else if (line.startsWith('+')) {
+        candidate.push(line.slice(1));
+      } else {
+        return false;
+      }
+    }
+    if (oldCursor - oldHunkStart !== oldCount ||
+        candidate.length - newHunkStart !== newCount) return false;
+    hunks++;
+  }
+  candidate.push(...source.slice(oldCursor));
+  return hunks > 0 && candidate.join('\n') + '\n' === actual;
+}
+
 // Scan only new lines; a bounded UI repair must not introduce active browser exfiltration,
 // dynamic code execution, credentials or raw HTML rendering.
 const suspect = /\b(?:eval|Function)\s*\(|\b(?:child_process|process\.env|document\.cookie|localStorage|sessionStorage|dangerouslySetInnerHTML)\b|\b(?:XMLHttpRequest|fetch|WebSocket|EventSource|postMessage|sendBeacon|require|import)\s*\(|\bimport\s+(?:[\w{*]|["'])|\b(?:innerHTML|outerHTML)\s*=|gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-[a-z0-9]{20,}|(?:sk-proj-|sk-live-|sb_secret_)[a-z0-9_-]{20,}|\bBearer\s+[a-z0-9._~+/-]{16,}|AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i;
@@ -117,6 +172,9 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
     ? introducedLines(original, actual) : [];
   if (!coversIntroducedLines(additions, actualAdditions)) {
     findings.push('Reported diff omits newly introduced source lines');
+  }
+  if (!exactDiffReconstructs(original, actual, diff)) {
+    findings.push('Reported diff does not reconstruct candidate source');
   }
   if (additions.length > 20 || actualAdditions.length > 20) findings.push('Too many new code lines');
   const checkedAdditions = additions.concat(actualAdditions);
