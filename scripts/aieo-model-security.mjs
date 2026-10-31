@@ -15,7 +15,10 @@ const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fe
 // Scan the full JSX opening tag. An early '>' inside quoted attributes or a
 // JSX expression is not the end of the tag; regexes stopping at '>' miss sinks.
 const outboundTagNames = /^(?:a|area|img|image|use|feImage|iframe|script|link|form|button|input|video|audio|source|track|embed|object|base|meta)$/i;
-// URL-bearing attributes are also dangerous on custom React components (e.g. Link/Image).\n// Keep native-only attributes separate to avoid rejecting ordinary custom `data` props.\nconst urlAttributes = /\b(?:href|xlink:href|src|srcSet|srcDoc|ping|poster|action|formAction)\s*=/i;\nconst nativeOnlyAttributes = /\b(?:data|httpEquiv|http-equiv)\s*=/i;
+// URL-bearing attributes are also dangerous on custom React components (e.g. Link/Image).
+// Keep native-only attributes separate to avoid rejecting ordinary custom `data` props.
+const urlAttributes = /\b(?:href|xlink:href|src|srcSet|srcDoc|ping|poster|action|formAction)\s*=/i;
+const nativeOnlyAttributes = /\b(?:data|httpEquiv|http-equiv)\s*=/i;
 function unsafeJsxMarkup(text) {
   const openings = /<\s*([A-Za-z][\w.:-]*)\b/g;
   let opening;
