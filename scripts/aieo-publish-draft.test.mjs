@@ -345,7 +345,7 @@ test('custom Git remote helper fails closed before execution or any remote write
   try {
     const marker = join(f.root, 'remote-helper-invoked');
     const helper = join(f.root, 'bin', 'git-remote-aieo-unsafe');
-    writeFileSync(helper, '#!/bin/sh\\necho invoked >> ' + JSON.stringify(marker) + '\\nexit 1\\n');
+    writeFileSync(helper, '#!/bin/sh\necho invoked >> ' + JSON.stringify(marker) + '\nexit 1\n');
     chmodSync(helper, 0o755);
     git(f.workspace, 'config', 'remote.origin.vcs', 'aieo-unsafe');
     assert.equal(git(f.workspace, 'config', '--get', 'remote.origin.vcs'), 'aieo-unsafe');
