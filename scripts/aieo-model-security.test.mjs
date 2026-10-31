@@ -235,7 +235,7 @@ test('independent Security rejects URL-bearing props on custom JSX components', 
   assert.equal(inspectModelDiff({
     ...input, actual: benignActual,
     diff: '@@ -1 +1 @@\n-const items = 1;\n+' + benign + '\n',
-    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(benignActual) }
+    report: { status: 'proposed', sourceHash: hash(input.original), proposedHash: hash(benignActual) }
   }).status, 'passed');
 });
 
