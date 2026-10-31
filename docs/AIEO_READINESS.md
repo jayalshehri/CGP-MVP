@@ -65,6 +65,11 @@ The new `aieo-model-draft.yml` and `aieo-developer-draft.yml` currently exist on
 - The publisher no longer writes a persistent Git credential configuration with `gh auth setup-git`. It adds two **command-scoped** Git configuration values for **both** authenticated push and remote-HEAD attestation: an empty `credential.helper` to reset inherited helpers, followed by only `!gh auth git-credential` as the permitted helper. Git hooks remain disabled on push. This preserves the manual dispatch, exact-commit and Draft-only verification boundaries.
 - An isolated negative fixture configures an executable global/local-style helper and URL-specific helper, proves Git's credential protocol obtains only the synthetic GitHub CLI response, and asserts the malicious helper is never invoked. The local model/Git workflow still uses a mocked GitHub CLI and temporary bare Git remote; this is **not** evidence of live GitHub Actions Draft publication or OpenRouter-generated code. CI must pass on the exact new HEAD before treating the change as validated.
 
+## HTTPS-only Draft publisher transport (stacked Draft, 2026-10-31)
+- GitHub Actions checks out the approved repository over HTTPS. Allowing the same repository through SSH also permits local SSH configuration to execute `ProxyCommand`, `Match exec` or other external helpers with the publisher's token, even after Git-level SSH command overrides and Git hooks have been rejected.
+- The Draft publisher now accepts only the two canonical HTTPS forms for both the **raw** origin and Git's **fully resolved single push URL**. SSH/scp-style destinations fail closed *before* branch creation, network transport or GitHub CLI calls; existing command-scoped GitHub CLI HTTPS authentication is unchanged.
+- Unit and isolated subprocess tests cover both SSH raw origins and SSH push URLs, and the workflow-policy test rejects reintroduction of the SSH allowlist. This intentionally tightens the supported publisher transport; it does not prove live GitHub Actions Draft publication, external source consent or a real OpenRouter-generated fix. Exact-HEAD GitHub CI must verify the change.
+
 ## Next safe milestones
 1. Continue hardening read-only and mocked integration tests on the feature branch.
 2. Check final CI conclusions against the *current branch HEAD*, not earlier successful commits.
