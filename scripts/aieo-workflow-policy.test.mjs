@@ -101,3 +101,40 @@ test('required app CI covers stacked AIEO PRs with read-only permissions', () =>
     assert.ok(requiredCI.includes(check), 'missing app CI step: ' + check);
   }
 });
+
+test('model review stages have separate Actions steps and never inherit the provider key', () => {
+  const steps = model.split(/\n(?=      - name: )/);
+  const getStep = (name) => {
+    const step = steps.find((block) => block.startsWith('      - name: ' + name + '\n'));
+    assert.ok(step, 'missing independent workflow step: ' + name);
+    return step;
+  };
+  const proposalName = 'Request one bounded model suggestion with scoped provider credential';
+  const qaName = 'Independently run model QA without provider credential';
+  const securityName = 'Independently run model Security without provider credential';
+  const reviewerName = 'Independently run model Reviewer without provider credential';
+  const scopeName = 'Attest candidate diff scope after independent reviews';
+  const buildName = 'Independently verify application build';
+  const proposal = getStep(proposalName);
+  assert.match(proposal, /OPENROUTER_API_KEY:/);
+  assert.match(proposal, /node scripts\/aieo-model-proposal\.mjs/);
+  assert.doesNotMatch(proposal, /node scripts\/aieo-model-(?:gates|security)\.mjs/);
+  const stages = [
+    [qaName, /run: node scripts\/aieo-model-gates\.mjs qa/],
+    [securityName, /run: node scripts\/aieo-model-security\.mjs/],
+    [reviewerName, /run: node scripts\/aieo-model-gates\.mjs reviewer/],
+    [scopeName, /git diff --check/]
+  ];
+  for (const [name, command] of stages) {
+    const step = getStep(name);
+    assert.match(step, command);
+    assert.doesNotMatch(step, /OPENROUTER_API_KEY|OPENROUTER_MODEL_ID|GH_TOKEN|AIEO_MODEL_TASK|secrets\./,
+      name + ' must not inherit provider or publishing credentials');
+  }
+  assert.equal(steps.filter((step) => step.includes('OPENROUTER_API_KEY:')).length, 1,
+    'provider secret must occur in exactly one Actions step');
+  const order = [proposalName, qaName, securityName, reviewerName, scopeName, buildName]
+    .map((name) => model.indexOf('      - name: ' + name + '\n'));
+  assert.ok(order.every((value, index) => value >= 0 && (index === 0 || value > order[index - 1])),
+    'review steps must be ordered sequentially before the app build');
+});
