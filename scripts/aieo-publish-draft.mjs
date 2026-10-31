@@ -154,6 +154,16 @@ export function verifyNoGitTransportOverride({ env, effectiveSshCommand }) {
   return true;
 }
 
+// A custom remote.origin.vcs value selects an arbitrary git-remote-<vcs> executable,
+// even when the origin and resolved push URL are the canonical GitHub HTTPS URL.
+// Reject it before git index reads, branch creation or any authenticated push.
+export function verifyNoGitRemoteHelper(effectiveVcs) {
+  if (effectiveVcs !== '') {
+    fail('untrusted Git remote helper override');
+  }
+  return true;
+}
+
 // A Git hook or local Git config can mutate the index/tree after source gates run.
 // Recheck the exact committed tree and single parent *before* any remote write.
 export function verifyCommittedCandidate({ baseSha, parentSha, reviewedSource, committedSource, changedPaths }) {
@@ -173,6 +183,8 @@ export function publishDraft({ env = process.env } = {}) {
     env,
     effectiveSshCommand: command('git', ['config', '--get', '--default', '', 'core.sshCommand']).trim()
   });
+  // A Git remote.vcs override can execute git-remote-<vcs> during a trusted-URL push.
+  verifyNoGitRemoteHelper(command('git', ['config', '--get', '--default', '', 'remote.origin.vcs']).trim());
   // Reading config is index-free; reject an executable fsmonitor before diff/add.
   verifyNoGitFsmonitor(command('git', ['config', '--get', '--default', 'false', 'core.fsmonitor']).trim());
   verifyTrustedCheckout({

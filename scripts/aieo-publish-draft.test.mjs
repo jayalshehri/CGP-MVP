@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, authenticatedGitArgs } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, verifyNoGitRemoteHelper, authenticatedGitArgs } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -331,6 +331,34 @@ test('publisher refuses executable SSH and askpass configuration overrides', () 
   assert.throws(() => verifyNoGitTransportOverride({
     ...args, effectiveSshCommand: '/tmp/not-trusted'
   }), /untrusted Git transport executable override/);
+});
+
+test('custom Git remote helper must not be configured for Draft publishing', () => {
+  assert.equal(verifyNoGitRemoteHelper(''), true);
+  for (const helper of ['git', 'aieo-unsafe', 'ext', 'ssh']) {
+    assert.throws(() => verifyNoGitRemoteHelper(helper), /untrusted Git remote helper override/);
+  }
+});
+
+test('custom Git remote helper fails closed before execution or any remote write', () => {
+  const f = fixture();
+  try {
+    const marker = join(f.root, 'remote-helper-invoked');
+    const helper = join(f.root, 'bin', 'git-remote-aieo-unsafe');
+    writeFileSync(helper, '#!/bin/sh\necho invoked >> ' + JSON.stringify(marker) + '\nexit 1\n');
+    chmodSync(helper, 0o755);
+    git(f.workspace, 'config', 'remote.origin.vcs', 'aieo-unsafe');
+    assert.equal(git(f.workspace, 'config', '--get', 'remote.origin.vcs'), 'aieo-unsafe');
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0);
+    assert.match(child.stderr, /untrusted Git remote helper override/);
+    assert.equal(existsSync(marker), false, 'untrusted git-remote helper must never execute');
+    assert.equal(existsSync(f.log), false, 'gh must not run');
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote), /model-proposal/);
+  } finally { rmSync(f.root, { force: true, recursive: true }); }
 });
 
 test('Git transport command overrides fail before branch write, gh or helper execution', () => {
