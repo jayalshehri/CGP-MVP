@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -282,6 +282,55 @@ test('publisher blocks executable fsmonitor before Git index reads and remote wr
     assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
     assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote), /model-proposal/);
   } finally { rmSync(f.root, { force: true, recursive: true }); }
+});
+
+test('publisher refuses executable SSH and askpass configuration overrides', () => {
+  const args = { env: {}, effectiveSshCommand: '' };
+  assert.equal(verifyNoGitTransportOverride(args), true);
+  for (const key of [
+    'GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_ASKPASS', 'SSH_ASKPASS',
+    'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS'
+  ]) {
+    assert.throws(() => verifyNoGitTransportOverride({
+      ...args, env: { [key]: key === 'GIT_CONFIG_COUNT' ? '1' : '/tmp/not-trusted' }
+    }), /untrusted Git transport executable override/);
+  }
+  assert.throws(() => verifyNoGitTransportOverride({
+    ...args, effectiveSshCommand: '/tmp/not-trusted'
+  }), /untrusted Git transport executable override/);
+});
+
+test('Git transport command overrides fail before branch write, gh or helper execution', () => {
+  for (const kind of ['core-ssh', 'env-ssh', 'git-askpass', 'ssh-askpass', 'config-overlay']) {
+    const f = fixture();
+    try {
+      const marker = join(f.root, 'transport-command-ran');
+      const executable = join(f.root, 'untrusted-transport.sh');
+      writeFileSync(executable, '#!/bin/sh\necho invoked >> ' + JSON.stringify(marker) + '\nexit 1\n');
+      chmodSync(executable, 0o755);
+      if (kind === 'core-ssh') git(f.workspace, 'config', 'core.sshCommand', executable);
+      const overrides = {
+        ...(kind === 'env-ssh' ? { GIT_SSH_COMMAND: executable } : {}),
+        ...(kind === 'git-askpass' ? { GIT_ASKPASS: executable } : {}),
+        ...(kind === 'ssh-askpass' ? { SSH_ASKPASS: executable } : {}),
+        ...(kind === 'config-overlay' ? {
+          GIT_CONFIG_COUNT: '1',
+          GIT_CONFIG_KEY_0: 'core.sshCommand',
+          GIT_CONFIG_VALUE_0: executable
+        } : {})
+      };
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: { ...f.env, ...overrides },
+        encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0);
+      assert.match(child.stderr, /untrusted Git transport executable override/);
+      assert.equal(existsSync(marker), false, 'untrusted command must not execute');
+      assert.equal(existsSync(f.log), false, 'GitHub CLI must not run');
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote), /model-proposal/);
+    } finally { rmSync(f.root, { force: true, recursive: true }); }
+  }
 });
 
 test('publisher never executes configured Git checkout, index, commit or push hooks with its token', () => {
