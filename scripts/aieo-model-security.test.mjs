@@ -228,3 +228,29 @@ test('independent Security rejects URL-bearing props on custom JSX components', 
   const benign = '<Display label="safe" />';
   assert.equal(inspectModelDiff({ ...input, diff: '+' + benign }).status, 'passed');
 });
+
+
+test('independent Security prevents new SDK-backed data access while preserving existing client use', () => {
+  const base = 'const client = supabase;\\nconst label = "old";\\n'.replaceAll('\\n', '\n');
+  const approved = base.replace('"old"', '"new"');
+  const clean = inspectModelDiff({
+    original: base, actual: approved, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -2 +2 @@\n-const label = "old";\n+const label = "new";\n',
+    report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(approved) }
+  });
+  assert.equal(clean.status, 'passed', 'unchanged pre-existing SDK references are not banned');
+  for (const addition of [
+    'const leak = supabase.from("profiles").select("*");',
+    'const session = supabase.auth.getSession();',
+    'const { from } = supabase;'
+  ]) {
+    const next = base + addition + '\n';
+    const checked = inspectModelDiff({
+      original: base, actual: next, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -2,0 +3 @@\n+' + addition + '\n',
+      report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(next) }
+    });
+    assert.equal(checked.status, 'failed', addition);
+    assert.ok(checked.findings.includes('Potentially unsafe new code'));
+  }
+});

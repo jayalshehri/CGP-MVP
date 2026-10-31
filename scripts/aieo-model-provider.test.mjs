@@ -325,3 +325,24 @@ test('custom JSX components cannot introduce URL-bearing props', () => {
   assert.equal(validateModelPatch({ response: JSON.stringify({ path: MODEL_ALLOWED_PATH,
     find, replace: '<Display label="safe" />', explanation: 'safe custom component' }), source }).status, 'proposed');
 });
+
+
+test('model-generated UI edits cannot reuse the existing Supabase client', () => {
+  // Existing imports and the protected submit handler stay untouched. Only
+  // newly proposed text is scanned, so ordinary UI edits remain possible.
+  for (const replace of [
+    'const result = supabase.from("profiles").select("*");',
+    'void supabase.from("feedback").insert({ message: secret });',
+    'const session = supabase.auth.getSession();',
+    'const client = supabase;',
+    'const { from } = supabase;'
+  ]) {
+    const response = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace, explanation: 'synthetic SDK reuse regression' });
+    assert.equal(validateModelPatch({ response, source }).status, 'rejected', replace);
+  }
+  const benign = JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: '  const sample = 105;',
+    explanation: 'safe static UI content'
+  });
+  assert.equal(validateModelPatch({ response: benign, source }).status, 'proposed');
+});
