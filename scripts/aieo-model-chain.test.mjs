@@ -164,9 +164,9 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     assert.equal(git('diff', '--name-only', 'main', 'HEAD').trim(), MODEL_ALLOWED_PATH);
     assert.match(git('ls-remote', '--heads', remote), /refs\/heads\/aieo\/model-proposal-77331-1/);
     const ghCommands = readFileSync(ghLog, 'utf8');
-    assert.match(ghCommands, /pr create --draft --base main --head aieo\/model-proposal-77331-1/);
+    assert.match(ghCommands, /pr create --draft --repo jayalshehri\/CGP-MVP --base main --head aieo\/model-proposal-77331-1/);
     assert.match(ghCommands, /pr view https:\/\/github.com\/jayalshehri\/CGP-MVP\/pull\/777/);
-    assert.match(ghCommands, /workflow run cgp-required-ci.yml --ref aieo\/model-proposal-77331-1/);
+    assert.match(ghCommands, /workflow run cgp-required-ci.yml --repo jayalshehri\/CGP-MVP --ref aieo\/model-proposal-77331-1/);
     assert.doesNotMatch(ghCommands, /^pr merge\b|^release create\b|^deploy\b|--auto-merge\b/m);
   } finally {
     rmSync(root, { recursive: true, force: true });
