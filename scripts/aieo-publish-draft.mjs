@@ -178,6 +178,18 @@ function effectiveGitSslVerify(url) {
   }
 }
 
+// Git trace exports may write HTTP headers (including credentials if trace
+// redaction is disabled) or patch/source data into attacker-chosen files.
+// Never inherit diagnostic logging in a token-bearing publish process.
+// Fail before the first Git subprocess, not merely before authenticated push.
+export function verifyNoGitDiagnosticExport(env) {
+  const unsafe = Object.entries(env).some(([key, value]) =>
+    (/^GIT_TRACE[A-Z0-9_]*$/.test(key) || key === 'GIT_CURL_VERBOSE') &&
+    typeof value === 'string' && value.length > 0);
+  if (unsafe) fail('untrusted Git diagnostics configuration');
+  return true;
+}
+
 // A custom remote.origin.vcs value selects an arbitrary git-remote-<vcs> executable,
 // even when the origin and resolved push URL are the canonical GitHub HTTPS URL.
 // Reject it before git index reads, branch creation or any authenticated push.
@@ -215,6 +227,7 @@ export function publishDraft({ env = process.env } = {}) {
   // Reject executable environment overrides before even invoking Git. A custom
   // GIT_EXEC_PATH can substitute remote-https when credentials are available.
   verifyNoGitTransportOverride({ env, effectiveSshCommand: '' });
+  verifyNoGitDiagnosticExport(env);
   // Reject a disabled SSL check even before running git. Git config can hold
   // a host- or path-specific override that takes precedence over global SSL.
   verifyGitHttpsTls({ env, effectiveSslVerify: 'true' });
