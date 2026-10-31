@@ -178,6 +178,17 @@ function effectiveGitSslVerify(url) {
   }
 }
 
+// The GitHub CLI can silently select a different repository via GH_REPO or
+// an alternate host via GH_HOST. Reject inherited routing overrides before
+// the first Git subprocess; all later gh operations also name the repository.
+export function verifyNoGitHubCliRoutingOverride(env) {
+  if (['GH_REPO', 'GH_HOST'].some((key) =>
+    typeof env[key] === 'string' && env[key].length > 0)) {
+    fail('untrusted GitHub CLI repository or host routing');
+  }
+  return true;
+}
+
 // Git trace exports may write HTTP headers (including credentials if trace
 // redaction is disabled) or patch/source data into attacker-chosen files.
 // Never inherit diagnostic logging in a token-bearing publish process.
@@ -224,6 +235,7 @@ export function verifyCommittedCandidate({ baseSha, parentSha, reviewedSource, c
 
 export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
+  verifyNoGitHubCliRoutingOverride(env);
   // Reject executable environment overrides before even invoking Git. A custom
   // GIT_EXEC_PATH can substitute remote-https when credentials are available.
   verifyNoGitTransportOverride({ env, effectiveSshCommand: '' });
@@ -302,8 +314,8 @@ export function publishDraft({ env = process.env } = {}) {
   }
   const body = 'Candidate scope, independent checks and build were verified before publishing. ' +
     'DRAFT only. No automatic approval, merge or production deployment.';
-  const pr = command('gh', ['pr', 'create', '--draft', '--base', 'main', '--head', branch,
-    '--title', 'AIEO: bounded ' + mode + ' proposal for review', '--body', body]).trim();
+  const pr = command('gh', ['pr', 'create', '--draft', '--repo', env.GITHUB_REPOSITORY,
+    '--base', 'main', '--head', branch, '--title', 'AIEO: bounded ' + mode + ' proposal for review', '--body', body]).trim();
   // A zero exit from gh is not proof that a new PR is actually Draft. Verify
   // the remote PR's identity and protection-relevant fields before reporting
   // success or dispatching any follow-up CI. Never fall back to a ready PR.
@@ -317,7 +329,8 @@ export function publishDraft({ env = process.env } = {}) {
     fail('Created PR could not be independently verified');
   }
   verifyRemoteDraft({ remote, url: pr, branch, commitSha: committedSha });
-  if (mode === 'model') command('gh', ['workflow', 'run', 'cgp-required-ci.yml', '--ref', branch]);
+  if (mode === 'model') command('gh', ['workflow', 'run', 'cgp-required-ci.yml',
+    '--repo', env.GITHUB_REPOSITORY, '--ref', branch]);
   return { status: 'draft-pr-created', branch, pr, requiresHumanMerge: true };
 }
 
