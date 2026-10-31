@@ -103,12 +103,13 @@ export function verifyRemoteDraft({ remote, url, branch, commitSha }) {
 // Git can push to multiple configured pushurls: require exactly one resolved destination.
 // Do not echo origin URLs: a misconfigured origin can contain credentials.
 export function verifyTrustedCheckout({ env, checkedOutSha, originUrl, effectivePushUrls }) {
+  // The trusted Actions checkout uses HTTPS. SSH remotes can execute local
+  // ~/.ssh/config ProxyCommand or Match exec helpers with GH_TOKEN in scope,
+  // even when Git hooks, core.sshCommand and askpass are blocked. The publisher
+  // has no reason to invoke SSH: fail closed on both raw and resolved URLs.
   const trustedOrigins = new Set([
     'https://github.com/jayalshehri/CGP-MVP',
-    'https://github.com/jayalshehri/CGP-MVP.git',
-    'git@github.com:jayalshehri/CGP-MVP',
-    'git@github.com:jayalshehri/CGP-MVP.git',
-    'ssh://git@github.com/jayalshehri/CGP-MVP.git'
+    'https://github.com/jayalshehri/CGP-MVP.git'
   ]);
   if (!/^[a-f0-9]{40}$/.test(env.GITHUB_SHA || '') ||
       checkedOutSha !== env.GITHUB_SHA || !trustedOrigins.has(originUrl) ||

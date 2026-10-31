@@ -64,6 +64,10 @@ test('publisher cannot bypass human review or invoke model from untrusted PR', (
   }
   assert.ok(publisher.includes("'credential.helper='"), 'prior Git credential helpers must be reset');
   assert.ok(publisher.includes("'credential.helper=!gh auth git-credential'"), 'only GitHub CLI may provide network authentication');
+  assert.ok(!publisher.includes("'git@github.com:jayalshehri/CGP-MVP'"),
+    'SSH transport must not be allowlisted in the token-bearing Draft publisher');
+  assert.ok(!publisher.includes("'ssh://git@github.com/jayalshehri/CGP-MVP.git'"),
+    'SSH ProxyCommand/Match exec routes must not be allowlisted');
   assert.ok(publisher.includes("gitAuthenticated(['push', 'origin'"), 'push must use isolated Git authentication');
   assert.ok(publisher.includes("gitAuthenticated(['ls-remote', 'origin'"), 'post-push attestation must use isolated Git authentication');
   assert.ok(!publisher.includes("command('gh', ['auth', 'setup-git'])"), 'no persistent Git credential configuration');
