@@ -155,6 +155,13 @@ export async function requestModelPatch({ source, path = MODEL_ALLOWED_PATH, tas
       !env.OPENROUTER_MODEL_ID) {
     return { status: 'blocked', reason: 'Manual trusted workflow, source consent or provider configuration missing' };
   }
+  // A broad opt-in flag is not consent to disclose whatever source happens
+  // to be checked out later. Bind authorization to the exact file bytes.
+  const approvedSourceHash = env.AIEO_APPROVED_SOURCE_SHA256;
+  if (typeof source !== 'string' || typeof approvedSourceHash !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(approvedSourceHash) || approvedSourceHash !== sha256(source)) {
+    return { status: 'blocked', reason: 'Approved source SHA-256 does not match the exact source' };
+  }
   let payload;
   try {
     payload = buildModelRequest({ source, path, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true });
