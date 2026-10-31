@@ -5,6 +5,9 @@ import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 
 const hash = (content) => createHash('sha256').update(content).digest('hex');
+// Disable executable fsmonitor configuration on every independent Git read;
+// --no-ext-diff and --no-textconv do not disable this separate index hook.
+const safeGit = (args) => execFileSync('git', ['-c', 'core.fsmonitor=false', ...args], { encoding: 'utf8' });
 
 // The diff is a report, not an independent source of truth. A forged/partial
 // diff must not hide newly introduced executable lines from Security or Reviewer.
@@ -220,10 +223,10 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
 // textconv executable while this process still has provider credentials.
 // Use Git's built-in diff exclusively in this independent review process.
 if (process.argv[1]?.endsWith('/aieo-model-security.mjs')) {
-  const original = execFileSync('git', ['show', 'HEAD:' + MODEL_ALLOWED_PATH], { encoding: 'utf8' });
+  const original = safeGit(['show', 'HEAD:' + MODEL_ALLOWED_PATH]);
   const actual = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
-  const changedPaths = execFileSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--name-only'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-  const diff = execFileSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--unified=0', '--', MODEL_ALLOWED_PATH], { encoding: 'utf8' });
+  const changedPaths = safeGit(['diff', '--no-ext-diff', '--no-textconv', '--name-only']).trim().split('\n').filter(Boolean);
+  const diff = safeGit(['diff', '--no-ext-diff', '--no-textconv', '--unified=0', '--', MODEL_ALLOWED_PATH]);
   const report = JSON.parse(readFileSync('aieo-output/model-proposal.json', 'utf8'));
   const result = inspectModelDiff({ original, actual, changedPaths, diff, report });
   mkdirSync('aieo-output', { recursive: true });

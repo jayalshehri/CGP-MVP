@@ -19,6 +19,8 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
   const output = join(root, 'aieo-output');
   const externalDiff = join(root, 'untrusted-diff.sh');
   const diffSentinel = join(root, 'external-diff-ran');
+  const fsmonitor = join(root, 'untrusted-fsmonitor.sh');
+  const fsmonitorSentinel = join(root, 'fsmonitor-ran');
   const guardedEnv = { ...process.env, GIT_EXTERNAL_DIFF: externalDiff, AIEO_TEST_DIFF_SENTINEL: diffSentinel };
   const artifact = (name) => join(output, 'model-' + name + '.json');
   const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe', encoding: 'utf8' });
@@ -46,6 +48,17 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     assert.notEqual(unguarded.status, 0, 'control must reject malicious external diff failure');
     assert.equal(existsSync(diffSentinel), true, 'control must prove unguarded Git executes the helper');
     rmSync(diffSentinel);
+    // A hostile fsmonitor also runs on index reads, independently of any
+    // external diff driver. Prove that an ordinary diff invokes it, then
+    // require all three agent processes to avoid it without disabling checks.
+    writeFileSync(fsmonitor, '#!/bin/sh\nprintf invoked >> ' + JSON.stringify(fsmonitorSentinel) + '\nexit 93\n');
+    chmodSync(fsmonitor, 0o755);
+    git('config', 'core.fsmonitor', fsmonitor);
+    spawnSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--name-only'],
+      { cwd: root, encoding: 'utf8', env: guardedEnv, timeout: 10000 });
+    assert.equal(existsSync(fsmonitorSentinel), true,
+      'control must prove Git runs an inherited fsmonitor');
+    rmSync(fsmonitorSentinel);
     writeFileSync(artifact('proposal'), JSON.stringify({
       schemaVersion: 1, status: 'proposed', path: 'components/FeedbackWidget.tsx',
       sourceHash: sha(original), proposedHash: sha(actual)
@@ -55,6 +68,8 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
       assert.equal(child.status, 0, (role || name) + ': ' + child.stderr);
       assert.equal(existsSync(diffSentinel), false,
         (role || name) + ' must not execute untrusted Git diff driver');
+      assert.equal(existsSync(fsmonitorSentinel), false,
+        (role || name) + ' must not execute untrusted Git fsmonitor');
     }
     const reviewer = JSON.parse(readFileSync(artifact('reviewer'), 'utf8'));
     assert.equal(reviewer.status, 'draft-pr-eligible');
