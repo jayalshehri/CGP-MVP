@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyRemoteDraft, verifyTrustedCheckout, verifyCommittedCandidate, verifyNoGitFilter, verifyNoGitFsmonitor, verifyNoGitTransportOverride, authenticatedGitArgs } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -281,6 +281,31 @@ test('publisher blocks executable fsmonitor before Git index reads and remote wr
     assert.equal(existsSync(f.log), false, 'gh must not run');
     assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
     assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote), /model-proposal/);
+  } finally { rmSync(f.root, { force: true, recursive: true }); }
+});
+
+test('authenticated Git resets configured executable helpers, including URL-specific helpers', () => {
+  const f = fixture();
+  try {
+    const marker = join(f.root, 'untrusted-helper-ran');
+    const malicious = join(f.root, 'malicious-helper.sh');
+    writeFileSync(malicious, '#!/bin/sh\\nprintf invoked >> ' + JSON.stringify(marker) + '\\n');
+    chmodSync(malicious, 0o755);
+    git(f.workspace, 'config', 'credential.helper', '!' + malicious);
+    git(f.workspace, 'config', 'credential.https://github.com.helper', '!' + malicious);
+
+    // The actual CLI helper is replaced only inside this local test sandbox.
+    const gh = join(f.root, 'bin', 'gh');
+    writeFileSync(gh, '#!/bin/sh\\nif [ "$1" = "auth" ] && [ "$2" = "git-credential" ] && [ "$3" = "get" ]; then\\n  printf "username=fixture\\\\npassword=synthetic\\\\n"\\nfi\\n');
+    chmodSync(gh, 0o755);
+    const child = spawnSync('git', authenticatedGitArgs(['credential', 'fill']), {
+      cwd: f.workspace, env: { ...f.env, GIT_TERMINAL_PROMPT: '0' },
+      input: 'protocol=https\\nhost=github.com\\n\\n',
+      encoding: 'utf8', timeout: 20000
+    });
+    assert.equal(child.status, 0, 'only the trusted fixture helper should supply credentials: ' + child.stderr);
+    assert.match(child.stdout, /username=fixture/);
+    assert.equal(existsSync(marker), false, 'inherited credential helpers must not run');
   } finally { rmSync(f.root, { force: true, recursive: true }); }
 });
 
