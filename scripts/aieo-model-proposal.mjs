@@ -2,7 +2,11 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH, requestModelPatch } from '../aieo/lib/model-provider.mjs';
+import { attestModelProposalWorkspace } from '../aieo/lib/model-workspace-attestation.mjs';
 
+// Fail closed before any approved source leaves this checkout. In particular,
+// never follow a redirected source or write a redirected proposal artifact.
+attestModelProposalWorkspace(MODEL_ALLOWED_PATH);
 const source = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
 const task = process.env.AIEO_MODEL_TASK || '';
 const result = await requestModelPatch({ source, task, env: process.env });
@@ -18,7 +22,11 @@ const redacted = {
   changedBytes: result.changedBytes ?? null,
   sourceShared: result.status !== 'blocked' // transport attempted, not merely user opt-in
 };
+// The provider request is a separate await boundary: attest again before
+// writing reports, including an existing report replaced by a hard/symlink.
+attestModelProposalWorkspace(MODEL_ALLOWED_PATH);
 mkdirSync('aieo-output', { recursive: true });
+attestModelProposalWorkspace(MODEL_ALLOWED_PATH);
 writeFileSync('aieo-output/model-proposal.json', JSON.stringify(redacted, null, 2) + '\n');
 console.log(JSON.stringify({ status: redacted.status, path: redacted.path, reason: redacted.reason, sourceShared: redacted.sourceShared }));
 
@@ -31,6 +39,11 @@ if (process.env.AIEO_MODEL_APPLY === '1') {
     throw new Error('Untrusted invocation cannot apply model code');
   }
   if (result.status !== 'proposed') throw new Error('No valid model patch to apply');
+  // Do not overwrite source bytes that changed after consent/remote review.
+  attestModelProposalWorkspace(MODEL_ALLOWED_PATH);
+  if (readFileSync(MODEL_ALLOWED_PATH, 'utf8') !== source) {
+    throw new Error('Approved model source changed before local apply');
+  }
   writeFileSync(MODEL_ALLOWED_PATH, result.patchedSource);
   console.log('Applied validated proposal to local workspace only; no commit or merge');
 }
