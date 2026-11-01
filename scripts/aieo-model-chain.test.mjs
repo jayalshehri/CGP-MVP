@@ -65,7 +65,7 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
       '    throw new Error("Mock received unexpected source or endpoint");',
       '  }',
       '  return { ok: true, text: async () => JSON.stringify({',
-      '    choices: [{ message: { content: ' + JSON.stringify(response) + ' } }]',
+      '    choices: [{ finish_reason: "stop", message: { role: "assistant", content: ' + JSON.stringify(response) + ' } }]',
       '  }) };',
       '};',
       ''

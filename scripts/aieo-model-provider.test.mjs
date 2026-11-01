@@ -68,7 +68,7 @@ test('model proposal fails closed on hidden instructions and any extra or missin
       return {
         ok: true,
         text: async () => JSON.stringify({
-          choices: [{ message: { content: JSON.stringify({ ...base, hiddenInstruction: 'publish-to-main' }) } }]
+          choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ ...base, hiddenInstruction: 'publish-to-main' }) } }]
         })
       };
     }
@@ -120,7 +120,7 @@ test('model proposal rejects duplicate JSON keys, even when last value passes no
       calls++;
       return {
         ok: true,
-        text: async () => JSON.stringify({ choices: [{ message: { content: duplicates[1] } }] })
+        text: async () => JSON.stringify({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: duplicates[1] } }] })
       };
     }
   });
@@ -162,13 +162,51 @@ test('mock provider call sends bounded source and returns validated proposal onl
     assert.equal(body.model, env.OPENROUTER_MODEL_ID);
     assert.ok(body.messages[1].content.includes(source));
     assert.equal(JSON.stringify(body).includes(env.OPENROUTER_API_KEY), false);
-    return { ok: true, text: async () => JSON.stringify({ choices: [{ message: { content: proposal } }] }) };
+    return { ok: true, text: async () => JSON.stringify({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: proposal } }] }) };
   };
   const result = await requestModelPatch({ source, task, env, transport });
   assert.equal(result.status, 'proposed');
   assert.equal(result.patchedSource, source.replace(find, replacement));
   assert.equal(requests, 1);
 });
+test('provider requires a single completed assistant response before accepting a patch', async () => {
+  // These are syntactically valid and contain an otherwise acceptable patch.
+  // Older versions silently promoted truncated, tool-call, or forged responses.
+  const complete = { finish_reason: 'stop', message: { role: 'assistant', content: proposal } };
+  const invalidEnvelopes = [
+    { choices: [{ message: complete.message }] }, // missing finish reason
+    { choices: [{ ...complete, finish_reason: 'length' }] },
+    { choices: [{ ...complete, finish_reason: 'content_filter' }] },
+    { choices: [{ ...complete, finish_reason: 'tool_calls' }] },
+    { choices: [{ ...complete, finish_reason: null }] },
+    { choices: [{ ...complete, message: { role: 'user', content: proposal } }] },
+    { choices: [{ ...complete, message: { content: proposal } }] },
+    { choices: [complete, complete] },
+    { choices: complete },
+    { choices: [] }
+  ];
+  let calls = 0;
+  for (const envelope of invalidEnvelopes) {
+    const response = await requestModelPatch({
+      source, task, env,
+      transport: async () => {
+        calls++;
+        return { ok: true, text: async () => JSON.stringify(envelope) };
+      }
+    });
+    assert.deepEqual(response, { status: 'rejected', reason: 'Incomplete or untrusted provider completion' });
+    assert.equal(JSON.stringify(response).includes(proposal), false, 'do not expose model response in evidence');
+  }
+  assert.equal(calls, invalidEnvelopes.length, 'test must exercise real adapter response parsing');
+  const valid = await requestModelPatch({
+    source, task, env,
+    transport: async () => ({
+      ok: true, text: async () => JSON.stringify({ choices: [complete] })
+    })
+  });
+  assert.equal(valid.status, 'proposed', 'normal completed assistant response remains eligible');
+});
+
 test('provider errors do not expose source or credentials', async () => {
   const failed = await requestModelPatch({ source, task, env, transport: async () => ({ ok: false }) });
   assert.deepEqual(failed, { status: 'failed', reason: 'Provider did not accept request' });
@@ -262,7 +300,7 @@ test('provider source sharing refuses redirects and strips referrers', async () 
 
 test('provider reads bounded streamed responses and rejects oversized bodies without buffering them', async () => {
   const encoded = new TextEncoder();
-  const response = JSON.stringify({ choices: [{ message: { content: proposal } }] });
+  const response = JSON.stringify({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: proposal } }] });
   const streamOf = (value) => new ReadableStream({
     start(controller) {
       controller.enqueue(encoded.encode(value));
