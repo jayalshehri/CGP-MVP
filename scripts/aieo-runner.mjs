@@ -1,10 +1,11 @@
 // Safe orchestrator CLI: defaults to read-only. Applying requires trusted manual workflow.
-import { readFileSync, writeFileSync, mkdirSync, lstatSync, fstatSync, openSync, closeSync, realpathSync, constants } from 'node:fs';
+import { writeFileSync, mkdirSync, lstatSync, fstatSync, openSync, closeSync, realpathSync, constants } from 'node:fs';
 import { resolve } from 'node:path';
 import { APPROVED_PATH, APPROVED_TASK, orchestrate, publicReport } from '../aieo/lib/engine.mjs';
+import { readApprovedSource } from '../aieo/lib/safe-source.mjs';
 
 const task = process.env.AIEO_TASK || APPROVED_TASK;
-const source = readFileSync(APPROVED_PATH, 'utf8');
+const source = readApprovedSource();
 const results = orchestrate({ task, source });
 const report = publicReport(results);
 
