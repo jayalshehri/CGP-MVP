@@ -218,12 +218,14 @@ export function verifyNoGitHubCliRoutingOverride(env) {
 }
 
 // Git repository, index and object-store environment variables can redirect
-// otherwise trusted Git commands to a different worktree or mutable index.
+// otherwise trusted Git commands to a different worktree, mutable index,
+// or alternate policy/configuration files that could change transport behavior.
 // Refuse inherited overrides before ANY Git subprocess has access to GH_TOKEN.
 export function verifyNoGitRepositoryEnvironmentOverride(env) {
   const overrides = [
     'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
-    'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE'
+    'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE',
+    'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM'
   ];
   if (overrides.some((key) => typeof env[key] === 'string' && env[key].length > 0)) {
     fail('untrusted Git repository or index environment override');
