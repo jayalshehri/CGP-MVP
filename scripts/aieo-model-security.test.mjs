@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -541,4 +542,27 @@ test('independent Security attests FeedbackWidget preamble and JSX expression im
   assert.ok(behavior.findings.includes('Feedback executable state or JSX expression changed'));
   assert.equal(assess('    <p className="old">{allowed} Hello</p>',
     '    <p className="new">{allowed} Welcome</p>', 4).status, 'passed');
+});
+
+test('independent Security accepts real FeedbackWidget outer label edit but rejects real state change', () => {
+  const real = readFileSync(new URL('../components/FeedbackWidget.tsx', import.meta.url), 'utf8');
+  const assess = (from, to) => {
+    const lines = real.split('\n');
+    const index = lines.findIndex((line) => line.includes(from));
+    assert.ok(index >= 0, 'real baseline text must exist');
+    const oldLine = lines[index];
+    const newLine = oldLine.replace(from, to);
+    const after = real.replace(oldLine, newLine);
+    const verdict = inspectModelDiff({
+      original: real, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -' + (index + 1) + ' +' + (index + 1) + ' @@\n-' + oldLine + '\n+' + newLine + '\n',
+      report: { status: 'proposed', sourceHash: hash(real), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.findings.includes('Reported diff does not reconstruct candidate source'), false);
+    return verdict;
+  };
+  assert.equal(assess(' ملاحظات الاختبار</button>', ' ملاحظات التجربة</button>').status, 'passed');
+  const blocked = assess('useState(false);', 'useState(true);');
+  assert.equal(blocked.status, 'failed');
+  assert.ok(blocked.findings.includes('Feedback executable state or JSX expression changed'));
 });
