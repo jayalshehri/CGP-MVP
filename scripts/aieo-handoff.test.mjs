@@ -10,7 +10,7 @@ const { sourceHash, candidateHash } = report.developer;
 
 const make = (role, extra = {}) => buildHandoffArtifact({
   role, task: APPROVED_TASK, sourceHash, candidateHash,
-  verdict: { ...report[role], ...(role === 'reviewer' ? { handoffValidated: true } : {}), ...extra }
+  verdict: { ...report[role], ...(role === 'developer' ? { bounded: true } : {}), ...(role === 'reviewer' ? { handoffValidated: true } : {}), ...extra }
 });
 const accept = (role, artifact = make(role)) => verifyHandoffArtifact({
   artifact, role, task: APPROVED_TASK, sourceHash, candidateHash, expected: report[role]
