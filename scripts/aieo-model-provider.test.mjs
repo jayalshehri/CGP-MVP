@@ -207,6 +207,40 @@ test('provider requires a single completed assistant response before accepting a
   assert.equal(valid.status, 'proposed', 'normal completed assistant response remains eligible');
 });
 
+test('provider rejects duplicate envelope keys, including nested escaped aliases', async () => {
+  const complete = { finish_reason: 'stop', message: { role: 'assistant', content: proposal } };
+  const validEnvelope = JSON.stringify({ choices: [complete] });
+  const forgedEnvelopes = [
+    validEnvelope.replace('"choices":', '"choices":[],"choices":'),
+    validEnvelope.replace('"finish_reason":', '"finish_reason":"length","finish_reason":'),
+    validEnvelope.replace('"role":', '"\\u0072ole":"user","role":'),
+    validEnvelope.replace('"message":', '"message":{"role":"user"},"message":'),
+    validEnvelope.replace('"content":', '"content":"untrusted","content":')
+  ];
+  let called = 0;
+  for (const forged of forgedEnvelopes) {
+    // JSON.parse is last-value-wins here, so only the new envelope scanner
+    // can reject the conflicting metadata before model output is promoted.
+    assert.equal(JSON.parse(forged).choices[0].message.role, 'assistant');
+    const result = await requestModelPatch({
+      source, task, env,
+      transport: async () => {
+        called++;
+        return { ok: true, text: async () => forged };
+      }
+    });
+    assert.deepEqual(result, { status: 'rejected', reason: 'Ambiguous provider envelope' });
+    assert.equal(JSON.stringify(result).includes(proposal), false,
+      'never include untrusted response content in evidence');
+  }
+  assert.equal(called, forgedEnvelopes.length);
+  const accepted = await requestModelPatch({
+    source, task, env,
+    transport: async () => ({ ok: true, text: async () => validEnvelope })
+  });
+  assert.equal(accepted.status, 'proposed', 'an ordinary unambiguous provider envelope remains valid');
+});
+
 test('provider errors do not expose source or credentials', async () => {
   const failed = await requestModelPatch({ source, task, env, transport: async () => ({ ok: false }) });
   assert.deepEqual(failed, { status: 'failed', reason: 'Provider did not accept request' });

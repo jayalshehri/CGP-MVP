@@ -227,6 +227,40 @@ function parseUniqueProposalStrings(text) {
   return i === text.length ? fields : null;
 }
 
+// JSON.parse silently chooses the last duplicate key in provider envelopes.
+// Even a syntactically valid envelope is ambiguous if any object (including
+// nested choices/messages) contains multiple spellings of the same JSON key.
+// Parse syntax first, then scan JSON string tokens without interpreting values.
+function hasDuplicateProviderKeys(json) {
+  const stack = [];
+  for (let i = 0; i < json.length; i++) {
+    const char = json[i];
+    if (char === '"') {
+      const start = i;
+      for (i++; i < json.length; i++) {
+        if (json[i] === '\\') { i++; continue; }
+        if (json[i] === '"') break;
+      }
+      let after = i + 1;
+      while (after < json.length && /[\t\n\r ]/.test(json[after])) after++;
+      const current = stack[stack.length - 1];
+      if (json[after] === ':' && current?.keys) {
+        // JSON.parse of this token normalizes escaped aliases (e.g. \u0072ole).
+        const key = JSON.parse(json.slice(start, i + 1));
+        if (current.keys.has(key)) return true;
+        current.keys.add(key);
+      }
+    } else if (char === '{') {
+      stack.push({ keys: new Set() });
+    } else if (char === '[') {
+      stack.push({ keys: null });
+    } else if (char === '}' || char === ']') {
+      stack.pop();
+    }
+  }
+  return false;
+}
+
 export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH }) {
   if (path !== MODEL_ALLOWED_PATH || typeof source !== 'string' || typeof response !== 'string' || response.length > 10000) {
     return { status: 'rejected', reason: 'Invalid scope or response size' };
@@ -335,7 +369,14 @@ export async function requestModelPatch({ source, path = MODEL_ALLOWED_PATH, tas
   }
   if (text === null) return { status: 'rejected', reason: 'Provider response too large' };
   let data;
-  try { data = JSON.parse(text); } catch { return { status: 'rejected', reason: 'Invalid provider envelope' }; }
+  try {
+    data = JSON.parse(text);
+    if (hasDuplicateProviderKeys(text)) {
+      return { status: 'rejected', reason: 'Ambiguous provider envelope' };
+    }
+  } catch {
+    return { status: 'rejected', reason: 'Invalid provider envelope' };
+  }
   // A truncated, filtered or tool-call completion is not a valid autonomous
   // edit proposal, even when its partial content happens to be valid JSON.
   // OpenRouter's non-streamed chat-completions contract includes the stop
