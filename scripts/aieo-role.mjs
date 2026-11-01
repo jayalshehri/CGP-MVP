@@ -1,5 +1,5 @@
 // Each CI job independently rechecks the source and validates prior artifact evidence.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, lstatSync, fstatSync, openSync, closeSync, constants } from 'node:fs';
 import { APPROVED_PATH, APPROVED_TASK, orchestrate, publicReport } from '../aieo/lib/engine.mjs';
 import { buildHandoffArtifact, verifyHandoffArtifact } from '../aieo/lib/handoff.mjs';
 
@@ -16,10 +16,49 @@ const sourceHash = local.developer.sourceHash;
 const candidateHash = local.developer.candidateHash;
 if (!sourceHash || !candidateHash) throw new Error('No valid source and candidate attestation');
 
+const MAX_HANDOFF_BYTES = 16 * 1024;
+
 function readPrior(prior) {
-  // Artifacts can be altered independently of the checked-out repository.
-  // Never consume patches, commands or success claims supplied by an artifact.
-  const artifact = JSON.parse(readFileSync('aieo-output/' + prior + '.json', 'utf8'));
+  // Downloaded CI handoffs are untrusted files, not trusted instructions.
+  // Check the directory and open the file without following a symlink, so a
+  // crafted artifact cannot make an agent read an arbitrary runner-local file.
+  const folder = lstatSync('aieo-output');
+  if (!folder.isDirectory() || folder.isSymbolicLink()) {
+    throw new Error('Unsafe AIEO handoff directory');
+  }
+  const path = 'aieo-output/' + prior + '.json';
+  const onDisk = lstatSync(path);
+  if (!onDisk.isFile() || onDisk.isSymbolicLink() ||
+      onDisk.nlink !== 1 || onDisk.size < 2 || onDisk.size > MAX_HANDOFF_BYTES) {
+    throw new Error('Unsafe AIEO handoff file');
+  }
+
+  // O_NONBLOCK makes a swapped-in FIFO or device fail instead of hanging.
+  // Recheck the opened descriptor to close the lstat-to-open replacement gap.
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  let raw;
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.nlink !== 1 ||
+        opened.size < 2 || opened.size > MAX_HANDOFF_BYTES) {
+      throw new Error('Unsafe opened AIEO handoff');
+    }
+    raw = readFileSync(fd);
+    if (raw.length < 2 || raw.length > MAX_HANDOFF_BYTES) {
+      throw new Error('Oversized or empty AIEO handoff');
+    }
+  } finally {
+    closeSync(fd);
+  }
+
+  let artifact;
+  try {
+    artifact = JSON.parse(raw.toString('utf8'));
+  } catch {
+    // Do not print JSON.parse diagnostics that might contain private source
+    // content inserted into a malicious downloaded artifact.
+    throw new Error('Malformed AIEO handoff JSON');
+  }
   return verifyHandoffArtifact({
     artifact, role: prior, task, sourceHash, candidateHash,
     expected: safe[prior]
