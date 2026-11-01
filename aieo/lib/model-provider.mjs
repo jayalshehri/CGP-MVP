@@ -55,6 +55,9 @@ function unsafeJsxMarkup(text) {
   }
   return false;
 }
+// A bounded presentation edit must not attach new event-driven behavior or
+// interpolate untrusted raw HTML. Independent Security enforces the same limit.
+const executableJsxProps = /\bon[A-Z][A-Za-z0-9_]*\s*=|\bdangerouslySetInnerHTML\b/;
 const outboundCss = /\burl\s*\(|\bimage-set\s*\(|@import\b|\bbackgroundImage\s*:/i;
 // Reject optional chaining, computed property access and aliases for browser/network APIs.
 // This deliberately errs on the side of refusing a model-generated UI change.
@@ -115,7 +118,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
   if (credentials.test(replace) || forbidden.test(replace) || privilegedClientReuse.test(replace) || browserExfil.test(replace) ||
-      unsafeJsxMarkup(replace) || outboundCss.test(replace) || indirectBrowserAccess.test(replace) || unsafeGlobalIdentifiers.test(replace) ||
+      unsafeJsxMarkup(replace) || executableJsxProps.test(replace) || outboundCss.test(replace) || indirectBrowserAccess.test(replace) || unsafeGlobalIdentifiers.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
