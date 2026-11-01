@@ -348,6 +348,56 @@ test('provider reads bounded streamed responses and rejects oversized bodies wit
   assert.equal(good.status, 'proposed');
   assert.equal(good.patchedSource, source.replace(find, replacement));
 
+  // UTF-8 codepoints split across chunks must decode normally; the provider
+  // proposal can legitimately contain non-ASCII explanation text.
+  const unicodeProposal = JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: replacement,
+    explanation: 'تعديل نص تجريبي'
+  });
+  const unicodeEnvelope = encoded.encode(JSON.stringify({
+    choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: unicodeProposal } }]
+  }));
+  const firstMultiByte = unicodeEnvelope.findIndex((byte) => byte >= 0x80);
+  assert.ok(firstMultiByte > 0, 'test must contain a multi-byte UTF-8 sequence');
+  const chunks = (parts) => new ReadableStream({
+    start(controller) {
+      for (const part of parts) controller.enqueue(part);
+      controller.close();
+    }
+  });
+  const validSplit = await requestModelPatch({
+    source, task, env,
+    transport: async () => ({
+      ok: true, body: chunks([
+        unicodeEnvelope.slice(0, firstMultiByte + 1),
+        unicodeEnvelope.slice(firstMultiByte + 1)
+      ])
+    })
+  });
+  assert.equal(validSplit.status, 'proposed', 'valid UTF-8 across chunk boundaries must remain accepted');
+
+  // In this case the older nonfatal TextDecoder replaced malformed bytes
+  // inside a JSON string with U+FFFD, yielding a valid but altered proposal.
+  const explanationOffset = response.indexOf('Correct a simple constant');
+  assert.ok(explanationOffset > 0, 'malformed-byte fixture must target a JSON string value');
+  for (const invalidLead of [0xff, 0xc3]) {
+    const malformed = encoded.encode(response);
+    malformed[explanationOffset] = invalidLead;
+    const invalid = await requestModelPatch({
+      source, task, env,
+      transport: async () => ({
+        ok: true, body: chunks([
+          malformed.slice(0, explanationOffset + 1),
+          malformed.slice(explanationOffset + 1)
+        ])
+      })
+    });
+    assert.equal(invalid.status, 'failed',
+      'malformed provider bytes must never be promoted into a valid patch');
+    assert.equal(JSON.stringify(invalid).includes('Correct a simple constant'), false,
+      'provider text must not appear in failure evidence');
+  }
+
   const tooLarge = await requestModelPatch({
     source, task, env,
     transport: async () => ({ ok: true, body: streamOf('x'.repeat(18001)) })
