@@ -28,8 +28,7 @@ const validOrigin = url => url.protocol === 'https:' &&
 if (!validOrigin(target) || !validOrigin(expected) || target.origin !== expected.origin) {
   refuse('QA target must exactly match the separately approved QA origin');
 }
-if (!target.hostname.endsWith('.vercel.app') ||
-    /(^cgp-mvp\.vercel\.app$|^cgp-mvp-grc13\.vercel\.app$|^cgp-mvp-git-main-|^cgp-mvp-git-claude-prod-portfolio-release-)/.test(target.hostname)) {
+if (!/^cgp-[a-z0-9]+-grc13\.vercel\.app$/.test(target.hostname)) {
   refuse('QA target is not an approved non-production Vercel preview origin');
 }
 if (!validOrigin(supabase) || supabase.hostname !== `${expectedQaRef}.supabase.co`) {
