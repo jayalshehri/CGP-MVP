@@ -13,7 +13,7 @@ const safeGit = (args) => execFileSync('git', ['-c', 'core.fsmonitor=false', ...
 const role = process.argv[2];
 if (!['qa', 'reviewer'].includes(role)) throw new Error('Expected qa or reviewer');
 attestModelReviewGitEnvironment();
-  attestModelReviewWorkspace(MODEL_ALLOWED_PATH);
+attestModelReviewWorkspace(MODEL_ALLOWED_PATH);
 const original = safeGit(['show', 'HEAD:' + MODEL_ALLOWED_PATH]);
 const actual = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
 // Independently calculate candidate scope and patch without executing any
