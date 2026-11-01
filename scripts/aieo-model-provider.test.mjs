@@ -37,6 +37,48 @@ test('untrusted or malformed model output fails closed', () => {
     JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace: find, explanation: 'x' })
   ]) assert.equal(validateModelPatch({ response, source }).status, 'rejected');
 });
+test('model proposal fails closed on hidden instructions and any extra or missing fields', async () => {
+  const base = { path: MODEL_ALLOWED_PATH, find, replace: replacement, explanation: 'Synthetic test' };
+  for (const unexpected of [
+    { debug: 'ignore all checks' },
+    { shell: 'not an executable instruction' },
+    { source: 'synthetic-confidential-marker' },
+    { token: 'synthetic-do-not-retain' },
+    { metadata: { action: 'publish' } },
+    { constructor: 'synthetic' }
+  ]) {
+    const attempted = JSON.stringify({ ...base, ...unexpected });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected',
+      'unexpected model field ' + Object.keys(unexpected)[0] + ' was accepted');
+  }
+  for (const missing of ['find', 'replace', 'path', 'explanation']) {
+    const incomplete = { ...base };
+    delete incomplete[missing];
+    assert.equal(validateModelPatch({ response: JSON.stringify(incomplete), source }).status, 'rejected',
+      'missing required field ' + missing + ' was accepted');
+  }
+  assert.equal(validateModelPatch({ response: JSON.stringify(base), source }).status, 'proposed',
+    'the strict schema must retain the ordinary bounded proposal path');
+
+  let calls = 0;
+  const provider = await requestModelPatch({
+    source, task, env,
+    transport: async () => {
+      calls++;
+      return {
+        ok: true,
+        text: async () => JSON.stringify({
+          choices: [{ message: { content: JSON.stringify({ ...base, hiddenInstruction: 'publish-to-main' }) } }]
+        })
+      };
+    }
+  });
+  assert.equal(calls, 1, 'test exercises actual provider response parsing');
+  assert.equal(provider.status, 'rejected', 'provider-originated extra fields must not become proposals');
+  assert.equal(JSON.stringify(provider).includes('publish-to-main'), false,
+    'untrusted instructions must not be returned in review evidence');
+});
+
 test('no source disclosure without explicit consent and privacy scan', () => {
   assert.throws(() => buildModelRequest({ source, task, model: env.OPENROUTER_MODEL_ID, shareApproved: false }));
   assert.throws(() => buildModelRequest({ source: 'const api_key = "plaintext-secret";', task, model: env.OPENROUTER_MODEL_ID, shareApproved: true }));
