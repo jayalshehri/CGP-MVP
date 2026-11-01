@@ -80,6 +80,11 @@ jobs:
       - name: Publish verified bounded fix as Draft PR only
         if: steps.proposal.outputs.changed == 'true'
         env:
+          # Prevent inherited Bash/Node startup hooks from executing with GH_TOKEN.
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          NODE_EXTRA_CA_CERTS: ''
+          NODE_TLS_REJECT_UNAUTHORIZED: '1'
           GH_TOKEN: ${{ github.token }}
           AIEO_PUBLISH_MODE: deterministic
         run: node scripts/aieo-publish-draft.mjs
