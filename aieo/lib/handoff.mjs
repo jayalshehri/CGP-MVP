@@ -75,7 +75,7 @@ export function verifyHandoffArtifact({ artifact, role, task, sourceHash, candid
       artifact.role !== role || artifact.task !== task ||
       artifact.runBinding !== getExecutionBinding() ||
       !onlyExpectedKeys(role, artifact) ||
-      (role === 'developer' && artifact.bounded !== undefined && artifact.bounded !== true) ||
+      (role === 'developer' && artifact.bounded !== true) ||
       !isHash(artifact.sourceHash) || !isHash(artifact.candidateHash) ||
       artifact.sourceHash !== sourceHash || artifact.candidateHash !== candidateHash ||
       !allowed[role]?.includes(artifact.status) ||
