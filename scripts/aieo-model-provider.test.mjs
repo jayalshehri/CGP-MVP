@@ -1,3 +1,5 @@
+// Synthetic-only OpenRouter canary mock tests; no external request is made.
+import './aieo-model-synthetic-canary.test.mjs';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
