@@ -502,3 +502,35 @@ test('independent Security rejects encoded/composed JS execution with authentic 
   assert.equal(check('  const sample = 101;').status, 'passed',
     'benign edits remain allowed with genuine source-bound evidence');
 });
+
+test('independent Security attests FeedbackWidget preamble and JSX expression immutability', () => {
+  const before = [
+    'export default function FeedbackWidget() {',
+    '  const allowed = true;',
+    '  return <>',
+    '    <p className="old">{allowed} Hello</p>',
+    '  </>;',
+    '}',
+    ''
+  ].join('\n');
+  const assess = (oldLine, newLine, lineNumber) => {
+    const after = before.replace(oldLine, newLine);
+    const verdict = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -' + lineNumber + ' +' + lineNumber + ' @@\n-' + oldLine + '\n+' + newLine + '\n',
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.findings.includes('Reported diff does not reconstruct candidate source'), false,
+      'fixture must use a genuine source-bound delta');
+    return verdict;
+  };
+  const logic = assess('  const allowed = true;', '  const allowed = false;', 2);
+  assert.equal(logic.status, 'failed');
+  assert.ok(logic.findings.includes('Feedback executable state or JSX expression changed'));
+  const jsx = assess('    <p className="old">{allowed} Hello</p>',
+    '    <p className="old">{isAllowed()} Hello</p>', 4);
+  assert.equal(jsx.status, 'failed');
+  assert.ok(jsx.findings.includes('Feedback executable state or JSX expression changed'));
+  assert.equal(assess('    <p className="old">{allowed} Hello</p>',
+    '    <p className="new">{allowed} Welcome</p>', 4).status, 'passed');
+});
