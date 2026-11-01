@@ -159,6 +159,9 @@ test('token-bearing Actions steps neutralize inherited Bash/Node startup hooks a
     for (const [variable, expected] of [
       ['BASH_ENV', "''"],
       ['NODE_OPTIONS', "''"],
+      ['LD_PRELOAD', "''"],
+      ['LD_AUDIT', "''"],
+      ['LD_LIBRARY_PATH', "''"],
       ['NODE_EXTRA_CA_CERTS', "''"],
       ['NODE_TLS_REJECT_UNAUTHORIZED', "'1'"]
     ]) {
@@ -167,5 +170,24 @@ test('token-bearing Actions steps neutralize inherited Bash/Node startup hooks a
     }
     assert.ok(lines.some((line) => line.trim().startsWith(credential)),
       'credential must be scoped to the protected step: ' + name);
+  }
+});
+
+test('independent model QA/Security/Reviewer reject inherited Bash and Node preload hooks', () => {
+  for (const name of [
+    'Independently run model QA without provider credential',
+    'Independently run model Security without provider credential',
+    'Independently run model Reviewer without provider credential'
+  ]) {
+    const stage = model.split(/\n(?=      - name: )/)
+      .find((block) => block.startsWith('      - name: ' + name + '\n'));
+    assert.ok(stage, 'missing independent reviewer: ' + name);
+    const environment = stage.match(/\n        env:\n((?:          .*\n)+)/)?.[1] || '';
+    assert.ok(environment.split('\n').some((line) => line.trim() === "BASH_ENV: ''"),
+      name + ' must not inherit a Bash startup hook');
+    assert.ok(environment.split('\n').some((line) => line.trim() === "NODE_OPTIONS: ''"),
+      name + ' must not inherit a Node preload hook');
+    assert.doesNotMatch(environment, /OPENROUTER_API_KEY|GH_TOKEN|secrets\./,
+      name + ' must not inherit any provider or publisher credential');
   }
 });
