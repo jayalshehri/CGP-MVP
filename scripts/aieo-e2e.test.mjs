@@ -249,6 +249,20 @@ test('independent agents refuse symlink, hardlink, oversized and malformed downl
     const malformed = rejectQa('invalid JSON');
     assert.equal(malformed.stderr.includes(marker), false, 'Parser leaked raw artifact contents');
 
+    // The last duplicate key would fool a plain JSON.parse/last-wins
+    // verifier; a receiving independent agent must reject the raw bytes.
+    const duplicate = safeDeveloper.replace(
+      '"bounded": true,', '"bounded": false,\n  "bounded": true,');
+    assert.notEqual(duplicate, safeDeveloper, 'duplicate-key fixture must be injected');
+    assert.equal(JSON.parse(duplicate).bounded, true,
+      'last-wins parser would otherwise consider developer bounded');
+    writeFileSync(artifact('developer'), duplicate);
+    rejectQa('duplicate JSON key with valid last value');
+
+    // Appended ignorable whitespace must not change the attested byte shape.
+    writeFileSync(artifact('developer'), safeDeveloper + '  \n');
+    rejectQa('noncanonical trailing whitespace');
+
     writeFileSync(artifact('developer'), safeDeveloper);
     const moved = folder + '.real';
     renameSync(folder, moved);

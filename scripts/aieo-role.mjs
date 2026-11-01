@@ -25,13 +25,15 @@ function readPrior(prior) {
   // Check the directory and open the file without following a symlink, so a
   // crafted artifact cannot make an agent read an arbitrary runner-local file.
   const folder = lstatSync('aieo-output');
-  if (!folder.isDirectory() || folder.isSymbolicLink()) {
+  if (!folder.isDirectory() || folder.isSymbolicLink() ||
+      realpathSync('aieo-output') !== resolve('aieo-output')) {
     throw new Error('Unsafe AIEO handoff directory');
   }
   const path = 'aieo-output/' + prior + '.json';
   const onDisk = lstatSync(path);
   if (!onDisk.isFile() || onDisk.isSymbolicLink() ||
-      onDisk.nlink !== 1 || onDisk.size < 2 || onDisk.size > MAX_HANDOFF_BYTES) {
+      onDisk.nlink !== 1 || onDisk.size < 2 || onDisk.size > MAX_HANDOFF_BYTES ||
+      realpathSync(path) !== resolve(path)) {
     throw new Error('Unsafe AIEO handoff file');
   }
 
@@ -42,12 +44,18 @@ function readPrior(prior) {
   try {
     const opened = fstatSync(fd);
     if (!opened.isFile() || opened.nlink !== 1 ||
-        opened.size < 2 || opened.size > MAX_HANDOFF_BYTES) {
+        opened.dev !== onDisk.dev || opened.ino !== onDisk.ino ||
+        opened.size !== onDisk.size || opened.size < 2 ||
+        opened.size > MAX_HANDOFF_BYTES) {
       throw new Error('Unsafe opened AIEO handoff');
     }
     raw = readFileSync(fd);
-    if (raw.length < 2 || raw.length > MAX_HANDOFF_BYTES) {
-      throw new Error('Oversized or empty AIEO handoff');
+    const after = fstatSync(fd);
+    if (!after.isFile() || after.nlink !== 1 ||
+        after.dev !== opened.dev || after.ino !== opened.ino ||
+        after.size !== opened.size || raw.length !== opened.size ||
+        realpathSync(path) !== resolve(path)) {
+      throw new Error('AIEO handoff descriptor changed during read');
     }
   } finally {
     closeSync(fd);
@@ -55,11 +63,20 @@ function readPrior(prior) {
 
   let artifact;
   try {
-    artifact = JSON.parse(raw.toString('utf8'));
+    // Do not accept replacement characters from lossy UTF-8 decoding.
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(raw);
+    artifact = JSON.parse(decoded);
+    // Only accept byte-for-byte serialization produced by the trusted
+    // artifact writer (or the compact equivalent used by local tests).
+    // Duplicate JSON keys, forged shadow fields, and appended content are
+    // not valid evidence even when JSON.parse returns expected last values.
+    const canonical = [JSON.stringify(artifact), JSON.stringify(artifact, null, 2)];
+    if (!canonical.some((value) => decoded === value || decoded === value + '\n')) {
+      throw new Error('Noncanonical AIEO handoff');
+    }
   } catch {
-    // Do not print JSON.parse diagnostics that might contain private source
-    // content inserted into a malicious downloaded artifact.
-    throw new Error('Malformed AIEO handoff JSON');
+    // Never echo untrusted bytes or a JSON error containing source data.
+    throw new Error('Malformed or noncanonical AIEO handoff JSON');
   }
   return verifyHandoffArtifact({
     artifact, role: prior, task, sourceHash, candidateHash,
