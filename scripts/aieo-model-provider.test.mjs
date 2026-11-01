@@ -433,4 +433,4 @@ test('model proposal refuses encoded and computed executable primitives before a
   }
   assert.equal(validateModelPatch({ source, response: proposal }).status, 'proposed',
     'a benign bounded constant edit must remain eligible');
-}
+});
