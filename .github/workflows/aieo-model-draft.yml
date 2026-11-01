@@ -85,10 +85,22 @@ jobs:
           set -euo pipefail
           node scripts/aieo-model-proposal.mjs
       - name: Independently run model QA without provider credential
+        # No inherited shell or Node preloads may forge an independent verdict.
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
         run: node scripts/aieo-model-gates.mjs qa
       - name: Independently run model Security without provider credential
+        # No inherited shell or Node preloads may forge an independent verdict.
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
         run: node scripts/aieo-model-security.mjs
       - name: Independently run model Reviewer without provider credential
+        # No inherited shell or Node preloads may forge an independent verdict.
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
         run: node scripts/aieo-model-gates.mjs reviewer
       - name: Attest candidate diff scope after independent reviews
         run: |
