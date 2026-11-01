@@ -12,6 +12,7 @@ const baseline = {
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_synthetic_test_only',
   QA_EMAIL: 'synthetic@example.invalid',
   QA_PASSWORD: 'synthetic-only-not-a-real-password',
+  QA_EXPECTED_ROLE: 'control_owner',
 };
 function blocked(name, overrides, expected) {
   test(name, () => {
@@ -24,6 +25,8 @@ function blocked(name, overrides, expected) {
   });
 }
 blocked('missing QA password is never a skip', { QA_PASSWORD: '' }, /QA_PASSWORD/);
+blocked('missing expected role is never a skip', { QA_EXPECTED_ROLE: '' }, /QA_EXPECTED_ROLE/);
+blocked('invalid expected role is blocked', { QA_EXPECTED_ROLE: 'superuser' }, /QA_EXPECTED_ROLE/);
 blocked('missing QA account is never a skip', { QA_EMAIL: '' }, /QA_EMAIL/);
 blocked('missing approved origin fails closed', { QA_EXPECTED_ORIGIN: '' }, /QA_EXPECTED_ORIGIN/);
 blocked('production domain rejected even when expected matches', {
