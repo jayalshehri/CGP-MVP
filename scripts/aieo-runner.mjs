@@ -1,5 +1,6 @@
 // Safe orchestrator CLI: defaults to read-only. Applying requires trusted manual workflow.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, lstatSync, fstatSync, openSync, closeSync, realpathSync, constants } from 'node:fs';
+import { resolve } from 'node:path';
 import { APPROVED_PATH, APPROVED_TASK, orchestrate, publicReport } from '../aieo/lib/engine.mjs';
 
 const task = process.env.AIEO_TASK || APPROVED_TASK;
@@ -7,8 +8,36 @@ const source = readFileSync(APPROVED_PATH, 'utf8');
 const results = orchestrate({ task, source });
 const report = publicReport(results);
 
-mkdirSync('aieo-output', { recursive: true });
-writeFileSync('aieo-output/multi-agent-report.json', JSON.stringify(report, null, 2) + '\n');
+// The read-only orchestrator runs before the isolated agents. Its diagnostic
+// report must never follow a checked-out/downloaded link or overwrite a file.
+// Use the same exclusive and no-follow destination policy as role verdicts.
+function writeReportExclusive(result) {
+  const folder = 'aieo-output';
+  mkdirSync(folder, { recursive: true });
+  const directory = lstatSync(folder);
+  if (!directory.isDirectory() || directory.isSymbolicLink() ||
+      realpathSync(folder) !== resolve(folder)) {
+    throw new Error('Unsafe AIEO orchestrator output directory');
+  }
+  let fd;
+  try {
+    fd = openSync(folder + '/multi-agent-report.json',
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o600);
+  } catch {
+    throw new Error('AIEO orchestrator report already exists or destination is unsafe');
+  }
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.nlink !== 1) {
+      throw new Error('Unsafe opened AIEO orchestrator report');
+    }
+    writeFileSync(fd, JSON.stringify(result, null, 2) + '\n');
+  } finally {
+    closeSync(fd);
+  }
+}
+writeReportExclusive(report);
 console.log(JSON.stringify({
   developer: report.developer.status, qa: report.qa.status,
   security: report.security.status, reviewer: report.reviewer.status,
