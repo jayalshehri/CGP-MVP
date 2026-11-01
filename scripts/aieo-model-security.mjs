@@ -140,6 +140,10 @@ function unsafeJsxMarkup(text) {
   }
   return false;
 }
+// Model-proposed presentation edits may not introduce a JSX event binding:
+// existing callbacks could be wired to privileged side effects without a new
+// fetch/import, and event-driven execution is outside this bounded task.
+const executableJsxProps = /\bon[A-Z][A-Za-z0-9_]*\s*=|\bdangerouslySetInnerHTML\b/;
 const outboundCss = /\burl\s*\(|\bimage-set\s*\(|@import\b|\bbackgroundImage\s*:/i;
 // Reject optional chaining, computed property access and aliases for browser/network APIs.
 // This deliberately errs on the side of refusing a model-generated UI change.
@@ -195,6 +199,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   if (deletions.length > 20) findings.push('Too many deleted code lines');
   const checkedAdditions = additions.concat(actualAdditions);
   if (checkedAdditions.some((line) => suspect.test(line) || privilegedClientReuse.test(line) || browserExfil.test(line) || indirectBrowserAccess.test(line) || unsafeGlobalIdentifiers.test(line)) ||
+      executableJsxProps.test(checkedAdditions.join('\n')) ||
       unsafeJsxMarkup(checkedAdditions.join('\n')) ||
       (typeof actual === 'string' && unsafeJsxMarkup(actual)) ||
       outboundCss.test(checkedAdditions.join('\n'))) {
