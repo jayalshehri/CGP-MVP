@@ -15,6 +15,8 @@ const RULES = [
   rule('DEV-EMPTY-CATCH', 'developer', 'Empty catch may silently swallow failures', 'Verify error handling and reporting at this location', /catch\s*(?:\([^)]*\))?\s*\{\s*\}/g, true),
   rule('DEV-CONSOLE-ERROR', 'developer', 'Client-side console error might expose operational details', 'Check redaction and user-facing error handling', /console\.error\s*\(/g, true),
   rule('DEV-UNSAFE-HTML', 'developer', 'Raw HTML injection surface requires independent sanitization review', 'Trace whether HTML is sanitized before rendering', /dangerouslySetInnerHTML\s*=/g, true),
+  rule('DEV-CLIENT-QUERY', 'developer', 'Client-side data query requires RLS and error handling review', 'Verify authorization is enforced server-side by RLS and error paths are handled', /supabase\.from\s*\(/g, true),
+  rule('DEV-SESSION-CHECK', 'developer', 'Client session check is not itself an authorization boundary', 'Verify sensitive operations rely on database authorization, not this client state', /supabase\.auth\.getSession\s*\(/g, true),
 ];
 export const REVIEW_RULES = RULES.map(({id,category,description,advice})=>({id,category,description,advice}));
 
