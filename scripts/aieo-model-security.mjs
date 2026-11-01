@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
+import { introducesObfuscatedExecution } from '../aieo/lib/model-obfuscation-guard.mjs';
 import { attestModelReviewWorkspace, attestModelReviewGitEnvironment } from '../aieo/lib/model-workspace-attestation.mjs';
 
 const hash = (content) => createHash('sha256').update(content).digest('hex');
@@ -287,6 +288,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   const checkedAdditions = additions.concat(actualAdditions);
   if (checkedAdditions.some((line) => suspect.test(line) || privilegedClientReuse.test(line) || browserExfil.test(line) || indirectBrowserAccess.test(line) || unsafeGlobalIdentifiers.test(line)) ||
       introducesEventBinding(original, actual) ||
+      introducesObfuscatedExecution(checkedAdditions.join('\n')) ||
       unsafeJsxMarkup(checkedAdditions.join('\n')) ||
       (typeof actual === 'string' && unsafeJsxMarkup(actual)) ||
       outboundCss.test(checkedAdditions.join('\n'))) {

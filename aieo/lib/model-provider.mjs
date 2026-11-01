@@ -1,5 +1,6 @@
 // AIEO optional external-model adapter. Disabled by default; never runs on PR/push.
 import { createHash } from 'node:crypto';
+import { introducesObfuscatedExecution } from './model-obfuscation-guard.mjs';
 
 export const MODEL_ALLOWED_PATH = 'components/FeedbackWidget.tsx';
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
@@ -198,6 +199,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
   if (credentials.test(replace) || forbidden.test(replace) || privilegedClientReuse.test(replace) || browserExfil.test(replace) ||
       unsafeJsxMarkup(replace) || executableJsxProps.test(replace) || outboundCss.test(replace) || indirectBrowserAccess.test(replace) || unsafeGlobalIdentifiers.test(replace) ||
+      introducesObfuscatedExecution(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }

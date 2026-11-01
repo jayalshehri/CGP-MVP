@@ -419,3 +419,18 @@ test('model proposal preserves existing JSX callback expressions during class up
   assert.equal(propose('{approve} className="idle"', '{cancel} className="idle"').status, 'rejected');
   assert.equal(propose('className="idle">Approve', 'className="ready">Approve').status, 'proposed');
 });
+
+test('model proposal refuses encoded and computed executable primitives before applying changes', () => {
+  const crafted = [
+    '  const sample = ([])["fil" + "ter"]["con" + "structor"]("return 7")();',
+    String.raw`  const sample = ({}).\u0063onstructor;`,
+    String.raw`  const sample = global\u0054his['fe' + 'tch']('/private');`
+  ];
+  for (const replace of crafted) {
+    const response = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace, explanation: 'adversarial fixture' });
+    const verdict = validateModelPatch({ source, response });
+    assert.equal(verdict.status, 'rejected', 'obfuscated executable property must not be proposed: ' + replace);
+  }
+  assert.equal(validateModelPatch({ source, response: proposal }).status, 'proposed',
+    'a benign bounded constant edit must remain eligible');
+});

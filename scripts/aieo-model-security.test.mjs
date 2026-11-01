@@ -478,3 +478,27 @@ test('independent Security binds ordered JSX callbacks to their original element
   assert.equal(movedVerdict.status, 'failed', 'moving an unchanged callback to a sibling is not a presentation edit');
   assert.ok(movedVerdict.findings.includes('Potentially unsafe new code'));
 });
+
+test('independent Security rejects encoded/composed JS execution with authentic source hashes and diffs', () => {
+  const before = '  const sample = 100;\n';
+  const check = (replacement) => {
+    const after = replacement + '\n';
+    return inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -1 +1 @@\n-' + before.trimEnd() + '\n+' + replacement + '\n',
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+  };
+  for (const replacement of [
+    '  const sample = ([])["fil" + "ter"]["con" + "structor"]("return 7")();',
+    String.raw`  const sample = ({}).\u0063onstructor;`,
+    String.raw`  const sample = global\u0054his['fe' + 'tch']('/private');`
+  ]) {
+    const verdict = check(replacement);
+    assert.equal(verdict.status, 'failed', 'Security must independently reject ' + replacement);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+    assert.ok(!verdict.findings.includes('Reported diff does not reconstruct candidate source'));
+  }
+  assert.equal(check('  const sample = 101;').status, 'passed',
+    'benign edits remain allowed with genuine source-bound evidence');
+});
