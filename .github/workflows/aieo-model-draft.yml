@@ -68,6 +68,15 @@ jobs:
       # Independent reviewers execute in separate Actions steps without the key.
       - name: Request one bounded model suggestion with scoped provider credential
         env:
+          # Clear pre-startup executable hooks before a provider secret enters bash/Node.
+          # NODE_EXTRA_CA_CERTS and TLS bypass must not redirect approved source.
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          NODE_EXTRA_CA_CERTS: ''
+          NODE_TLS_REJECT_UNAUTHORIZED: '1'
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL_ID: ${{ vars.AIEO_MODEL_ID }}
           AIEO_MODEL_ENABLED: 'true'
@@ -79,10 +88,31 @@ jobs:
           set -euo pipefail
           node scripts/aieo-model-proposal.mjs
       - name: Independently run model QA without provider credential
+        # No inherited shell or Node preloads may forge an independent verdict.
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
         run: node scripts/aieo-model-gates.mjs qa
       - name: Independently run model Security without provider credential
+        # No inherited shell or Node preloads may forge an independent verdict.
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
         run: node scripts/aieo-model-security.mjs
       - name: Independently run model Reviewer without provider credential
+        # No inherited shell or Node preloads may forge an independent verdict.
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
         run: node scripts/aieo-model-gates.mjs reviewer
       - name: Attest candidate diff scope after independent reviews
         run: |
@@ -102,6 +132,14 @@ jobs:
           npm run build
       - name: Publish independently verified candidate as Draft PR only
         env:
+          # The token-bearing shell and Node process must not inherit startup hooks.
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          NODE_EXTRA_CA_CERTS: ''
+          NODE_TLS_REJECT_UNAUTHORIZED: '1'
           GH_TOKEN: ${{ github.token }}
           AIEO_PUBLISH_MODE: model
           AIEO_MODEL_ENABLED: 'true'

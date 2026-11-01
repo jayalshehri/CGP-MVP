@@ -138,3 +138,60 @@ test('model review stages have separate Actions steps and never inherit the prov
   assert.ok(order.every((value, index) => value >= 0 && (index === 0 || value > order[index - 1])),
     'review steps must be ordered sequentially before the app build');
 });
+
+test('token-bearing Actions steps neutralize inherited Bash/Node startup hooks and Node TLS overrides', () => {
+  // BASH_ENV runs before a noninteractive Bash command; NODE_OPTIONS can preload
+  // arbitrary JavaScript before the publisher's own fail-closed checks execute.
+  // Both must be explicitly cleared at step scope, not merely validated inside
+  // a JavaScript process that may already have executed an inherited preload.
+  const protectedSteps = [
+    [model, 'Request one bounded model suggestion with scoped provider credential', 'OPENROUTER_API_KEY:'],
+    [model, 'Publish independently verified candidate as Draft PR only', 'GH_TOKEN:'],
+    [developer, 'Publish verified bounded fix as Draft PR only', 'GH_TOKEN:']
+  ];
+  for (const [workflow, name, credential] of protectedSteps) {
+    const step = workflow.split(/\n(?=      - name: )/)
+      .find((block) => block.startsWith('      - name: ' + name + '\n'));
+    assert.ok(step, 'missing protected step: ' + name);
+    const envBlock = step.match(/\n        env:\n((?:          .*\n)+)/)?.[1];
+    assert.ok(envBlock, 'missing step-scoped environment: ' + name);
+    const lines = envBlock.split('\n');
+    for (const [variable, expected] of [
+      ['BASH_ENV', "''"],
+      ['NODE_OPTIONS', "''"],
+      ['LD_PRELOAD', "''"],
+      ['LD_AUDIT', "''"],
+      ['LD_LIBRARY_PATH', "''"],
+      ['NODE_EXTRA_CA_CERTS', "''"],
+      ['NODE_TLS_REJECT_UNAUTHORIZED', "'1'"]
+    ]) {
+      assert.equal(lines.filter((line) => line.trim() === variable + ': ' + expected).length, 1,
+        name + ' must pin ' + variable + ' at the credential-bearing step');
+    }
+    assert.ok(lines.some((line) => line.trim().startsWith(credential)),
+      'credential must be scoped to the protected step: ' + name);
+  }
+});
+
+test('independent model QA/Security/Reviewer reject inherited Bash and Node preload hooks', () => {
+  for (const name of [
+    'Independently run model QA without provider credential',
+    'Independently run model Security without provider credential',
+    'Independently run model Reviewer without provider credential'
+  ]) {
+    const stage = model.split(/\n(?=      - name: )/)
+      .find((block) => block.startsWith('      - name: ' + name + '\n'));
+    assert.ok(stage, 'missing independent reviewer: ' + name);
+    const environment = stage.match(/\n        env:\n((?:          .*\n)+)/)?.[1] || '';
+    assert.ok(environment.split('\n').some((line) => line.trim() === "BASH_ENV: ''"),
+      name + ' must not inherit a Bash startup hook');
+    assert.ok(environment.split('\n').some((line) => line.trim() === "NODE_OPTIONS: ''"),
+      name + ' must not inherit a Node preload hook');
+    for (const libraryVariable of ['LD_PRELOAD', 'LD_AUDIT', 'LD_LIBRARY_PATH']) {
+      assert.ok(environment.split('\n').some((line) => line.trim() === libraryVariable + ": ''"),
+        name + ' must not inherit dynamic-loader injection: ' + libraryVariable);
+    }
+    assert.doesNotMatch(environment, /OPENROUTER_API_KEY|GH_TOKEN|secrets\./,
+      name + ' must not inherit any provider or publisher credential');
+  }
+});
