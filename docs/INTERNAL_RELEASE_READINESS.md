@@ -7,6 +7,7 @@ This is a **release-candidate validation aid**, not approval to merge or deploy.
 - Vercel project: `cgp-mvp`. A production-target deployment from `main` reported READY, but READY is **not** user acceptance or application security certification.
 - Supabase project `CGP-DEV`: `ahfindosbawqfvhbcplq`, ACTIVE_HEALTHY.
 - Dedicated Supabase project `CGP-QA`: `lkozjnpfufdpzqtzdxhe`, ACTIVE_HEALTHY.
+- The connected Supabase account currently lists **only CGP-DEV and CGP-QA**; no separately named production Supabase project was visible. The actual database backing the live Vercel domain must be established via approved environment configuration review before internal go-live; do not infer it from historical naming.
 - DEV security advisor warned about authenticated execution of a SECURITY DEFINER data-governance transition function; source inspection showed role checks and separation-of-duties checks. Independently verify all bypass paths and grants rather than treating the warning as automatically exploitable or cleared.
 - DEV password-breach protection is disabled. Review rollout in every relevant environment.
 - Vercel project details report no project-level password, SSO, or trusted-IP protection. Application login and RLS may still restrict data, but internal-only access needs a separately approved access policy.
