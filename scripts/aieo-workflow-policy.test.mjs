@@ -187,6 +187,10 @@ test('independent model QA/Security/Reviewer reject inherited Bash and Node prel
       name + ' must not inherit a Bash startup hook');
     assert.ok(environment.split('\n').some((line) => line.trim() === "NODE_OPTIONS: ''"),
       name + ' must not inherit a Node preload hook');
+    for (const libraryVariable of ['LD_PRELOAD', 'LD_AUDIT', 'LD_LIBRARY_PATH']) {
+      assert.ok(environment.split('\n').some((line) => line.trim() === libraryVariable + ": ''"),
+        name + ' must not inherit dynamic-loader injection: ' + libraryVariable);
+    }
     assert.doesNotMatch(environment, /OPENROUTER_API_KEY|GH_TOKEN|secrets\./,
       name + ' must not inherit any provider or publisher credential');
   }
