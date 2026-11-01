@@ -406,3 +406,16 @@ test('model proposal rejects retargeting an unchanged privileged JSX callback by
     explanation: 'safe styling update on unchanged event owner' });
   assert.equal(validateModelPatch({ response: benign, source: original }).status, 'proposed');
 });
+
+
+test('model proposal preserves existing JSX callback expressions during class updates', () => {
+  const original = 'const view = <><button onClick={approve} className="idle">Approve</button><button onClick={cancel}>Cancel</button></>;\n';
+  const propose = (find, replace) => validateModelPatch({
+    source: original,
+    response: JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace, explanation: 'bounded handler fixture' })
+  });
+  // This substitution does not introduce an onClick= attribute: the old
+  // name-only comparison accepted the changed callback expression.
+  assert.equal(propose('{approve} className="idle"', '{cancel} className="idle"').status, 'rejected');
+  assert.equal(propose('className="idle">Approve', 'className="ready">Approve').status, 'proposed');
+});
