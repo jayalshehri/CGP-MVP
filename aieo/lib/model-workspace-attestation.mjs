@@ -50,7 +50,6 @@ export function attestModelReviewWorkspace(sourcePath) {
   }
 }
 
-
 // The QA, Security and Reviewer CLIs read Git index and repository state.
 // Inherited GIT_* overrides can make that state differ from the checkout
 // containing the attested source, so refuse them before any Git subprocess.
