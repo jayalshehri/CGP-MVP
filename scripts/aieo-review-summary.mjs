@@ -18,7 +18,7 @@ export function consolidate(designer, developer) {
   for (const [report, allowed] of [[designer,allowedDesigner],[developer,allowedDeveloper]]) {
     if (!Number.isInteger(report.findingCount) || report.findingCount < 0 ||
         !Array.isArray(report.findings) ||
-        report.findings.length !== Math.min(report.findingCount,120) ||
+        report.findings.length !== Math.min(report.findingCount,500) ||
         !report.ruleCounts || typeof report.ruleCounts !== 'object') throw Error('Invalid report counts');
     const total=Object.values(report.ruleCounts).reduce((sum,x) => {
       if (!Number.isInteger(x) || x < 0) throw Error('Invalid rule count');
@@ -57,8 +57,9 @@ export function consolidate(designer, developer) {
     roleCounts:{designer:designer.findingCount,developer:developer.findingCount},
     rulePriorities:counts,
     topFilesFromSample:topFiles,
+    findingLocationsComplete:designer.findingCount <= 500 && developer.findingCount <= 500,
     sampledFindings:{designer:designer.findings.length,developer:developer.findings.length},
-    warning:'Heuristic leads, not confirmed defects; developer file ranking may omit findings beyond 120-item sample.',
+    warning:'Heuristic leads, not confirmed defects; file ranking may omit findings beyond 500-item sample.',
     recommendedActions:['Check LTR input direction and accessible error announcements','Review client Supabase operations against RLS and errors','Validate hardcoded color contrast in actual browser','Perform actual role-based QA before release'],
     requiresHumanApproval:true,codeModified:false,deployPerformed:false
   };
