@@ -32,7 +32,7 @@ export function analyzeSource({filename, source, role}) {
       if (spec.id === 'UX-RTL-INPUT' && /\bdir\s*=\s*["']ltr["']/i.test(match[0])) continue;
       const line = source.slice(0,match.index).split('\n').length;
       findings.push({rule:spec.id,file:filename,line,severity:'review',reason:spec.description,recommendation:spec.advice});
-      if(findings.length>=100) break;
+      if(findings.length>=500) break;
     }
   }
   return findings;
