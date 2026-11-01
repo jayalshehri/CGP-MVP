@@ -20,6 +20,16 @@ function attestEntry(path, kind, required = true) {
   }
 }
 
+// The source-sharing step runs before any QA/Security/Reviewer report exists.
+// It must still reject redirected input/output paths before making a provider
+// request or writing its proposal evidence. Missing output entries are fine:
+// the proposal CLI creates them itself after the remote request completes.
+export function attestModelProposalWorkspace(sourcePath) {
+  attestModelSourceFile(sourcePath);
+  attestEntry('aieo-output', 'directory', false);
+  attestEntry('aieo-output/model-proposal.json', 'file', false);
+}
+
 // The privileged publisher also serves deterministic repairs, where no model
 // verdict directory exists. Both modes must independently attest the source
 // file rather than trusting the previous stage's filesystem check.
