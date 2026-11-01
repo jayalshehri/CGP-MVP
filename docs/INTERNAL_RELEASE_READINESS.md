@@ -24,8 +24,11 @@ QA_EXPECTED_ORIGIN=https://<QA-preview>.vercel.app \
 NEXT_PUBLIC_SUPABASE_URL=https://lkozjnpfufdpzqtzdxhe.supabase.co \
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<QA-publishable-key> \
 QA_EMAIL=<QA-test-user> QA_PASSWORD=<QA-password> \
+QA_EXPECTED_ROLE=control_owner \
 npm run qa:release
 ```
+
+Use a separate approved QA-only identity per role. `QA_EXPECTED_ROLE` ensures the login is checked against the intended role; it does not by itself prove comprehensive RBAC.
 
 The QA origin must be independently approved, not inferred from a preview URL. The script rejects absent credentials, unknown Supabase projects, explicit production domains and an unapproved origin. It then invokes the existing read-only QA smoke flow (HTTP routes, sign-in, user profile, owner scoping where applicable, and dashboard). This does **not** prove full role-matrix authorization.
 
