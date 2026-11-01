@@ -46,3 +46,21 @@ test('Developer reports client-side Supabase query and session review leads',()=
  assert.deepEqual(r.map(x=>x.rule),['DEV-CLIENT-QUERY','DEV-SESSION-CHECK']);
  assert.ok(r.every(x=>x.severity==='review'));
 });
+
+test('Designer does not flag email input already marked LTR',()=>{
+ const r=analyzeSource({filename:'app/login/page.tsx',role:'designer',
+  source:'<input dir="ltr" id="email" type="email" />\n<input type="email" />'});
+ assert.deepEqual(r.map(x=>x.rule),['UX-RTL-INPUT']);
+ assert.equal(r[0].line,2);
+});
+test('Report includes all matching findings within the 500-location bound',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'aieo-review-'));
+ try {
+   mkdirSync(join(dir,'app'));mkdirSync(join(dir,'components'));
+   writeFileSync(join(dir,'app','page.tsx'),Array(131).fill('supabase.from("controls");').join('\n'));
+   const r=reviewRepository(dir,'developer');
+   assert.equal(r.findingCount,131);
+   assert.equal(r.findings.length,131);
+   assert.equal(r.limitedToFirst,500);
+ } finally {rmSync(dir,{recursive:true,force:true});}
+});
