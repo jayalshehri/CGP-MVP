@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, symlinkSync, linkSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -202,6 +202,77 @@ test('four independent CLI runs reject cross-run and retry artifact replay', () 
     for (const role of ['developer', 'qa', 'security', 'reviewer']) {
       assert.equal(readFileSync(artifact(role), 'utf8').includes(originalLine), false);
     }
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('independent agents refuse symlink, hardlink, oversized and malformed downloaded handoffs', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'aieo-untrusted-files-'));
+  const sourceFile = join(workspace, 'components', 'FeedbackWidget.tsx');
+  const folder = join(workspace, 'aieo-output');
+  const artifact = (role) => join(folder, role + '.json');
+  const outside = join(workspace, 'external.json');
+  const run = (role) => spawnSync(process.execPath, [runner, role], {
+    cwd: workspace, encoding: 'utf8', timeout: 15000,
+    env: { ...process.env, AIEO_TASK: 'feedback-control-route-boundary' }
+  });
+  const rejectQa = (label) => {
+    const result = run('qa');
+    assert.notEqual(result.status, 0, label + ': QA accepted an unsafe artifact');
+    assert.equal(existsSync(artifact('qa')), false, label + ': QA wrote an artifact after failure');
+    return result;
+  };
+  try {
+    mkdirSync(dirname(sourceFile), { recursive: true });
+    writeFileSync(sourceFile, syntheticSource);
+    const developer = run('developer');
+    assert.equal(developer.status, 0, developer.stderr);
+    const safeDeveloper = readFileSync(artifact('developer'), 'utf8');
+    writeFileSync(outside, safeDeveloper);
+
+    rmSync(artifact('developer'));
+    symlinkSync(outside, artifact('developer'));
+    rejectQa('external file symlink');
+    rmSync(artifact('developer'));
+
+    linkSync(outside, artifact('developer'));
+    rejectQa('external file hardlink');
+    rmSync(artifact('developer'));
+
+    // JSON accepts trailing whitespace, so this handoff would otherwise verify.
+    writeFileSync(artifact('developer'), safeDeveloper + ' '.repeat(20 * 1024));
+    rejectQa('unbounded JSON whitespace');
+
+    const marker = 'SYNTHETIC_PRIVATE_TEST_MARKER';
+    writeFileSync(artifact('developer'), '{"secret":"' + marker + '",');
+    const malformed = rejectQa('invalid JSON');
+    assert.equal(malformed.stderr.includes(marker), false, 'Parser leaked raw artifact contents');
+
+    writeFileSync(artifact('developer'), safeDeveloper);
+    const moved = folder + '.real';
+    renameSync(folder, moved);
+    symlinkSync(moved, folder);
+    rejectQa('download folder symlink');
+    rmSync(folder);
+    renameSync(moved, folder);
+
+    for (const role of ['qa', 'security']) {
+      const result = run(role);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+    }
+    const safeSecurity = readFileSync(artifact('security'), 'utf8');
+    rmSync(artifact('security'));
+    symlinkSync(outside, artifact('security'));
+    const refused = run('reviewer');
+    assert.notEqual(refused.status, 0, 'Reviewer accepted unsafe security artifact');
+    assert.equal(existsSync(artifact('reviewer')), false);
+    rmSync(artifact('security'));
+    writeFileSync(artifact('security'), safeSecurity);
+    const reviewer = run('reviewer');
+    assert.equal(reviewer.status, 0, reviewer.stderr);
+    assert.equal(JSON.parse(readFileSync(artifact('reviewer'), 'utf8')).requiresHumanMerge, true);
+    assert.equal(readFileSync(sourceFile, 'utf8'), syntheticSource);
   } finally {
     rmSync(workspace, { recursive: true, force: true });
   }
