@@ -192,7 +192,9 @@ function eventBindingOwners(source) {
   const owners = [];
   const openings = /<\s*([A-Za-z][\w.:-]*)\b/g;
   let opening;
+  let elementIndex = 0;
   while ((opening = openings.exec(source)) !== null) {
+    const ownerIndex = elementIndex++;
     let quote = null;
     let braces = 0;
     let end = openings.lastIndex;
@@ -208,10 +210,10 @@ function eventBindingOwners(source) {
       else if (ch === '>' && braces === 0) break;
     }
     for (const binding of eventBindingFingerprints(source.slice(openings.lastIndex, end))) {
-      owners.push(opening[1] + ':' + binding);
+      owners.push(ownerIndex + ':' + opening[1] + ':' + binding);
     }
   }
-  return owners.sort();
+  return owners;
 }
 function introducesEventBinding(original, actual) {
   if (typeof original !== 'string' || typeof actual !== 'string') return true;
