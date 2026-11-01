@@ -79,6 +79,57 @@ test('model proposal fails closed on hidden instructions and any extra or missin
     'untrusted instructions must not be returned in review evidence');
 });
 
+test('model proposal rejects duplicate JSON keys, even when last value passes normal schema', async () => {
+  const valid = JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: replacement, explanation: 'Synthetic bounded fix'
+  });
+  const duplicates = [
+    valid.replace('"path":', '"path":"components/unapproved.tsx","path":'),
+    valid.replace('"find":', '"find":"attacker-controlled match","find":'),
+    valid.replace('"replace":', '"replace":"untrusted code","replace":'),
+    valid.replace('"explanation":', '"explanation":"hidden instruction","explanation":'),
+    valid.replace('"find":', '"\\u0066ind":"escaped duplicate key","find":')
+  ];
+  for (const ambiguous of duplicates) {
+    assert.equal(JSON.parse(ambiguous).path, MODEL_ALLOWED_PATH,
+      'fixture must remain syntactically valid JSON accepted by native parser');
+    assert.equal(validateModelPatch({ response: ambiguous, source }).status, 'rejected',
+      'duplicate or escaped-duplicate proposal key was accepted');
+  }
+
+  // Backslashes, quotes, braces and JSON-like text *inside* string values
+  // are ordinary data and must not trigger a false-positive duplicate.
+  const validEscaped = JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: replacement,
+    explanation: 'Text: {"find":"example"} and an escaped quote " here'
+  }).replace('"find":', '"\\u0066ind":');
+  assert.equal(validateModelPatch({ response: validEscaped, source }).status, 'proposed');
+  for (const invalid of [
+    valid + '\n' + valid,
+    valid.replace('"explanation":', '"explanation":null,"unused":'),
+    valid.replace('"path":', '"path":{"nested":"object"},"path":'),
+    valid.replace('"find":', '"find":"bad\\q","find":')
+  ]) {
+    assert.equal(validateModelPatch({ response: invalid, source }).status, 'rejected');
+  }
+
+  let calls = 0;
+  const result = await requestModelPatch({
+    source, task, env,
+    transport: async () => {
+      calls++;
+      return {
+        ok: true,
+        text: async () => JSON.stringify({ choices: [{ message: { content: duplicates[1] } }] })
+      };
+    }
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.status, 'rejected');
+  assert.equal(JSON.stringify(result).includes('attacker-controlled'), false,
+    'untrusted duplicate-key text must never become an evidence field');
+});
+
 test('no source disclosure without explicit consent and privacy scan', () => {
   assert.throws(() => buildModelRequest({ source, task, model: env.OPENROUTER_MODEL_ID, shareApproved: false }));
   assert.throws(() => buildModelRequest({ source: 'const api_key = "plaintext-secret";', task, model: env.OPENROUTER_MODEL_ID, shareApproved: true }));
