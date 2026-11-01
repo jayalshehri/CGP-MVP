@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 
 // Negative-only: do not give valid QA credentials, perform network calls, or touch any DB.
 const script = 'scripts/qa-release-gate.mjs';
-const qaUrl = 'https://cgp-test-pr-123-grc13.vercel.app';
+const qaUrl = 'https://cgp-testpr123-grc13.vercel.app';
 const baseline = {
   CGP_BASE_URL: qaUrl,
   QA_EXPECTED_ORIGIN: qaUrl,
@@ -48,10 +48,10 @@ blocked('production database ref rejected', {
   NEXT_PUBLIC_SUPABASE_URL: 'https://ahfindosbawqfvhbcplq.supabase.co',
 }, /dedicated CGP-QA/);
 blocked('URL credential injection rejected', {
-  CGP_BASE_URL: 'https://alice:pass@cgp-test-pr-123-grc13.vercel.app',
-  QA_EXPECTED_ORIGIN: 'https://alice:pass@cgp-test-pr-123-grc13.vercel.app',
+  CGP_BASE_URL: 'https://alice:pass@cgp-testpr123-grc13.vercel.app',
+  QA_EXPECTED_ORIGIN: 'https://alice:pass@cgp-testpr123-grc13.vercel.app',
 }, /exactly match/);
 blocked('plaintext QA URL rejected', {
-  CGP_BASE_URL: 'http://cgp-test-pr-123-grc13.vercel.app',
-  QA_EXPECTED_ORIGIN: 'http://cgp-test-pr-123-grc13.vercel.app',
+  CGP_BASE_URL: 'http://cgp-testpr123-grc13.vercel.app',
+  QA_EXPECTED_ORIGIN: 'http://cgp-testpr123-grc13.vercel.app',
 }, /exactly match/);
