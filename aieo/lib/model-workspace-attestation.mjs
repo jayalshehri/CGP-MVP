@@ -61,7 +61,13 @@ export function attestModelReviewGitEnvironment(env = process.env) {
     'GIT_EXEC_PATH', 'GIT_CEILING_DIRECTORIES', 'GIT_PREFIX',
     'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM'
   ];
-  if (overrides.some((name) => typeof env[name] === 'string' && env[name].length > 0)) {
+  // Git tracing can write process paths, repository metadata or packet/body
+  // diagnostics to attacker-chosen files before a reviewer emits its verdict.
+  // Reject inherited diagnostic sinks before ANY Git subprocess is started.
+  const diagnostics = Object.entries(env).some(([name, value]) =>
+    (/^GIT_TRACE[A-Z0-9_]*$/.test(name) || name === 'GIT_CURL_VERBOSE') &&
+    typeof value === 'string' && value.length > 0);
+  if (diagnostics || overrides.some((name) => typeof env[name] === 'string' && env[name].length > 0)) {
     throw new Error('Unsafe Git environment for model review');
   }
 }
