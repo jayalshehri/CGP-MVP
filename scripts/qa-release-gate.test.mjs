@@ -37,6 +37,10 @@ blocked('main branch preview rejected', {
   CGP_BASE_URL: 'https://cgp-mvp-git-main-grc13.vercel.app',
   QA_EXPECTED_ORIGIN: 'https://cgp-mvp-git-main-grc13.vercel.app',
 }, /non-production/);
+blocked('non-CGP preview hostname rejected even when expected', {
+  CGP_BASE_URL: 'https://other-project.vercel.app',
+  QA_EXPECTED_ORIGIN: 'https://other-project.vercel.app',
+}, /non-production/);
 blocked('unapproved host rejected', {
   CGP_BASE_URL: 'https://other-project.vercel.app',
 }, /exactly match/);
