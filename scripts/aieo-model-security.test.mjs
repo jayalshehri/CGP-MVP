@@ -432,3 +432,23 @@ test('independent Security rejects newly bound JSX events with genuine candidate
   });
   assert.equal(unchangedCallback.status, 'passed', 'unchanged callbacks may coexist with safe label edits');
 });
+
+test('independent Security rejects JSX event-owner reassignment in genuine source-bound diffs', () => {
+  const original = 'const view = <div className="idle" onClick={performSensitiveAction} />;\n';
+  const inspect = (candidate) => {
+    const actual = candidate + '\n';
+    return inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -1 +1 @@\n-' + original.trimEnd() + '\n+' + candidate + '\n',
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+  };
+  const moved = inspect('const view = <button className="idle" onClick={performSensitiveAction} />;');
+  assert.equal(moved.status, 'failed', 'the callback must remain bound to its original element type');
+  assert.ok(moved.findings.includes('Potentially unsafe new code'));
+  assert.ok(!moved.findings.includes('Reported diff does not reconstruct candidate source'));
+  assert.equal(inspect('const view = <div className="ready" onClick={performSensitiveAction} />;').status,
+    'passed', 'an unchanged owner and handler may coexist with a harmless styling edit');
+  const removed = inspect('const view = <div className="idle" />;');
+  assert.equal(removed.status, 'failed', 'silent event-binding removal is also outside a presentation-only edit');
+});

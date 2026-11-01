@@ -185,8 +185,39 @@ function eventBindingFingerprints(source) {
   }
   return tokens;
 }
+// The existing onClick expression is not enough evidence that its JSX owner
+// stayed the same. A tag-name-only patch can reattach a privileged callback
+// without changing the callback token or introducing a new event attribute.
+function eventBindingOwners(source) {
+  const owners = [];
+  const openings = /<\s*([A-Za-z][\w.:-]*)\b/g;
+  let opening;
+  while ((opening = openings.exec(source)) !== null) {
+    let quote = null;
+    let braces = 0;
+    let end = openings.lastIndex;
+    for (; end < source.length; end++) {
+      const ch = source[end];
+      if (quote !== null) {
+        if (ch === '\\') { end++; continue; }
+        if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'" || ch === '`') {
+        quote = ch;
+      } else if (ch === '{') braces++;
+      else if (ch === '}' && braces > 0) braces--;
+      else if (ch === '>' && braces === 0) break;
+    }
+    for (const binding of eventBindingFingerprints(source.slice(openings.lastIndex, end))) {
+      owners.push(opening[1] + ':' + binding);
+    }
+  }
+  return owners.sort();
+}
 function introducesEventBinding(original, actual) {
   if (typeof original !== 'string' || typeof actual !== 'string') return true;
+  // Refuse handler removal, retargeting, or tag-type changes, even when the
+  // handler expression itself appears unchanged elsewhere in the source.
+  if (JSON.stringify(eventBindingOwners(original)) !== JSON.stringify(eventBindingOwners(actual))) return true;
   const prior = new Map();
   for (const binding of eventBindingFingerprints(original)) {
     prior.set(binding, (prior.get(binding) || 0) + 1);

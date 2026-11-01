@@ -392,3 +392,17 @@ test('model proposal rejects executable JSX props and raw HTML rendering before 
     replace: 'const view = <Widget label="new" />;', explanation: 'text-only fixture' });
   assert.equal(validateModelPatch({ response: benign, source: original }).status, 'proposed');
 });
+
+test('model proposal rejects retargeting an unchanged privileged JSX callback by changing its element type', () => {
+  const original = 'const view = <div className="idle" onClick={performSensitiveAction} />;\n';
+  const proposed = JSON.stringify({ path: MODEL_ALLOWED_PATH,
+    find: 'const view = <div className',
+    replace: 'const view = <button className',
+    explanation: 'negative event-owner reassignment fixture' });
+  assert.equal(validateModelPatch({ response: proposed, source: original }).status, 'rejected',
+    'an unchanged onClick expression is unsafe if the owning JSX element changes');
+  const benign = JSON.stringify({ path: MODEL_ALLOWED_PATH,
+    find: 'className="idle"', replace: 'className="ready"',
+    explanation: 'safe styling update on unchanged event owner' });
+  assert.equal(validateModelPatch({ response: benign, source: original }).status, 'proposed');
+});
