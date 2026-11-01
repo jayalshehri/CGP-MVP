@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync, renameSync, symlinkSync, linkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -125,6 +125,56 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     });
 
     const proposal = join(scripts, 'aieo-model-proposal.mjs');
+    // The source-sharing CLI must not read a redirected source or let its
+    // report write escape the checkout. The local provider stub records calls
+    // so every rejection is proved to happen BEFORE sharing any source.
+    const externalSource = join(root, 'external-source.tsx');
+    renameSync(target, externalSource);
+    symlinkSync(externalSource, target);
+    const sourceRedirect = run(['--import', shimPath, proposal]);
+    assert.notEqual(sourceRedirect.status, 0, 'Symlinked proposal source must fail closed');
+    assert.match(sourceRedirect.stderr, /Unsafe model review workspace entry/);
+    assert.equal(existsSync(transportCalls), false, 'Symlink must not reach external provider');
+    rmSync(target);
+    renameSync(externalSource, target);
+
+    const externalSourceLink = join(root, 'external-source-hardlink.tsx');
+    linkSync(target, externalSourceLink);
+    const multiplyLinkedSource = run(['--import', shimPath, proposal]);
+    assert.notEqual(multiplyLinkedSource.status, 0, 'Hardlinked source must fail closed');
+    assert.equal(existsSync(transportCalls), false, 'Hardlink must not reach external provider');
+    rmSync(externalSourceLink);
+
+    const outputDir = join(workspace, 'aieo-output');
+    const externalOutputDir = join(root, 'redirected-output');
+    renameSync(outputDir, externalOutputDir);
+    symlinkSync(externalOutputDir, outputDir, 'dir');
+    const redirectedOutput = run(['--import', shimPath, proposal]);
+    assert.notEqual(redirectedOutput.status, 0, 'Redirected report directory must fail closed');
+    assert.match(redirectedOutput.stderr, /Unsafe model review workspace entry/);
+    assert.equal(existsSync(transportCalls), false, 'Redirected report must not call provider');
+    rmSync(outputDir);
+    renameSync(externalOutputDir, outputDir);
+
+    const externalReport = join(root, 'external-proposal.json');
+    writeFileSync(externalReport, 'PRESERVE EXTERNAL REPORT\\n');
+    symlinkSync(externalReport, report('proposal'));
+    const redirectedReport = run(['--import', shimPath, proposal]);
+    assert.notEqual(redirectedReport.status, 0, 'Symlinked proposal report must fail closed');
+    assert.equal(readFileSync(externalReport, 'utf8'), 'PRESERVE EXTERNAL REPORT\\n');
+    assert.equal(existsSync(transportCalls), false, 'Report link must not call provider');
+    rmSync(report('proposal'));
+
+    writeFileSync(report('proposal'), 'PRESERVE HARDLINKED REPORT\\n');
+    const externalHardReport = join(root, 'external-proposal-hardlink.json');
+    linkSync(report('proposal'), externalHardReport);
+    const hardlinkedReport = run(['--import', shimPath, proposal]);
+    assert.notEqual(hardlinkedReport.status, 0, 'Hardlinked proposal report must fail closed');
+    assert.equal(readFileSync(externalHardReport, 'utf8'), 'PRESERVE HARDLINKED REPORT\\n');
+    assert.equal(existsSync(transportCalls), false, 'Hardlinked report must not call provider');
+    rmSync(report('proposal'));
+    rmSync(externalHardReport);
+
     const denied = run(['--import', shimPath, proposal], {
       AIEO_SOURCE_SHARING_APPROVED: 'false'
     });
