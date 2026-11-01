@@ -72,6 +72,9 @@ jobs:
           # NODE_EXTRA_CA_CERTS and TLS bypass must not redirect approved source.
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
           NODE_EXTRA_CA_CERTS: ''
           NODE_TLS_REJECT_UNAUTHORIZED: '1'
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -123,6 +126,9 @@ jobs:
           # The token-bearing shell and Node process must not inherit startup hooks.
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
           NODE_EXTRA_CA_CERTS: ''
           NODE_TLS_REJECT_UNAUTHORIZED: '1'
           GH_TOKEN: ${{ github.token }}
