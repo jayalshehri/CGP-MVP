@@ -59,11 +59,57 @@ function unsafeJsxMarkup(text) {
 // can reattach an existing privileged onClick without inserting "onClick=".
 // Compare handler names AND the actual opening-element types across the candidate.
 // A benign change to an unrelated label/class on the same element remains allowed.
+function eventBindingFingerprints(source) {
+  const tokens = [];
+  const pattern = /\bon[A-Z][A-Za-z0-9_]*\s*=/g;
+  let match;
+  while ((match = pattern.exec(source)) !== null) {
+    let i = pattern.lastIndex;
+    while (i < source.length && /\s/.test(source[i])) i++;
+    const opener = source[i];
+    if (opener === '{') {
+      let depth = 0;
+      let quote = null;
+      for (; i < source.length; i++) {
+        const ch = source[i];
+        if (quote !== null) {
+          if (ch === '\\') { i++; continue; }
+          if (ch === quote) quote = null;
+        } else if (ch === '"' || ch === "'" || ch === '`') {
+          quote = ch;
+        } else if (ch === '{') {
+          depth++;
+        } else if (ch === '}' && --depth === 0) {
+          i++;
+          break;
+        }
+      }
+    } else if (opener === '"' || opener === "'") {
+      const quote = opener;
+      i++;
+      for (; i < source.length; i++) {
+        if (source[i] === '\\') { i++; continue; }
+        if (source[i] === quote) { i++; break; }
+      }
+    } else {
+      // Unknown/unquoted value: conservatively capture it as a distinct binding.
+      while (i < source.length && !/[\s>]/.test(source[i])) i++;
+    }
+    tokens.push(source.slice(match.index, i));
+    pattern.lastIndex = Math.max(pattern.lastIndex, i);
+  }
+  return tokens;
+}
+// Compare each event callback and its opening-element ordinal, not merely
+// a sorted collection of tag names and prop names. A model must not silently
+// swap privileged handlers between otherwise identical JSX elements.
 function jsxEventOwnerNames(source) {
   const owners = [];
   const openings = /<\s*([A-Za-z][\w.:-]*)\b/g;
   let opening;
+  let elementIndex = 0;
   while ((opening = openings.exec(source)) !== null) {
+    const ownerIndex = elementIndex++;
     let quote = null;
     let braces = 0;
     let end = openings.lastIndex;
@@ -72,18 +118,18 @@ function jsxEventOwnerNames(source) {
       if (quote !== null) {
         if (ch === '\\') { end++; continue; }
         if (ch === quote) quote = null;
-      } else if (ch === '"' || ch === "'" || ch === '`') {
+      } else if (ch === '"' || ch === "'" || ch.charCodeAt(0) === 96) {
         quote = ch;
       } else if (ch === '{') braces++;
       else if (ch === '}' && braces > 0) braces--;
       else if (ch === '>' && braces === 0) break;
     }
     const attributes = source.slice(openings.lastIndex, end);
-    for (const match of attributes.matchAll(/\bon[A-Z][A-Za-z0-9_]*\s*=/g)) {
-      owners.push(opening[1] + ':' + match[0].replace(/\s+/g, ''));
+    for (const binding of eventBindingFingerprints(attributes)) {
+      owners.push(ownerIndex + ':' + opening[1] + ':' + binding);
     }
   }
-  return owners.sort();
+  return owners;
 }
 function changesJsxEventOwner(original, actual) {
   return JSON.stringify(jsxEventOwnerNames(original)) !== JSON.stringify(jsxEventOwnerNames(actual));
