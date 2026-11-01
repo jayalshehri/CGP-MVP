@@ -140,6 +140,64 @@ function unsafeJsxMarkup(text) {
   }
   return false;
 }
+// Compare the actual event-binding expressions, not whole diff lines. A benign
+// text edit on the same line as an unchanged onSubmit={submit} must still pass,
+// but a new handler, changed expression, or duplicated binding is forbidden.
+// This is deliberately conservative lexical attestation, not a JSX AST parser.
+function eventBindingFingerprints(source) {
+  const tokens = [];
+  const pattern = /\bon[A-Z][A-Za-z0-9_]*\s*=/g;
+  let match;
+  while ((match = pattern.exec(source)) !== null) {
+    let i = pattern.lastIndex;
+    while (i < source.length && /\s/.test(source[i])) i++;
+    const opener = source[i];
+    if (opener === '{') {
+      let depth = 0;
+      let quote = null;
+      for (; i < source.length; i++) {
+        const ch = source[i];
+        if (quote !== null) {
+          if (ch === '\\') { i++; continue; }
+          if (ch === quote) quote = null;
+        } else if (ch === '"' || ch === "'" || ch === '`') {
+          quote = ch;
+        } else if (ch === '{') {
+          depth++;
+        } else if (ch === '}' && --depth === 0) {
+          i++;
+          break;
+        }
+      }
+    } else if (opener === '"' || opener === "'") {
+      const quote = opener;
+      i++;
+      for (; i < source.length; i++) {
+        if (source[i] === '\\') { i++; continue; }
+        if (source[i] === quote) { i++; break; }
+      }
+    } else {
+      // Unknown/unquoted value: conservatively capture it as a distinct binding.
+      while (i < source.length && !/[\s>]/.test(source[i])) i++;
+    }
+    tokens.push(source.slice(match.index, i));
+    pattern.lastIndex = Math.max(pattern.lastIndex, i);
+  }
+  return tokens;
+}
+function introducesEventBinding(original, actual) {
+  if (typeof original !== 'string' || typeof actual !== 'string') return true;
+  const prior = new Map();
+  for (const binding of eventBindingFingerprints(original)) {
+    prior.set(binding, (prior.get(binding) || 0) + 1);
+  }
+  for (const binding of eventBindingFingerprints(actual)) {
+    const count = prior.get(binding) || 0;
+    if (!count) return true;
+    prior.set(binding, count - 1);
+  }
+  return false;
+}
 const outboundCss = /\burl\s*\(|\bimage-set\s*\(|@import\b|\bbackgroundImage\s*:/i;
 // Reject optional chaining, computed property access and aliases for browser/network APIs.
 // This deliberately errs on the side of refusing a model-generated UI change.
@@ -195,6 +253,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   if (deletions.length > 20) findings.push('Too many deleted code lines');
   const checkedAdditions = additions.concat(actualAdditions);
   if (checkedAdditions.some((line) => suspect.test(line) || privilegedClientReuse.test(line) || browserExfil.test(line) || indirectBrowserAccess.test(line) || unsafeGlobalIdentifiers.test(line)) ||
+      introducesEventBinding(original, actual) ||
       unsafeJsxMarkup(checkedAdditions.join('\n')) ||
       (typeof actual === 'string' && unsafeJsxMarkup(actual)) ||
       outboundCss.test(checkedAdditions.join('\n'))) {
