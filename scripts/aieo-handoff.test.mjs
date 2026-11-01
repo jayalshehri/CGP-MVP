@@ -67,3 +67,20 @@ test('invalid verdict or candidate hashes cannot construct handoffs', () => {
     role: 'security', task: APPROVED_TASK, sourceHash, candidateHash, verdict: { status: 'failed' }
   }));
 });
+
+test('CI handoffs strip surprise model/source fields and reject injected artifact properties', () => {
+  const leak = 'synthetic-secret-marker-never-artifacted';
+  for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+    const sanitized = make(role, { privateSource: leak, providerResponse: leak, unexpectedPrompt: leak });
+    assert.equal(JSON.stringify(sanitized).includes(leak), false, role + ': unexpected data leaked');
+    assert.equal(accept(role, sanitized), sanitized);
+    assert.throws(
+      () => accept(role, { ...sanitized, privateSource: leak }),
+      role + ': unknown field should be refused at the receiving job'
+    );
+  }
+  assert.throws(
+    () => accept('developer', { ...make('developer'), bounded: false }),
+    'Developer bounded evidence must not be downgraded'
+  );
+});
