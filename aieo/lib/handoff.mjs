@@ -11,13 +11,35 @@ const isHash = (s) => typeof s === 'string' && /^[a-f0-9]{64}$/.test(s);
 
 export const HANDOFF_SCHEMA_VERSION = 2;
 
+// Handoff artifacts are *untrusted evidence*. Export only the fields needed by
+// the receiving role: never serialize an arbitrary verdict's extra properties.
+// In particular, source, model responses, prompts or future secret fields may
+// be added to internal agent results but must not enter retained CI artifacts.
+const roleFields = {
+  developer: ['status', 'reason', 'path', 'bounded'],
+  qa: ['status', 'checks', 'casesPassed', 'casesTotal'],
+  security: ['status', 'findings'],
+  reviewer: ['status', 'reason', 'requiresHumanMerge', 'handoffValidated']
+};
+const identityFields = ['schemaVersion', 'role', 'task', 'sourceHash', 'candidateHash'];
+const pickVerdict = (role, verdict) => Object.fromEntries(
+  roleFields[role].filter((field) => Object.hasOwn(verdict, field))
+    .map((field) => [field, verdict[field]])
+);
+const onlyExpectedKeys = (role, artifact) =>
+  Object.keys(artifact).every((key) =>
+    identityFields.includes(key) || roleFields[role]?.includes(key)
+  );
+
+
+
 export function buildHandoffArtifact({ role, task, sourceHash, candidateHash, verdict }) {
   if (!allowed[role] || !allowed[role].includes(verdict?.status) ||
       !task || !isHash(sourceHash) || !isHash(candidateHash)) {
     throw new Error('Cannot construct invalid AIEO handoff');
   }
   return {
-    ...verdict,
+    ...pickVerdict(role, verdict),
     schemaVersion: HANDOFF_SCHEMA_VERSION, role, task, sourceHash, candidateHash
   };
 }
@@ -26,6 +48,8 @@ export function verifyHandoffArtifact({ artifact, role, task, sourceHash, candid
   if (!artifact || typeof artifact !== 'object' || Array.isArray(artifact) ||
       artifact.schemaVersion !== HANDOFF_SCHEMA_VERSION ||
       artifact.role !== role || artifact.task !== task ||
+      !onlyExpectedKeys(role, artifact) ||
+      (role === 'developer' && artifact.bounded !== undefined && artifact.bounded !== true) ||
       !isHash(artifact.sourceHash) || !isHash(artifact.candidateHash) ||
       artifact.sourceHash !== sourceHash || artifact.candidateHash !== candidateHash ||
       !allowed[role]?.includes(artifact.status) ||

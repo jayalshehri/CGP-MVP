@@ -111,3 +111,41 @@ test('second bounded repair crosses all four separate CLI processes and rejects 
     rmSync(workspace, { recursive: true, force: true });
   }
 });
+
+
+test('no-change path completes four independent processes with strictly validated artifacts', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'aieo-no-change-e2e-'));
+  const sourceFile = join(workspace, 'components', 'FeedbackWidget.tsx');
+  const correctedLine = '  const controlId = useMemo(() => /^\\/controls\\/(\\d+)(?:\\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);';
+  const correctedSource = 'function example() {\n' + correctedLine + '\n}\n';
+  const artifactPath = (role) => join(workspace, 'aieo-output', role + '.json');
+  const run = (role) => spawnSync(process.execPath, [runner, role], {
+    cwd: workspace, encoding: 'utf8', timeout: 15000,
+    env: { ...process.env, AIEO_TASK: 'feedback-control-route-boundary' }
+  });
+  try {
+    mkdirSync(dirname(sourceFile), { recursive: true });
+    writeFileSync(sourceFile, correctedSource);
+    assert.equal(run('developer').status, 0);
+    const dev = JSON.parse(readFileSync(artifactPath('developer'), 'utf8'));
+    assert.equal(dev.status, 'no-change');
+    assert.equal(dev.bounded, true);
+    assert.equal(dev.sourceHash, dev.candidateHash);
+    writeFileSync(artifactPath('developer'), JSON.stringify({ ...dev, exposedSource: correctedSource }));
+    assert.notEqual(run('qa').status, 0, 'QA must refuse unexpected source-bearing handoff keys');
+    writeFileSync(artifactPath('developer'), JSON.stringify(dev));
+    for (const role of ['qa', 'security', 'reviewer']) {
+      const child = run(role);
+      assert.equal(child.status, 0, role + ': ' + child.stderr);
+    }
+    const reviewed = JSON.parse(readFileSync(artifactPath('reviewer'), 'utf8'));
+    assert.equal(reviewed.status, 'verified-no-change');
+    assert.equal(reviewed.requiresHumanMerge, true);
+    assert.equal(readFileSync(sourceFile, 'utf8'), correctedSource);
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      assert.equal(readFileSync(artifactPath(role), 'utf8').includes(correctedLine), false);
+    }
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
