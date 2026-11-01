@@ -396,3 +396,39 @@ test('independent Security rejects exact-diff reflective global access with genu
   });
   assert.equal(clean.status, 'passed');
 });
+
+// Security runs independently of the model adapter and rechecks a genuine
+// source-bound unified diff, not a fabricated line fragment.
+test('independent Security rejects newly bound JSX events with genuine candidate hashes and diff', () => {
+  const base = 'const view = <Widget label="old" />;\n';
+  const before = base.trimEnd();
+  const inspect = (line) => {
+    const next = line + '\n';
+    return inspectModelDiff({
+      original: base, actual: next, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -1 +1 @@\n-' + before + '\n+' + line + '\n',
+      report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(next) }
+    });
+  };
+  for (const line of [
+    'const view = <Widget onClick={runPrivilegedAction} />;',
+    'const view = <button onMouseEnter={() => doSomething()} />;',
+    'const view = <img onError={() => sendData()} />;',
+    'const view = <div dangerouslySetInnerHTML={{ __html: rawContent }} />;'
+  ]) {
+    const verdict = inspect(line);
+    assert.equal(verdict.status, 'failed', line);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+    assert.ok(!verdict.findings.includes('Reported diff does not reconstruct candidate source'),
+      'real diff must be rejected by policy, not by malformed evidence');
+  }
+  assert.equal(inspect('const view = <Widget label="new" />;').status, 'passed');
+  const withExistingHandler = 'const view = <Widget onClick={existingSafeHandler} />;\nconst label = "old";\n';
+  const changed = withExistingHandler.replace('"old"', '"new"');
+  const unchangedCallback = inspectModelDiff({
+    original: withExistingHandler, actual: changed, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -2 +2 @@\n-const label = "old";\n+const label = "new";\n',
+    report: { status: 'proposed', sourceHash: hash(withExistingHandler), proposedHash: hash(changed) }
+  });
+  assert.equal(unchangedCallback.status, 'passed', 'unchanged callbacks may coexist with safe label edits');
+});
