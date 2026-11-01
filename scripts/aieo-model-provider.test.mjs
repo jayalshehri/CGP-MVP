@@ -370,3 +370,25 @@ test('model validator rejects reflective and bare browser-global access, not jus
     replace: '  const sample = 106;', explanation: 'benign edit' });
   assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
 });
+
+// This one-file model workflow is for presentation changes, not new reactive
+// code paths. An onClick/onError binding can call an existing privileged method
+// without adding a network API, so reject new event bindings at proposal time.
+test('model proposal rejects executable JSX props and raw HTML rendering before the review stages', () => {
+  const original = 'const view = <Widget label="old" />;\n';
+  const before = 'const view = <Widget label="old" />;';
+  for (const after of [
+    'const view = <Widget onClick={runPrivilegedAction} />;',
+    'const view = <input onChange={() => submit()} />;',
+    'const view = <img onError={() => sendData()} />;',
+    'const view = <div dangerouslySetInnerHTML={{ __html: rawContent }} />;'
+  ]) {
+    const attempt = JSON.stringify({ path: MODEL_ALLOWED_PATH, find: before, replace: after,
+      explanation: 'test-only event-handler injection' });
+    assert.equal(validateModelPatch({ response: attempt, source: original }).status,
+      'rejected', after);
+  }
+  const benign = JSON.stringify({ path: MODEL_ALLOWED_PATH, find: before,
+    replace: 'const view = <Widget label="new" />;', explanation: 'text-only fixture' });
+  assert.equal(validateModelPatch({ response: benign, source: original }).status, 'proposed');
+});
