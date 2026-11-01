@@ -83,6 +83,9 @@ jobs:
           # Prevent inherited Bash/Node startup hooks from executing with GH_TOKEN.
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
           NODE_EXTRA_CA_CERTS: ''
           NODE_TLS_REJECT_UNAUTHORIZED: '1'
           GH_TOKEN: ${{ github.token }}
