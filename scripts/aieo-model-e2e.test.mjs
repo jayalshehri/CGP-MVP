@@ -172,7 +172,7 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
       const child = run(name, role);
       assert.equal(child.status, 0, (role || name) + ' must pass after restoring genuine inputs: ' + child.stderr);
     }
-    // An alternate index, repository, object store or Git configuration can
+    // An alternate index, repository, object store, global/system Git config or Git configuration can
     // hide changes from a supposedly independent reviewer. Fail before Git
     // can consume that environment, without modifying the existing verdicts.
     const expectedVerdicts = new Map(['qa', 'security', 'reviewer']
@@ -181,7 +181,8 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
       'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
       'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
       'GIT_NAMESPACE', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS',
-      'GIT_EXEC_PATH', 'GIT_CEILING_DIRECTORIES', 'GIT_PREFIX'
+      'GIT_EXEC_PATH', 'GIT_CEILING_DIRECTORIES', 'GIT_PREFIX',
+      'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM'
     ];
     for (const variable of redirectedGitEnvironment) {
       for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
