@@ -55,6 +55,39 @@ function unsafeJsxMarkup(text) {
   }
   return false;
 }
+// Binding counts alone do not protect the JSX owner: changing <div to <button
+// can reattach an existing privileged onClick without inserting "onClick=".
+// Compare handler names AND the actual opening-element types across the candidate.
+// A benign change to an unrelated label/class on the same element remains allowed.
+function jsxEventOwnerNames(source) {
+  const owners = [];
+  const openings = /<\s*([A-Za-z][\w.:-]*)\b/g;
+  let opening;
+  while ((opening = openings.exec(source)) !== null) {
+    let quote = null;
+    let braces = 0;
+    let end = openings.lastIndex;
+    for (; end < source.length; end++) {
+      const ch = source[end];
+      if (quote !== null) {
+        if (ch === '\\') { end++; continue; }
+        if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'" || ch === '`') {
+        quote = ch;
+      } else if (ch === '{') braces++;
+      else if (ch === '}' && braces > 0) braces--;
+      else if (ch === '>' && braces === 0) break;
+    }
+    const attributes = source.slice(openings.lastIndex, end);
+    for (const match of attributes.matchAll(/\bon[A-Z][A-Za-z0-9_]*\s*=/g)) {
+      owners.push(opening[1] + ':' + match[0].replace(/\s+/g, ''));
+    }
+  }
+  return owners.sort();
+}
+function changesJsxEventOwner(original, actual) {
+  return JSON.stringify(jsxEventOwnerNames(original)) !== JSON.stringify(jsxEventOwnerNames(actual));
+}
 // A bounded presentation edit must not attach new event-driven behavior or
 // interpolate untrusted raw HTML. Independent Security enforces the same limit.
 const executableJsxProps = /\bon[A-Z][A-Za-z0-9_]*\s*=|\bdangerouslySetInnerHTML\b/;
@@ -125,7 +158,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   const patchedSource = source.replace(find, replace);
   // A short replacement may only add an attribute inside an existing JSX tag.
   // Scan the assembled candidate, not just the replacement fragment.
-  if (unsafeJsxMarkup(patchedSource)) {
+  if (unsafeJsxMarkup(patchedSource) || changesJsxEventOwner(source, patchedSource)) {
     return { status: 'rejected', reason: 'Potentially unsafe JSX in patched source' };
   }
   return {
