@@ -28,6 +28,8 @@ export function analyzeSource({filename, source, role}) {
     if (spec.category!==role) continue;
     const rx=new RegExp(spec.pattern.source,spec.pattern.flags);
     for(const match of source.matchAll(rx)) {
+      // An explicit LTR/email input is not a missing-direction finding.
+      if (spec.id === 'UX-RTL-INPUT' && /\bdir\s*=\s*["']ltr["']/i.test(match[0])) continue;
       const line = source.slice(0,match.index).split('\n').length;
       findings.push({rule:spec.id,file:filename,line,severity:'review',reason:spec.description,recommendation:spec.advice});
       if(findings.length>=100) break;
@@ -74,7 +76,7 @@ export function reviewRepository(root,role) {
   for(const f of findings)counts[f.rule]=(counts[f.rule]||0)+1;
   return {schemaVersion:1,role,mode:'read-only-static-review',scope:SOURCE_ROOTS,filesReviewed:files.length,
     sourceManifestHash:createHash('sha256').update(hashes.join('\n')).digest('hex'),
-    findingCount:findings.length,ruleCounts:counts,findings:findings.slice(0,120),
-    limitedToFirst:120,verdict:'human-review-required',
+    findingCount:findings.length,ruleCounts:counts,findings:findings.slice(0,500),
+    limitedToFirst:500,verdict:'human-review-required',
     limitations:['Heuristic observations are not verified bugs','No browser, login, QA data or model/provider invocation','No fixes, pull requests, merges or deployment']};
 }
