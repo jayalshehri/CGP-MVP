@@ -83,6 +83,12 @@ test('CI handoffs strip surprise model/source fields and reject injected artifac
     () => accept('developer', { ...make('developer'), bounded: false }),
     'Developer bounded evidence must not be downgraded'
   );
+  const missingBound = make('developer');
+  delete missingBound.bounded;
+  assert.throws(
+    () => accept('developer', missingBound),
+    'Developer must explicitly attest bounded scope; absence is not approval'
+  );
 });
 
 test('execution binding varies across GitHub runs, retries and checkout commits', () => {
