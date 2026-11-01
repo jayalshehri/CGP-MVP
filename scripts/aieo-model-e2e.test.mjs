@@ -24,9 +24,9 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
   const guardedEnv = { ...process.env, GIT_EXTERNAL_DIFF: externalDiff, AIEO_TEST_DIFF_SENTINEL: diffSentinel };
   const artifact = (name) => join(output, 'model-' + name + '.json');
   const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe', encoding: 'utf8' });
-  const run = (name, role) => spawnSync(process.execPath,
+  const run = (name, role, extraEnv = {}) => spawnSync(process.execPath,
     [join(scriptRoot, 'aieo-model-' + name + '.mjs'), ...(role ? [role] : [])],
-    { cwd: root, timeout: 15000, encoding: 'utf8', env: guardedEnv });
+    { cwd: root, timeout: 15000, encoding: 'utf8', env: { ...guardedEnv, ...extraEnv } });
   try {
     assert.ok(readFileSync(join(repositoryRoot, 'components', 'FeedbackWidget.tsx'), 'utf8').includes(route),
       'Fixture invariant must match actual CGP source');
@@ -171,6 +171,33 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
       const child = run(name, role);
       assert.equal(child.status, 0, (role || name) + ' must pass after restoring genuine inputs: ' + child.stderr);
+    }
+    // An alternate index, repository, object store or Git configuration can
+    // hide changes from a supposedly independent reviewer. Fail before Git
+    // can consume that environment, without modifying the existing verdicts.
+    const expectedVerdicts = new Map(['qa', 'security', 'reviewer']
+      .map((role) => [role, readFileSync(artifact(role), 'utf8')]));
+    const redirectedGitEnvironment = [
+      'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
+      'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+      'GIT_NAMESPACE', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS',
+      'GIT_EXEC_PATH', 'GIT_CEILING_DIRECTORIES', 'GIT_PREFIX'
+    ];
+    for (const variable of redirectedGitEnvironment) {
+      for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
+        const actualRole = role || 'security';
+        const child = run(name, role, { [variable]: variable === 'GIT_CONFIG_COUNT' ? '1' : root });
+        assert.notEqual(child.status, 0, actualRole + ' must reject ' + variable);
+        assert.match(child.stderr, /Unsafe Git environment for model review/,
+          actualRole + ' must reject ' + variable + ' before reading Git');
+        assert.equal(readFileSync(artifact(actualRole), 'utf8'), expectedVerdicts.get(actualRole),
+          actualRole + ' may not overwrite its verdict after rejecting ' + variable);
+      }
+    }
+    // Normal inherited Git settings remain usable after removing the overrides.
+    for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
+      const child = run(name, role);
+      assert.equal(child.status, 0, (role || 'security') + ' should still pass after rejection tests: ' + child.stderr);
     }
     assert.equal(readFileSync(path, 'utf8'), actual);
   } finally {

@@ -49,3 +49,18 @@ export function attestModelReviewWorkspace(sourcePath) {
     attestEntry('aieo-output/model-' + stage + '.json', 'file', false);
   }
 }
+
+// The QA, Security and Reviewer CLIs read Git index and repository state.
+// Inherited GIT_* overrides can make that state differ from the checkout
+// containing the attested source, so refuse them before any Git subprocess.
+export function attestModelReviewGitEnvironment(env = process.env) {
+  const overrides = [
+    'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
+    'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+    'GIT_NAMESPACE', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS',
+    'GIT_EXEC_PATH', 'GIT_CEILING_DIRECTORIES', 'GIT_PREFIX'
+  ];
+  if (overrides.some((name) => typeof env[name] === 'string' && env[name].length > 0)) {
+    throw new Error('Unsafe Git environment for model review');
+  }
+}
