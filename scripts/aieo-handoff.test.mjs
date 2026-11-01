@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { APPROVED_TASK, orchestrate, publicReport } from '../aieo/lib/engine.mjs';
-import { HANDOFF_SCHEMA_VERSION, buildHandoffArtifact, verifyHandoffArtifact } from '../aieo/lib/handoff.mjs';
+import { HANDOFF_SCHEMA_VERSION, buildHandoffArtifact, verifyHandoffArtifact, getExecutionBinding } from '../aieo/lib/handoff.mjs';
 
 const vulnerableLine = '  const controlId = useMemo(() => /^\\/controls\\/(\\d+)/.exec(pagePath)?.[1] ?? null, [pagePath]);';
 const source = 'function syntheticFixture() {\n' + vulnerableLine + '\n}\n';
@@ -83,4 +83,61 @@ test('CI handoffs strip surprise model/source fields and reject injected artifac
     () => accept('developer', { ...make('developer'), bounded: false }),
     'Developer bounded evidence must not be downgraded'
   );
+});
+
+test('execution binding varies across GitHub runs, retries and checkout commits', () => {
+  const context = {
+    GITHUB_ACTIONS: 'true',
+    GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
+    GITHUB_RUN_ID: '900101',
+    GITHUB_RUN_ATTEMPT: '1',
+    GITHUB_SHA: 'a'.repeat(40)
+  };
+  const bound = getExecutionBinding(context);
+  assert.match(bound, /^github:[a-f0-9]{64}$/);
+  assert.equal(bound, getExecutionBinding({ ...context }));
+  for (const change of [
+    { GITHUB_RUN_ID: '900102' },
+    { GITHUB_RUN_ATTEMPT: '2' },
+    { GITHUB_SHA: 'b'.repeat(40) }
+  ]) {
+    assert.notEqual(getExecutionBinding({ ...context, ...change }), bound);
+  }
+  const artifact = make('developer');
+  assert.equal(artifact.runBinding, getExecutionBinding());
+  assert.equal(accept('developer', artifact), artifact);
+  assert.throws(() => accept('developer', { ...artifact, runBinding: 'local-unbound' }));
+  assert.throws(() => accept('developer', { ...artifact, runBinding: bound === artifact.runBinding ? 'other' : bound }));
+});
+
+test('GitHub context must be complete and canonical, or artifact construction fails closed', () => {
+  const valid = {
+    GITHUB_ACTIONS: 'true',
+    GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
+    GITHUB_RUN_ID: '900101',
+    GITHUB_RUN_ATTEMPT: '1',
+    GITHUB_SHA: 'a'.repeat(40)
+  };
+  assert.equal(getExecutionBinding({}), 'local-unbound');
+  for (const change of [
+    { GITHUB_ACTIONS: 'false' },
+    { GITHUB_REPOSITORY: 'someone-else/CGP-MVP' },
+    { GITHUB_RUN_ID: '' },
+    { GITHUB_RUN_ID: '0' },
+    { GITHUB_RUN_ATTEMPT: '0' },
+    { GITHUB_RUN_ATTEMPT: '' },
+    { GITHUB_SHA: 'a'.repeat(39) },
+    { GITHUB_SHA: 'not-a-commit' }
+  ]) {
+    assert.throws(() => getExecutionBinding({ ...valid, ...change }), 'reject ' + JSON.stringify(change));
+  }
+  assert.throws(() => getExecutionBinding({ GITHUB_ACTIONS: 'true' }));
+  assert.throws(() => getExecutionBinding({ GITHUB_RUN_ID: '900101' }));
+});
+
+test('unexpected source or provider content cannot override execution binding', () => {
+  const fake = make('developer', { runBinding: 'forged', source: 'confidential-source' });
+  assert.equal(fake.runBinding, getExecutionBinding());
+  assert.equal(JSON.stringify(fake).includes('confidential-source'), false);
+  assert.throws(() => accept('developer', { ...fake, runBinding: 'forged' }));
 });
