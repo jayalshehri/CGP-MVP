@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { introducesObfuscatedExecution } from '../aieo/lib/model-obfuscation-guard.mjs';
+import { preservesFeedbackExecutableSurface } from '../aieo/lib/model-executable-surface.mjs';
 import { attestModelReviewWorkspace, attestModelReviewGitEnvironment } from '../aieo/lib/model-workspace-attestation.mjs';
 
 const hash = (content) => createHash('sha256').update(content).digest('hex');
@@ -296,6 +297,9 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
       (typeof actual === 'string' && unsafeJsxMarkup(actual)) ||
       outboundCss.test(checkedAdditions.join('\n'))) {
     findings.push('Potentially unsafe new code');
+  }
+  if (!preservesFeedbackExecutableSurface(original, actual)) {
+    findings.push('Feedback executable state or JSX expression changed');
   }
   if (typeof original === 'string' && typeof actual === 'string') {
     if (protectedFeedbackInvariants.some((line) => original.includes(line) && !actual.includes(line))) {
