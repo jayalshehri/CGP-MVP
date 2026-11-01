@@ -138,3 +138,34 @@ test('model review stages have separate Actions steps and never inherit the prov
   assert.ok(order.every((value, index) => value >= 0 && (index === 0 || value > order[index - 1])),
     'review steps must be ordered sequentially before the app build');
 });
+
+test('token-bearing Actions steps neutralize inherited Bash/Node startup hooks and Node TLS overrides', () => {
+  // BASH_ENV runs before a noninteractive Bash command; NODE_OPTIONS can preload
+  // arbitrary JavaScript before the publisher's own fail-closed checks execute.
+  // Both must be explicitly cleared at step scope, not merely validated inside
+  // a JavaScript process that may already have executed an inherited preload.
+  const protectedSteps = [
+    [model, 'Request one bounded model suggestion with scoped provider credential', 'OPENROUTER_API_KEY:'],
+    [model, 'Publish independently verified candidate as Draft PR only', 'GH_TOKEN:'],
+    [developer, 'Publish verified bounded fix as Draft PR only', 'GH_TOKEN:']
+  ];
+  for (const [workflow, name, credential] of protectedSteps) {
+    const step = workflow.split(/\n(?=      - name: )/)
+      .find((block) => block.startsWith('      - name: ' + name + '\n'));
+    assert.ok(step, 'missing protected step: ' + name);
+    const envBlock = step.match(/\n        env:\n((?:          .*\n)+)/)?.[1];
+    assert.ok(envBlock, 'missing step-scoped environment: ' + name);
+    const lines = envBlock.split('\n');
+    for (const [variable, expected] of [
+      ['BASH_ENV', "''"],
+      ['NODE_OPTIONS', "''"],
+      ['NODE_EXTRA_CA_CERTS', "''"],
+      ['NODE_TLS_REJECT_UNAUTHORIZED', "'1'"]
+    ]) {
+      assert.equal(lines.filter((line) => line.trim() === variable + ': ' + expected).length, 1,
+        name + ' must pin ' + variable + ' at the credential-bearing step');
+    }
+    assert.ok(lines.some((line) => line.trim().startsWith(credential)),
+      'credential must be scoped to the protected step: ' + name);
+  }
+});
