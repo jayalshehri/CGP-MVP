@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { APPROVED_PATH, APPROVED_TASK, developerAgent, qaAgent, securityAgent, reviewerAgent, orchestrate, publicReport } from '../aieo/lib/engine.mjs';
+import { APPROVED_PATH, APPROVED_TASK, MESSAGE_TRIM_TASK, developerAgent, qaAgent, securityAgent, reviewerAgent, orchestrate, publicReport } from '../aieo/lib/engine.mjs';
 
 const oldLine = '  const controlId = useMemo(() => /^\\/controls\\/(\\d+)/.exec(pagePath)?.[1] ?? null, [pagePath]);';
 const newLine = '  const controlId = useMemo(() => /^\\/controls\\/(\\d+)(?:\\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);';
@@ -55,4 +55,38 @@ test('full four-agent handoff supports no-change and sanitized report', () => {
   assert.equal(JSON.stringify(report).includes('patchedSource'), false);
   assert.equal(report.mergePerformed, false);
   assert.equal(report.productionChanges, false);
+});
+
+
+test('second approved deterministic task repairs blank-message validation without any general code edits', () => {
+  const vulnerable = 'function example() {\n    const cleanMessage = message;\n}\n';
+  const corrected = 'function example() {\n    const cleanMessage = message.trim();\n}\n';
+  const proposed = orchestrate({ task: MESSAGE_TRIM_TASK, source: vulnerable });
+  assert.equal(proposed.developer.status, 'proposed');
+  assert.equal(proposed.developer.patchedSource, corrected);
+  assert.equal(proposed.developer.task, MESSAGE_TRIM_TASK);
+  assert.equal(proposed.qa.status, 'passed');
+  assert.deepEqual(proposed.qa.checks, ['single-corrected-source-line', 'five-message-trim-regressions']);
+  assert.equal(proposed.qa.casesPassed, 5);
+  assert.equal(proposed.security.status, 'passed');
+  assert.equal(proposed.reviewer.status, 'draft-pr-eligible');
+  assert.equal(proposed.reviewer.requiresHumanMerge, true);
+  const alreadyFixed = orchestrate({ task: MESSAGE_TRIM_TASK, source: corrected });
+  assert.equal(alreadyFixed.developer.status, 'no-change');
+  assert.equal(alreadyFixed.reviewer.status, 'verified-no-change');
+});
+
+test('second repair fails closed on drift, forged identity/hash and mixed-task replacement', () => {
+  const vulnerable = 'function example() {\n    const cleanMessage = message;\n}\n';
+  const proposed = developerAgent({ task: MESSAGE_TRIM_TASK, source: vulnerable });
+  assert.equal(developerAgent({ task: MESSAGE_TRIM_TASK, source: vulnerable.repeat(2) }).status, 'blocked');
+  assert.equal(developerAgent({ task: 'feedback-unapproved', source: vulnerable }).status, 'blocked');
+  assert.equal(developerAgent({ task: MESSAGE_TRIM_TASK, path: 'app/login/page.tsx', source: vulnerable }).status, 'blocked');
+  const forged = { ...proposed, task: APPROVED_TASK };
+  assert.equal(qaAgent({ developer: forged, source: vulnerable }).status, 'failed');
+  assert.equal(securityAgent({ developer: forged, source: vulnerable }).status, 'failed');
+  const forgedHash = { ...proposed, candidateHash: '0'.repeat(64) };
+  assert.equal(qaAgent({ developer: forgedHash, source: vulnerable }).status, 'failed');
+  assert.equal(securityAgent({ developer: forgedHash, source: vulnerable }).status, 'failed');
+  assert.equal(securityAgent({ developer: { ...proposed, addedLines: ['const cleanMessage = message;'] }, source: vulnerable }).status, 'failed');
 });
