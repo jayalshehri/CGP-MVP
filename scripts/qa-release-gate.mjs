@@ -8,7 +8,7 @@ function refuse(reason) {
 
 const expectedQaRef = 'lkozjnpfufdpzqtzdxhe';
 const vars = ['CGP_BASE_URL', 'QA_EXPECTED_ORIGIN', 'NEXT_PUBLIC_SUPABASE_URL',
-  'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'QA_EMAIL', 'QA_PASSWORD'];
+  'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'QA_EMAIL', 'QA_PASSWORD', 'QA_EXPECTED_ROLE'];
 for (const key of vars) {
   if (!process.env[key]?.trim()) refuse(`Missing required QA-only variable: ${key}`);
 }
@@ -37,6 +37,10 @@ if (!validOrigin(supabase) || supabase.hostname !== `${expectedQaRef}.supabase.c
 }
 if (process.env.QA_EMAIL.trim().includes(' ') || !process.env.QA_EMAIL.includes('@')) {
   refuse('Invalid QA account identifier');
+}
+const allowedRoles = new Set(['admin', 'cybersecurity_team', 'control_owner', 'external_auditor']);
+if (!allowedRoles.has(process.env.QA_EXPECTED_ROLE)) {
+  refuse('QA_EXPECTED_ROLE must be a supported test role');
 }
 console.log('PASS: exact QA origin, dedicated QA database and authenticated-test prerequisites');
 const result = spawnSync(process.execPath, ['scripts/qa-smoke.mjs'], {
