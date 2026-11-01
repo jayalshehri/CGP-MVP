@@ -8,7 +8,8 @@ Scope: **read-only** connected-service inspection. **Not** UAT sign-off, authent
 |---|---|---|
 | QA database available | PASS | Supabase `CGP-QA` (`lkozjnpfufdpzqtzdxhe`): ACTIVE_HEALTHY |
 | Public table RLS enabled | PASS (configuration only) | Read-only `pg_class` inventory: every public ordinary table returned `relrowsecurity = true` |
-| QA profiles exist | PASS (inventory only) | 6 profile records; no credential-based login or role authorization verification |
+| QA profiles exist | PASS (inventory only) | 6 profile records: 1 admin, 2 cybersecurity_team, 3 control_owner; no external_auditor profile found, and no credential-based role authorization verification |
+| Storage object RLS enabled | PASS (configuration only) | `storage.objects` reports RLS enabled; actual per-bucket access policies still require negative tests |
 | Preview env database selection | PASS (project config only) | Vercel project preview `NEXT_PUBLIC_SUPABASE_URL` references CGP-QA, production variable references CGP-DEV; values not committed |
 | CI static checks | PASS | [CGP Required CI](https://github.com/jayalshehri/CGP-MVP/actions/runs/41298175968) including 9 fail-closed QA gate negative tests |
 | Authenticated smoke | NOT RUN | A dedicated QA account and protected secrets were not used in this review |
