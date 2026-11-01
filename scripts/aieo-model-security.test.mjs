@@ -531,6 +531,14 @@ test('independent Security attests FeedbackWidget preamble and JSX expression im
     '    <p className="old">{isAllowed()} Hello</p>', 4);
   assert.equal(jsx.status, 'failed');
   assert.ok(jsx.findings.includes('Feedback executable state or JSX expression changed'));
+  const structural = assess('    <p className="old">{allowed} Hello</p>',
+    '    <div className="old">{allowed} Hello</div>', 4);
+  assert.equal(structural.status, 'failed');
+  assert.ok(structural.findings.includes('Feedback executable state or JSX expression changed'));
+  const behavior = assess('    <p className="old">{allowed} Hello</p>',
+    '    <p role="button" className="old">{allowed} Hello</p>', 4);
+  assert.equal(behavior.status, 'failed');
+  assert.ok(behavior.findings.includes('Feedback executable state or JSX expression changed'));
   assert.equal(assess('    <p className="old">{allowed} Hello</p>',
     '    <p className="new">{allowed} Welcome</p>', 4).status, 'passed');
 });
