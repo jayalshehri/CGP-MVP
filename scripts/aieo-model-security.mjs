@@ -135,7 +135,10 @@ function unsafeJsxMarkup(text) {
     }
     const attributes = text.slice(openings.lastIndex, end);
     // Also inspect nested JSX: an outer expression can contain a network tag.
-    if (/\{\s*\.\.\./.test(attributes) ||
+    // JSX ref callbacks run during mount/unmount: a model UI edit must not add them.
+    // Also scan the assembled candidate for attribute-only patches without a new <tag.
+    if (/(?:^|\s)ref\s*=/.test(attributes) ||
+        /\{\s*\.\.\./.test(attributes) ||
         urlAttributes.test(attributes) ||
         (outboundTagNames.test(opening[1]) && nativeOnlyAttributes.test(attributes))) return true;
   }
