@@ -457,6 +457,12 @@ test('FeedbackWidget model proposals cannot change component state or executable
     '    <p className="old">{isAllowed()} Hello</p>').status, 'rejected',
     'inserting a call inside a previously static JSX expression is executable logic');
   assert.equal(propose('    <p className="old">{allowed} Hello</p>',
+    '    <div className="old">{allowed} Hello</div>').status, 'rejected',
+    'changing JSX element structure is not a static copy edit');
+  assert.equal(propose('    <p className="old">{allowed} Hello</p>',
+    '    <p role="button" className="old">{allowed} Hello</p>').status, 'rejected',
+    'adding behavioral attributes must not bypass model validation');
+  assert.equal(propose('    <p className="old">{allowed} Hello</p>',
     '    <p className="new">{allowed} Welcome</p>').status, 'proposed',
     'literal label and static CSS class changes may remain in scope');
 });
