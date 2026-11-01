@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -433,4 +434,48 @@ test('model proposal refuses encoded and computed executable primitives before a
   }
   assert.equal(validateModelPatch({ source, response: proposal }).status, 'proposed',
     'a benign bounded constant edit must remain eligible');
+});
+
+test('FeedbackWidget model proposals cannot change component state or executable JSX expressions', () => {
+  const component = [
+    'export default function FeedbackWidget() {',
+    '  const allowed = true;',
+    '  return <>',
+    '    <p className="old">{allowed} Hello</p>',
+    '  </>;',
+    '}',
+    ''
+  ].join('\n');
+  const propose = (find, replace) => validateModelPatch({
+    source: component,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace, explanation: 'Synthetic bounded UI test'
+    })
+  });
+  assert.equal(propose('  const allowed = true;', '  const allowed = false;').status, 'rejected',
+    'changing control state ahead of the JSX return is executable logic');
+  assert.equal(propose('    <p className="old">{allowed} Hello</p>',
+    '    <p className="old">{isAllowed()} Hello</p>').status, 'rejected',
+    'inserting a call inside a previously static JSX expression is executable logic');
+  assert.equal(propose('    <p className="old">{allowed} Hello</p>',
+    '    <div className="old">{allowed} Hello</div>').status, 'rejected',
+    'changing JSX element structure is not a static copy edit');
+  assert.equal(propose('    <p className="old">{allowed} Hello</p>',
+    '    <p role="button" className="old">{allowed} Hello</p>').status, 'rejected',
+    'adding behavioral attributes must not bypass model validation');
+  assert.equal(propose('    <p className="old">{allowed} Hello</p>',
+    '    <p className="new">{allowed} Welcome</p>').status, 'proposed',
+    'literal label and static CSS class changes may remain in scope');
+});
+
+test('real checked-out FeedbackWidget supports a harmless outer label edit, not a state change', () => {
+  const real = readFileSync(new URL('../components/FeedbackWidget.tsx', import.meta.url), 'utf8');
+  const propose = (find, replace) => validateModelPatch({
+    source: real,
+    response: JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace, explanation: 'Real-source safety regression' })
+  });
+  assert.equal(propose(' ملاحظات الاختبار</button>', ' ملاحظات التجربة</button>').status, 'proposed',
+    'a simple text node outside executable JSX expressions must remain editable');
+  assert.equal(propose('  const [open, setOpen] = useState(false);',
+    '  const [open, setOpen] = useState(true);').status, 'rejected');
 });

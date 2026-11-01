@@ -1,6 +1,7 @@
 // AIEO optional external-model adapter. Disabled by default; never runs on PR/push.
 import { createHash } from 'node:crypto';
 import { introducesObfuscatedExecution } from './model-obfuscation-guard.mjs';
+import { preservesFeedbackExecutableSurface } from './model-executable-surface.mjs';
 
 export const MODEL_ALLOWED_PATH = 'components/FeedbackWidget.tsx';
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
@@ -207,6 +208,9 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
   const patchedSource = source.replace(find, replace);
+  if (!preservesFeedbackExecutableSurface(source, patchedSource)) {
+    return { status: 'rejected', reason: 'Feedback executable state or JSX expression changed' };
+  }
   // A short replacement may only add an attribute inside an existing JSX tag.
   // Scan the assembled candidate, not just the replacement fragment.
   if (unsafeJsxMarkup(patchedSource) || changesJsxEventOwner(source, patchedSource)) {
