@@ -149,3 +149,60 @@ test('no-change path completes four independent processes with strictly validate
     rmSync(workspace, { recursive: true, force: true });
   }
 });
+
+test('four independent CLI runs reject cross-run and retry artifact replay', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'aieo-replay-e2e-'));
+  const sourceFile = join(workspace, 'components', 'FeedbackWidget.tsx');
+  const artifact = (role) => join(workspace, 'aieo-output', role + '.json');
+  const trustedRun = {
+    GITHUB_ACTIONS: 'true',
+    GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
+    GITHUB_RUN_ID: '900123',
+    GITHUB_RUN_ATTEMPT: '1',
+    GITHUB_SHA: 'a'.repeat(40)
+  };
+  const run = (role, change = {}) => spawnSync(process.execPath, [runner, role], {
+    cwd: workspace, encoding: 'utf8', timeout: 15000,
+    env: { ...process.env, AIEO_TASK: 'feedback-control-route-boundary', ...trustedRun, ...change }
+  });
+  try {
+    mkdirSync(dirname(sourceFile), { recursive: true });
+    writeFileSync(sourceFile, syntheticSource);
+    let child = run('developer');
+    assert.equal(child.status, 0, 'developer: ' + child.stderr);
+    const dev = JSON.parse(readFileSync(artifact('developer'), 'utf8'));
+    assert.match(dev.runBinding, /^github:[a-f0-9]{64}$/);
+
+    child = run('qa', { GITHUB_RUN_ID: '900124' });
+    assert.notEqual(child.status, 0, 'QA must not accept an old run artifact');
+    assert.equal(existsSync(artifact('qa')), false);
+
+    child = run('qa', { GITHUB_RUN_ATTEMPT: '2' });
+    assert.notEqual(child.status, 0, 'QA must not accept an old retry artifact');
+    assert.equal(existsSync(artifact('qa')), false);
+
+    child = run('qa');
+    assert.equal(child.status, 0, 'QA: ' + child.stderr);
+    child = run('security', { GITHUB_SHA: 'b'.repeat(40) });
+    assert.notEqual(child.status, 0, 'Security must not accept an artifact for another checkout');
+    assert.equal(existsSync(artifact('security')), false);
+
+    child = run('security');
+    assert.equal(child.status, 0, 'Security: ' + child.stderr);
+    child = run('reviewer', { GITHUB_RUN_ATTEMPT: '2' });
+    assert.notEqual(child.status, 0, 'Reviewer must reject a different attempt');
+    assert.equal(existsSync(artifact('reviewer')), false);
+
+    child = run('reviewer');
+    assert.equal(child.status, 0, 'Reviewer: ' + child.stderr);
+    const reviewer = JSON.parse(readFileSync(artifact('reviewer'), 'utf8'));
+    assert.equal(reviewer.runBinding, dev.runBinding);
+    assert.equal(reviewer.status, 'draft-pr-eligible');
+    assert.equal(readFileSync(sourceFile, 'utf8'), syntheticSource);
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      assert.equal(readFileSync(artifact(role), 'utf8').includes(originalLine), false);
+    }
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
