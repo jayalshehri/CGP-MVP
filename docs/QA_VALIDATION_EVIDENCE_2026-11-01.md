@@ -37,3 +37,12 @@ Scope: **read-only** connected-service inspection. **Not** UAT sign-off, authent
 5. Backup/restore proof, monitoring and approved release/rollback owner.
 
 No database mutations, credential reads, account creation, merges, or deployments were performed.
+
+## Follow-up review (read-only)
+
+- Existing QA function ACLs were inspected directly. All three privileged functions have explicit EXECUTE grants to both `anon` and `authenticated` (in addition to privileged roles).
+- The risk and submission logging functions are trigger helpers; their definitions write audit records and rely on trigger row context.
+- The request transition function contains active-user role authorization, state-transition constraints, and self-approval prevention. These are useful internal checks but do not justify anonymous EXECUTE.
+- RLS policy predicates on `controls`, `cyber_risks`, `evidence`, and `data_governance_requests` were inspected; they require real negative-role session tests before acceptance.
+- Prepared **review-only**, unapplied privilege fix in [QA_FUNCTION_EXECUTE_REMEDIATION_PROPOSAL.sql](QA_FUNCTION_EXECUTE_REMEDIATION_PROPOSAL.sql) and test cases in [QA_RBAC_TEST_MATRIX.md](QA_RBAC_TEST_MATRIX.md).
+- CI [41298643091](https://github.com/jayalshehri/CGP-MVP/actions/runs/41298643091) succeeded on previous commit; new documentation-only commits still require exact-head verification.
