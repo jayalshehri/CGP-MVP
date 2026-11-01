@@ -1,0 +1,45 @@
+name: AIEO Designer and Developer Review (read-only)
+on:
+  push:
+    branches: [aieo/designer-developer-review-v1]
+  pull_request:
+    paths:
+      - 'aieo/lib/ui-code-review.mjs'
+      - 'scripts/aieo-ui-code-review*.mjs'
+      - '.github/workflows/aieo-ui-code-review.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review:
+    name: Independent read-only Designer and Developer audits
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify reviewer safety and deterministic findings
+        run: node --test scripts/aieo-ui-code-review.test.mjs scripts/aieo-review-summary.test.mjs
+      - name: Designer reviews app and components
+        run: node scripts/aieo-ui-code-review.mjs designer
+      - name: Developer reviews app and components
+        run: node scripts/aieo-ui-code-review.mjs developer
+      - name: Validate independent reports and prepare prioritized triage
+        run: node scripts/aieo-review-summary.mjs
+      - name: Prove repository source files unchanged
+        run: |
+          git diff --exit-code -- app components aieo scripts
+          test -z "$(git ls-files --others --exclude-standard -- app components aieo scripts)"
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: aieo-designer-developer-review
+          path: |
+            aieo-output/designer-review.json
+            aieo-output/developer-review.json
+            aieo-output/review-summary.json
+          retention-days: 7
