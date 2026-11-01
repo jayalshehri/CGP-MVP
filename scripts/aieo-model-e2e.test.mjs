@@ -22,6 +22,11 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
   const fsmonitor = join(output, 'untrusted-fsmonitor.sh');
   const fsmonitorSentinel = join(output, 'fsmonitor-ran');
   const guardedEnv = { ...process.env, GIT_EXTERNAL_DIFF: externalDiff, AIEO_TEST_DIFF_SENTINEL: diffSentinel };
+  // Keep the passing fixture independent of unrelated host diagnostics:
+  // the regression below supplies hostile Git trace exports explicitly.
+  for (const name of Object.keys(guardedEnv)) {
+    if (/^GIT_TRACE[A-Z0-9_]*$/.test(name) || name === 'GIT_CURL_VERBOSE') delete guardedEnv[name];
+  }
   const artifact = (name) => join(output, 'model-' + name + '.json');
   const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe', encoding: 'utf8' });
   const run = (name, role, extraEnv = {}) => spawnSync(process.execPath,
@@ -184,15 +189,26 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
       'GIT_EXEC_PATH', 'GIT_CEILING_DIRECTORIES', 'GIT_PREFIX',
       'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM'
     ];
-    for (const variable of redirectedGitEnvironment) {
+    // Git trace exports can write outside the attested aieo-output folder,
+    // even though source/review files themselves are not redirected.
+    const diagnosticExports = [
+      'GIT_TRACE', 'GIT_TRACE_SETUP', 'GIT_TRACE_PERFORMANCE',
+      'GIT_TRACE_PACKET', 'GIT_TRACE_PACKFILE', 'GIT_TRACE_CURL',
+      'GIT_TRACE2', 'GIT_TRACE2_EVENT', 'GIT_TRACE2_PERF',
+      'GIT_CURL_VERBOSE'
+    ];
+    const traceSink = join(root, 'untrusted-git-trace.log');
+    for (const variable of [...redirectedGitEnvironment, ...diagnosticExports]) {
       for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
         const actualRole = role || 'security';
-        const child = run(name, role, { [variable]: variable === 'GIT_CONFIG_COUNT' ? '1' : root });
+        const child = run(name, role, { [variable]: variable === 'GIT_CONFIG_COUNT' ? '1' : diagnosticExports.includes(variable) ? traceSink : root });
         assert.notEqual(child.status, 0, actualRole + ' must reject ' + variable);
         assert.match(child.stderr, /Unsafe Git environment for model review/,
           actualRole + ' must reject ' + variable + ' before reading Git');
         assert.equal(readFileSync(artifact(actualRole), 'utf8'), expectedVerdicts.get(actualRole),
           actualRole + ' may not overwrite its verdict after rejecting ' + variable);
+        assert.equal(existsSync(traceSink), false,
+          actualRole + ' may not create a Git diagnostic export before rejecting ' + variable);
       }
     }
     // Normal inherited Git settings remain usable after removing the overrides.
