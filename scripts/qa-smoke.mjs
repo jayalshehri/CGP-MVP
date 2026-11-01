@@ -73,7 +73,12 @@ if (supabaseUrl && anonKey && email && password) {
       console.log(`FAIL profile/role check: ${profileError?.message || 'Inactive/missing profile'}`);
       failed = true;
     } else {
-      console.log(`PASS profile/role check: ${profile.role}`);
+      if (process.env.QA_EXPECTED_ROLE && profile.role !== process.env.QA_EXPECTED_ROLE) {
+        console.log('FAIL authenticated QA role mismatch');
+        failed = true;
+      } else {
+        console.log(`PASS profile/role check: ${profile.role}`);
+      }
 
       let taskQuery = supabase
         .from('controls')
