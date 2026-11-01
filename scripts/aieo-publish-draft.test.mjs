@@ -438,7 +438,8 @@ test('publisher refuses inherited Git repository, object and index routing overr
   assert.equal(verifyNoGitRepositoryEnvironmentOverride({ GIT_INDEX_FILE: '' }), true);
   for (const key of [
     'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
-    'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE'
+    'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE',
+    'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM'
   ]) {
     assert.throws(
       () => verifyNoGitRepositoryEnvironmentOverride({ [key]: '/tmp/untrusted-repository' }),
@@ -450,7 +451,8 @@ test('publisher refuses inherited Git repository, object and index routing overr
 test('repository and index redirects block token-bearing publisher before Git or gh writes', () => {
   for (const key of [
     'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
-    'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE'
+    'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE',
+    'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM'
   ]) {
     const f = fixture();
     try {
