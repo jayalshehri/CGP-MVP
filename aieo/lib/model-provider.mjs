@@ -185,12 +185,54 @@ async function readLimitedProviderBody(response) {
 
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
+// Untrusted model output must have exactly one interpretation. JSON.parse
+// silently accepts duplicate object keys (last wins), so independently parse
+// this intentionally tiny schema: a flat object with string keys and values.
+// This also rejects trailing data, nested commands and non-JSON escapes.
+const proposalStringToken = /"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"/y;
+function parseUniqueProposalStrings(text) {
+  let i = 0;
+  const skip = () => { while (i < text.length && /[\t\n\r ]/.test(text[i])) i++; };
+  const string = () => {
+    proposalStringToken.lastIndex = i;
+    const match = proposalStringToken.exec(text);
+    if (!match) return null;
+    i = proposalStringToken.lastIndex;
+    return JSON.parse(match[0]);
+  };
+  skip();
+  if (text[i++] !== '{') return null;
+  const fields = Object.create(null);
+  skip();
+  if (text[i] === '}') {
+    i++; skip();
+    return i === text.length ? fields : null;
+  }
+  while (true) {
+    skip();
+    const key = string();
+    if (key === null || Object.hasOwn(fields, key)) return null;
+    skip();
+    if (text[i++] !== ':') return null;
+    skip();
+    const value = string();
+    if (value === null) return null;
+    fields[key] = value;
+    skip();
+    if (text[i] === '}') { i++; break; }
+    if (text[i] !== ',') return null;
+    i++;
+  }
+  skip();
+  return i === text.length ? fields : null;
+}
+
 export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH }) {
   if (path !== MODEL_ALLOWED_PATH || typeof source !== 'string' || typeof response !== 'string' || response.length > 10000) {
     return { status: 'rejected', reason: 'Invalid scope or response size' };
   }
-  let parsed;
-  try { parsed = JSON.parse(response); } catch { return { status: 'rejected', reason: 'Expected strict JSON' }; }
+  const parsed = parseUniqueProposalStrings(response);
+  if (parsed === null) return { status: 'rejected', reason: 'Expected unique flat JSON string fields' };
   // The model is an untrusted proposer, not a source of additional commands
   // or metadata. Refuse every unknown or missing top-level field rather than
   // silently discarding it (including future executable or secret-bearing fields).
