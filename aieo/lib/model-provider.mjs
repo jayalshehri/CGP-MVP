@@ -336,6 +336,16 @@ export async function requestModelPatch({ source, path = MODEL_ALLOWED_PATH, tas
   if (text === null) return { status: 'rejected', reason: 'Provider response too large' };
   let data;
   try { data = JSON.parse(text); } catch { return { status: 'rejected', reason: 'Invalid provider envelope' }; }
-  const answer = data?.choices?.[0]?.message?.content;
+  // A truncated, filtered or tool-call completion is not a valid autonomous
+  // edit proposal, even when its partial content happens to be valid JSON.
+  // OpenRouter's non-streamed chat-completions contract includes the stop
+  // reason and assistant role; do not silently accept absent metadata.
+  if (!data || !Array.isArray(data.choices) || data.choices.length !== 1 ||
+      data.choices[0]?.finish_reason !== 'stop' ||
+      data.choices[0]?.message?.role !== 'assistant' ||
+      typeof data.choices[0]?.message?.content !== 'string') {
+    return { status: 'rejected', reason: 'Incomplete or untrusted provider completion' };
+  }
+  const answer = data.choices[0].message.content;
   return validateModelPatch({ response: answer, source, path });
 }
