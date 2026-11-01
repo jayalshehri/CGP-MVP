@@ -452,3 +452,29 @@ test('independent Security rejects JSX event-owner reassignment in genuine sourc
   const removed = inspect('const view = <div className="idle" />;');
   assert.equal(removed.status, 'failed', 'silent event-binding removal is also outside a presentation-only edit');
 });
+
+
+test('independent Security binds ordered JSX callbacks to their original element positions', () => {
+  const original = 'const view = <><button onClick={approve}>Approve</button><button onClick={cancel}>Cancel</button></>;\n';
+  const verify = (actual) => inspectModelDiff({
+    original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-' + original.trimEnd() + '\n+' + actual.trimEnd() + '\n',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+  });
+  const swapped = 'const view = <><button onClick={cancel}>Approve</button><button onClick={approve}>Cancel</button></>;\n';
+  const swappedResult = verify(swapped);
+  assert.equal(swappedResult.status, 'failed', 'swapped callbacks on the same element types must be rejected');
+  assert.ok(swappedResult.findings.includes('Potentially unsafe new code'));
+  assert.ok(!swappedResult.findings.includes('Reported diff does not reconstruct candidate source'));
+  const styleOnly = original.replace('>Approve</button>', ' className="ready">Approve</button>');
+  assert.equal(verify(styleOnly).status, 'passed', 'styling must not alter a handler owner');
+  const noHandler = 'const view = <><button onClick={approve}>Approve</button><button>Cancel</button></>;\n';
+  const movedHandler = 'const view = <><button>Approve</button><button onClick={approve}>Cancel</button></>;\n';
+  const movedVerdict = inspectModelDiff({
+    original: noHandler, actual: movedHandler, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-' + noHandler.trimEnd() + '\n+' + movedHandler.trimEnd() + '\n',
+    report: { status: 'proposed', sourceHash: hash(noHandler), proposedHash: hash(movedHandler) }
+  });
+  assert.equal(movedVerdict.status, 'failed', 'moving an unchanged callback to a sibling is not a presentation edit');
+  assert.ok(movedVerdict.findings.includes('Potentially unsafe new code'));
+});
