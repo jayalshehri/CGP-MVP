@@ -1,5 +1,6 @@
 // Each CI job independently rechecks the source and validates prior artifact evidence.
-import { readFileSync, writeFileSync, mkdirSync, lstatSync, fstatSync, openSync, closeSync, constants } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, lstatSync, fstatSync, openSync, closeSync, constants, realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { APPROVED_PATH, APPROVED_TASK, orchestrate, publicReport } from '../aieo/lib/engine.mjs';
 import { buildHandoffArtifact, verifyHandoffArtifact } from '../aieo/lib/handoff.mjs';
 
@@ -81,8 +82,40 @@ if (role === 'developer') {
   verdict = { ...safe.reviewer, handoffValidated: true };
 }
 const artifact = buildHandoffArtifact({ role, task, sourceHash, candidateHash, verdict });
-mkdirSync('aieo-output', { recursive: true });
-writeFileSync('aieo-output/' + role + '.json', JSON.stringify(artifact, null, 2) + '\n');
+
+// Even a correctly verified verdict must not overwrite a redirected artifact.
+// In particular, a downloaded handoff must never turn an output into a write
+// through a symlink/hardlink, and old files must not be silently replaced.
+function writeVerdictOutput(name, result) {
+  const folder = 'aieo-output';
+  mkdirSync(folder, { recursive: true });
+  const directory = lstatSync(folder);
+  if (!directory.isDirectory() || directory.isSymbolicLink() ||
+      realpathSync(folder) !== resolve(folder)) {
+    throw new Error('Unsafe AIEO verdict output directory');
+  }
+  const target = folder + '/' + name + '.json';
+  let fd;
+  try {
+    fd = openSync(target,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o600);
+  } catch {
+    // Never report an untrusted filename's contents or overwrite an existing
+    // file, even if it happens to contain a previously valid verdict.
+    throw new Error('AIEO verdict destination already exists or is unsafe');
+  }
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.nlink !== 1) {
+      throw new Error('Unsafe opened AIEO verdict destination');
+    }
+    writeFileSync(fd, JSON.stringify(result, null, 2) + '\n');
+  } finally {
+    closeSync(fd);
+  }
+}
+writeVerdictOutput(role, artifact);
 console.log(JSON.stringify({ role, status: verdict.status, handoff: 'verified-against-source', writesToProduction: false }));
 
 const allowed = {

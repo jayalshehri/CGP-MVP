@@ -10,7 +10,7 @@ const { sourceHash, candidateHash } = report.developer;
 
 const make = (role, extra = {}) => buildHandoffArtifact({
   role, task: APPROVED_TASK, sourceHash, candidateHash,
-  verdict: { ...report[role], ...(role === 'reviewer' ? { handoffValidated: true } : {}), ...extra }
+  verdict: { ...report[role], ...(role === 'developer' ? { bounded: true } : {}), ...(role === 'reviewer' ? { handoffValidated: true } : {}), ...extra }
 });
 const accept = (role, artifact = make(role)) => verifyHandoffArtifact({
   artifact, role, task: APPROVED_TASK, sourceHash, candidateHash, expected: report[role]
@@ -82,6 +82,12 @@ test('CI handoffs strip surprise model/source fields and reject injected artifac
   assert.throws(
     () => accept('developer', { ...make('developer'), bounded: false }),
     'Developer bounded evidence must not be downgraded'
+  );
+  const missingBound = make('developer');
+  delete missingBound.bounded;
+  assert.throws(
+    () => accept('developer', missingBound),
+    'Developer must explicitly attest bounded scope; absence is not approval'
   );
 });
 

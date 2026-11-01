@@ -277,3 +277,69 @@ test('independent agents refuse symlink, hardlink, oversized and malformed downl
     rmSync(workspace, { recursive: true, force: true });
   }
 });
+
+test('each independent role refuses redirected or pre-existing verdict output paths', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'aieo-verdict-output-'));
+  const sourceFile = join(workspace, 'components', 'FeedbackWidget.tsx');
+  const folder = join(workspace, 'aieo-output');
+  const artifact = (role) => join(folder, role + '.json');
+  const outside = join(workspace, 'external-sentinel.txt');
+  const run = (role) => spawnSync(process.execPath, [runner, role], {
+    cwd: workspace, encoding: 'utf8', timeout: 15000,
+    env: { ...process.env, AIEO_TASK: 'feedback-control-route-boundary' }
+  });
+  const assertRefused = (role, reason) => {
+    const result = run(role);
+    assert.notEqual(result.status, 0, reason + ': role unexpectedly wrote to an unsafe destination');
+    assert.equal(readFileSync(outside, 'utf8'), 'SYNTHETIC_OUTSIDE_SENTINEL',
+      reason + ': external content was overwritten');
+  };
+  try {
+    mkdirSync(dirname(sourceFile), { recursive: true });
+    writeFileSync(sourceFile, syntheticSource);
+    writeFileSync(outside, 'SYNTHETIC_OUTSIDE_SENTINEL');
+
+    // Developer must not follow an output-directory link, even if no prior
+    // evidence is read and the directory already exists on disk.
+    symlinkSync(workspace, folder);
+    assertRefused('developer', 'symlinked verdict directory');
+    assert.equal(existsSync(join(workspace, 'developer.json')), false);
+    rmSync(folder);
+
+    mkdirSync(folder);
+    symlinkSync(outside, artifact('developer'));
+    assertRefused('developer', 'symlinked developer verdict');
+    rmSync(artifact('developer'));
+
+    linkSync(outside, artifact('developer'));
+    assertRefused('developer', 'hardlinked developer verdict');
+    rmSync(artifact('developer'));
+
+    assert.equal(run('developer').status, 0, 'normal developer must pass');
+    const dev = JSON.parse(readFileSync(artifact('developer'), 'utf8'));
+    delete dev.bounded;
+    writeFileSync(artifact('developer'), JSON.stringify(dev) + '\n');
+    const missing = run('qa');
+    assert.notEqual(missing.status, 0, 'QA must not accept developer evidence lacking bounded=true');
+    assert.equal(existsSync(artifact('qa')), false);
+    assert.equal(run('developer').status !== 0, true,
+      'Developer must never overwrite a previously emitted verdict');
+    // Reset the missing field only in the fixture before testing output writes.
+    dev.bounded = true;
+    writeFileSync(artifact('developer'), JSON.stringify(dev) + '\n');
+
+    for (const role of ['qa', 'security', 'reviewer']) {
+      symlinkSync(outside, artifact(role));
+      assertRefused(role, 'symlinked ' + role + ' verdict');
+      rmSync(artifact(role));
+      const ok = run(role);
+      assert.equal(ok.status, 0, role + ': ' + ok.stderr);
+      assert.equal(existsSync(artifact(role)), true);
+    }
+    assert.equal(JSON.parse(readFileSync(artifact('reviewer'), 'utf8')).requiresHumanMerge, true);
+    assert.equal(readFileSync(sourceFile, 'utf8'), syntheticSource);
+    assert.equal(readFileSync(outside, 'utf8'), 'SYNTHETIC_OUTSIDE_SENTINEL');
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
