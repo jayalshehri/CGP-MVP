@@ -23,11 +23,13 @@ jobs:
         with:
           node-version: '24'
       - name: Verify reviewer safety and deterministic findings
-        run: node --test scripts/aieo-ui-code-review.test.mjs
+        run: node --test scripts/aieo-ui-code-review.test.mjs scripts/aieo-review-summary.test.mjs
       - name: Designer reviews app and components
         run: node scripts/aieo-ui-code-review.mjs designer
       - name: Developer reviews app and components
         run: node scripts/aieo-ui-code-review.mjs developer
+      - name: Validate independent reports and prepare prioritized triage
+        run: node scripts/aieo-review-summary.mjs
       - name: Prove repository source files unchanged
         run: |
           git diff --exit-code -- app components aieo scripts
@@ -39,4 +41,5 @@ jobs:
           path: |
             aieo-output/designer-review.json
             aieo-output/developer-review.json
+            aieo-output/review-summary.json
           retention-days: 7
