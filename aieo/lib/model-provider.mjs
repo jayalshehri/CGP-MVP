@@ -162,7 +162,11 @@ async function readLimitedProviderBody(response) {
     return Buffer.byteLength(text, 'utf8') <= MAX_PROVIDER_BYTES ? text : null;
   }
   const reader = response.body.getReader();
-  const decoder = new TextDecoder();
+  // A provider response is untrusted bytes. Replacement-character decoding
+  // silently converts invalid UTF-8 into different but still valid JSON text.
+  // Reject malformed sequences (also across streamed chunk boundaries), and
+  // preserve a leading BOM so JSON.parse rejects that non-JSON prefix.
+  const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
   const fragments = [];
   let bytes = 0;
   try {
