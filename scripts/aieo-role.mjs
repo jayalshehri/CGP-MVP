@@ -71,7 +71,7 @@ function readPrior(prior) {
     // Duplicate JSON keys, forged shadow fields, and appended content are
     // not valid evidence even when JSON.parse returns expected last values.
     const canonical = [JSON.stringify(artifact), JSON.stringify(artifact, null, 2)];
-    if (!canonical.some((value) => decoded === value || decoded === value + '\\n')) {
+    if (!canonical.some((value) => decoded === value || decoded === value + '\n')) {
       throw new Error('Noncanonical AIEO handoff');
     }
   } catch {
