@@ -501,4 +501,4 @@ test('independent Security rejects encoded/composed JS execution with authentic 
   }
   assert.equal(check('  const sample = 101;').status, 'passed',
     'benign edits remain allowed with genuine source-bound evidence');
-}
+});
