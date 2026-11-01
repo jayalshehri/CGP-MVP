@@ -20,6 +20,8 @@ jobs:
           node-version: '24'
       - run: npm ci
       - run: npm run lint
+      - name: Verify internal release QA rejects unsafe configurations
+        run: node --test scripts/qa-release-gate.test.mjs
       - run: npx next typegen
       - run: npx tsc --noEmit
       - name: Build with synthetic values
