@@ -1,0 +1,105 @@
+name: AIEO Synthetic OpenRouter Canary (manual only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      approve_synthetic_only:
+        description: "Send ONLY the built-in invented function to OpenRouter (no CGP source)"
+        type: boolean
+        required: true
+        default: false
+      model_id:
+        description: "OpenRouter model ID (for example openai/gpt-4.1-mini)"
+        type: string
+        required: true
+        default: "openai/gpt-4.1-mini"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aieo-synthetic-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: Synthetic-only model request (no source checkout, no writes)
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_synthetic_only == true }}
+    runs-on: ubuntu-latest
+    environment: aieo-ai
+    timeout-minutes: 5
+    steps:
+      - name: Call OpenRouter on an invented fixture only
+        shell: bash
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL_ID: ${{ inputs.model_id }}
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          NODE_EXTRA_CA_CERTS: ''
+          NODE_TLS_REJECT_UNAUTHORIZED: '1'
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          const source = 'export function normalizeLabel(value) { return value; }\n';
+          const expected = 'export function normalizeLabel(value) { return value.trim(); }\n';
+          const path = 'synthetic/normalize-label.js';
+          const hash = x => createHash('sha256').update(x).digest('hex');
+          const key = process.env.OPENROUTER_API_KEY;
+          const model = process.env.OPENROUTER_MODEL_ID;
+          if (!key || !/^[a-z0-9_.-]+\/[a-z0-9_.:-]+$/i.test(model ?? '')) {
+            console.error('BLOCKED: provider configuration unavailable');
+            process.exit(1);
+          }
+          const payload = {
+            model, temperature: 0, max_tokens: 180, stream: false,
+            messages: [
+              { role: 'system', content: 'Respond with ONLY valid JSON containing exactly path, find, replace. No markdown and no other fields.' },
+              { role: 'user', content: 'Synthetic example only. Change this invented source so normalizeLabel trims spaces. Path: ' + path + '\nSource:\n' + source + '\nUse an exact replacement.' }
+            ]
+          };
+          try {
+            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST', redirect: 'error', referrerPolicy: 'no-referrer',
+              signal: AbortSignal.timeout(20000),
+              headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!res.ok || res.redirected || !res.body) throw Error('provider-http-failed');
+            const length = res.headers.get('content-length');
+            if (length && /^\d+$/.test(length) && Number(length) > 12000) throw Error('response-too-large');
+            const reader = res.body.getReader();
+            let bytes = 0;
+            const fragments = [];
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                bytes += value.byteLength;
+                if (bytes > 12000) throw Error('response-too-large');
+                fragments.push(value);
+              }
+            } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+            const body = new Uint8Array(bytes);
+            let offset = 0;
+            for (const part of fragments) { body.set(part, offset); offset += part.byteLength; }
+            const json = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
+            const raw = json?.choices?.[0]?.message?.content;
+            if (typeof raw !== 'string' || raw.length > 2000) throw Error('invalid-model-response');
+            const candidate = JSON.parse(raw);
+            if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate) ||
+                Object.keys(candidate).sort().join(',') !== 'find,path,replace' ||
+                candidate.path !== path || candidate.find !== 'return value;' ||
+                candidate.replace !== 'return value.trim();' ||
+                source.replace(candidate.find, candidate.replace) !== expected) {
+              throw Error('unapproved-patch');
+            }
+            console.log(JSON.stringify({ status: 'passed', fixture: 'synthetic-only', sourceSha256: hash(source), candidateSha256: hash(expected), productionTouched: false }));
+          } catch (e) {
+            console.error('FAILED: synthetic-only model canary (' + (
+              ['provider-http-failed','response-too-large','invalid-model-response','unapproved-patch'].includes(e?.message) ? e.message : 'timeout-or-invalid-response'
+            ) + ')');
+            process.exitCode = 1;
+          }
+          NODE
