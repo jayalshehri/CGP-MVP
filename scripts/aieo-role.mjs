@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync, mkdirSync, lstatSync, fstatSync, openSync, closeSync, constants, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { APPROVED_PATH, APPROVED_TASK, orchestrate, publicReport } from '../aieo/lib/engine.mjs';
+import { readApprovedSource } from '../aieo/lib/safe-source.mjs';
 import { buildHandoffArtifact, verifyHandoffArtifact } from '../aieo/lib/handoff.mjs';
 
 const role = process.argv[2];
@@ -9,7 +10,7 @@ if (!['developer', 'qa', 'security', 'reviewer'].includes(role)) {
   throw new Error('Expected one of: developer, qa, security, reviewer');
 }
 
-const source = readFileSync(APPROVED_PATH, 'utf8');
+const source = readApprovedSource();
 const task = process.env.AIEO_TASK || APPROVED_TASK;
 const local = orchestrate({ task, source });
 const safe = publicReport(local);
