@@ -385,12 +385,19 @@ export async function requestModelPatch({ source, path = MODEL_ALLOWED_PATH, tas
   // edit proposal, even when its partial content happens to be valid JSON.
   // OpenRouter's non-streamed chat-completions contract includes the stop
   // reason and assistant role; do not silently accept absent metadata.
-  if (!data || !Array.isArray(data.choices) || data.choices.length !== 1 ||
-      data.choices[0]?.finish_reason !== 'stop' ||
-      data.choices[0]?.message?.role !== 'assistant' ||
-      typeof data.choices[0]?.message?.content !== 'string') {
+  // A completed text message must be the *only* active response channel.
+  // Do not accept a plausible JSON patch alongside a provider error,
+  // streaming delta, tool invocation, legacy function call or refusal.
+  // These fields may be absent or null in ordinary non-streamed completions.
+  const choice = data?.choices?.[0];
+  if (!data || data.error != null || !Array.isArray(data.choices) || data.choices.length !== 1 ||
+      choice?.finish_reason !== 'stop' || choice?.delta != null ||
+      choice?.message?.role !== 'assistant' ||
+      typeof choice?.message?.content !== 'string' ||
+      choice.message.tool_calls != null || choice.message.function_call != null ||
+      choice.message.refusal != null) {
     return { status: 'rejected', reason: 'Incomplete or untrusted provider completion' };
   }
-  const answer = data.choices[0].message.content;
+  const answer = choice.message.content;
   return validateModelPatch({ response: answer, source, path });
 }
