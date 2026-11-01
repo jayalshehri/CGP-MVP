@@ -39,3 +39,10 @@ test('Symlinks are not followed into confidential files',()=>{
    const r=reviewRepository(dir,'developer');assert.equal(r.filesReviewed,1);assert.equal(r.findingCount,0);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
+
+test('Developer reports client-side Supabase query and session review leads',()=>{
+ const r=analyzeSource({filename:'app/login/page.tsx',role:'developer',
+   source:'await supabase.auth.getSession();\nawait supabase.from("controls").select("*");'});
+ assert.deepEqual(r.map(x=>x.rule),['DEV-CLIENT-QUERY','DEV-SESSION-CHECK']);
+ assert.ok(r.every(x=>x.severity==='review'));
+});
