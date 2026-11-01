@@ -183,7 +183,13 @@ test('provider requires a single completed assistant response before accepting a
     { choices: [{ ...complete, message: { content: proposal } }] },
     { choices: [complete, complete] },
     { choices: complete },
-    { choices: [] }
+    { choices: [] },
+    // A valid-looking patch must not conceal a second provider action or error.
+    { error: { message: 'synthetic provider error' }, choices: [complete] },
+    { choices: [{ ...complete, delta: { content: 'conflicting stream content' } }] },
+    { choices: [{ ...complete, message: { ...complete.message, refusal: 'refused' } }] },
+    { choices: [{ ...complete, message: { ...complete.message, tool_calls: [{ id: 'synthetic', type: 'function' }] } }] },
+    { choices: [{ ...complete, message: { ...complete.message, function_call: { name: 'untrusted', arguments: '{}' } } }] }
   ];
   let calls = 0;
   for (const envelope of invalidEnvelopes) {
@@ -205,6 +211,21 @@ test('provider requires a single completed assistant response before accepting a
     })
   });
   assert.equal(valid.status, 'proposed', 'normal completed assistant response remains eligible');
+  const nullMetadata = await requestModelPatch({
+    source, task, env,
+    transport: async () => ({
+      ok: true,
+      text: async () => JSON.stringify({
+        error: null,
+        choices: [{
+          ...complete, delta: null,
+          message: { ...complete.message, tool_calls: null, function_call: null, refusal: null }
+        }]
+      })
+    })
+  });
+  assert.equal(nullMetadata.status, 'proposed',
+    'ordinary null metadata must not block a complete text-only response');
 });
 
 test('provider rejects duplicate envelope keys, including nested escaped aliases', async () => {
