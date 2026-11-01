@@ -191,7 +191,14 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   }
   let parsed;
   try { parsed = JSON.parse(response); } catch { return { status: 'rejected', reason: 'Expected strict JSON' }; }
-  if (!parsed || parsed.path !== path || typeof parsed.find !== 'string' ||
+  // The model is an untrusted proposer, not a source of additional commands
+  // or metadata. Refuse every unknown or missing top-level field rather than
+  // silently discarding it (including future executable or secret-bearing fields).
+  // This also rejects arrays and scalar JSON responses, not just invalid values.
+  const exactFields = ['explanation', 'find', 'path', 'replace'];
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+      JSON.stringify(Object.keys(parsed).sort()) !== JSON.stringify(exactFields) ||
+      parsed.path !== path || typeof parsed.find !== 'string' ||
       typeof parsed.replace !== 'string' || typeof parsed.explanation !== 'string') {
     return { status: 'rejected', reason: 'Invalid proposal schema' };
   }
