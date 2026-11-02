@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { attestModelReviewWorkspace, attestModelReviewGitEnvironment } from '../aieo/lib/model-workspace-attestation.mjs';
+import { readApprovedSource } from '../aieo/lib/safe-source.mjs';
 
 // A repository/runner fsmonitor executable is independent of diff drivers and
 // can run during index reads while this job carries the model provider secret.
@@ -15,7 +16,9 @@ if (!['qa', 'reviewer'].includes(role)) throw new Error('Expected qa or reviewer
 attestModelReviewGitEnvironment();
 attestModelReviewWorkspace(MODEL_ALLOWED_PATH);
 const original = safeGit(['show', 'HEAD:' + MODEL_ALLOWED_PATH]);
-const actual = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
+// Re-attest exact source bytes after the model proposal; lossy UTF-8 decoding
+// can hide invalid byte substitution behind a legitimate U+FFFD character.
+const actual = readApprovedSource();
 // Independently calculate candidate scope and patch without executing any
 // configured external diff/textconv command from the checkout or runner.
 // Independent scope attestation must cover unstaged, staged AND non-ignored

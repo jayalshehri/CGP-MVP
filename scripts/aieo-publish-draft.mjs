@@ -6,6 +6,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { attestModelSourceFile, attestModelReviewWorkspace } from '../aieo/lib/model-workspace-attestation.mjs';
 import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
+import { readApprovedSource } from '../aieo/lib/safe-source.mjs';
 
 function command(binary, args) {
   return execFileSync(binary, args, { encoding: 'utf8', stdio: 'pipe' });
@@ -341,7 +342,10 @@ export function publishDraft({ env = process.env } = {}) {
   }
   command('git', ['diff', '--no-ext-diff', '--no-textconv', '--check']);
   const original = command('git', ['show', 'HEAD:' + path]);
-  const actual = readFileSync(path, 'utf8');
+  // Token-bearing publisher must verify real UTF-8 source bytes itself.
+  // A lossy decoder can consider byte-corrupted source equal to an approved
+  // candidate that already contained a U+FFFD replacement character.
+  const actual = readApprovedSource();
   const changedPaths = command('git', ['diff', '--no-ext-diff', '--no-textconv', '--name-only']).trim().split('\n').filter(Boolean);
   const diff = command('git', ['diff', '--no-ext-diff', '--no-textconv', '--unified=0', '--', path]);
   const reports = mode === 'model' ? {

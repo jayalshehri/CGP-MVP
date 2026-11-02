@@ -6,6 +6,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { introducesObfuscatedExecution } from '../aieo/lib/model-obfuscation-guard.mjs';
 import { preservesFeedbackExecutableSurface } from '../aieo/lib/model-executable-surface.mjs';
 import { attestModelReviewWorkspace, attestModelReviewGitEnvironment } from '../aieo/lib/model-workspace-attestation.mjs';
+import { readApprovedSource } from '../aieo/lib/safe-source.mjs';
 
 const hash = (content) => createHash('sha256').update(content).digest('hex');
 // Disable executable fsmonitor configuration on every independent Git read;
@@ -328,7 +329,9 @@ if (process.argv[1]?.endsWith('/aieo-model-security.mjs')) {
   attestModelReviewGitEnvironment();
   attestModelReviewWorkspace(MODEL_ALLOWED_PATH);
   const original = safeGit(['show', 'HEAD:' + MODEL_ALLOWED_PATH]);
-  const actual = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
+  // Independently refuse malformed or replaced source bytes, even when a
+  // lossy decoder would reproduce the consented candidate string.
+  const actual = readApprovedSource();
   // Independent scope attestation must cover unstaged, staged AND non-ignored
 // untracked files. Plain "git diff --name-only" silently omits the latter two.
 // Only aieo-output is an allowed untracked artifact directory, never source.

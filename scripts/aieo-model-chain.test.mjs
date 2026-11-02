@@ -25,7 +25,8 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
   const ghLog = join(root, 'gh-commands.txt');
   const target = join(workspace, MODEL_ALLOWED_PATH);
   const report = (name) => join(workspace, 'aieo-output', 'model-' + name + '.json');
-  const original = ['function fixture() {', route, '  const statusLabel = "Old status";', '}', ''].join('\n');
+  // A valid U+FFFD marker makes malformed source bytes indistinguishable under lossy UTF-8.
+  const original = ['function fixture() {', route, '  const statusLabel = "Old status";', '  // Synthetic Unicode marker: \uFFFD', '}', ''].join('\n');
   const find = '  const statusLabel = "Old status";';
   const replacement = '  const statusLabel = "Current status";';
   const candidate = original.replace(find, replacement);
@@ -275,6 +276,39 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     assert.equal(attestation.sourceHash, hash(original));
     assert.equal(attestation.proposedHash, hash(candidate));
     assert.equal(attestation.sourceShared, true);
+
+    // The provider successfully applied a candidate containing a legitimate
+    // U+FFFD byte sequence. Corrupt those bytes AFTER proposal evidence was
+    // issued. A lossy UTF-8 reader returns the same candidate text, but each
+    // independent gate and the token-bearing publisher must refuse the bytes.
+    const approvedCandidateBytes = readFileSync(target);
+    const utf8Replacement = Buffer.from([0xef, 0xbf, 0xbd]);
+    const markerAt = approvedCandidateBytes.indexOf(utf8Replacement);
+    assert.ok(markerAt >= 0, 'Valid candidate must contain the U+FFFD fixture');
+    writeFileSync(target, Buffer.concat([
+      approvedCandidateBytes.subarray(0, markerAt), Buffer.from([0xff]),
+      approvedCandidateBytes.subarray(markerAt + utf8Replacement.length)
+    ]));
+    assert.equal(readFileSync(target, 'utf8'), candidate,
+      'Lossy decoding disguises the post-proposal byte substitution');
+    assert.notDeepEqual(readFileSync(target), approvedCandidateBytes);
+    for (const [filename, role] of [
+      ['aieo-model-gates.mjs', 'qa'],
+      ['aieo-model-security.mjs', 'security'],
+      ['aieo-model-gates.mjs', 'reviewer']
+    ]) {
+      const deniedReview = run([join(scripts, filename), ...(role === 'security' ? [] : [role])]);
+      assert.notEqual(deniedReview.status, 0, role + ' must reject invalid source bytes');
+      assert.match(deniedReview.stderr, /Unsafe or oversized AIEO approved source/);
+      assert.equal(existsSync(report(role)), false,
+        role + ' must not issue success-shaped evidence for corrupted source');
+    }
+    const deniedPublisher = run([join(scripts, 'aieo-publish-draft.mjs')]);
+    assert.notEqual(deniedPublisher.status, 0,
+      'Token-bearing publisher must independently reject post-review source corruption');
+    assert.match(deniedPublisher.stderr, /Unsafe or oversized AIEO approved source/);
+    assert.equal(existsSync(ghLog), false, 'No GitHub PR command may follow corrupted bytes');
+    writeFileSync(target, approvedCandidateBytes);
 
     // Three independent child processes use their real CLI scripts and actual Git diff.
     for (const [filename, role] of [
