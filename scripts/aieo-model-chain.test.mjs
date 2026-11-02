@@ -145,6 +145,19 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     assert.equal(existsSync(transportCalls), false, 'Hardlink must not reach external provider');
     rmSync(externalSourceLink);
 
+    // Node's default readFileSync('utf8') replaces invalid byte sequences with
+    // U+FFFD. A fabricated approval hash of that decoded text must not permit
+    // disclosure of a file whose original bytes were never approved.
+    writeFileSync(target, Buffer.concat([Buffer.from(original, 'utf8'), Buffer.from([0xff])]));
+    const lossySourceHash = hash(readFileSync(target, 'utf8'));
+    const malformedSource = run(['--import', shimPath, proposal], {
+      AIEO_APPROVED_SOURCE_SHA256: lossySourceHash
+    });
+    assert.notEqual(malformedSource.status, 0, 'Malformed source UTF-8 must fail before provider transport');
+    assert.match(malformedSource.stderr, /Unsafe or oversized AIEO approved source/);
+    assert.equal(existsSync(transportCalls), false, 'Invalid UTF-8 must never reach the provider');
+    writeFileSync(target, original);
+
     const outputDir = join(workspace, 'aieo-output');
     const externalOutputDir = join(root, 'redirected-output');
     renameSync(outputDir, externalOutputDir);

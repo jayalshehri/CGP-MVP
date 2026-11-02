@@ -3,11 +3,14 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH, requestModelPatch } from '../aieo/lib/model-provider.mjs';
 import { attestModelProposalWorkspace } from '../aieo/lib/model-workspace-attestation.mjs';
+import { readApprovedSource } from '../aieo/lib/safe-source.mjs';
 
 // Fail closed before any approved source leaves this checkout. In particular,
 // never follow a redirected source or write a redirected proposal artifact.
 attestModelProposalWorkspace(MODEL_ALLOWED_PATH);
-const source = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
+// Read approved bytes from an inode-checked descriptor; do not let UTF-8
+// replacement characters silently alter the source before consent matching.
+const source = readApprovedSource();
 const task = process.env.AIEO_MODEL_TASK || '';
 const result = await requestModelPatch({ source, task, env: process.env });
 
