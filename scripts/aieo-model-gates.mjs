@@ -1,10 +1,11 @@
 // Separate CLI processes perform candidate QA and reviewer recomputation.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { attestModelReviewWorkspace, attestModelReviewGitEnvironment } from '../aieo/lib/model-workspace-attestation.mjs';
 import { readApprovedSource } from '../aieo/lib/safe-source.mjs';
+import { readModelReport } from '../aieo/lib/model-report-read.mjs';
 
 // A repository/runner fsmonitor executable is independent of diff drivers and
 // can run during index reads while this job carries the model provider secret.
@@ -31,14 +32,14 @@ const untracked = gitPaths(['ls-files', '--others', '--exclude-standard', '-z'])
   .filter((path) => !path.startsWith('aieo-output/'));
 const changedPaths = [...new Set([...tracked, ...staged, ...untracked])].sort();
 const diff = safeGit(['diff', '--no-ext-diff', '--no-textconv', '--unified=0', '--', MODEL_ALLOWED_PATH]);
-const proposal = JSON.parse(readFileSync('aieo-output/model-proposal.json', 'utf8'));
+const proposal = readModelReport('proposal');
 
 const result = role === 'qa'
   ? inspectModelQa({ original, actual, changedPaths, report: proposal })
   : inspectModelReviewer({
       original, actual, changedPaths, diff, proposal,
-      qa: JSON.parse(readFileSync('aieo-output/model-qa.json', 'utf8')),
-      security: JSON.parse(readFileSync('aieo-output/model-security.json', 'utf8'))
+      qa: readModelReport('qa'),
+      security: readModelReport('security')
     });
 mkdirSync('aieo-output', { recursive: true });
 writeFileSync('aieo-output/model-' + role + '.json', JSON.stringify(result, null, 2) + '\n');
