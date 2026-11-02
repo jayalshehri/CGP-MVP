@@ -390,10 +390,16 @@ export async function requestModelPatch({ source, path = MODEL_ALLOWED_PATH, tas
   // streaming delta, tool invocation, legacy function call or refusal.
   // These fields may be absent or null in ordinary non-streamed completions.
   const choice = data?.choices?.[0];
+  // A success-shaped completion must not hide an error/refusal on the choice
+  // itself or a second non-text output channel on the assistant message.
+  // The provider can add null metadata; only active conflicting values fail.
   if (!data || data.error != null || !Array.isArray(data.choices) || data.choices.length !== 1 ||
+      choice?.error != null || choice?.refusal != null ||
       choice?.finish_reason !== 'stop' || choice?.delta != null ||
       choice?.message?.role !== 'assistant' ||
       typeof choice?.message?.content !== 'string' ||
+      choice.message.error != null || choice.message.audio != null ||
+      choice.message.images != null || choice.message.tool_call != null ||
       choice.message.tool_calls != null || choice.message.function_call != null ||
       choice.message.refusal != null) {
     return { status: 'rejected', reason: 'Incomplete or untrusted provider completion' };

@@ -189,7 +189,15 @@ test('provider requires a single completed assistant response before accepting a
     { choices: [{ ...complete, delta: { content: 'conflicting stream content' } }] },
     { choices: [{ ...complete, message: { ...complete.message, refusal: 'refused' } }] },
     { choices: [{ ...complete, message: { ...complete.message, tool_calls: [{ id: 'synthetic', type: 'function' }] } }] },
-    { choices: [{ ...complete, message: { ...complete.message, function_call: { name: 'untrusted', arguments: '{}' } } }] }
+    { choices: [{ ...complete, message: { ...complete.message, function_call: { name: 'untrusted', arguments: '{}' } } }] },
+    // A single "stop" text choice can still contain a nested failure or
+    // conflicting non-text channel. Neither is a validated one-file edit.
+    { choices: [{ ...complete, error: { message: 'synthetic choice failure' } }] },
+    { choices: [{ ...complete, refusal: 'synthetic refusal' }] },
+    { choices: [{ ...complete, message: { ...complete.message, error: { message: 'synthetic message failure' } } }] },
+    { choices: [{ ...complete, message: { ...complete.message, audio: { id: 'synthetic-audio' } } }] },
+    { choices: [{ ...complete, message: { ...complete.message, images: [{ type: 'synthetic-image' }] } }] },
+    { choices: [{ ...complete, message: { ...complete.message, tool_call: { name: 'synthetic-tool' } } }] }
   ];
   let calls = 0;
   for (const envelope of invalidEnvelopes) {
