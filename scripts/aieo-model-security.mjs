@@ -1,5 +1,5 @@
 // Independent review of a model-generated working tree against the prior HEAD.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
@@ -7,6 +7,7 @@ import { introducesObfuscatedExecution } from '../aieo/lib/model-obfuscation-gua
 import { preservesFeedbackExecutableSurface } from '../aieo/lib/model-executable-surface.mjs';
 import { attestModelReviewWorkspace, attestModelReviewGitEnvironment } from '../aieo/lib/model-workspace-attestation.mjs';
 import { readApprovedSource } from '../aieo/lib/safe-source.mjs';
+import { readModelReport } from '../aieo/lib/model-report-read.mjs';
 
 const hash = (content) => createHash('sha256').update(content).digest('hex');
 // Disable executable fsmonitor configuration on every independent Git read;
@@ -342,7 +343,7 @@ const untracked = gitPaths(['ls-files', '--others', '--exclude-standard', '-z'])
   .filter((path) => !path.startsWith('aieo-output/'));
 const changedPaths = [...new Set([...tracked, ...staged, ...untracked])].sort();
   const diff = safeGit(['diff', '--no-ext-diff', '--no-textconv', '--unified=0', '--', MODEL_ALLOWED_PATH]);
-  const report = JSON.parse(readFileSync('aieo-output/model-proposal.json', 'utf8'));
+  const report = readModelReport('proposal');
   const result = inspectModelDiff({ original, actual, changedPaths, diff, report });
   mkdirSync('aieo-output', { recursive: true });
   writeFileSync('aieo-output/model-security.json', JSON.stringify(result, null, 2) + '\n');
