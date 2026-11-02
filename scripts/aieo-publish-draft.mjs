@@ -1,12 +1,12 @@
 // Trusted, fail-closed publisher. It cannot merge, approve, or deploy.
 // Call only after a manual main-branch dispatch and successful application gates.
-import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { attestModelSourceFile, attestModelReviewWorkspace } from '../aieo/lib/model-workspace-attestation.mjs';
 import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
 import { readApprovedSource } from '../aieo/lib/safe-source.mjs';
+import { readModelReport } from '../aieo/lib/model-report-read.mjs';
 
 function command(binary, args) {
   return execFileSync(binary, args, { encoding: 'utf8', stdio: 'pipe' });
@@ -28,9 +28,6 @@ export function authenticatedGitArgs(args) {
 }
 function gitAuthenticated(args) {
   return command('git', authenticatedGitArgs(args));
-}
-function readJson(path) {
-  return JSON.parse(readFileSync(path, 'utf8'));
 }
 function identical(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -349,10 +346,10 @@ export function publishDraft({ env = process.env } = {}) {
   const changedPaths = command('git', ['diff', '--no-ext-diff', '--no-textconv', '--name-only']).trim().split('\n').filter(Boolean);
   const diff = command('git', ['diff', '--no-ext-diff', '--no-textconv', '--unified=0', '--', path]);
   const reports = mode === 'model' ? {
-    proposal: readJson('aieo-output/model-proposal.json'),
-    qa: readJson('aieo-output/model-qa.json'),
-    security: readJson('aieo-output/model-security.json'),
-    reviewer: readJson('aieo-output/model-reviewer.json')
+    proposal: readModelReport('proposal'),
+    qa: readModelReport('qa'),
+    security: readModelReport('security'),
+    reviewer: readModelReport('reviewer')
   } : {};
   verifyCandidate({ mode, original, actual, changedPaths, diff, reports });
   const branch = 'aieo/' + (mode === 'model' ? 'model-proposal-' : 'repair-feedback-') +
