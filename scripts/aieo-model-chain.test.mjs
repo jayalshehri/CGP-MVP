@@ -277,6 +277,27 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     assert.equal(attestation.proposedHash, hash(candidate));
     assert.equal(attestation.sourceShared, true);
 
+    // A report is untrusted evidence, even if the prior step generated it.
+    // Each independent process must reject oversized reports before parsing or
+    // issuing passing verdicts. The publisher must refuse them before gh/git push.
+    const savedProposalReport = readFileSync(report('proposal'));
+    writeFileSync(report('proposal'), Buffer.alloc(1024 * 1024, 0x20));
+    for (const [filename, role] of [
+      ['aieo-model-gates.mjs', 'qa'],
+      ['aieo-model-security.mjs', 'security']
+    ]) {
+      const denied = run([join(scripts, filename), ...(role === 'qa' ? ['qa'] : [])]);
+      assert.notEqual(denied.status, 0, role + ' must reject a giant proposal report');
+      assert.match(denied.stderr, /Unsafe AIEO model report/);
+      assert.equal(existsSync(report(role)), false,
+        role + ' must not emit a passing report after oversized evidence');
+    }
+    const rejectedLargeProposal = run([join(scripts, 'aieo-publish-draft.mjs')]);
+    assert.notEqual(rejectedLargeProposal.status, 0);
+    assert.match(rejectedLargeProposal.stderr, /Unsafe AIEO model report/);
+    assert.equal(existsSync(ghLog), false, 'Oversized proposal cannot reach GitHub');
+    writeFileSync(report('proposal'), savedProposalReport);
+
     // The provider successfully applied a candidate containing a legitimate
     // U+FFFD byte sequence. Corrupt those bytes AFTER proposal evidence was
     // issued. A lossy UTF-8 reader returns the same candidate text, but each
@@ -321,6 +342,29 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     }
     assert.equal(JSON.parse(readFileSync(report('reviewer'), 'utf8')).status,
       'draft-pr-eligible');
+
+    // Both the Reviewer and the token-bearing publisher re-read prior reports.
+    // A replaced oversized evidence file must never be allowed to advance.
+    const savedQaReport = readFileSync(report('qa'));
+    writeFileSync(report('qa'), Buffer.alloc(1024 * 1024, 0x20));
+    const deniedReviewer = run([join(scripts, 'aieo-model-gates.mjs'), 'reviewer']);
+    assert.notEqual(deniedReviewer.status, 0, 'Reviewer must reject oversized QA report');
+    assert.match(deniedReviewer.stderr, /Unsafe AIEO model report/);
+    const deniedQaPublisher = run([join(scripts, 'aieo-publish-draft.mjs')]);
+    assert.notEqual(deniedQaPublisher.status, 0);
+    assert.match(deniedQaPublisher.stderr, /Unsafe AIEO model report/);
+    assert.equal(existsSync(ghLog), false, 'Oversized QA cannot reach GitHub');
+    writeFileSync(report('qa'), savedQaReport);
+    for (const role of ['security', 'reviewer']) {
+      const savedReport = readFileSync(report(role));
+      writeFileSync(report(role), Buffer.alloc(1024 * 1024, 0x20));
+      const deniedPublisher = run([join(scripts, 'aieo-publish-draft.mjs')]);
+      assert.notEqual(deniedPublisher.status, 0,
+        'Publisher must reject oversized ' + role + ' report');
+      assert.match(deniedPublisher.stderr, /Unsafe AIEO model report/);
+      assert.equal(existsSync(ghLog), false, 'Oversized evidence cannot reach GitHub');
+      writeFileSync(report(role), savedReport);
+    }
 
     // The real publisher operates against a temporary Git remote and fake gh executable.
     const published = run([join(scripts, 'aieo-publish-draft.mjs')]);
