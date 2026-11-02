@@ -64,6 +64,16 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
       '      !payload.messages[1].content.includes(' + JSON.stringify(original) + ')) {',
       '    throw new Error("Mock received unexpected source or endpoint");',
       '  }',
+      '  if (process.env.AIEO_FIXTURE_CORRUPT_POST_REQUEST === "1") {',
+      '    const { readFileSync, writeFileSync } = await import("node:fs");',
+      '    const before = readFileSync(' + JSON.stringify(target) + ');',
+      '    const marker = Buffer.from([0xef, 0xbf, 0xbd]);',
+      '    const index = before.indexOf(marker);',
+      '    if (index < 0) throw new Error("Synthetic UTF-8 marker is missing");',
+      '    writeFileSync(' + JSON.stringify(target) + ', Buffer.concat([',
+      '      before.subarray(0, index), Buffer.from([0xff]), before.subarray(index + marker.length)',
+      '    ]));',
+      '  }',
       '  return { ok: true, text: async () => JSON.stringify({',
       '    choices: [{ finish_reason: "stop", message: { role: "assistant", content: ' + JSON.stringify(response) + ' } }]',
       '  }) };',
@@ -202,6 +212,32 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     assert.equal(JSON.parse(readFileSync(report('proposal'), 'utf8')).sourceShared, false,
       'Blocked consent must never be reported as a source-sharing attempt');
     assert.equal(readFileSync(target, 'utf8'), original);
+
+    // Regression: a source initially containing a legitimate U+FFFD can be
+    // changed after the provider request into INVALID UTF-8 bytes that decode
+    // to the same JS string. The old readFileSync('utf8') equality check
+    // silently accepted this, then applied a candidate to unapproved bytes.
+    const approvedWithReplacementCharacter = original + '// benign marker: \uFFFD\\n';
+    writeFileSync(target, approvedWithReplacementCharacter);
+    const previouslyBlockedReport = readFileSync(report('proposal'), 'utf8');
+    rmSync(transportCalls, { force: true });
+    const corruptedAfterRequest = run(['--import', shimPath, proposal], {
+      AIEO_APPROVED_SOURCE_SHA256: hash(approvedWithReplacementCharacter),
+      AIEO_FIXTURE_CORRUPT_POST_REQUEST: '1'
+    });
+    assert.notEqual(corruptedAfterRequest.status, 0,
+      'Post-request malformed bytes must block the model apply');
+    assert.match(corruptedAfterRequest.stderr, /Unsafe or oversized AIEO approved source/);
+    assert.equal(readFileSync(transportCalls, 'utf8').trim(), 'called',
+      'The corruption fixture must execute after the mocked provider request');
+    assert.equal(readFileSync(target, 'utf8'), approvedWithReplacementCharacter,
+      'Lossy decoding must look identical despite changed source bytes');
+    assert.notDeepEqual(readFileSync(target), Buffer.from(approvedWithReplacementCharacter),
+      'Fixture must actually contain different, invalid source bytes');
+    assert.equal(readFileSync(report('proposal'), 'utf8'), previouslyBlockedReport,
+      'Failed post-request attestation must not overwrite evidence with a proposed result');
+    writeFileSync(target, original);
+    rmSync(transportCalls);
 
     const proposed = run(['--import', shimPath, proposal]);
     assert.equal(proposed.status, 0, 'Proposal CLI: ' + proposed.stderr);
