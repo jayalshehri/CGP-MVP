@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync, renameSync, symlinkSync, linkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync, renameSync, symlinkSync, linkSync, statSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -73,6 +73,9 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
       '    writeFileSync(' + JSON.stringify(target) + ', Buffer.concat([',
       '      before.subarray(0, index), Buffer.from([0xff]), before.subarray(index + marker.length)',
       '    ]));',
+      '  }',
+      '  if (process.env.AIEO_FIXTURE_REVOKE_REF_POST_REQUEST === "1") {',
+      '    process.env.GITHUB_REF = "refs/heads/untrusted";',
       '  }',
       '  return { ok: true, text: async () => JSON.stringify({',
       '    choices: [{ finish_reason: "stop", message: { role: "assistant", content: ' + JSON.stringify(response) + ' } }]',
@@ -239,10 +242,34 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     writeFileSync(target, original);
     rmSync(transportCalls);
 
+    // A proposal may be valid even if the apply trust gate fails AFTER the
+    // asynchronous model call. Never overwrite a prior blocked report with a
+    // false 'proposed' result when the candidate was not actually applied.
+    const blockedEvidenceBefore = readFileSync(report('proposal'), 'utf8');
+    const revokedDuringRequest = run(['--import', shimPath, proposal], {
+      AIEO_FIXTURE_REVOKE_REF_POST_REQUEST: '1'
+    });
+    assert.notEqual(revokedDuringRequest.status, 0, 'Revoked trust gate must fail local apply');
+    assert.match(revokedDuringRequest.stderr, /Untrusted invocation cannot apply model code/);
+    assert.equal(readFileSync(transportCalls, 'utf8').trim(), 'called',
+      'The gate was revoked after the mocked model transport');
+    assert.equal(readFileSync(target, 'utf8'), original, 'Failed apply must keep original source');
+    assert.equal(readFileSync(report('proposal'), 'utf8'), blockedEvidenceBefore,
+      'Failed apply must not issue success-shaped proposal evidence');
+    rmSync(transportCalls);
+    const sourceBeforeAtomicApply = statSync(target);
+
     const proposed = run(['--import', shimPath, proposal]);
     assert.equal(proposed.status, 0, 'Proposal CLI: ' + proposed.stderr);
     assert.equal(readFileSync(transportCalls, 'utf8').trim(), 'called');
     assert.equal(readFileSync(target, 'utf8'), candidate);
+    const sourceAfterAtomicApply = statSync(target);
+    assert.notEqual(sourceAfterAtomicApply.ino, sourceBeforeAtomicApply.ino,
+      'Atomic apply must replace the source inode rather than truncate it');
+    assert.equal(sourceAfterAtomicApply.mode & 0o777, sourceBeforeAtomicApply.mode & 0o777,
+      'Atomic apply must preserve the approved source file mode');
+    assert.deepEqual(readdirSync(dirname(target)).filter((name) =>
+      name.startsWith('.aieo-model-stage-')), [], 'No staged source file should remain');
     const attestation = JSON.parse(readFileSync(report('proposal'), 'utf8'));
     assert.equal(attestation.status, 'proposed');
     assert.equal(attestation.sourceHash, hash(original));
