@@ -1,9 +1,10 @@
 // Each CI job independently rechecks the source and validates prior artifact evidence.
-import { readFileSync, writeFileSync, mkdirSync, lstatSync, fstatSync, openSync, closeSync, constants, realpathSync } from 'node:fs';
+import { writeFileSync, mkdirSync, lstatSync, fstatSync, openSync, closeSync, constants, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { APPROVED_PATH, APPROVED_TASK, orchestrate, publicReport } from '../aieo/lib/engine.mjs';
 import { readApprovedSource } from '../aieo/lib/safe-source.mjs';
 import { buildHandoffArtifact, verifyHandoffArtifact } from '../aieo/lib/handoff.mjs';
+import { MAX_HANDOFF_BYTES, readBoundedHandoff } from '../aieo/lib/bounded-handoff-read.mjs';
 
 const role = process.argv[2];
 if (!['developer', 'qa', 'security', 'reviewer'].includes(role)) {
@@ -17,8 +18,6 @@ const safe = publicReport(local);
 const sourceHash = local.developer.sourceHash;
 const candidateHash = local.developer.candidateHash;
 if (!sourceHash || !candidateHash) throw new Error('No valid source and candidate attestation');
-
-const MAX_HANDOFF_BYTES = 16 * 1024;
 
 function readPrior(prior) {
   // Downloaded CI handoffs are untrusted files, not trusted instructions.
@@ -49,7 +48,10 @@ function readPrior(prior) {
         opened.size > MAX_HANDOFF_BYTES) {
       throw new Error('Unsafe opened AIEO handoff');
     }
-    raw = readFileSync(fd);
+    // A previously small downloaded artifact may grow while it is being read.
+    // Never buffer unbounded bytes on this untrusted descriptor; detect even
+    // one newly appended byte before parsing or checking its canonical JSON.
+    raw = readBoundedHandoff(fd, opened.size);
     const after = fstatSync(fd);
     if (!after.isFile() || after.nlink !== 1 ||
         after.dev !== opened.dev || after.ino !== opened.ino ||

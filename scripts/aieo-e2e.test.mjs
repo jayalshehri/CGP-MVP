@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, symlinkSync, linkSync, renameSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, symlinkSync, linkSync, renameSync, openSync, closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { readBoundedHandoff, MAX_HANDOFF_BYTES } from '../aieo/lib/bounded-handoff-read.mjs';
 
 // Real child processes, separate artifact handoffs and a purposely vulnerable
 // temporary source. No repository file is modified, and no provider is contacted.
@@ -354,6 +355,43 @@ test('each independent role refuses redirected or pre-existing verdict output pa
     assert.equal(readFileSync(sourceFile, 'utf8'), syntheticSource);
     assert.equal(readFileSync(outside, 'utf8'), 'SYNTHETIC_OUTSIDE_SENTINEL');
   } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('downloaded handoff descriptor reads are bounded even if file grows after initial size check', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'aieo-fd-growth-'));
+  const file = join(workspace, 'artifact.json');
+  const initial = '{"ok":true}';
+  let fd;
+  try {
+    writeFileSync(file, initial);
+    fd = openSync(file, 'r');
+    assert.equal(readBoundedHandoff(fd, Buffer.byteLength(initial)).toString('utf8'), initial);
+    closeSync(fd); fd = undefined;
+
+    // Simulate an artifact that passed its initial lstat/fstat size check,
+    // then expanded before the bounded read. The old readFileSync(fd)
+    // could consume the entire appended payload before rejecting it.
+    writeFileSync(file, initial + 'X'.repeat(1024 * 1024));
+    fd = openSync(file, 'r');
+    assert.throws(
+      () => readBoundedHandoff(fd, Buffer.byteLength(initial)),
+      /AIEO handoff changed during bounded read/
+    );
+    closeSync(fd); fd = undefined;
+
+    // Also reject truncated input and invalid/unbounded expected lengths.
+    writeFileSync(file, initial.slice(0, -1));
+    fd = openSync(file, 'r');
+    assert.throws(
+      () => readBoundedHandoff(fd, Buffer.byteLength(initial)),
+      /AIEO handoff changed during bounded read/
+    );
+    assert.throws(() => readBoundedHandoff(fd, MAX_HANDOFF_BYTES + 1), /Unsafe AIEO handoff size/);
+    assert.throws(() => readBoundedHandoff(fd, 0), /Unsafe AIEO handoff size/);
+  } finally {
+    if (fd !== undefined) closeSync(fd);
     rmSync(workspace, { recursive: true, force: true });
   }
 });
