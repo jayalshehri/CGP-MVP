@@ -1,5 +1,5 @@
 // Manual, provider-backed proposal. Never sends source without explicit opt-in.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH, requestModelPatch } from '../aieo/lib/model-provider.mjs';
 import { attestModelProposalWorkspace } from '../aieo/lib/model-workspace-attestation.mjs';
@@ -13,6 +13,18 @@ attestModelProposalWorkspace(MODEL_ALLOWED_PATH);
 const source = readApprovedSource();
 const task = process.env.AIEO_MODEL_TASK || '';
 const result = await requestModelPatch({ source, task, env: process.env });
+
+// If an approved model result will be applied, verify the original approved
+// source bytes AGAIN before emitting a success-shaped report. A provider request
+// is an asynchronous boundary: a post-request file can decode to the same UTF-8
+// string despite containing newly invalid bytes. The strict descriptor reader
+// must reject that ambiguity, rather than reporting a proposed fix as applied.
+if (result.status === 'proposed' && process.env.AIEO_MODEL_APPLY === '1') {
+  attestModelProposalWorkspace(MODEL_ALLOWED_PATH);
+  if (readApprovedSource() !== source) {
+    throw new Error('Approved model source changed before local apply');
+  }
+}
 
 // Publish metadata only; never provider response, source, replacement or access token.
 const redacted = {
@@ -44,7 +56,7 @@ if (process.env.AIEO_MODEL_APPLY === '1') {
   if (result.status !== 'proposed') throw new Error('No valid model patch to apply');
   // Do not overwrite source bytes that changed after consent/remote review.
   attestModelProposalWorkspace(MODEL_ALLOWED_PATH);
-  if (readFileSync(MODEL_ALLOWED_PATH, 'utf8') !== source) {
+  if (readApprovedSource() !== source) {
     throw new Error('Approved model source changed before local apply');
   }
   writeFileSync(MODEL_ALLOWED_PATH, result.patchedSource);
