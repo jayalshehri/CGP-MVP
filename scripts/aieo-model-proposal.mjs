@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH, requestModelPatch } from '../aieo/lib/model-provider.mjs';
 import { attestModelProposalWorkspace } from '../aieo/lib/model-workspace-attestation.mjs';
 import { readApprovedSource } from '../aieo/lib/safe-source.mjs';
+import { applyModelCandidate } from '../aieo/lib/model-safe-apply.mjs';
 
 // Fail closed before any approved source leaves this checkout. In particular,
 // never follow a redirected source or write a redirected proposal artifact.
@@ -26,6 +27,25 @@ if (result.status === 'proposed' && process.env.AIEO_MODEL_APPLY === '1') {
   }
 }
 
+// Apply successfully before publishing any eligible proposal evidence. A failed
+// trust gate, source attestation or local replacement must leave prior evidence
+// untouched instead of publishing a false-positive 'proposed' report.
+if (result.status === 'proposed' && process.env.AIEO_MODEL_APPLY === '1') {
+  if (process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
+      process.env.GITHUB_REF !== 'refs/heads/main' ||
+      process.env.AIEO_MODEL_ENABLED !== 'true' ||
+      process.env.AIEO_SOURCE_SHARING_APPROVED !== 'true') {
+    throw new Error('Untrusted invocation cannot apply model code');
+  }
+  // Do not overwrite source bytes that changed after consent/remote review.
+  attestModelProposalWorkspace(MODEL_ALLOWED_PATH);
+  if (readApprovedSource() !== source) {
+    throw new Error('Approved model source changed before local apply');
+  }
+  applyModelCandidate({ original: source, candidate: result.patchedSource });
+  console.log('Applied validated proposal to local workspace only; no commit or merge');
+}
+
 // Publish metadata only; never provider response, source, replacement or access token.
 const redacted = {
   schemaVersion: 1,
@@ -46,19 +66,6 @@ writeFileSync('aieo-output/model-proposal.json', JSON.stringify(redacted, null, 
 console.log(JSON.stringify({ status: redacted.status, path: redacted.path, reason: redacted.reason, sourceShared: redacted.sourceShared }));
 
 if (result.status !== 'proposed') process.exitCode = 1;
-if (process.env.AIEO_MODEL_APPLY === '1') {
-  if (process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
-      process.env.GITHUB_REF !== 'refs/heads/main' ||
-      process.env.AIEO_MODEL_ENABLED !== 'true' ||
-      process.env.AIEO_SOURCE_SHARING_APPROVED !== 'true') {
-    throw new Error('Untrusted invocation cannot apply model code');
-  }
-  if (result.status !== 'proposed') throw new Error('No valid model patch to apply');
-  // Do not overwrite source bytes that changed after consent/remote review.
-  attestModelProposalWorkspace(MODEL_ALLOWED_PATH);
-  if (readApprovedSource() !== source) {
-    throw new Error('Approved model source changed before local apply');
-  }
-  writeFileSync(MODEL_ALLOWED_PATH, result.patchedSource);
-  console.log('Applied validated proposal to local workspace only; no commit or merge');
+if (process.env.AIEO_MODEL_APPLY === '1' && result.status !== 'proposed') {
+  throw new Error('No valid model patch to apply');
 }
