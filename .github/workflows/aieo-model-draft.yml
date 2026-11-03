@@ -49,14 +49,12 @@ jobs:
   create-model-draft:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true
     needs: policy-tests
-    name: Manual source-approved model proposal into Draft PR
+    name: Source-approved Developer - isolated runner
     environment: aieo-ai
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     permissions:
-      contents: write
-      pull-requests: write
-      actions: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,12 +62,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      # The OpenRouter credential exists only in this proposal step.
-      # Independent reviewers execute in separate Actions steps without the key.
       - name: Request one bounded model suggestion with scoped provider credential
         env:
-          # Clear pre-startup executable hooks before a provider secret enters bash/Node.
-          # NODE_EXTRA_CA_CERTS and TLS bypass must not redirect approved source.
           BASH_ENV: ''
           NODE_OPTIONS: ''
           LD_PRELOAD: ''
@@ -87,8 +81,35 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/aieo-model-proposal.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cgp-model-developer
+          path: |
+            components/FeedbackWidget.tsx
+            aieo-output/model-proposal.json
+          if-no-files-found: error
+          retention-days: 1
+
+  model-qa:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true
+    needs: create-model-draft
+    name: QA - isolated runner without provider secret
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: cgp-model-developer
+          path: .
       - name: Independently run model QA without provider credential
-        # No inherited shell or Node preloads may forge an independent verdict.
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
@@ -96,8 +117,36 @@ jobs:
           LD_AUDIT: ''
           LD_LIBRARY_PATH: ''
         run: node scripts/aieo-model-gates.mjs qa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cgp-model-qa
+          path: |
+            components/FeedbackWidget.tsx
+            aieo-output/model-proposal.json
+            aieo-output/model-qa.json
+          if-no-files-found: error
+          retention-days: 1
+
+  model-security:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true
+    needs: model-qa
+    name: Security - isolated runner without provider secret
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: cgp-model-qa
+          path: .
       - name: Independently run model Security without provider credential
-        # No inherited shell or Node preloads may forge an independent verdict.
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
@@ -105,8 +154,37 @@ jobs:
           LD_AUDIT: ''
           LD_LIBRARY_PATH: ''
         run: node scripts/aieo-model-security.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cgp-model-security
+          path: |
+            components/FeedbackWidget.tsx
+            aieo-output/model-proposal.json
+            aieo-output/model-qa.json
+            aieo-output/model-security.json
+          if-no-files-found: error
+          retention-days: 1
+
+  model-reviewer:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true
+    needs: model-security
+    name: Reviewer - isolated runner without provider secret
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: cgp-model-security
+          path: .
       - name: Independently run model Reviewer without provider credential
-        # No inherited shell or Node preloads may forge an independent verdict.
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
@@ -119,6 +197,37 @@ jobs:
           set -euo pipefail
           git diff --check
           test "$(git diff --name-only)" = 'components/FeedbackWidget.tsx'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cgp-model-reviewer
+          path: |
+            components/FeedbackWidget.tsx
+            aieo-output/model-proposal.json
+            aieo-output/model-qa.json
+            aieo-output/model-security.json
+            aieo-output/model-reviewer.json
+          if-no-files-found: error
+          retention-days: 1
+
+  model-build:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true
+    needs: model-reviewer
+    name: Build - separate runner for verified candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: cgp-model-reviewer
+          path: .
       - name: Independently verify application build
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
@@ -130,9 +239,41 @@ jobs:
           npx next typegen
           npx tsc --noEmit
           npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cgp-model-build
+          path: |
+            components/FeedbackWidget.tsx
+            aieo-output/model-proposal.json
+            aieo-output/model-qa.json
+            aieo-output/model-security.json
+            aieo-output/model-reviewer.json
+          if-no-files-found: error
+          retention-days: 1
+
+  model-publisher:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true
+    needs: model-build
+    name: Draft-only publisher - separate write-scoped runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: cgp-model-build
+          path: .
       - name: Publish independently verified candidate as Draft PR only
         env:
-          # The token-bearing shell and Node process must not inherit startup hooks.
           BASH_ENV: ''
           NODE_OPTIONS: ''
           LD_PRELOAD: ''

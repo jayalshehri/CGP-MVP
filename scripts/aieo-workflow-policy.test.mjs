@@ -195,3 +195,45 @@ test('independent model QA/Security/Reviewer reject inherited Bash and Node prel
       name + ' must not inherit any provider or publisher credential');
   }
 });
+
+test('live provider-backed model chain uses separate credential-isolated runners', () => {
+  const jobs = [
+    'create-model-draft',
+    'model-qa',
+    'model-security',
+    'model-reviewer',
+    'model-build',
+    'model-publisher'
+  ];
+  const jobContent = (name) => {
+    const start = model.indexOf('\n  ' + name + ':\n');
+    assert.ok(start >= 0, 'missing isolated live model job: ' + name);
+    const tail = model.slice(start + ('\n  ' + name + ':\n').length);
+    const next = tail.search(/\n  [a-z][a-z0-9-]*:\n/);
+    return next < 0 ? tail : tail.slice(0, next);
+  };
+  const manual = "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true";
+  for (const name of jobs) {
+    const job = jobContent(name);
+    assert.ok(job.includes(manual), 'manual main + source consent is required in ' + name);
+    assert.ok(job.includes('runs-on: ubuntu-latest'), 'missing independent runner for ' + name);
+    assert.ok(job.includes('persist-credentials: false'), 'checkout credentials must never persist in ' + name);
+  }
+  const developerJob = jobContent('create-model-draft');
+  assert.ok(developerJob.includes('environment: aieo-ai'));
+  assert.ok(developerJob.includes('OPENROUTER_API_KEY:'));
+  assert.ok(developerJob.includes('contents: read'));
+  for (const name of ['model-qa', 'model-security', 'model-reviewer', 'model-build']) {
+    const job = jobContent(name);
+    assert.doesNotMatch(job, /OPENROUTER_API_KEY|GH_TOKEN|secrets\.|contents:\s*write|pull-requests:\s*write/);
+    assert.ok(job.includes('needs:'), 'review chain must have dependency gate: ' + name);
+    assert.ok(job.includes('actions/download-artifact@v4'), 'source-bound handoff is required: ' + name);
+  }
+  const publish = jobContent('model-publisher');
+  assert.ok(publish.includes('needs: model-build'));
+  assert.ok(publish.includes('contents: write'));
+  assert.ok(publish.includes('pull-requests: write'));
+  assert.ok(publish.includes('actions/download-artifact@v4'));
+  assert.ok(!publish.includes('OPENROUTER_API_KEY'));
+  assert.equal((model.match(/OPENROUTER_API_KEY:/g) || []).length, 1);
+});
