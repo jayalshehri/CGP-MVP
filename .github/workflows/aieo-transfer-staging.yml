@@ -1,0 +1,104 @@
+name: AIEO CGP isolated staging transfer gate
+on:
+  pull_request:
+    paths:
+      - 'aieo/**'
+      - 'scripts/aieo-*.mjs'
+      - '.github/workflows/aieo-transfer-staging.yml'
+permissions:
+  contents: read
+jobs:
+  preflight:
+    name: Read-only migration policy and model mock tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test scripts/aieo-transfer-gate.test.mjs scripts/aieo-model-provider.test.mjs scripts/aieo-model-ref.test.mjs scripts/aieo-model-gates.test.mjs
+      - run: node scripts/aieo-runner.mjs
+      - run: git diff --exit-code -- components/FeedbackWidget.tsx
+  developer:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/aieo-role.mjs developer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transfer-developer
+          path: aieo-output/developer.json
+          retention-days: 1
+          if-no-files-found: error
+  qa:
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: transfer-developer
+          path: aieo-output
+      - run: node scripts/aieo-role.mjs qa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transfer-qa
+          path: aieo-output/qa.json
+          retention-days: 1
+          if-no-files-found: error
+  security:
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: transfer-developer
+          path: aieo-output
+      - run: node scripts/aieo-role.mjs security
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transfer-security
+          path: aieo-output/security.json
+          retention-days: 1
+          if-no-files-found: error
+  reviewer:
+    needs: [qa, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: transfer-*
+          path: aieo-output
+          merge-multiple: true
+      - run: node scripts/aieo-role.mjs reviewer
+      - run: git diff --exit-code -- components/FeedbackWidget.tsx
