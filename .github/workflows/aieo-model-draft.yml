@@ -255,6 +255,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true
     needs: model-build
     name: Draft-only publisher - separate write-scoped runner
+    environment: aieo-ai # require the same protected human approval gate as model execution
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
