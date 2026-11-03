@@ -16,8 +16,13 @@
 1. A human reviews/approves which **exact CGP source snapshot** may be sent to OpenRouter; the synthetic-only laboratory consent does not authorize this.
 2. Any protected manual workflow activation on CGP's default branch requires a separate human decision; **this PR must never self-merge**.
 3. Require the exact source SHA-256, environment-scoped protected credentials, separate QA/Security/Reviewer verdicts, passing lint/typecheck/build and a human-reviewed Draft PR, with no automated merge or deployment.
-4. Current CGP model path has distinct CLI review steps **within one privileged GitHub Actions job**; that does not match the laboratory's stronger separate-runner isolation. The live CGP path must be re-architected to separate runners before production-like use.
+4. This staging PR now splits the protected CGP model workflow into **separate GitHub Actions jobs** for Developer, QA, Security, Reviewer, build, and the write-scoped Draft publisher. Source-bound candidate/review artifacts cross runner boundaries. This job-level architecture is **code-reviewed and CI-policy-tested only** until the trusted default-branch manual workflow is activated by a separate human decision; no CGP source has been sent to OpenRouter.
 5. A successful synthetic lab run is a narrow proof of the lab pipeline, not of autonomous general-purpose programming, full CGP integration or deployment readiness.
 
 ## Gate interpretation
 The staged workflow is read-only (contents:read) and uses no model or GitHub write tokens. Passing its checks proves only this bounded staging behavior. **Do not label CGP live integration complete** on their basis.
+
+## Job-level isolation migration in this Draft
+- Reworked `.github/workflows/aieo-model-draft.yml` with separate runner jobs and explicit artifacts for the candidate and proposal/QA/Security/Reviewer evidence. Only Developer has the protected OpenRouter secret; only Publisher has GitHub write permissions. All privileged jobs preserve the manual-main-dispatch + exact-source-consent condition.
+- No secrets, candidate code or authenticated writes are executed from PR-triggered CI. The PR preflight continues to run in read-only mode.
+- GitHub Actions on this Draft can validate the workflow structure and deterministic/mock pipeline, but it **cannot demonstrate a real CGP provider invocation or CGP auto-published Draft PR**. Human activation and approval remain required.
