@@ -1,5 +1,6 @@
 // AIEO optional external-model adapter. Disabled by default; never runs on PR/push.
 import { createHash } from 'node:crypto';
+import { requireFreeModel } from './free-model-policy.mjs';
 import { introducesObfuscatedExecution } from './model-obfuscation-guard.mjs';
 import { preservesFeedbackExecutableSurface } from './model-executable-surface.mjs';
 
@@ -321,6 +322,7 @@ export function buildModelRequest({ source, path = MODEL_ALLOWED_PATH, task, mod
       typeof model !== 'string' || !/^[a-z0-9_.-]+\/[a-z0-9_.:-]+$/i.test(model)) {
     throw new Error('Invalid task or configured model');
   }
+  requireFreeModel(model); // fail before any outbound request if pricing is not explicitly free
   return {
     model, max_tokens: 800, temperature: 0, stream: false,
     messages: [

@@ -1,3 +1,4 @@
+import './aieo-free-only.test.mjs'; // cost-safety regression: free models only
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';

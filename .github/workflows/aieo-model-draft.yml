@@ -72,7 +72,7 @@ jobs:
           NODE_EXTRA_CA_CERTS: ''
           NODE_TLS_REJECT_UNAUTHORIZED: '1'
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENROUTER_MODEL_ID: ${{ vars.AIEO_MODEL_ID }}
+          OPENROUTER_MODEL_ID: openrouter/free # never use paid model or fallback
           AIEO_MODEL_ENABLED: 'true'
           AIEO_SOURCE_SHARING_APPROVED: 'true'
           AIEO_APPROVED_SOURCE_SHA256: ${{ inputs.approved_source_sha256 }}
@@ -255,6 +255,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true
     needs: model-build
     name: Draft-only publisher - separate write-scoped runner
+    environment: aieo-ai # require the same protected human approval gate as model execution
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

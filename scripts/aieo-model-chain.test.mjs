@@ -125,7 +125,7 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
       GITHUB_RUN_ID: '77331', GITHUB_RUN_ATTEMPT: '1',
       GITHUB_SHA: git('rev-parse', 'HEAD').trim(),
       OPENROUTER_API_KEY: 'synthetic-only-do-not-use',
-      OPENROUTER_MODEL_ID: 'provider/fixture',
+      OPENROUTER_MODEL_ID: 'provider/fixture:free',
       AIEO_MODEL_ENABLED: 'true',
       AIEO_SOURCE_SHARING_APPROVED: 'true',
       AIEO_APPROVED_SOURCE_SHA256: hash(original),
