@@ -230,6 +230,7 @@ test('live provider-backed model chain uses separate credential-isolated runners
     assert.ok(job.includes('actions/download-artifact@v4'), 'source-bound handoff is required: ' + name);
   }
   const publish = jobContent('model-publisher');
+  assert.ok(publish.includes('environment: aieo-ai'), 'write-scoped publisher must require protected environment approval');
   assert.ok(publish.includes('needs: model-build'));
   assert.ok(publish.includes('contents: write'));
   assert.ok(publish.includes('pull-requests: write'));
