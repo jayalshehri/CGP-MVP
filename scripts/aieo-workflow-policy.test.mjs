@@ -208,8 +208,9 @@ test('live provider-backed model chain uses separate credential-isolated runners
   const jobContent = (name) => {
     const start = model.indexOf('\n  ' + name + ':\n');
     assert.ok(start >= 0, 'missing isolated live model job: ' + name);
-    const next = model.indexOf('\n  ', start + 4);
-    return model.slice(start, next < 0 ? undefined : next);
+    const tail = model.slice(start + ('\n  ' + name + ':\n').length);
+    const next = tail.search(/\n  [a-z][a-z0-9-]*:\n/);
+    return next < 0 ? tail : tail.slice(0, next);
   };
   const manual = "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true";
   for (const name of jobs) {
