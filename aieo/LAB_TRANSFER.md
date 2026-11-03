@@ -16,7 +16,7 @@
 1. A human reviews/approves which **exact CGP source snapshot** may be sent to OpenRouter; the synthetic-only laboratory consent does not authorize this.
 2. Any protected manual workflow activation on CGP's default branch requires a separate human decision; **this PR must never self-merge**.
 3. Require the exact source SHA-256, environment-scoped protected credentials, separate QA/Security/Reviewer verdicts, passing lint/typecheck/build and a human-reviewed Draft PR, with no automated merge or deployment.
-4. This staging PR now splits the protected CGP model workflow into **separate GitHub Actions jobs** for Developer, QA, Security, Reviewer, build, and the write-scoped Draft publisher. Source-bound candidate/review artifacts cross runner boundaries. This job-level architecture is **code-reviewed and CI-policy-tested only** until the trusted default-branch manual workflow is activated by a separate human decision; no CGP source has been sent to OpenRouter.
+4. This staging PR now splits the protected CGP model workflow into **separate GitHub Actions jobs** for Developer, QA, Security, Reviewer, build, and the write-scoped Draft publisher. Source-bound candidate/review artifacts cross runner boundaries. This separate-runner isolation architecture is **code-reviewed and CI-policy-tested only** until the trusted default-branch manual workflow is activated by a separate human decision; no CGP source has been sent to OpenRouter.
 5. A successful synthetic lab run is a narrow proof of the lab pipeline, not of autonomous general-purpose programming, full CGP integration or deployment readiness.
 
 ## Gate interpretation
