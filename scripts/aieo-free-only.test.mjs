@@ -32,7 +32,7 @@ test('only the free router and explicitly free-suffixed models are accepted', ()
 test('free router is used unchanged for the only allowed provider request', () => {
   const data = buildModelRequest({ source, task, model: DEFAULT_FREE_MODEL, shareApproved: true });
   assert.equal(data.model, DEFAULT_FREE_MODEL);
-  assert.equal(JSON.stringify(data.messages).includes(source), true);
+  assert.equal(data.messages[1].content.includes(source), true);
   assert.throws(() => buildModelRequest({ source, task, model: 'openrouter/auto', shareApproved: true }));
   assert.throws(() => buildModelRequest({ source, task, model: 'openai/gpt-4.1-mini', shareApproved: true }));
 });
