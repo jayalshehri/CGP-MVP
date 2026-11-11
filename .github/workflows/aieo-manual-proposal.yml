@@ -1,0 +1,23 @@
+name: AIEO Manual Synthetic OpenAI Proposal
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proposal:
+    environment: aieo-ai
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify proposal script syntax
+        run: node --check scripts/aieo-manual-proposal.mjs
+      - name: Request synthetic non-writing proposal
+        env:
+          AIEO_OPENAI_API_KEY: ${{ secrets.AIEO_OPENAI_API_KEY }}
+        run: node scripts/aieo-manual-proposal.mjs
