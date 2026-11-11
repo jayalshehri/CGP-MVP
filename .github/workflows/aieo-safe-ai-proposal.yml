@@ -1,0 +1,51 @@
+name: AIEO Safe AI Proposal (Manual)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-proposal:
+    environment: aieo-ai
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Synthetic OpenAI request (no checkout, no repository writes)
+        shell: bash
+        env:
+          AIEO_OPENAI_API_KEY: ${{ secrets.AIEO_OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$AIEO_OPENAI_API_KEY" || { echo 'Missing protected environment API key'; exit 2; }
+          python3 - <<'PY'
+          import json, os, urllib.request
+          payload = {
+              'model': 'gpt-4.1-mini',
+              'store': False,
+              'max_output_tokens': 180,
+              'instructions': 'Offer a brief plain-language suggestion only; do not output code, secrets, or commands.',
+              'input': 'Synthetic fixture: a display label says BROKEN. Suggest changing the label to FIXED.'
+          }
+          req = urllib.request.Request(
+              'https://api.openai.com/v1/responses',
+              data=json.dumps(payload).encode(),
+              headers={
+                  'Authorization': 'Bearer ' + os.environ['AIEO_OPENAI_API_KEY'],
+                  'Content-Type': 'application/json'
+              },
+              method='POST'
+          )
+          with urllib.request.urlopen(req, timeout=20) as response:
+              result = json.load(response)
+          texts = [
+              c.get('text', '')
+              for item in result.get('output', [])
+              for c in item.get('content', [])
+              if c.get('type') == 'output_text'
+          ]
+          if not any(s.strip() for s in texts):
+              raise SystemExit('No proposal produced')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write('## AIEO synthetic model request succeeded\n')
+              f.write('No CGP source was accessed or changed. No model response echoed to logs.\n')
+          print('PASS: synthetic proposal completed without repository writes')
+          PY
