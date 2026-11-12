@@ -1,0 +1,68 @@
+name: AIEO Synthetic Draft PR Pilot
+on:
+  workflow_dispatch:
+    inputs:
+      approve_synthetic_pr:
+        description: 'I approve creating a synthetic-only Draft PR, without app changes, merge or production deployment'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-preflight:
+    name: Synthetic-only scope and reference gate
+    if: github.ref == 'refs/heads/main' && inputs.approve_synthetic_pr == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify execution contract
+        env:
+          APPROVED: ${{ inputs.approve_synthetic_pr }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$APPROVED" = 'true'
+          echo 'PASS: fixed synthetic evidence only; no source/model access'
+
+  publish-draft:
+    name: Create synthetic GitHub Actions bot Draft PR
+    needs: synthetic-preflight
+    environment: aieo-ai
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Publish synthetic proof as a Draft PR, never merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test -n "$GITHUB_RUN_ID"
+          test -z "$(git status --porcelain)"
+          branch="aieo/synthetic-draft-proof-${GITHUB_RUN_ID}"
+          evidence="docs/aieo-evidence/synthetic-pr-${GITHUB_RUN_ID}.md"
+          git checkout -b "$branch"
+          mkdir -p docs/aieo-evidence
+          printf '# AIEO synthetic Draft PR proof\n\nThis is fixed, synthetic test data only.\nGitHub Actions run ID: %s\nNo application source was modified or sent to a model.\nNo merge or production deployment is requested.\n' "$GITHUB_RUN_ID" > "$evidence"
+          test "$(git status --porcelain | wc -l | tr -d ' ')" = '1'
+          test "$(git status --porcelain | sed -E 's/^...//')" = "$evidence"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "$evidence"
+          git diff --cached --check
+          git commit -m 'test(aieo): add synthetic-only Draft PR proof'
+          gh auth setup-git
+          git push origin "HEAD:refs/heads/$branch"
+          gh pr create --draft --base main --head "$branch" \
+            --title "AIEO synthetic-only bot Draft PR proof #${GITHUB_RUN_ID}" \
+            --body "Synthetic-only workflow proof. Fixed test data; no real code changes, no OpenRouter/source transmission, no merge and no production deployment. Human review required."
