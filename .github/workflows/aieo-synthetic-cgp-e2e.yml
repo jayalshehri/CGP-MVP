@@ -5,6 +5,7 @@ on:
       - '.github/workflows/aieo-synthetic-cgp-e2e.yml'
       - 'aieo/**'
       - 'scripts/aieo-model-*.mjs'
+      - 'scripts/aieo-synthetic-live*.mjs'
       - 'scripts/aieo-publish-draft*.mjs'
   workflow_dispatch:
 
@@ -33,7 +34,7 @@ jobs:
           NODE_OPTIONS: ''
         run: |
           set -euo pipefail
-          node --test scripts/aieo-model-chain.test.mjs scripts/aieo-workflow-policy.test.mjs
+          node --test scripts/aieo-model-chain.test.mjs scripts/aieo-workflow-policy.test.mjs scripts/aieo-synthetic-live.test.mjs
       - name: Assert repository files unchanged
         run: |
           set -euo pipefail
