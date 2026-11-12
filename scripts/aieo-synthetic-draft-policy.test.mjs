@@ -68,3 +68,14 @@ test('the publisher fails closed until GitHub confirms draft state and exact rem
     '.files[0].path == $evidence'
   ]) assert.ok(publisher.includes(clause), 'missing remote attestation: ' + clause);
 });
+
+test('publisher independently confirms official GitHub Actions bot via REST identity', () => {
+  for (const clause of [
+    'pr_number="${pr_url##*/}"',
+    'gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}"',
+    '.number == $pr_number and .url == $pr_url',
+    '.login == "github-actions[bot]"',
+    '.id == 41898282',
+    '.type == "Bot"'
+  ]) assert.ok(publisher.includes(clause), 'missing official bot attestation: ' + clause);
+});

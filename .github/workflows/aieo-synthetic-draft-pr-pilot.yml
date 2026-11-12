@@ -81,4 +81,13 @@ jobs:
           jq -e --arg pr_url "$pr_url" --arg branch "$branch" --arg evidence "$evidence" --arg base_sha "$base_sha" --arg candidate_sha "$candidate_sha" \
             '.url == $pr_url and .state == "OPEN" and .isDraft == true and .baseRefName == "main" and .headRefName == $branch and .baseRefOid == $base_sha and .headRefOid == $candidate_sha and .headRepository.nameWithOwner == "jayalshehri/CGP-MVP" and .headRepositoryOwner.login == "jayalshehri" and (.files | length) == 1 and .files[0].path == $evidence' \
             <<<"$pr_json" >/dev/null
-          echo "PASS: GitHub confirmed a Draft PR limited to the single synthetic evidence file"
+          # GraphQL Draft/scope checks alone do not establish which identity opened the PR.
+          # The genuine synthetic pilot must be authored by GitHub's official Actions bot.
+          # REST exposes the immutable bot numeric ID (as well as login and actor type).
+          pr_number="${pr_url##*/}"
+          actor_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" \
+            --jq '{number: .number, url: .html_url, login: .user.login, id: .user.id, type: .user.type}')"
+          jq -e --arg pr_url "$pr_url" --argjson pr_number "$pr_number" \
+            '.number == $pr_number and .url == $pr_url and .login == "github-actions[bot]" and .id == 41898282 and .type == "Bot"' \
+            <<<"$actor_json" >/dev/null
+          echo "PASS: GitHub confirmed the official Actions bot authored the single-file synthetic Draft PR"

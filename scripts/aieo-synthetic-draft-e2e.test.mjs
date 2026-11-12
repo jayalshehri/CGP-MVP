@@ -74,6 +74,19 @@ function fixture({response='valid',env={},dirty=false}={}){
       '  }',
       '  console.log(JSON.stringify(r));process.exit(0);',
       '}',
+      "if(a[0]==='api'&&a[1]==='repos/jayalshehri/CGP-MVP/pulls/999'){",
+      "  const r={number:999,url:'https://github.com/jayalshehri/CGP-MVP/pull/999',login:'github-actions[bot]',id:41898282,type:'Bot'};",
+      '  switch(process.env.AIEO_FAKE_RESPONSE){',
+      "    case 'human-author':r.login='jayalshehri';break;",
+      "    case 'forged-bot-id':r.id=191056639;break;",
+      "    case 'non-bot-author':r.type='User';break;",
+      "    case 'wrong-rest-pr':r.number=1000;break;",
+      "    case 'wrong-rest-url':r.url='https://github.com/jayalshehri/CGP-MVP/pull/1000';break;",
+      "    case 'missing-rest-author':r.login=null;r.id=null;r.type=null;break;",
+      "    case 'invalid-rest-json':console.log('{invalid');process.exit(0);",
+      '  }',
+      '  console.log(JSON.stringify(r));process.exit(0);',
+      '}',
       'process.exit(4);'
     ].join('\n')+'\n';
     writeFileSync(join(bin,'gh'),gh,{mode:0o755});
@@ -105,6 +118,7 @@ test('actual publisher script pushes a single synthetic file and validates Draft
   assert.match(r.log,/pr create .*--draft --base main --head aieo\/synthetic-draft-proof-90122012-1/);
   assert.match(r.log,/pr view https:\/\/github.com\/jayalshehri\/CGP-MVP\/pull\/999/);
   assert.match(r.log,/--json url,state,isDraft,baseRefName,headRefName,baseRefOid,headRefOid,headRepository,headRepositoryOwner,files/);
+  assert.match(r.log,/api repos\/jayalshehri\/CGP-MVP\/pulls\/999 --jq/);
   assert.doesNotMatch(r.log,/pr merge|release|delete/);
 });
 for(const response of ['not-draft','closed-pr','wrong-view-url','wrong-head','wrong-base','wrong-base-oid','wrong-head-oid','foreign-head-repository','foreign-head-owner','missing-head-repository','missing-head-owner','extra-file','invalid-json']){
@@ -113,6 +127,15 @@ for(const response of ['not-draft','closed-pr','wrong-view-url','wrong-head','wr
     assert.notEqual(r.status,0);
     assert.equal(r.mainSHA,r.afterMain);
     assert.match(r.log,/pr view /);
+  });
+}
+for(const response of ['human-author','forged-bot-id','non-bot-author','wrong-rest-pr','wrong-rest-url','missing-rest-author','invalid-rest-json']){
+  test('publisher rejects non-attested REST bot author: '+response,()=>{
+    const r=fixture({response});
+    assert.notEqual(r.status,0);
+    assert.equal(r.mainSHA,r.afterMain);
+    assert.match(r.log,/pr view /);
+    assert.match(r.log,/api repos\/jayalshehri\/CGP-MVP\/pulls\/999/);
   });
 }
 test('publisher rejects an unexpected cross-repository creation URL before PR lookup',()=>{
