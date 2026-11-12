@@ -36,16 +36,61 @@ export function validateSyntheticResult(data) {
   return { status: 'PASS', reason: 'Synthetic replacement validated; no source change executed' };
 }
 
+const MAX_PROVIDER_BYTES = 18_000;
+const PROVIDER_TIMEOUT_MS = 20_000;
+
+// Bound the actual streamed bytes, not just the model's 2-KiB patch text.
+// Never use Response.json(): it buffers an unbounded body before validation.
+async function readBoundedProviderJson(response) {
+  const declared = response.headers?.get?.('content-length');
+  if (declared != null && declared !== '' &&
+      (!/^\d+$/.test(declared) || Number(declared) > MAX_PROVIDER_BYTES)) {
+    throw new Error('Invalid provider response length');
+  }
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    throw new Error('Provider response is not a readable stream');
+  }
+  const reader = response.body.getReader();
+  const parts = [];
+  let size = 0;
+  let completed = false;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) { completed = true; break; }
+      if (!(value instanceof Uint8Array)) throw new Error('Invalid provider stream chunk');
+      size += value.byteLength;
+      if (size > MAX_PROVIDER_BYTES) throw new Error('Provider response too large');
+      parts.push(value);
+    }
+  } finally {
+    if (!completed) await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const part of parts) { bytes.set(part, offset); offset += part.length; }
+  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+}
+
 export async function runSyntheticLive({ key, transport = fetch } = {}) {
   if (typeof key !== 'string' || !key.trim()) throw new Error('OPENROUTER_API_KEY is not configured');
-  const response = await transport(ENDPOINT, {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildSyntheticRequest())
-  });
-  if (!response.ok) return { status: 'INCONCLUSIVE', reason: 'Provider HTTP ' + response.status };
-  const data = await response.json();
-  return validateSyntheticResult(data);
+  try {
+    const response = await transport(ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildSyntheticRequest()),
+      redirect: 'error',
+      referrerPolicy: 'no-referrer',
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
+    });
+    if (response.redirected) return { status: 'INCONCLUSIVE', reason: 'Redirected provider response' };
+    if (!response.ok) return { status: 'INCONCLUSIVE', reason: 'Provider HTTP ' + response.status };
+    const data = await readBoundedProviderJson(response);
+    return validateSyntheticResult(data);
+  } catch {
+    return { status: 'INCONCLUSIVE', reason: 'Provider transport or bounded-response validation failed' };
+  }
 }
 
 if (process.argv[1] && import.meta.url === new URL('file://' + process.argv[1]).href) {
