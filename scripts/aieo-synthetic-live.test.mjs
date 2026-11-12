@@ -36,7 +36,7 @@ test('mock transport sees only synthetic content and free model', async () => {
       assert.equal(url, 'https://openrouter.ai/api/v1/chat/completions');
       assert.equal(JSON.parse(opts.body).model, 'openrouter/free');
       assert.ok(JSON.parse(opts.body).messages[1].content.includes(ORIGINAL));
-      return { ok: true, json: async () => response() };
+      return new Response(JSON.stringify(response()), { headers: { 'content-type': 'application/json' } });
     }
   });
   assert.equal(result.status, 'PASS');
@@ -46,4 +46,73 @@ test('reject missing API key before transport', async () => {
   let called = false;
   await assert.rejects(() => runSyntheticLive({key:'', transport:async()=>{called=true;}}), /not configured/);
   assert.equal(called, false);
+});
+
+test('live probe forbids redirects, sends no referrer and has a timeout', async () => {
+  const result = await runSyntheticLive({
+    key: 'synthetic-test-key',
+    transport: async (_url, options) => {
+      assert.equal(options.redirect, 'error');
+      assert.equal(options.referrerPolicy, 'no-referrer');
+      assert.ok(options.signal instanceof AbortSignal);
+      assert.equal(options.signal.aborted, false);
+      return { ok: true, redirected: true };
+    }
+  });
+  assert.equal(result.status, 'INCONCLUSIVE');
+});
+
+test('reject declared oversized provider response even with correct fixture', async () => {
+  const result = await runSyntheticLive({
+    key: 'synthetic-test-key',
+    transport: async () => new Response(JSON.stringify(response()), {
+      headers: { 'content-length': '18001' }
+    })
+  });
+  assert.equal(result.status, 'INCONCLUSIVE');
+});
+
+test('reject actual oversized streamed response regardless of content-length', async () => {
+  const result = await runSyntheticLive({
+    key: 'synthetic-test-key',
+    transport: async () => new Response(JSON.stringify(response()) + ' '.repeat(20_000))
+  });
+  assert.equal(result.status, 'INCONCLUSIVE');
+});
+
+test('reject malformed UTF-8 bytes instead of replacing them lossily', async () => {
+  const result = await runSyntheticLive({
+    key: 'synthetic-test-key',
+    transport: async () => new Response(Uint8Array.of(0xff, 0xfe, 0xfd))
+  });
+  assert.equal(result.status, 'INCONCLUSIVE');
+});
+
+test('reject non-streaming fake responses rather than trusting unbounded json()', async () => {
+  let jsonCalled = false;
+  const result = await runSyntheticLive({
+    key: 'synthetic-test-key',
+    transport: async () => ({
+      ok: true,
+      redirected: false,
+      json: async () => { jsonCalled = true; return response(); }
+    })
+  });
+  assert.equal(jsonCalled, false);
+  assert.equal(result.status, 'INCONCLUSIVE');
+});
+
+test('accept split streaming JSON only when exact synthetic fixture is returned', async () => {
+  const bytes = new TextEncoder().encode(JSON.stringify(response()));
+  const result = await runSyntheticLive({
+    key: 'synthetic-test-key',
+    transport: async () => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes.subarray(0, 12));
+        controller.enqueue(bytes.subarray(12));
+        controller.close();
+      }
+    }))
+  });
+  assert.equal(result.status, 'PASS');
 });
