@@ -54,11 +54,11 @@ jobs:
           git checkout -b "$branch"
           mkdir -p docs/aieo-evidence
           printf '# AIEO synthetic Draft PR proof\n\nThis is fixed, synthetic test data only.\nGitHub Actions run ID: %s\nNo application source was modified or sent to a model.\nNo merge or production deployment is requested.\n' "$GITHUB_RUN_ID" > "$evidence"
-          test "$(git status --porcelain | wc -l | tr -d ' ')" = '1'
-          test "$(git status --porcelain | sed -E 's/^...//')" = "$evidence"
+          git add -- "$evidence"
+          test "$(git diff --cached --name-only)" = "$evidence"
+          test -z "$(git diff --name-only)"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- "$evidence"
           git diff --cached --check
           git commit -m 'test(aieo): add synthetic-only Draft PR proof'
           gh auth setup-git
