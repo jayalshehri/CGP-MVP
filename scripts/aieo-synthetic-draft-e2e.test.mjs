@@ -56,7 +56,7 @@ function fixture({response='valid',env={},dirty=false}={}){
       '  const id=process.env.GITHUB_RUN_ID,attempt=process.env.GITHUB_RUN_ATTEMPT;',
       "  const branch='aieo/synthetic-draft-proof-'+id+'-'+attempt;",
       "  const file='docs/aieo-evidence/synthetic-pr-'+id+'-'+attempt+'.md';",
-      "  const r={url:'https://github.com/jayalshehri/CGP-MVP/pull/999',state:'OPEN',isDraft:true,baseRefName:'main',headRefName:branch,baseRefOid:git('main'),headRefOid:git('HEAD'),files:[{path:file}]};",
+      "  const r={url:'https://github.com/jayalshehri/CGP-MVP/pull/999',state:'OPEN',isDraft:true,baseRefName:'main',headRefName:branch,baseRefOid:git('main'),headRefOid:git('HEAD'),headRepository:{nameWithOwner:'jayalshehri/CGP-MVP'},headRepositoryOwner:{login:'jayalshehri'},files:[{path:file}]};",
       '  switch(process.env.AIEO_FAKE_RESPONSE){',
       "    case 'not-draft':r.isDraft=false;break;",
       "    case 'closed-pr':r.state='CLOSED';break;",
@@ -65,6 +65,10 @@ function fixture({response='valid',env={},dirty=false}={}){
       "    case 'wrong-base':r.baseRefName='other';break;",
       "    case 'wrong-base-oid':r.baseRefOid='0'.repeat(40);break;",
       "    case 'wrong-head-oid':r.headRefOid='0'.repeat(40);break;",
+      "    case 'foreign-head-repository':r.headRepository.nameWithOwner='untrusted/CGP-MVP';break;",
+      "    case 'foreign-head-owner':r.headRepositoryOwner.login='untrusted';break;",
+      "    case 'missing-head-repository':r.headRepository=null;break;",
+      "    case 'missing-head-owner':r.headRepositoryOwner=null;break;",
       "    case 'extra-file':r.files.push({path:'components/FeedbackWidget.tsx'});break;",
       "    case 'invalid-json':console.log('{invalid');process.exit(0);",
       '  }',
@@ -100,10 +104,10 @@ test('actual publisher script pushes a single synthetic file and validates Draft
   assert.match(r.remoteBranch,/refs\/heads\/aieo\/synthetic-draft-proof-90122012-1/);
   assert.match(r.log,/pr create .*--draft --base main --head aieo\/synthetic-draft-proof-90122012-1/);
   assert.match(r.log,/pr view https:\/\/github.com\/jayalshehri\/CGP-MVP\/pull\/999/);
-  assert.match(r.log,/--json url,state,isDraft,baseRefName,headRefName,baseRefOid,headRefOid,files/);
+  assert.match(r.log,/--json url,state,isDraft,baseRefName,headRefName,baseRefOid,headRefOid,headRepository,headRepositoryOwner,files/);
   assert.doesNotMatch(r.log,/pr merge|release|delete/);
 });
-for(const response of ['not-draft','closed-pr','wrong-view-url','wrong-head','wrong-base','wrong-base-oid','wrong-head-oid','extra-file','invalid-json']){
+for(const response of ['not-draft','closed-pr','wrong-view-url','wrong-head','wrong-base','wrong-base-oid','wrong-head-oid','foreign-head-repository','foreign-head-owner','missing-head-repository','missing-head-owner','extra-file','invalid-json']){
   test('publisher rejects remote attestation: '+response,()=>{
     const r=fixture({response});
     assert.notEqual(r.status,0);
