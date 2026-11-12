@@ -51,9 +51,12 @@ test('a re-run gets its own bounded synthetic evidence branch and no app file ch
 
 test('the publisher fails closed until GitHub confirms draft state and exact remote scope', () => {
   assert.match(publisher, /pr_url="\$\(gh pr create/);
-  assert.match(publisher, /gh pr view "\$pr_url" --repo "\$GITHUB_REPOSITORY" --json isDraft,baseRefName,headRefName,baseRefOid,headRefOid,files/);
-  assert.match(publisher, /jq -e --arg branch "\$branch" --arg evidence "\$evidence"/);
+  assert.match(publisher, /gh pr view "\$pr_url" --repo "\$GITHUB_REPOSITORY" --json url,state,isDraft,baseRefName,headRefName,baseRefOid,headRefOid,files/);
+  assert.match(publisher, /jq -e --arg pr_url "\$pr_url" --arg branch "\$branch" --arg evidence "\$evidence"/);
+  assert.match(publisher, /\[\[ "\$pr_url" =~ \^https:\/\/github\[\.\]com\/jayalshehri\/CGP-MVP\/pull\/\[1-9\]\[0-9\]\*\$ \]\]/);
   for (const clause of [
+    '.url == $pr_url',
+    '.state == "OPEN"',
     '.isDraft == true',
     '.baseRefName == "main"',
     '.headRefName == $branch',
