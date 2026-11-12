@@ -1,0 +1,70 @@
+name: AIEO Synthetic-only Live OpenRouter Probe
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/aieo-synthetic-live.yml'
+      - 'scripts/aieo-synthetic-live*.mjs'
+  workflow_dispatch:
+    inputs:
+      approve_synthetic_only:
+        description: 'I approve sending the fixed synthetic line only; no CGP source'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-tests:
+    name: Synthetic-only adapter tests (no provider)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate fixture and fail-closed checks without secrets
+        env:
+          OPENROUTER_API_KEY: ''
+          NODE_OPTIONS: ''
+        run: node --test scripts/aieo-synthetic-live.test.mjs
+      - name: Check for uncommitted files
+        run: |
+          git diff --exit-code
+          git diff --cached --exit-code
+
+  synthetic-live:
+    name: Approved free model call (hardcoded synthetic fixture)
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_synthetic_only == true
+    needs: synthetic-tests
+    environment: aieo-ai
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Send synthetic sample only to free OpenRouter route
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          NODE_OPTIONS: ''
+          BASH_ENV: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+          NODE_TLS_REJECT_UNAUTHORIZED: '1'
+        run: |
+          set -euo pipefail
+          node scripts/aieo-synthetic-live.mjs
+      - name: Verify unchanged checkout
+        run: |
+          git diff --exit-code
+          git diff --cached --exit-code
