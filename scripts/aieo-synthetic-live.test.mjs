@@ -35,7 +35,7 @@ test('mock transport sees only synthetic content and free model', async () => {
     transport: async (url, opts) => {
       assert.equal(url, 'https://openrouter.ai/api/v1/chat/completions');
       assert.equal(JSON.parse(opts.body).model, 'openrouter/free');
-      assert.ok(JSON.stringify(opts).includes(ORIGINAL));
+      assert.ok(JSON.parse(opts.body).messages[1].content.includes(ORIGINAL));
       return { ok: true, json: async () => response() };
     }
   });
