@@ -1,0 +1,43 @@
+name: AIEO Synthetic-only Live OpenRouter Probe
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-live:
+    name: Manually approved synthetic-only free model call
+    if: github.ref == 'refs/heads/main'
+    environment: aieo-ai
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Synthetic-only local regression before provider contact
+        env:
+          OPENROUTER_API_KEY: ''
+        run: node --test scripts/aieo-synthetic-live.test.mjs
+      - name: Call free provider with hardcoded synthetic input only
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          NODE_OPTIONS: ''
+          BASH_ENV: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+          NODE_TLS_REJECT_UNAUTHORIZED: '1'
+        run: |
+          set -euo pipefail
+          node scripts/aieo-synthetic-live.mjs
+      - name: Verify no working-tree changes
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          git diff --cached --exit-code
