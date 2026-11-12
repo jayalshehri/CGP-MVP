@@ -43,6 +43,8 @@ function fixture({response='valid',env={},dirty=false}={}){
     const gh=[
       '#!/usr/bin/env node',
       "const fs=require('node:fs');",
+      "const cp=require('node:child_process');",
+      "const git=(ref)=>cp.execFileSync('git',['rev-parse',ref],{encoding:'utf8'}).trim();",
       'const a=process.argv.slice(2);',
       "fs.appendFileSync(process.env.AIEO_GH_LOG,a.join(' ')+'\\n');",
       "if(a[0]==='auth'&&a[1]==='setup-git')process.exit(0);",
@@ -54,11 +56,13 @@ function fixture({response='valid',env={},dirty=false}={}){
       '  const id=process.env.GITHUB_RUN_ID,attempt=process.env.GITHUB_RUN_ATTEMPT;',
       "  const branch='aieo/synthetic-draft-proof-'+id+'-'+attempt;",
       "  const file='docs/aieo-evidence/synthetic-pr-'+id+'-'+attempt+'.md';",
-      "  const r={isDraft:true,baseRefName:'main',headRefName:branch,files:[{path:file}]};",
+      "  const r={isDraft:true,baseRefName:'main',headRefName:branch,baseRefOid:git('main'),headRefOid:git('HEAD'),files:[{path:file}]};",
       '  switch(process.env.AIEO_FAKE_RESPONSE){',
       "    case 'not-draft':r.isDraft=false;break;",
       "    case 'wrong-head':r.headRefName='other';break;",
       "    case 'wrong-base':r.baseRefName='other';break;",
+      "    case 'wrong-base-oid':r.baseRefOid='0'.repeat(40);break;",
+      "    case 'wrong-head-oid':r.headRefOid='0'.repeat(40);break;",
       "    case 'extra-file':r.files.push({path:'components/FeedbackWidget.tsx'});break;",
       "    case 'invalid-json':console.log('{invalid');process.exit(0);",
       '  }',
@@ -94,9 +98,10 @@ test('actual publisher script pushes a single synthetic file and validates Draft
   assert.match(r.remoteBranch,/refs\/heads\/aieo\/synthetic-draft-proof-90122012-1/);
   assert.match(r.log,/pr create .*--draft --base main --head aieo\/synthetic-draft-proof-90122012-1/);
   assert.match(r.log,/pr view https:\/\/github.invalid\/CGP-MVP\/pull\/999/);
+  assert.match(r.log,/--json isDraft,baseRefName,headRefName,baseRefOid,headRefOid,files/);
   assert.doesNotMatch(r.log,/pr merge|release|delete/);
 });
-for(const response of ['not-draft','wrong-head','wrong-base','extra-file','invalid-json']){
+for(const response of ['not-draft','wrong-head','wrong-base','wrong-base-oid','wrong-head-oid','extra-file','invalid-json']){
   test('publisher rejects remote attestation: '+response,()=>{
     const r=fixture({response});
     assert.notEqual(r.status,0);
