@@ -50,15 +50,17 @@ function fixture({response='valid',env={},dirty=false}={}){
       "if(a[0]==='auth'&&a[1]==='setup-git')process.exit(0);",
       "if(a[0]==='pr'&&a[1]==='create'){",
       "  if(!a.includes('--draft')||!a.includes('--base')||!a.includes('--head'))process.exit(3);",
-      "  console.log('https://github.invalid/CGP-MVP/pull/999');process.exit(0);",
+      "  console.log(process.env.AIEO_FAKE_RESPONSE==='created-foreign-url'?'https://github.com/untrusted/repo/pull/999':'https://github.com/jayalshehri/CGP-MVP/pull/999');process.exit(0);",
       '}',
       "if(a[0]==='pr'&&a[1]==='view'){",
       '  const id=process.env.GITHUB_RUN_ID,attempt=process.env.GITHUB_RUN_ATTEMPT;',
       "  const branch='aieo/synthetic-draft-proof-'+id+'-'+attempt;",
       "  const file='docs/aieo-evidence/synthetic-pr-'+id+'-'+attempt+'.md';",
-      "  const r={isDraft:true,baseRefName:'main',headRefName:branch,baseRefOid:git('main'),headRefOid:git('HEAD'),files:[{path:file}]};",
+      "  const r={url:'https://github.com/jayalshehri/CGP-MVP/pull/999',state:'OPEN',isDraft:true,baseRefName:'main',headRefName:branch,baseRefOid:git('main'),headRefOid:git('HEAD'),files:[{path:file}]};",
       '  switch(process.env.AIEO_FAKE_RESPONSE){',
       "    case 'not-draft':r.isDraft=false;break;",
+      "    case 'closed-pr':r.state='CLOSED';break;",
+      "    case 'wrong-view-url':r.url='https://github.com/jayalshehri/CGP-MVP/pull/1000';break;",
       "    case 'wrong-head':r.headRefName='other';break;",
       "    case 'wrong-base':r.baseRefName='other';break;",
       "    case 'wrong-base-oid':r.baseRefOid='0'.repeat(40);break;",
@@ -97,11 +99,11 @@ test('actual publisher script pushes a single synthetic file and validates Draft
   assert.equal(r.evidence,true);
   assert.match(r.remoteBranch,/refs\/heads\/aieo\/synthetic-draft-proof-90122012-1/);
   assert.match(r.log,/pr create .*--draft --base main --head aieo\/synthetic-draft-proof-90122012-1/);
-  assert.match(r.log,/pr view https:\/\/github.invalid\/CGP-MVP\/pull\/999/);
-  assert.match(r.log,/--json isDraft,baseRefName,headRefName,baseRefOid,headRefOid,files/);
+  assert.match(r.log,/pr view https:\/\/github.com\/jayalshehri\/CGP-MVP\/pull\/999/);
+  assert.match(r.log,/--json url,state,isDraft,baseRefName,headRefName,baseRefOid,headRefOid,files/);
   assert.doesNotMatch(r.log,/pr merge|release|delete/);
 });
-for(const response of ['not-draft','wrong-head','wrong-base','wrong-base-oid','wrong-head-oid','extra-file','invalid-json']){
+for(const response of ['not-draft','closed-pr','wrong-view-url','wrong-head','wrong-base','wrong-base-oid','wrong-head-oid','extra-file','invalid-json']){
   test('publisher rejects remote attestation: '+response,()=>{
     const r=fixture({response});
     assert.notEqual(r.status,0);
@@ -109,6 +111,12 @@ for(const response of ['not-draft','wrong-head','wrong-base','wrong-base-oid','w
     assert.match(r.log,/pr view /);
   });
 }
+test('publisher rejects an unexpected cross-repository creation URL before PR lookup',()=>{
+  const r=fixture({response:'created-foreign-url'});
+  assert.notEqual(r.status,0);
+  assert.equal(r.mainSHA,r.afterMain);
+  assert.doesNotMatch(r.log,/pr view /);
+});
 for(const [name,env] of [
   ['non-main branch',{GITHUB_REF:'refs/heads/development'}],
   ['non-manual event',{GITHUB_EVENT_NAME:'pull_request'}],

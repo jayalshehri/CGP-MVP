@@ -74,9 +74,11 @@ jobs:
           pr_url="$(gh pr create --repo "$GITHUB_REPOSITORY" --draft --base main --head "$branch" \
             --title "AIEO synthetic-only bot Draft PR proof #${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --body "Synthetic-only workflow proof. Fixed test data; no real code changes, no OpenRouter/source transmission, no merge and no production deployment. Human review required.")"
-          # Attest GitHub's actual response, not only that the CLI accepted --draft.
-          pr_json="$(gh pr view "$pr_url" --repo "$GITHUB_REPOSITORY" --json isDraft,baseRefName,headRefName,baseRefOid,headRefOid,files)"
-          jq -e --arg branch "$branch" --arg evidence "$evidence" --arg base_sha "$base_sha" --arg candidate_sha "$candidate_sha" \
-            '.isDraft == true and .baseRefName == "main" and .headRefName == $branch and .baseRefOid == $base_sha and .headRefOid == $candidate_sha and (.files | length) == 1 and .files[0].path == $evidence' \
+          # Refuse unexpected or cross-repository PR URLs before remote lookup.
+          [[ "$pr_url" =~ ^https://github[.]com/jayalshehri/CGP-MVP/pull/[1-9][0-9]*$ ]]
+          # Attest the actual open Draft PR, including identity and exact Git commit OIDs.
+          pr_json="$(gh pr view "$pr_url" --repo "$GITHUB_REPOSITORY" --json url,state,isDraft,baseRefName,headRefName,baseRefOid,headRefOid,files)"
+          jq -e --arg pr_url "$pr_url" --arg branch "$branch" --arg evidence "$evidence" --arg base_sha "$base_sha" --arg candidate_sha "$candidate_sha" \
+            '.url == $pr_url and .state == "OPEN" and .isDraft == true and .baseRefName == "main" and .headRefName == $branch and .baseRefOid == $base_sha and .headRefOid == $candidate_sha and (.files | length) == 1 and .files[0].path == $evidence' \
             <<<"$pr_json" >/dev/null
           echo "PASS: GitHub confirmed a Draft PR limited to the single synthetic evidence file"
