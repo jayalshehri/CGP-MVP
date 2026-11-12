@@ -51,7 +51,7 @@ test('a re-run gets its own bounded synthetic evidence branch and no app file ch
 
 test('the publisher fails closed until GitHub confirms draft state and exact remote scope', () => {
   assert.match(publisher, /pr_url="\$\(gh pr create/);
-  assert.match(publisher, /gh pr view "\$pr_url" --repo "\$GITHUB_REPOSITORY" --json url,state,isDraft,baseRefName,headRefName,baseRefOid,headRefOid,files/);
+  assert.match(publisher, /gh pr view "\$pr_url" --repo "\$GITHUB_REPOSITORY" --json url,state,isDraft,baseRefName,headRefName,baseRefOid,headRefOid,headRepository,headRepositoryOwner,files/);
   assert.match(publisher, /jq -e --arg pr_url "\$pr_url" --arg branch "\$branch" --arg evidence "\$evidence"/);
   assert.match(publisher, /\[\[ "\$pr_url" =~ \^https:\/\/github\[\.\]com\/jayalshehri\/CGP-MVP\/pull\/\[1-9\]\[0-9\]\*\$ \]\]/);
   for (const clause of [
@@ -62,6 +62,8 @@ test('the publisher fails closed until GitHub confirms draft state and exact rem
     '.headRefName == $branch',
     '.baseRefOid == $base_sha',
     '.headRefOid == $candidate_sha',
+    '.headRepository.nameWithOwner == "jayalshehri/CGP-MVP"',
+    '.headRepositoryOwner.login == "jayalshehri"',
     '(.files | length) == 1',
     '.files[0].path == $evidence'
   ]) assert.ok(publisher.includes(clause), 'missing remote attestation: ' + clause);
