@@ -6,6 +6,7 @@ on:
       - '.github/workflows/aieo-synthetic-draft-pr-pilot.yml'
       - '.github/workflows/aieo-synthetic-draft-policy.yml'
       - 'scripts/aieo-synthetic-draft-policy.test.mjs'
+      - 'scripts/aieo-synthetic-draft-e2e.test.mjs'
 permissions:
   contents: read
 jobs:
@@ -26,7 +27,7 @@ jobs:
         env:
           OPENROUTER_API_KEY: ''
           GH_TOKEN: ''
-        run: node --test scripts/aieo-synthetic-draft-policy.test.mjs
+        run: node --test scripts/aieo-synthetic-draft-policy.test.mjs scripts/aieo-synthetic-draft-e2e.test.mjs
       - name: Verify no local modifications
         run: |
           git diff --exit-code
