@@ -114,6 +114,8 @@ test('publisher pushes a scoped candidate branch and invokes only Draft PR comma
     assert.equal(git(f.workspace, 'diff', 'main', 'HEAD', '--name-only'), MODEL_ALLOWED_PATH);
     const commands = readFileSync(f.log, 'utf8');
     assert.match(commands, /pr create --draft --base main --head aieo\/model-proposal-99123-1/);
+    assert.match(commands, /pr view https:\/\/github.com\/jayalshehri\/CGP-MVP\/pull\/123 --json/);
+    assert.match(commands, /api repos\/jayalshehri\/CGP-MVP\/pulls\/123 --jq/);
     assert.match(commands, /workflow run cgp-required-ci.yml --ref aieo\/model-proposal-99123-1/);
     assert.doesNotMatch(commands, /(?:^|\n).*?(?:pr merge|deployment|release)(?: |$)/);
   } finally { rmSync(f.root, { force: true, recursive: true }); }
@@ -147,7 +149,7 @@ for (const fakeResponse of ['foreign-create-url', 'view-not-draft', 'view-extra-
       const commands = readFileSync(f.log, 'utf8');
       assert.match(commands, /pr create --draft/);
       assert.doesNotMatch(commands, /workflow run cgp-required-ci.yml/);
-      assert.doesNotMatch(commands, /pr merge|release create|deploy/);
+      assert.doesNotMatch(commands, /^(?:pr merge\b|release create\b|deploy\b)/m);
     } finally {
       rmSync(f.root, { force: true, recursive: true });
     }
