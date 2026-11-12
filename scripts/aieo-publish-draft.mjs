@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
+import { verifyRemoteDraft } from '../aieo/lib/remote-draft.mjs';
 
 function command(binary, args) {
   return execFileSync(binary, args, { encoding: 'utf8', stdio: 'pipe' });
@@ -84,6 +85,7 @@ export function publishDraft({ env = process.env } = {}) {
     reviewer: readJson('aieo-output/model-reviewer.json')
   } : {};
   verifyCandidate({ mode, original, actual, changedPaths, diff, reports });
+  const baseSha = command('git', ['rev-parse', 'HEAD']).trim();
   const branch = 'aieo/' + (mode === 'model' ? 'model-proposal-' : 'repair-feedback-') +
     env.GITHUB_RUN_ID + '-' + env.GITHUB_RUN_ATTEMPT;
   command('git', ['config', 'user.name', 'github-actions[bot]']);
@@ -92,14 +94,20 @@ export function publishDraft({ env = process.env } = {}) {
   command('git', ['add', '--', path]);
   if (command('git', ['diff', '--cached', '--name-only']).trim() !== path) fail('unexpected staged scope');
   command('git', ['commit', '-m', 'feat(aieo): bounded candidate for human review']);
+  const candidateSha = command('git', ['rev-parse', 'HEAD']).trim();
   command('gh', ['auth', 'setup-git']);
   command('git', ['push', 'origin', 'HEAD:refs/heads/' + branch]);
   const body = 'Candidate scope, independent checks and build were verified before publishing. ' +
     'DRAFT only. No automatic approval, merge or production deployment.';
   const pr = command('gh', ['pr', 'create', '--draft', '--base', 'main', '--head', branch,
     '--title', 'AIEO: bounded ' + mode + ' proposal for review', '--body', body]).trim();
+  // A printed URL is not proof: independently read back GitHub's exact Draft,
+  // source/candidate commit OIDs, one-file scope, repository and official bot actor.
+  // Failure stops downstream CI dispatch and success reporting; no auto-delete/merge.
+  const attested = verifyRemoteDraft({ url: pr, branch, baseSha, candidateSha,
+    path, gh: command });
   if (mode === 'model') command('gh', ['workflow', 'run', 'cgp-required-ci.yml', '--ref', branch]);
-  return { status: 'draft-pr-created', branch, pr, requiresHumanMerge: true };
+  return { status: 'draft-pr-created', branch, pr: attested.url, requiresHumanMerge: true };
 }
 
 if (process.argv[1]?.endsWith('/aieo-publish-draft.mjs')) {
