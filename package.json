@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "qa": "node scripts/qa-smoke.mjs"
+    "qa": "node scripts/qa-smoke.mjs",
+    "qa:release": "node scripts/qa-release-gate.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.112.4",
