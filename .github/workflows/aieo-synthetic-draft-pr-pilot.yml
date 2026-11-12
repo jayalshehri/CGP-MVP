@@ -77,8 +77,8 @@ jobs:
           # Refuse unexpected or cross-repository PR URLs before remote lookup.
           [[ "$pr_url" =~ ^https://github[.]com/jayalshehri/CGP-MVP/pull/[1-9][0-9]*$ ]]
           # Attest the actual open Draft PR, including identity and exact Git commit OIDs.
-          pr_json="$(gh pr view "$pr_url" --repo "$GITHUB_REPOSITORY" --json url,state,isDraft,baseRefName,headRefName,baseRefOid,headRefOid,files)"
+          pr_json="$(gh pr view "$pr_url" --repo "$GITHUB_REPOSITORY" --json url,state,isDraft,baseRefName,headRefName,baseRefOid,headRefOid,headRepository,headRepositoryOwner,files)"
           jq -e --arg pr_url "$pr_url" --arg branch "$branch" --arg evidence "$evidence" --arg base_sha "$base_sha" --arg candidate_sha "$candidate_sha" \
-            '.url == $pr_url and .state == "OPEN" and .isDraft == true and .baseRefName == "main" and .headRefName == $branch and .baseRefOid == $base_sha and .headRefOid == $candidate_sha and (.files | length) == 1 and .files[0].path == $evidence' \
+            '.url == $pr_url and .state == "OPEN" and .isDraft == true and .baseRefName == "main" and .headRefName == $branch and .baseRefOid == $base_sha and .headRefOid == $candidate_sha and .headRepository.nameWithOwner == "jayalshehri/CGP-MVP" and .headRepositoryOwner.login == "jayalshehri" and (.files | length) == 1 and .files[0].path == $evidence' \
             <<<"$pr_json" >/dev/null
           echo "PASS: GitHub confirmed a Draft PR limited to the single synthetic evidence file"
