@@ -1,0 +1,42 @@
+name: AIEO Synthetic CGP End-to-End Gate
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/aieo-synthetic-cgp-e2e.yml'
+      - 'aieo/**'
+      - 'scripts/aieo-model-*.mjs'
+      - 'scripts/aieo-synthetic-live*.mjs'
+      - 'scripts/aieo-publish-draft*.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-four-agent-rehearsal:
+    name: Synthetic Developer to QA to Security to Reviewer to Draft publisher
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run synthetic full-process integration and policy regression
+        env:
+          OPENROUTER_API_KEY: ''
+          AIEO_MODEL_ENABLED: 'false'
+          AIEO_SOURCE_SHARING_APPROVED: 'false'
+          NODE_OPTIONS: ''
+        run: |
+          set -euo pipefail
+          node --test scripts/aieo-model-chain.test.mjs scripts/aieo-workflow-policy.test.mjs scripts/aieo-synthetic-live.test.mjs
+      - name: Assert repository files unchanged
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          git diff --cached --exit-code
