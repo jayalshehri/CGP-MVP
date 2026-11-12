@@ -43,18 +43,22 @@ test('a re-run gets its own bounded synthetic evidence branch and no app file ch
   assert.match(publisher, /evidence="docs\/aieo-evidence\/synthetic-pr-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}\.md"/);
   assert.match(publisher, /test "\$\(git diff --cached --name-only\)" = "\$evidence"/);
   assert.match(publisher, /git diff --cached --check/);
+  assert.match(publisher, /base_sha="\$\(git rev-parse HEAD\)"/);
+  assert.match(publisher, /candidate_sha="\$\(git rev-parse HEAD\)"/);
   assert.match(publisher, /gh pr create --repo "\$GITHUB_REPOSITORY" --draft --base main --head "\$branch"/);
   assert.doesNotMatch(publisher, /^\s*(?:gh pr merge|git push origin main|vercel deploy|npm run deploy)\b/m);
 });
 
 test('the publisher fails closed until GitHub confirms draft state and exact remote scope', () => {
   assert.match(publisher, /pr_url="\$\(gh pr create/);
-  assert.match(publisher, /gh pr view "\$pr_url" --repo "\$GITHUB_REPOSITORY" --json isDraft,baseRefName,headRefName,files/);
+  assert.match(publisher, /gh pr view "\$pr_url" --repo "\$GITHUB_REPOSITORY" --json isDraft,baseRefName,headRefName,baseRefOid,headRefOid,files/);
   assert.match(publisher, /jq -e --arg branch "\$branch" --arg evidence "\$evidence"/);
   for (const clause of [
     '.isDraft == true',
     '.baseRefName == "main"',
     '.headRefName == $branch',
+    '.baseRefOid == $base_sha',
+    '.headRefOid == $candidate_sha',
     '(.files | length) == 1',
     '.files[0].path == $evidence'
   ]) assert.ok(publisher.includes(clause), 'missing remote attestation: ' + clause);
