@@ -71,9 +71,9 @@ jobs:
           pr_url="$(gh pr create --repo "$GITHUB_REPOSITORY" --draft --base main --head "$branch" \
             --title "AIEO synthetic-only bot Draft PR proof #${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --body "Synthetic-only workflow proof. Fixed test data; no real code changes, no OpenRouter/source transmission, no merge and no production deployment. Human review required.")"
-          # Attest GitHub\u0027s actual response, not only that the CLI accepted --draft.
+          # Attest GitHub's actual response, not only that the CLI accepted --draft.
           pr_json="$(gh pr view "$pr_url" --repo "$GITHUB_REPOSITORY" --json isDraft,baseRefName,headRefName,files)"
           jq -e --arg branch "$branch" --arg evidence "$evidence" \
-            \u0027.isDraft == true and .baseRefName == "main" and .headRefName == $branch and (.files | length) == 1 and .files[0].path == $evidence\u0027 \
+            '.isDraft == true and .baseRefName == "main" and .headRefName == $branch and (.files | length) == 1 and .files[0].path == $evidence' \
             <<<"$pr_json" >/dev/null
           echo "PASS: GitHub confirmed a Draft PR limited to the single synthetic evidence file"
