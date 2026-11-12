@@ -1,0 +1,33 @@
+name: AIEO Synthetic Draft PR Pilot Policy (read only)
+on:
+  pull_request:
+    branches: [main, 'aieo/**']
+    paths:
+      - '.github/workflows/aieo-synthetic-draft-pr-pilot.yml'
+      - '.github/workflows/aieo-synthetic-draft-policy.yml'
+      - 'scripts/aieo-synthetic-draft-policy.test.mjs'
+permissions:
+  contents: read
+jobs:
+  policy:
+    name: Validate manual approval, write scope and Draft PR attestation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run fixed synthetic pilot policy tests, without credentials
+        env:
+          OPENROUTER_API_KEY: ''
+          GH_TOKEN: ''
+        run: node --test scripts/aieo-synthetic-draft-policy.test.mjs
+      - name: Verify no local modifications
+        run: |
+          git diff --exit-code
+          git diff --cached --exit-code
