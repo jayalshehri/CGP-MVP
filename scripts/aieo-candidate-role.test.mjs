@@ -352,3 +352,43 @@ test('independent Git QA rejects unchanged route relocated under a dead branch',
     assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted fixture main is unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('independent real-Git QA refuses a model candidate that forces a hidden widget visible guard to false', () => {
+  const f = setup();
+  try {
+    // Build a new trusted baseline with a realistic pre-render visibility guard.
+    f.git('switch', '-q', 'main');
+    const guarded = original.replace('  const statusLabel = "Old status";',
+      '  if (!visible) return null;\n' +
+      '  const statusLabel = "Old status";\n' +
+      '  return <><span>{statusLabel}</span></>;');
+    writeFileSync(join(f.cwd, path), guarded);
+    f.git('add', path);
+    f.git('commit', '-qm', 'fixture with trusted pre-render visibility logic');
+    const trustedHead = f.git('rev-parse', 'HEAD');
+    f.git('push', '-q', '--force', 'origin', 'main');
+
+    f.git('switch', '-q', branch);
+    f.git('reset', '--hard', 'main');
+    const disabled = guarded.replace('if (!visible) return null;', 'if (true) return null;');
+    assert.ok(disabled.includes(route), 'route hook remains unchanged');
+    writeFileSync(join(f.cwd, path), disabled);
+    f.git('add', path);
+    f.git('commit', '-qm', 'synthetic disabled feedback UI');
+    f.git('push', '-q', '--force', 'origin', branch);
+    f.pr.base.sha = trustedHead;
+    f.pr.head.sha = f.git('rev-parse', 'HEAD');
+    f.savePr();
+    f.git('switch', '-q', 'main');
+
+    const overrides = { GITHUB_SHA: trustedHead };
+    assert.equal(f.run('developer', overrides).status, 0, 'trusted Git provenance passes');
+    assert.notEqual(f.run('qa', overrides).status, 0,
+      'independent QA must reject newly unconditional early return');
+    assert.equal(f.run('security', overrides).status, 0,
+      'generic security scanner is not a substitute for QA runtime invariants');
+    assert.notEqual(f.run('reviewer', overrides).status, 0, 'Reviewer must fail closed');
+    assert.equal(f.git('rev-parse', 'main'), trustedHead, 'main fixture stays unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
