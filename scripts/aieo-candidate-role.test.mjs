@@ -606,3 +606,66 @@ test('four independent real-Git roles accept actual widget copy and reject refac
     rmSync(f.root, { recursive: true, force: true });
   }
 });
+
+
+test('independent roles reject a real feedback network-error handler fix outside model copy-only scope', () => {
+  // A legitimate application repair (review/feedback-network-error) must NOT
+  // be automatically certified by the bounded display-copy model workflow.
+  // Source here is the real trusted widget; no application file is changed.
+  const f = setup();
+  try {
+    const source = readFileSync(new URL('../components/FeedbackWidget.tsx', import.meta.url), 'utf8');
+    const before = [
+      '    const { data: auth } = await supabase.auth.getUser();',
+      '    if (!auth.user) { setError("انتهت جلسة الدخول. سجّل الدخول ثم حاول مرة أخرى."); setState("error"); return; }',
+      '    const { error: insertError } = await supabase.from("feedback").insert({ created_by: auth.user.id, category, priority, message: cleanMessage, page_path: pagePath, control_id: controlId ? Number(controlId) : null });',
+      '    if (insertError) { setError("تعذر حفظ الملاحظة. حاول مرة أخرى."); setState("error"); return; }',
+      '    setMessage(""); setState("success");'
+    ].join('\n');
+    const after = [
+      '    try {',
+      '      const { data: auth, error: authError } = await supabase.auth.getUser();',
+      '      if (authError || !auth.user) { setError("انتهت جلسة الدخول. سجّل الدخول ثم حاول مرة أخرى."); setState("error"); return; }',
+      '      const { error: insertError } = await supabase.from("feedback").insert({ created_by: auth.user.id, category, priority, message: cleanMessage, page_path: pagePath, control_id: controlId ? Number(controlId) : null });',
+      '      if (insertError) { setError("تعذر حفظ الملاحظة. حاول مرة أخرى."); setState("error"); return; }',
+      '      setMessage(""); setState("success");',
+      '    } catch {',
+      '      setError("تعذر الاتصال بالخدمة. تحقق من اتصالك وحاول مرة أخرى.");',
+      '      setState("error");',
+      '    }'
+    ].join('\n');
+    assert.ok(source.includes(before), 'source baseline must still match real original handler');
+    const repaired = source.replace(before, after);
+    assert.notEqual(repaired, source);
+
+    f.git('switch', '-q', 'main');
+    writeFileSync(join(f.cwd, path), source);
+    f.git('add', path);
+    f.git('commit', '-qm', 'trusted real-source baseline');
+    const baseSha = f.git('rev-parse', 'HEAD');
+    f.git('push', '-q', 'origin', 'main');
+
+    f.git('switch', '-q', branch);
+    f.git('reset', '--hard', 'main');
+    writeFileSync(join(f.cwd, path), repaired);
+    f.git('add', path);
+    f.git('commit', '-qm', 'realistic network failure repair candidate');
+    const headSha = f.git('rev-parse', 'HEAD');
+    f.git('push', '-q', '--force', 'origin', branch);
+    f.pr.base.sha = baseSha;
+    f.pr.head.sha = headSha;
+    f.savePr();
+    f.git('switch', '-q', 'main');
+
+    const env = { GITHUB_SHA: baseSha };
+    assert.equal(f.run('developer', env).status, 0,
+      'Developer verifies Git provenance, not arbitrary behavioral correctness');
+    assert.notEqual(f.run('qa', env).status, 0,
+      'QA must reject behavioral application fixes outside its approved text-only model scope');
+    assert.notEqual(f.run('security', env).status, 0,
+      'Security must independently block edits to the protected submit handler');
+    assert.notEqual(f.run('reviewer', env).status, 0,
+      'Reviewer must refuse an otherwise legitimate but unapproved model-scope repair');
+    assert.equal(f.git('rev-parse', 'main'), baseSha, 'trusted main stays unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
