@@ -94,6 +94,7 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
       GITHUB_EVENT_NAME: 'workflow_dispatch',
       GITHUB_REF: 'refs/heads/main',
       GITHUB_RUN_ID: '77331', GITHUB_RUN_ATTEMPT: '1',
+      GITHUB_SHA: git('rev-parse', 'HEAD').trim(),
       OPENROUTER_API_KEY: 'synthetic-only-do-not-use',
       OPENROUTER_MODEL_ID: 'provider/fixture',
       AIEO_MODEL_ENABLED: 'true',
