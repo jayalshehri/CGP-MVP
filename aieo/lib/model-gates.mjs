@@ -103,11 +103,11 @@ function isOnlyRenderedTextEdit(original, actual) {
     const replacement = actual.slice(start, actual.length - suffix.length);
     if (!replacement.trim() || replacement === previousText ||
         replacement.length > 240 ||
-        // Fail closed on Unicode default-ignorables (soft hyphen, joiners,
-        // bidi controls, etc.), control/line separators and *all* JSX entities.
-        // Named entities such as &shy; or &Tab; can otherwise smuggle hidden
-        // characters past a numeric/bidi-only entity filter.
-        /[\p{Default_Ignorable_Code_Point}\p{Cc}\p{Zl}\p{Zp}]/u.test(replacement) ||
+        // Fail closed on every Unicode Other category (format controls,
+        // private-use, isolated surrogates, noncharacters), default-ignorables
+        // (including combining marks), separators and *all* JSX entities.
+        // Non-printing characters cannot be certified as inert display copy.
+        /[\p{C}\p{Default_Ignorable_Code_Point}\p{Zl}\p{Zp}]/u.test(replacement) ||
         /&(?:#[xX][0-9a-f]+|#[0-9]+|[a-z][a-z0-9]+);/i.test(replacement) ||
         /[<>{}\r\n"'\x60\\\x00-\x1f]/.test(replacement)) continue;
     return true;
