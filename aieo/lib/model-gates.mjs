@@ -68,6 +68,33 @@ function guardedRoutePrefix(source) {
   return normalized.slice(0, end);
 }
 
+// For a rendered TSX component, the model may change one inert, static text
+// node inside a simple JSX element. Freeze tags, attributes, JSX expressions,
+// state bindings and control flow byte-for-byte. This is a deliberately
+// conservative source check, not a TSX parser or a functional proof.
+function isOnlyRenderedTextEdit(original, actual) {
+  const marker = '\n  return <>';
+  const renderStart = original.indexOf(marker);
+  if (renderStart < 0) return true; // Legacy route-only synthetic fixtures.
+  const offset = renderStart + marker.length;
+  const literalElement = /<([a-z][\w-]*)(?:\s+[^<>{}\r\n]*)?>([^<>{}\r\n]+)<\/\1>/gi;
+  for (const match of original.slice(offset).matchAll(literalElement)) {
+    const previousText = match[2];
+    if (!previousText.trim()) continue;
+    const start = offset + match.index + match[0].indexOf('>') + 1;
+    const end = start + previousText.length;
+    const prefix = original.slice(0, start);
+    const suffix = original.slice(end);
+    if (!actual.startsWith(prefix) || !actual.endsWith(suffix)) continue;
+    const replacement = actual.slice(start, actual.length - suffix.length);
+    if (!replacement.trim() || replacement === previousText ||
+        replacement.length > 240 ||
+        /[<>{}\r\n"'\x60\\\x00-\x1f]/.test(replacement)) continue;
+    return true;
+  }
+  return false;
+}
+
 export function inspectModelQa({ original, actual, changedPaths, report }) {
   const findings = [];
   if (!exactScope(changedPaths)) findings.push('QA scope is not exactly the allowlisted file');
@@ -87,6 +114,12 @@ export function inspectModelQa({ original, actual, changedPaths, report }) {
   // widget invisible, moves it into dead code, or rewrites subsequent hooks.
   const hasInvariant = hasLiveRouteLine(original) && hasLiveRouteLine(actual) &&
     guardedRoutePrefix(original) === guardedRoutePrefix(actual);
+  // A preserved render entry alone does not protect JSX state and submit
+  // bindings. Do not treat structural JSX edits as harmless copy changes.
+  if (typeof original === 'string' && typeof actual === 'string' &&
+      !isOnlyRenderedTextEdit(original, actual)) {
+    findings.push('Rendered JSX edit is not one inert literal text node');
+  }
   const regressions = routeCases.filter(([path, expected]) =>
     (routeMatcher.exec(path)?.[1] ?? null) === expected).length;
   if (!hasInvariant || regressions !== routeCases.length) {
