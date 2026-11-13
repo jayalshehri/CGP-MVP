@@ -11,6 +11,7 @@ const foundation = read('.github/workflows/aieo-multi-agent.yml');
 const publisher = read('scripts/aieo-publish-draft.mjs');
 const provider = read('aieo/lib/model-provider.mjs');
 const candidateRoles = read('.github/workflows/aieo-model-candidate-roles.yml');
+const finalizer = read('scripts/aieo-candidate-finalize.mjs');
 
 test('provider-backed source sharing stays manual, explicit, and environment-scoped', () => {
   const guard = "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true";
@@ -59,8 +60,12 @@ test('dispatched independent model candidate roles are read-only and run trusted
   }
   assert.doesNotMatch(candidateRoles, /^env:\s*\n\s*GH_TOKEN:/m,
     'candidate build must not inherit GitHub credentials at workflow scope');
-  assert.equal((candidateRoles.match(/GH_TOKEN: \$\{\{ github.token \}\}/g) || []).length, 4,
-    'only the four trusted role CLI steps may receive a read-only GitHub token');
+  assert.equal((candidateRoles.match(/GH_TOKEN: \$\{\{ github.token \}\}/g) || []).length, 5,
+    'only the four role CLI steps and post-build re-attestation receive a read-only token');
+  assert.ok(candidateRoles.includes('node scripts/aieo-candidate-finalize.mjs'));
+  assert.ok(finalizer.includes("pr.draft !== true"));
+  assert.ok(finalizer.includes("pr.head?.sha !== head"));
+  assert.doesNotMatch(finalizer, /(?:['"]pr merge['"]|--auto-merge|--force-with-lease)/);
   assert.ok(publisher.includes("'aieo-model-candidate-roles.yml'"));
   assert.ok(publisher.includes("'dispatched-not-proven'"));
 });
