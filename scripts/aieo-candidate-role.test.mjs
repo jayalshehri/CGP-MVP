@@ -225,3 +225,22 @@ test('reject a one-commit, one-path candidate that changes executable file mode'
     assert.equal(f.git('rev-parse', 'main'), f.base, 'main must remain unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('refuse staged and unstaged changes to trusted tracked files before any candidate review', () => {
+  const f = setup();
+  try {
+    // Reports are untracked handoff artifacts and must remain allowed.
+    assert.equal(f.run('developer').status, 0, 'clean base checkout should pass');
+    writeFileSync(join(f.cwd, path), candidate);
+    assert.notEqual(f.run('developer').status, 0,
+      'unstaged worktree edits must not be treated as the trusted workflow checkout');
+    f.git('add', path);
+    assert.notEqual(f.run('developer').status, 0,
+      'staged changes must also be rejected even while HEAD matches the trusted SHA');
+    f.git('restore', '--staged', '--worktree', '--', path);
+    assert.equal(f.run('developer').status, 0,
+      'restored trusted checkout with untracked report artifact should pass');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'main must remain untouched');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
