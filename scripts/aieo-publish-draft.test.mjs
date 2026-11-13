@@ -117,6 +117,8 @@ test('publisher pushes a scoped candidate branch and invokes only Draft PR comma
     assert.match(commands, /pr view https:\/\/github.com\/jayalshehri\/CGP-MVP\/pull\/123 --json/);
     assert.match(commands, /api repos\/jayalshehri\/CGP-MVP\/pulls\/123 --jq/);
     assert.match(commands, /workflow run cgp-required-ci.yml --ref aieo\/model-proposal-99123-1/);
+    assert.match(commands, /workflow run aieo-model-candidate-roles.yml --ref main -f pr_number=123/);
+    assert.equal(result.independentRoles, 'dispatched-not-proven');
     assert.doesNotMatch(commands, /(?:^|\n).*?(?:pr merge|deployment|release)(?: |$)/);
   } finally { rmSync(f.root, { force: true, recursive: true }); }
 });
