@@ -189,3 +189,46 @@ test('QA and Reviewer block disabling the component after a preserved route hook
     }).status, 'blocked', 'Reviewer must reject a fabricated success report');
   }
 });
+
+
+test('QA and Reviewer allow literal JSX copy but block post-render state bypass with valid hashes', () => {
+  const baseline = [
+    'function fixture() {',
+    route,
+    '  if (!visible) return null;',
+    '  return <>',
+    '    <div>{open && <span>Old label</span>}</div>',
+    '    <form onSubmit={submit}><strong>Save feedback</strong></form>',
+    '  </>;',
+    '}',
+    ''
+  ].join('\n');
+  const bound = (source) => ({
+    schemaVersion: 1, status: 'proposed', path: MODEL_ALLOWED_PATH,
+    sourceHash: hash(baseline), proposedHash: hash(source)
+  });
+  const good = baseline.replace('Old label', 'Updated label');
+  const checked = inspectModelQa({ original: baseline, actual: good, changedPaths, report: bound(good) });
+  assert.equal(checked.status, 'passed', 'bounded static JSX copy remains permitted');
+
+  for (const unsafe of [
+    baseline.replace('open &&', 'false &&'),
+    baseline.replace('<span>Old label</span>', '<span>{false && "Old label"}</span>'),
+    baseline.replace('<form onSubmit={submit}>', '<form onSubmit={() => {}}>'),
+    baseline.replace('<span>Old label</span>', '<span onClick={() => setOpen(false)}>Old label</span>')
+  ]) {
+    const proposal = bound(unsafe);
+    const currentQa = inspectModelQa({ original: baseline, actual: unsafe, changedPaths, report: proposal });
+    assert.equal(currentQa.status, 'failed', 'JSX expression and attribute changes must not pass as copy edits');
+    assert.match(currentQa.findings.join(' '), /Rendered JSX edit/);
+    const sec = inspectModelDiff({
+      original: baseline, actual: unsafe, changedPaths,
+      diff: '@@ -1 +1 @@\n+    <div>changed markup</div>\n', report: proposal
+    });
+    assert.equal(inspectModelReviewer({
+      original: baseline, actual: unsafe, changedPaths,
+      diff: '@@ -1 +1 @@\n+    <div>changed markup</div>\n',
+      proposal, qa: { ...checked, proposedHash: hash(unsafe) }, security: sec
+    }).status, 'blocked', 'Reviewer independently recomputes JSX integrity');
+  }
+});
