@@ -155,3 +155,35 @@ test('tampered reports fail Reviewer; an unrelated extra file fails Developer', 
     assert.equal(f.git('rev-parse', 'main'), f.base);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('final clean-runner recheck rejects a Draft closed or replaced after all four roles passed', () => {
+  const f = setup();
+  try {
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const result = f.run(role);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+    }
+    // An earlier green Reviewer report is not sufficient if GitHub closes the PR.
+    f.pr.state = 'closed';
+    f.savePr();
+    assert.notEqual(f.run('reviewer').status, 0, 'post-build recheck must reject a closed PR');
+    f.pr.state = 'open';
+    f.savePr();
+
+    // The branch can change while lint/build runs. Revalidation must not
+    // accept prior role artifacts against the replacement commit.
+    f.git('switch', '-q', branch);
+    writeFileSync(join(f.cwd, path), candidate.replace('"Current status"', '"Changed after review"'));
+    f.git('add', path);
+    f.git('commit', '-qm', 'replace candidate after role review');
+    f.git('push', '-q', 'origin', branch);
+    const changedHead = f.git('rev-parse', 'HEAD');
+    f.git('switch', '-q', 'main');
+    assert.notEqual(f.run('reviewer').status, 0, 'stale GitHub head metadata must fail');
+    f.pr.head.sha = changedHead;
+    f.savePr();
+    assert.notEqual(f.run('reviewer').status, 0, 'old Developer evidence must not attest new head');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'main stays unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
