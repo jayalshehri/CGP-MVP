@@ -440,3 +440,58 @@ test('independent real-Git roles accept copy but reject JSX state bypass on a bo
     assert.equal(f.git('rev-parse', 'main'), trusted, 'trusted fixture main is unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('independent real-Git roles reject markup-shaped JS string edits while allowing visible copy', () => {
+  const f = setup();
+  try {
+    f.git('switch', '-q', 'main');
+    const baseline = original.replace('  const statusLabel = "Old status";', [
+      '  const statusLabel = "Old status";',
+      '  return <>',
+      '    {(() => {',
+      '      const endpoint = "https://trusted.example/<span>Old endpoint</span>";',
+      '      return <a href={endpoint}>Help</a>;',
+      '    })()}',
+      '    <span>Visible label</span>',
+      '  </>;'
+    ].join('\n'));
+    writeFileSync(join(f.cwd, path), baseline);
+    f.git('add', path);
+    f.git('commit', '-qm', 'trusted JSX baseline containing a code string');
+    const trusted = f.git('rev-parse', 'HEAD');
+    f.git('push', '-q', '--force', 'origin', 'main');
+    f.pr.base.sha = trusted;
+    const overrides = { GITHUB_SHA: trusted };
+
+    const publish = (content, message) => {
+      f.git('switch', '-q', branch);
+      f.git('reset', '--hard', 'main');
+      writeFileSync(join(f.cwd, path), content);
+      f.git('add', path);
+      f.git('commit', '-qm', message);
+      f.git('push', '-q', '--force', 'origin', branch);
+      f.pr.head.sha = f.git('rev-parse', 'HEAD');
+      f.savePr();
+      f.git('switch', '-q', 'main');
+    };
+
+    publish(baseline.replace('Visible label', 'Updated label'), 'legitimate JSX copy');
+    for (const [role, status] of [
+      ['developer', 'proposed'], ['qa', 'passed'],
+      ['security', 'passed'], ['reviewer', 'draft-pr-eligible']
+    ]) {
+      const result = f.run(role, overrides);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+      assert.equal(JSON.parse(result.stdout).status, status);
+    }
+
+    publish(baseline.replace('Old endpoint', 'Changed endpoint'), 'JS string disguised as JSX text');
+    assert.equal(f.run('developer', overrides).status, 0, 'source provenance alone is valid');
+    assert.notEqual(f.run('qa', overrides).status, 0,
+      'independent QA must reject edits inside a JS string');
+    assert.notEqual(f.run('reviewer', overrides).status, 0,
+      'Reviewer must not certify an unchanged-looking JSX string');
+    assert.equal(f.git('rev-parse', 'main'), trusted, 'fixture main remains unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
