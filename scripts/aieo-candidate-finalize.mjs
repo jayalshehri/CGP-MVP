@@ -44,6 +44,12 @@ export function verifyPostBuild(env = process.env) {
       gitTrim('diff', '--name-only') !== path ||
       developer.baseSha !== base || developer.prNumber !== Number(number)) fail();
 
+  // Re-check the trusted index AFTER dependency installation and build. Git
+  // diff/status can hide modified tracked files behind assume-unchanged or
+  // skip-worktree flags, including files other than the approved candidate.
+  // A normal non-sparse Actions checkout must keep every entry visible.
+  const indexEntries = git('ls-files', '-v', '-z').split('\0').filter(Boolean);
+  if (!indexEntries.length || indexEntries.some((entry) => !entry.startsWith('H '))) fail();
   // The build must compile exactly the previously reviewed immutable blob.
   const file = lstatSync(path);
   if (!file.isFile() || file.isSymbolicLink() || (file.mode & 0o111)) fail();

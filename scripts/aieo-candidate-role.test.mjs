@@ -26,6 +26,7 @@ function setup() {
   mkdirSync(cwd);
   mkdirSync(bin);
   mkdirSync(join(cwd, 'components'));
+  mkdirSync(join(cwd, 'scripts'));
   const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
   execFileSync('git', ['init', '--bare', '-q', remote], { cwd: root });
   git('init', '-q', '-b', 'main');
@@ -33,7 +34,8 @@ function setup() {
   git('config', 'user.email', 'fixture@example.invalid');
   git('remote', 'add', 'origin', remote);
   writeFileSync(join(cwd, path), original);
-  git('add', path);
+  writeFileSync(join(cwd, 'scripts/trusted-build-step.mjs'), 'export const approved = true;\n');
+  git('add', path, 'scripts/trusted-build-step.mjs');
   git('commit', '-qm', 'trusted baseline');
   const base = git('rev-parse', 'HEAD');
   git('push', '-q', '-u', 'origin', 'main');
@@ -693,6 +695,28 @@ test('post-build gate reattests the exact independently reviewed blob and curren
     assert.equal(outcome.headSha, f.head);
     assert.equal(outcome.requiresHumanMerge, true);
     assert.equal(f.git('rev-parse', 'main'), f.base);
+
+    // Simulate a build tool modifying another tracked source while setting an
+    // index flag that hides the change from the previous diff-only finalizer.
+    // The approved candidate itself remains byte-identical.
+    const trustedBuildPath = 'scripts/trusted-build-step.mjs';
+    const trustedBuild = join(f.cwd, trustedBuildPath);
+    const trustedBuildOriginal = readFileSync(trustedBuild, 'utf8');
+    for (const [hide, unhide] of [
+      ['--assume-unchanged', '--no-assume-unchanged'],
+      ['--skip-worktree', '--no-skip-worktree']
+    ]) {
+      writeFileSync(trustedBuild, 'export const approved = false;\n');
+      f.git('update-index', hide, trustedBuildPath);
+      assert.equal(f.git('diff', '--name-only'), path,
+        'a normal diff conceals the unapproved tracked build-time change');
+      assert.notEqual(verify().status, 0,
+        hide + ': final post-build attestation must reject hidden source tampering');
+      f.git('update-index', unhide, trustedBuildPath);
+      f.git('restore', '--worktree', '--', trustedBuildPath);
+      assert.equal(readFileSync(trustedBuild, 'utf8'), trustedBuildOriginal);
+      assert.equal(verify().status, 0, 'clean restored checkout still passes');
+    }
 
     writeFileSync(join(f.cwd, path), reviewedSource.replace('Current status', 'Changed after review'));
     assert.notEqual(verify().status, 0, 'source mutated during build must be rejected');
