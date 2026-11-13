@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync, symlinkSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -60,6 +60,7 @@ function fixture() {
     GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main',
     GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
     GITHUB_RUN_ID: '99123', GITHUB_RUN_ATTEMPT: '1',
+    GITHUB_SHA: git(workspace, 'rev-parse', 'HEAD'),
     GH_TOKEN: 'placeholder-not-a-real-secret',
     AIEO_PUBLISH_MODE: 'model', AIEO_MODEL_ENABLED: 'true',
     AIEO_SOURCE_SHARING_APPROVED: 'true'
@@ -122,6 +123,42 @@ test('publisher pushes a scoped candidate branch and invokes only Draft PR comma
     assert.doesNotMatch(commands, /(?:^|\n).*?(?:pr merge|deployment|release)(?: |$)/);
   } finally { rmSync(f.root, { force: true, recursive: true }); }
 });
+
+
+for (const [name, mutate] of [
+  ['missing trusted GitHub SHA', (f) => { delete f.env.GITHUB_SHA; }],
+  ['mismatched trusted GitHub SHA', (f) => { f.env.GITHUB_SHA = '0'.repeat(40); }],
+  ['assume-unchanged Git index flag', (f) => {
+    git(f.workspace, 'update-index', '--assume-unchanged', '--', MODEL_ALLOWED_PATH);
+  }],
+  ['skip-worktree Git index flag', (f) => {
+    git(f.workspace, 'update-index', '--skip-worktree', '--', MODEL_ALLOWED_PATH);
+  }],
+  ['new executable mode on candidate', (f) => { chmodSync(f.target, 0o755); }],
+  ['symlink replacing tracked source', (f) => {
+    const outside = join(f.root, 'external-source.tsx');
+    writeFileSync(outside, readFileSync(f.target, 'utf8'));
+    unlinkSync(f.target);
+    symlinkSync(outside, f.target);
+  }]
+]) {
+  test('publisher refuses untrusted checkout before any branch or remote write: ' + name, () => {
+    const f = fixture();
+    try {
+      const oldMain = git(f.workspace, 'rev-parse', 'main');
+      mutate(f);
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, 'unsafe checkout must be rejected');
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), oldMain);
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.equal(existsSync(f.log), false, 'GitHub CLI must not be called');
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /refs\/heads\/aieo\/model-proposal-99123-1/);
+    } finally { rmSync(f.root, { force: true, recursive: true }); }
+  });
+}
 
 test('tampered model QA evidence stops before any push or PR operation', () => {
   const f = fixture();
