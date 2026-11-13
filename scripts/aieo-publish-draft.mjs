@@ -1,6 +1,6 @@
 // Trusted, fail-closed publisher. It cannot merge, approve, or deploy.
 // Call only after a manual main-branch dispatch and successful application gates.
-import { readFileSync } from 'node:fs';
+import { readFileSync, lstatSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
@@ -64,9 +64,33 @@ export function verifyCandidate({ mode, original, actual, changedPaths, diff, re
   return true;
 }
 
+// GitHub's event ref alone does not establish the checked-out source commit.
+// Reject a stale/mismatched checkout, concealed index flags, or a file mode/type
+// change before creating a branch, pushing code, or contacting the GitHub CLI.
+function assertTrustedCheckout(env, path) {
+  const expectedSha = env.GITHUB_SHA || '';
+  const checkedOutSha = command('git', ['rev-parse', '--verify', 'HEAD']).trim();
+  if (!/^[a-f0-9]{40}$/.test(expectedSha) || checkedOutSha !== expectedSha) {
+    fail('candidate checkout differs from the trusted workflow commit');
+  }
+  const entries = command('git', ['ls-files', '-v', '-z']).split('\0').filter(Boolean);
+  if (!entries.length || entries.some((entry) => !entry.startsWith('H '))) {
+    fail('hidden or special Git index flags in the trusted checkout');
+  }
+  const indexEntry = command('git', ['ls-files', '-s', '--', path]).trim();
+  if (!/^100644 [a-f0-9]{40} 0\tcomponents\/FeedbackWidget\.tsx$/.test(indexEntry)) {
+    fail('candidate must start from a regular, non-executable tracked file');
+  }
+  const file = lstatSync(path);
+  if (!file.isFile() || file.isSymbolicLink() || (file.mode & 0o111)) {
+    fail('candidate must remain a regular, non-executable file');
+  }
+}
+
 export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
   const path = MODEL_ALLOWED_PATH;
+  assertTrustedCheckout(env, path);
   // Refuse pre-staged changes, untracked files and whitespace errors before any write.
   if (command('git', ['diff', '--cached', '--name-only']).trim()) fail('unexpected staged files');
   if (command('git', ['ls-files', '--others', '--exclude-standard'])
