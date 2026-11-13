@@ -696,6 +696,23 @@ test('post-build gate reattests the exact independently reviewed blob and curren
     assert.equal(outcome.requiresHumanMerge, true);
     assert.equal(f.git('rev-parse', 'main'), f.base);
 
+    // Untracked files do not appear in git diff. Do not attest a build that
+    // generated a new source/config or an unexpected extra role artifact.
+    for (const untrackedPath of [
+      'scripts/unexpected-build-source.mjs',
+      'aieo-output/unexpected-review-artifact.json'
+    ]) {
+      const unexpectedFile = join(f.cwd, untrackedPath);
+      writeFileSync(unexpectedFile, '{"unexpected":true}\\n');
+      assert.equal(f.git('diff', '--name-only'), path,
+        'normal git diff must not observe untracked build-time files');
+      assert.notEqual(verify().status, 0,
+        'post-build gate must reject unexpected untracked path: ' + untrackedPath);
+      rmSync(unexpectedFile);
+      assert.equal(verify().status, 0,
+        'removing the unexpected file restores the valid candidate proof');
+    }
+
     // Simulate a build tool modifying another tracked source while setting an
     // index flag that hides the change from the previous diff-only finalizer.
     // The approved candidate itself remains byte-identical.
