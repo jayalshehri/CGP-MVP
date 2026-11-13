@@ -21,11 +21,16 @@ export default function FeedbackWidget({ pagePath, visible }: FeedbackWidgetProp
     const cleanMessage = message.trim();
     if (!cleanMessage) { setError("اكتب الملاحظة قبل الإرسال."); setState("error"); return; }
     setState("saving"); setError("");
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) { setError("انتهت جلسة الدخول. سجّل الدخول ثم حاول مرة أخرى."); setState("error"); return; }
-    const { error: insertError } = await supabase.from("feedback").insert({ created_by: auth.user.id, category, priority, message: cleanMessage, page_path: pagePath, control_id: controlId ? Number(controlId) : null });
-    if (insertError) { setError("تعذر حفظ الملاحظة. حاول مرة أخرى."); setState("error"); return; }
-    setMessage(""); setState("success");
+    try {
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError || !auth.user) { setError("انتهت جلسة الدخول. سجّل الدخول ثم حاول مرة أخرى."); setState("error"); return; }
+      const { error: insertError } = await supabase.from("feedback").insert({ created_by: auth.user.id, category, priority, message: cleanMessage, page_path: pagePath, control_id: controlId ? Number(controlId) : null });
+      if (insertError) { setError("تعذر حفظ الملاحظة. حاول مرة أخرى."); setState("error"); return; }
+      setMessage(""); setState("success");
+    } catch {
+      setError("تعذر الاتصال بالخدمة. تحقق من اتصالك وحاول مرة أخرى.");
+      setState("error");
+    }
   }
 
   return <>
