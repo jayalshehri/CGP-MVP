@@ -208,6 +208,9 @@ test('reject a one-commit, one-path candidate that changes executable file mode'
     writeFileSync(join(f.cwd, path), candidate);
     f.git('add', path);
     f.git('update-index', '--chmod=+x', path);
+    // Keep the fixture's physical mode consistent with the index. Otherwise
+    // Git correctly refuses switching back to main due to dirty local mode.
+    chmodSync(join(f.cwd, path), 0o755);
     f.git('commit', '-qm', 'one-commit candidate with unapproved executable mode');
     const head = f.git('rev-parse', 'HEAD');
     f.git('push', '-q', '--force', 'origin', branch);
