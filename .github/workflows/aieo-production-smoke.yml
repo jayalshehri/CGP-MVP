@@ -1,5 +1,9 @@
 name: AIEO Production Smoke
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    branches: [aieo/production-readonly-smoke-20261114]
+    paths: [.github/workflows/aieo-production-smoke.yml, scripts/aieo-production-smoke.mjs]
 permissions:
   contents: read
 jobs:
