@@ -55,12 +55,22 @@ function verifiedRemoteContext(env) {
   // Fetch only this verified same-repository candidate ref; check that it has not
   // moved since the API attestation. This avoids trusting a stale PR observation.
   try {
+    // The independent role must execute from the trusted workflow checkout,
+    // never from a candidate branch or another local revision.
+    if (git(['rev-parse', 'HEAD']).trim() !== env.GITHUB_SHA) block();
     git(['fetch', '--no-tags', 'origin', 'refs/heads/' + headRef]);
     if (git(['rev-parse', 'FETCH_HEAD']).trim() !== head) block();
     // The guarded publisher creates exactly ONE commit on the approved main
     // base. A simple ancestor check would silently accept multi-commit or merge
     // histories, even when their final tree changes just the allowlisted file.
     if (git(['rev-list', '--parents', '-n', '1', head]).trim() !== head + ' ' + base) block();
+    // A text-only proposal must preserve the regular, non-executable file mode.
+    // The path-only diff check misses chmod/symlink/type changes to that file.
+    for (const revision of [base, head]) {
+      const entry = git(['ls-tree', revision, '--', MODEL_ALLOWED_PATH]).trimEnd();
+      if (!/^100644 blob [a-f0-9]{40}\\t/.test(entry) ||
+          !entry.endsWith('\\t' + MODEL_ALLOWED_PATH)) block();
+    }
   } catch { block(); }
   return { base, head, number: Number(number) };
 }
