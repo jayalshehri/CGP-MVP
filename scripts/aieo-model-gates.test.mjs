@@ -141,3 +141,51 @@ test('QA and Reviewer reject live-looking route guard relocated into unreachable
     }).status, 'blocked', 'Reviewer independently rejects forged QA success');
   }
 });
+
+
+test('QA and Reviewer block disabling the component after a preserved route hook', () => {
+  const baseline = [
+    'function fixture() {',
+    route,
+    '  if (!visible) return null;',
+    '  async function submit(event: FormEvent<HTMLFormElement>) {',
+    '    await save();',
+    '  }',
+    '  return <>',
+    '    <form onSubmit={submit}><span>Old label</span></form>',
+    '  </>;',
+    '}',
+    ''
+  ].join('\n');
+  const valid = baseline.replace('Old label', 'New label');
+  const attested = (current) => ({
+    schemaVersion: 1, status: 'proposed', path: MODEL_ALLOWED_PATH,
+    sourceHash: hash(baseline), proposedHash: hash(current)
+  });
+  const good = inspectModelQa({
+    original: baseline, actual: valid, changedPaths, report: attested(valid)
+  });
+  assert.equal(good.status, 'passed', 'bounded JSX label edits remain possible');
+
+  for (const unsafe of [
+    baseline.replace('if (!visible) return null;', 'if (true) return null;'),
+    baseline.replace('    await save();', '    return;'),
+    baseline.replace('  return <>', '  return <div>')
+  ]) {
+    const proposal = attested(unsafe);
+    const currentQa = inspectModelQa({
+      original: baseline, actual: unsafe, changedPaths, report: proposal
+    });
+    assert.equal(currentQa.status, 'failed', 'pre-render logic and entry point are trusted');
+    assert.equal(currentQa.routeCasesPassed, 0, 'an unchanged live route line alone is not enough');
+    const changedLine = unsafe.split('\n').find((line) => !baseline.split('\n').includes(line));
+    const delta = '@@ -1 +1 @@\n+' + (changedLine || '  const noop = false;') + '\n';
+    const sec = inspectModelDiff({
+      original: baseline, actual: unsafe, changedPaths, diff: delta, report: proposal
+    });
+    assert.equal(inspectModelReviewer({
+      original: baseline, actual: unsafe, changedPaths, diff: delta,
+      proposal, qa: { ...good, proposedHash: hash(unsafe) }, security: sec
+    }).status, 'blocked', 'Reviewer must reject a fabricated success report');
+  }
+});
