@@ -19,7 +19,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GH_TOKEN: ${{ github.token }}
   AIEO_PR_NUMBER: ${{ inputs.pr_number }}
 
 jobs:
@@ -37,7 +36,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node scripts/aieo-candidate-role.mjs developer
+      - name: Verify bounded candidate using trusted code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-role.mjs developer
       - uses: actions/upload-artifact@v4
         with:
           name: aieo-candidate-developer
@@ -62,7 +64,10 @@ jobs:
         with:
           name: aieo-candidate-developer
           path: aieo-output
-      - run: node scripts/aieo-candidate-role.mjs qa
+      - name: Verify bounded candidate using trusted code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-role.mjs qa
       - uses: actions/upload-artifact@v4
         with:
           name: aieo-candidate-qa
@@ -87,7 +92,10 @@ jobs:
         with:
           name: aieo-candidate-developer
           path: aieo-output
-      - run: node scripts/aieo-candidate-role.mjs security
+      - name: Verify bounded candidate using trusted code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-role.mjs security
       - uses: actions/upload-artifact@v4
         with:
           name: aieo-candidate-security
@@ -113,7 +121,10 @@ jobs:
           pattern: aieo-candidate-*
           path: aieo-output
           merge-multiple: true
-      - run: node scripts/aieo-candidate-role.mjs reviewer
+      - name: Verify bounded candidate using trusted code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-role.mjs reviewer
       # Only after independent QA+Security+Reviewer approve the one-file diff,
       # compile candidate source with trusted main-branch build tools.
       - name: Independently lint, typecheck and build approved candidate
