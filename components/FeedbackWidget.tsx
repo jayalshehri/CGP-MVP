@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { isAuthRetryableFetchError, isAuthSessionMissingError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
 type FeedbackWidgetProps = { pagePath: string; visible: boolean };
@@ -21,11 +22,43 @@ export default function FeedbackWidget({ pagePath, visible }: FeedbackWidgetProp
     const cleanMessage = message.trim();
     if (!cleanMessage) { setError("اكتب الملاحظة قبل الإرسال."); setState("error"); return; }
     setState("saving"); setError("");
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) { setError("انتهت جلسة الدخول. سجّل الدخول ثم حاول مرة أخرى."); setState("error"); return; }
-    const { error: insertError } = await supabase.from("feedback").insert({ created_by: auth.user.id, category, priority, message: cleanMessage, page_path: pagePath, control_id: controlId ? Number(controlId) : null });
-    if (insertError) { setError("تعذر حفظ الملاحظة. حاول مرة أخرى."); setState("error"); return; }
-    setMessage(""); setState("success");
+    const connectionError = "تعذر الاتصال بالخدمة. تحقق من اتصالك وحاول مرة أخرى.";
+    function fail(message: string) {
+      setError(message);
+      setState("error");
+    }
+
+    try {
+      if (navigator.onLine === false) {
+        fail(connectionError);
+        return;
+      }
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (isAuthRetryableFetchError(authError)) {
+        fail(connectionError);
+        return;
+      }
+      if (isAuthSessionMissingError(authError) || authError?.status === 401 || (!authError && !auth.user)) {
+        fail("انتهت جلسة الدخول. سجّل الدخول ثم حاول مرة أخرى.");
+        return;
+      }
+      if (authError || !auth.user) {
+        fail("تعذر التحقق من جلسة الدخول. حاول مرة أخرى.");
+        return;
+      }
+      const { error: insertError, status } = await supabase.from("feedback").insert({
+        created_by: auth.user.id, category, priority, message: cleanMessage,
+        page_path: pagePath, control_id: controlId ? Number(controlId) : null,
+      });
+      if (insertError) {
+        fail(status === 0 ? connectionError : "تعذر حفظ الملاحظة. حاول مرة أخرى.");
+        return;
+      }
+      setMessage("");
+      setState("success");
+    } catch {
+      fail(connectionError);
+    }
   }
 
   return <>
