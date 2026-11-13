@@ -14,11 +14,44 @@ const routeCases = [
 const routeMatcher = /^\/controls\/(\d+)(?:\/|$)/;
 const exactScope = (paths) => Array.isArray(paths) && paths.length === 1 && paths[0] === MODEL_ALLOWED_PATH;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-// A substring is not a working route guard: a model could leave the expected
-// expression inside a line comment after replacing the live binding with null.
-// Require exactly one unchanged, standalone code line in both source versions.
-const hasLiveRouteLine = (source) => typeof source === 'string' &&
-  source.split(/\r?\n/).filter((line) => line === routeLine).length === 1;
+// A full, standalone line may still be inert inside a block comment or template.
+// This conservative lexical scan fails closed on ambiguous source (it is not a
+// full TSX parser or semantic proof of arbitrary proposed changes).
+function routeIsCode(source, offset) {
+  let state = 'code';
+  for (let i = 0; i < offset; i++) {
+    const ch = source[i], next = source[i + 1];
+    if (state === 'line-comment') { if (ch === '\n') state = 'code'; continue; }
+    if (state === 'block-comment') {
+      if (ch === '*' && next === '/') { state = 'code'; i++; }
+      continue;
+    }
+    if (state === 'single' || state === 'double' || state === 'template') {
+      if (ch === '\\') { i++; continue; }
+      if ((state === 'single' && ch === "'") ||
+          (state === 'double' && ch === '"') ||
+          (state === 'template' && ch === '`')) state = 'code';
+      continue;
+    }
+    if (ch === '/' && next === '/') { state = 'line-comment'; i++; }
+    else if (ch === '/' && next === '*') { state = 'block-comment'; i++; }
+    else if (ch === "'") state = 'single';
+    else if (ch === '"') state = 'double';
+    else if (ch === '`') state = 'template';
+  }
+  return state === 'code';
+}
+const hasLiveRouteLine = (source) => {
+  if (typeof source !== 'string') return false;
+  const normalized = source.replace(/\r\n?/g, '\n');
+  const matches = [];
+  let offset = 0;
+  for (const line of normalized.split('\n')) {
+    if (line === routeLine) matches.push(offset);
+    offset += line.length + 1;
+  }
+  return matches.length === 1 && routeIsCode(normalized, matches[0]);
+};
 
 export function inspectModelQa({ original, actual, changedPaths, report }) {
   const findings = [];
