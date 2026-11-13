@@ -724,6 +724,25 @@ test('post-build gate reattests the exact independently reviewed blob and curren
       }
     }
 
+    // A reviewed build source can be hardlinked to an identical file outside
+    // the workspace. Git's diff still reports only the approved candidate,
+    // yet the source's inode is shared with an untrusted external path.
+    const sourcePath = join(f.cwd, path);
+    const externalSource = join(f.root, 'external-reviewed-widget.tsx');
+    writeFileSync(externalSource, reviewedSource);
+    rmSync(sourcePath);
+    linkSync(externalSource, sourcePath);
+    assert.equal(f.git('diff', '--name-only'), path,
+      'Git diff cannot reveal a byte-identical external source hardlink');
+    assert.equal(readFileSync(sourcePath, 'utf8'), reviewedSource);
+    assert.notEqual(verify().status, 0,
+      'post-build attestation must reject hardlinked reviewed source');
+    rmSync(sourcePath);
+    rmSync(externalSource);
+    writeFileSync(sourcePath, reviewedSource);
+    assert.equal(verify().status, 0,
+      'ordinary singly-linked reviewed source passes after restoration');
+
     // Untracked files do not appear in git diff. Do not attest a build that
     // generated a new source/config or an unexpected extra role artifact.
     for (const untrackedPath of [

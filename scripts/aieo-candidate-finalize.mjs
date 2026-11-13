@@ -73,7 +73,10 @@ export function verifyPostBuild(env = process.env) {
   if (untracked.some((entry) => !allowedHandoffs.has(entry))) fail();
   // The build must compile exactly the previously reviewed immutable blob.
   const file = lstatSync(path);
-  if (!file.isFile() || file.isSymbolicLink() || (file.mode & 0o111)) fail();
+  // A byte-identical hardlink may alias an external, untrusted source inode.
+  // A reviewed build input must be an ordinary, singly-linked local file.
+  if (!file.isFile() || file.isSymbolicLink() || file.nlink !== 1 ||
+      (file.mode & 0o111)) fail();
   const original = git('show', base + ':' + path);
   const actual = git('show', head + ':' + path);
   const worktree = readFileSync(path, 'utf8');

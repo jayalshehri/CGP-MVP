@@ -82,7 +82,9 @@ function assertTrustedCheckout(env, path) {
     fail('candidate must start from a regular, non-executable tracked file');
   }
   const file = lstatSync(path);
-  if (!file.isFile() || file.isSymbolicLink() || (file.mode & 0o111)) {
+  // Reject hardlinked source aliases before any branch, push, or remote PR.
+  if (!file.isFile() || file.isSymbolicLink() || file.nlink !== 1 ||
+      (file.mode & 0o111)) {
     fail('candidate must remain a regular, non-executable file');
   }
 }
