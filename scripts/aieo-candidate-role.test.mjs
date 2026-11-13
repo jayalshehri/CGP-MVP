@@ -227,6 +227,37 @@ test('reject a one-commit, one-path candidate that changes executable file mode'
 });
 
 
+test('reject hidden tracked-file tampering using Git index assume-unchanged and skip-worktree flags', () => {
+  const f = setup();
+  try {
+    assert.equal(f.run('developer').status, 0, 'clean trusted checkout is accepted');
+
+    writeFileSync(join(f.cwd, path), candidate);
+    f.git('update-index', '--assume-unchanged', path);
+    assert.match(f.git('ls-files', '-v', '--', path), /^h /);
+    assert.equal(f.git('status', '--porcelain=v1', '--untracked-files=no'), '',
+      'assume-unchanged hides the tampered tracked file from the previous status check');
+    assert.notEqual(f.run('developer').status, 0,
+      'trusted checkout must reject an assume-unchanged index entry');
+    f.git('update-index', '--no-assume-unchanged', path);
+    f.git('restore', '--staged', '--worktree', '--', path);
+
+    f.git('update-index', '--skip-worktree', path);
+    writeFileSync(join(f.cwd, path), candidate);
+    assert.match(f.git('ls-files', '-v', '--', path), /^S /);
+    assert.equal(f.git('status', '--porcelain=v1', '--untracked-files=no'), '',
+      'skip-worktree hides the tampered tracked file from the previous status check');
+    assert.notEqual(f.run('developer').status, 0,
+      'trusted checkout must reject a skip-worktree index entry');
+    f.git('update-index', '--no-skip-worktree', path);
+    f.git('restore', '--staged', '--worktree', '--', path);
+
+    assert.equal(f.run('developer').status, 0,
+      'clean restored checkout remains eligible after index flags are removed');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'main remains unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test('refuse staged and unstaged changes to trusted tracked files before any candidate review', () => {
   const f = setup();
   try {

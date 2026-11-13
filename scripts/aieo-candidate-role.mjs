@@ -62,6 +62,12 @@ function verifiedRemoteContext(env) {
     // does not detect a staged or unstaged edit to checked-out trusted files.
     // Untracked aieo-output/ reports are expected handoff artifacts.
     if (git(['status', '--porcelain=v1', '--untracked-files=no']).trim()) block();
+    // Git's assume-unchanged and skip-worktree index flags can conceal local
+    // modifications from porcelain status at the same trusted HEAD. The
+    // ordinary non-sparse Actions checkout must have neither flag set.
+    const indexEntries = git(['ls-files', '-v', '-z']).split('\0').filter(Boolean);
+    if (!indexEntries.length ||
+        indexEntries.some((entry) => entry.slice(0, 2) !== 'H ')) block();
     git(['fetch', '--no-tags', 'origin', 'refs/heads/' + headRef]);
     if (git(['rev-parse', 'FETCH_HEAD']).trim() !== head) block();
     // The guarded publisher creates exactly ONE commit on the approved main
