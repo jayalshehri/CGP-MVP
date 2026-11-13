@@ -275,3 +275,28 @@ test('refuse staged and unstaged changes to trusted tracked files before any can
     assert.equal(f.git('rev-parse', 'main'), f.base, 'main must remain untouched');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test('independent CLI QA fails closed on a bot Draft that comments out the live route guard', () => {
+  const f = setup();
+  try {
+    f.git('switch', '-q', branch);
+    f.git('reset', '--hard', 'main');
+    const hidden = candidate.replace(route, '  const controlId = null; //' + route);
+    assert.equal(hidden.split(route).length - 1, 1,
+      'the old substring check would have accepted the disabled route');
+    writeFileSync(join(f.cwd, path), hidden);
+    f.git('add', path);
+    f.git('commit', '-qm', 'fixture deliberately disables live route guard');
+    f.git('push', '-q', '--force', 'origin', branch);
+    f.pr.head.sha = f.git('rev-parse', 'HEAD');
+    f.savePr();
+    f.git('switch', '-q', 'main');
+
+    assert.equal(f.run('developer').status, 0, 'Git provenance alone still passes');
+    assert.notEqual(f.run('qa').status, 0, 'independent QA detects disabled guard');
+    assert.equal(f.run('security').status, 0,
+      'Security generic checks do not substitute for known QA invariant');
+    assert.notEqual(f.run('reviewer').status, 0, 'Reviewer refuses missing successful QA');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'main stays unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});

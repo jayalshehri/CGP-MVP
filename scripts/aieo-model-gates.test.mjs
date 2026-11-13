@@ -55,3 +55,31 @@ test('reviewer refuses unapproved file change despite forged successful artifact
   });
   assert.equal(result.status, 'blocked');
 });
+
+test('QA and Reviewer reject a route expression retained only as a comment, with valid hashes', () => {
+  for (const hidden of [
+    actual.replace(route, '//' + route),
+    actual.replace(route, '  const controlId = null; //' + route)
+  ]) {
+    // These both passed the old substring-only check despite disabling the route.
+    assert.equal(hidden.split(route).length - 1, 1);
+    const legitimateProposal = { ...proposal, proposedHash: hash(hidden) };
+    const observedQa = inspectModelQa({
+      original, actual: hidden, changedPaths, report: legitimateProposal
+    });
+    assert.equal(observedQa.status, 'failed');
+    assert.equal(observedQa.routeCasesPassed, 0);
+    assert.match(observedQa.findings.join(' '), /route-boundary invariant/);
+    const observedDiff = '@@ -2 +2 @@\n-' + route + '\n+' +
+      hidden.split('\n')[1] + '\n';
+    const observedSecurity = inspectModelDiff({
+      original, actual: hidden, changedPaths, diff: observedDiff, report: legitimateProposal
+    });
+    assert.equal(inspectModelReviewer({
+      original, actual: hidden, changedPaths, diff: observedDiff,
+      proposal: legitimateProposal,
+      qa: { ...qa, proposedHash: hash(hidden) },
+      security: observedSecurity
+    }).status, 'blocked', 'Reviewer independently recomputes failed QA');
+  }
+});

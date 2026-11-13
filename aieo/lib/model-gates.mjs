@@ -14,6 +14,11 @@ const routeCases = [
 const routeMatcher = /^\/controls\/(\d+)(?:\/|$)/;
 const exactScope = (paths) => Array.isArray(paths) && paths.length === 1 && paths[0] === MODEL_ALLOWED_PATH;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// A substring is not a working route guard: a model could leave the expected
+// expression inside a line comment after replacing the live binding with null.
+// Require exactly one unchanged, standalone code line in both source versions.
+const hasLiveRouteLine = (source) => typeof source === 'string' &&
+  source.split(/\r?\n/).filter((line) => line === routeLine).length === 1;
 
 export function inspectModelQa({ original, actual, changedPaths, report }) {
   const findings = [];
@@ -29,7 +34,7 @@ export function inspectModelQa({ original, actual, changedPaths, report }) {
   }
   // Confirm the already-fixed route boundary survives any model edit.
   // Route cases use the known expected matcher, not untrusted model code.
-  const hasInvariant = typeof actual === 'string' && actual.split(routeLine).length - 1 === 1;
+  const hasInvariant = hasLiveRouteLine(original) && hasLiveRouteLine(actual);
   const regressions = routeCases.filter(([path, expected]) =>
     (routeMatcher.exec(path)?.[1] ?? null) === expected).length;
   if (!hasInvariant || regressions !== routeCases.length) {
