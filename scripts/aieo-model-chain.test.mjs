@@ -15,7 +15,25 @@ const scripts = dirname(fileURLToPath(import.meta.url));
 const hash = (source) => createHash('sha256').update(source).digest('hex');
 const route = '  const controlId = useMemo(() => /^\\/controls\\/(\\d+)(?:\\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);';
 
-test('mocked provider proposal travels through real QA, Security, Reviewer and Git publisher processes', () => {
+const scenarios = [
+  {
+    name: 'minimal synthetic source',
+    original: ['function fixture() {', route, '  const statusLabel = "Old status";', '}', ''].join('\n'),
+    find: '  const statusLabel = "Old status";',
+    replace: '  const statusLabel = "Current status";',
+    task: 'Correct the stale status label in this temporary fixture.'
+  },
+  {
+    name: 'real checked-in FeedbackWidget TSX',
+    // The checked-in source is used only in a local Git fixture and intercepted fetch.
+    original: readFileSync(join(scripts, '..', MODEL_ALLOWED_PATH), 'utf8'),
+    find: '<h2 id="feedback-title">أرسل ملاحظتك</h2>',
+    replace: '<h2 id="feedback-title">شارك ملاحظتك</h2>',
+    task: 'Improve the Arabic feedback dialog heading without changing any interactive behavior.'
+  }
+];
+for (const scenario of scenarios) {
+test('mocked whole-chain independently reviews ' + scenario.name, () => {
   const root = mkdtempSync(join(tmpdir(), 'aieo-model-whole-chain-'));
   const workspace = join(root, 'workspace');
   const remote = join(root, 'remote.git');
@@ -25,13 +43,12 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
   const ghLog = join(root, 'gh-commands.txt');
   const target = join(workspace, MODEL_ALLOWED_PATH);
   const report = (name) => join(workspace, 'aieo-output', 'model-' + name + '.json');
-  const original = ['function fixture() {', route, '  const statusLabel = "Old status";', '}', ''].join('\n');
-  const find = '  const statusLabel = "Old status";';
-  const replacement = '  const statusLabel = "Current status";';
+  const { original, find, replace: replacement, task } = scenario;
+  assert.equal(original.split(find).length, 2, 'the source must contain exactly one approved text target');
   const candidate = original.replace(find, replacement);
   const response = JSON.stringify({
     path: MODEL_ALLOWED_PATH, find, replace: replacement,
-    explanation: 'Correct a stale label in this isolated fixture'
+    explanation: 'Change one approved inert display text node in an isolated fixture'
   });
   const git = (...args) => execFileSync('git', args, { cwd: workspace, encoding: 'utf8' });
   try {
@@ -81,7 +98,7 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
       OPENROUTER_MODEL_ID: 'provider/fixture',
       AIEO_MODEL_ENABLED: 'true',
       AIEO_SOURCE_SHARING_APPROVED: 'true',
-      AIEO_MODEL_TASK: 'Correct the stale status label in this temporary fixture.',
+      AIEO_MODEL_TASK: task,
       AIEO_MODEL_APPLY: '1',
       AIEO_PUBLISH_MODE: 'model',
       GH_TOKEN: 'synthetic-only-do-not-use'
@@ -120,6 +137,21 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     assert.equal(JSON.parse(readFileSync(report('reviewer'), 'utf8')).status,
       'draft-pr-eligible');
 
+    if (scenario.name === 'real checked-in FeedbackWidget TSX') {
+      // Even after all role reports pass, the publisher must independently
+      // reject a post-review executable mutation before invoking git push or gh.
+      const tampered = candidate.replace('if (!visible) return null;', 'if (true) return null;');
+      assert.notEqual(tampered, candidate, 'test requires a live source visibility guard');
+      writeFileSync(target, tampered);
+      const refused = run([join(scripts, 'aieo-publish-draft.mjs')]);
+      assert.notEqual(refused.status, 0, 'publisher must reverify evidence at the final boundary');
+      assert.equal(existsSync(ghLog), false, 'rejected candidate must not contact GitHub CLI');
+      assert.equal(git('branch', '--show-current').trim(), 'main');
+      assert.doesNotMatch(git('ls-remote', '--heads', remote),
+        /refs\/heads\/aieo\/model-proposal-/, 'rejected patch must not create a remote branch');
+      writeFileSync(target, candidate);
+    }
+
     // The real publisher operates against a temporary Git remote and fake gh executable.
     const published = run([join(scripts, 'aieo-publish-draft.mjs')]);
     assert.equal(published.status, 0, 'Publisher: ' + published.stderr);
@@ -142,3 +174,4 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     rmSync(root, { recursive: true, force: true });
   }
 });
+}
