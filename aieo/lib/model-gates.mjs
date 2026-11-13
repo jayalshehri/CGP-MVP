@@ -82,6 +82,11 @@ function isOnlyRenderedTextEdit(original, actual) {
     const previousText = match[2];
     if (!previousText.trim()) continue;
     const start = offset + match.index + match[0].indexOf('>') + 1;
+    // A regex match is not proof of a JSX text node: JSX expressions can
+    // contain quoted JS strings or templates with markup-like substrings.
+    // Editing those can change executable URLs/conditions, not visible copy.
+    // Reuse the conservative lexical guard and fail closed on such contexts.
+    if (!routeIsCode(original, start)) continue;
     const end = start + previousText.length;
     const prefix = original.slice(0, start);
     const suffix = original.slice(end);
