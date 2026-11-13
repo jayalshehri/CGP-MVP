@@ -140,6 +140,10 @@ jobs:
           npx next typegen
           npx tsc --noEmit
           npm run build
+      - name: Re-attest independently reviewed candidate and remote Draft after build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-finalize.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: aieo-candidate-reviewer
