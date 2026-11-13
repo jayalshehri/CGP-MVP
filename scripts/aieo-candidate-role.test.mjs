@@ -66,6 +66,7 @@ function setup() {
     GH_TOKEN: 'fixture-never-live',
     GITHUB_EVENT_NAME: 'workflow_dispatch',
     GITHUB_REF: 'refs/heads/main',
+    GITHUB_SHA: base,
     GITHUB_REPOSITORY: repo,
     AIEO_PR_NUMBER: '777',
     AIEO_FAKE_PR_FILE: prFile
@@ -153,5 +154,32 @@ test('tampered reports fail Reviewer; an unrelated extra file fails Developer', 
     f.git('switch', '-q', 'main');
     assert.notEqual(f.run('developer').status, 0, 'two-file proposal must be rejected');
     assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+
+test('reject stale base and multi-commit candidate even with one allowed final file', () => {
+  const f = setup();
+  try {
+    assert.notEqual(f.run('developer', { GITHUB_SHA: 'f'.repeat(40) }).status, 0,
+      'PR base must match the trusted main workflow SHA');
+    assert.notEqual(f.run('developer', { GITHUB_SHA: '' }).status, 0,
+      'missing trusted main SHA must fail closed');
+    assert.equal(f.run('developer').status, 0, 'original single-parent candidate is valid');
+
+    f.git('switch', '-q', branch);
+    writeFileSync(join(f.cwd, path), candidate.replace('"Current status"', '"Final status"'));
+    f.git('add', path);
+    f.git('commit', '-qm', 'second commit changing the same approved file');
+    f.git('push', '-q', 'origin', branch);
+    f.pr.head.sha = f.git('rev-parse', 'HEAD');
+    f.savePr();
+    f.git('switch', '-q', 'main');
+
+    assert.equal(f.git('diff', '--name-only', f.base, f.pr.head.sha), path,
+      'final diff intentionally remains within the allowlist');
+    assert.notEqual(f.run('developer').status, 0,
+      'extra intermediate commits must be rejected despite a one-file final diff');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'main must stay untouched');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
