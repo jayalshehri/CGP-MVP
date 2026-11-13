@@ -50,6 +50,19 @@ export function verifyPostBuild(env = process.env) {
   // A normal non-sparse Actions checkout must keep every entry visible.
   const indexEntries = git('ls-files', '-v', '-z').split('\0').filter(Boolean);
   if (!indexEntries.length || indexEntries.some((entry) => !entry.startsWith('H '))) fail();
+  // Only the four expected independent-role handoffs may be untracked after
+  // dependency installation/build. A new source/config file (or an extra
+  // handoff payload) would not appear in git diff and must not be attested.
+  // Ignore only ordinary build outputs covered by the repository's .gitignore.
+  const allowedHandoffs = new Set([
+    'aieo-output/candidate-developer.json',
+    'aieo-output/candidate-qa.json',
+    'aieo-output/candidate-security.json',
+    'aieo-output/candidate-reviewer.json'
+  ]);
+  const untracked = git('ls-files', '--others', '--exclude-standard', '-z')
+    .split('\\0').filter(Boolean);
+  if (untracked.some((entry) => !allowedHandoffs.has(entry))) fail();
   // The build must compile exactly the previously reviewed immutable blob.
   const file = lstatSync(path);
   if (!file.isFile() || file.isSymbolicLink() || (file.mode & 0o111)) fail();
