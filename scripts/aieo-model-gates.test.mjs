@@ -83,3 +83,30 @@ test('QA and Reviewer reject a route expression retained only as a comment, with
     }).status, 'blocked', 'Reviewer independently recomputes failed QA');
   }
 });
+
+test('QA and Reviewer reject non-executable route decoys within block comments or templates', () => {
+  const decoys = [
+    ['/*', route, '*/', '  const controlId = null;'].join('\n'),
+    ['  const decoy = `', route, '`;', '  const controlId = null;'].join('\n')
+  ];
+  for (const decoy of decoys) {
+    const hidden = actual.replace(route, decoy);
+    assert.equal(hidden.split('\n').filter((line) => line === route).length, 1,
+      'the older standalone-line guard would accept this inert code');
+    const bound = { ...proposal, proposedHash: hash(hidden) };
+    const checkedQa = inspectModelQa({ ...input, actual: hidden, report: bound });
+    assert.equal(checkedQa.status, 'failed');
+    assert.equal(checkedQa.routeCasesPassed, 0);
+    assert.match(checkedQa.findings.join(' '), /route-boundary invariant/);
+    const addition = decoy.split('\n');
+    const trueDiff = '@@ -2 +2,' + addition.length + ' @@\n-' + route + '\n' +
+      addition.map((line) => '+' + line).join('\n') + '\n';
+    const checkedSecurity = inspectModelDiff({
+      ...input, actual: hidden, diff: trueDiff, report: bound
+    });
+    assert.equal(inspectModelReviewer({
+      ...input, actual: hidden, diff: trueDiff, proposal: bound,
+      qa: checkedQa, security: checkedSecurity
+    }).status, 'blocked');
+  }
+});
