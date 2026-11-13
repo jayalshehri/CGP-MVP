@@ -232,3 +232,58 @@ test('QA and Reviewer allow literal JSX copy but block post-render state bypass 
     }).status, 'blocked', 'Reviewer independently recomputes JSX integrity');
   }
 });
+
+
+test('QA and Reviewer reject markup-shaped decoys inside executable JS strings', () => {
+  const baseline = [
+    'function fixture() {',
+    route,
+    '  return <>',
+    '    {(() => {',
+    '      const endpoint = "https://trusted.example/<span>Stable route</span>";',
+    '      return <a href={endpoint}>Actual label</a>;',
+    '    })()}',
+    '    <div><span>Visible text</span></div>',
+    '  </>;',
+    '}',
+    ''
+  ].join('\n');
+  const attested = (source) => ({
+    schemaVersion: 1, status: 'proposed', path: MODEL_ALLOWED_PATH,
+    sourceHash: hash(baseline), proposedHash: hash(source)
+  });
+  const allowed = baseline.replace('Visible text', 'Updated text');
+  assert.equal(inspectModelQa({
+    original: baseline, actual: allowed, changedPaths, report: attested(allowed)
+  }).status, 'passed', 'real JSX text changes remain allowed');
+
+  for (const unsafe of [
+    baseline.replace('Stable route', 'Changed destination'),
+    baseline.replace(
+      'const endpoint = "https://trusted.example/<span>Stable route</span>";',
+      'const endpoint = \x60https://trusted.example/<span>Changed destination</span>\x60;'
+    )
+  ]) {
+    const proposal = attested(unsafe);
+    const checkedQa = inspectModelQa({
+      original: baseline, actual: unsafe, changedPaths, report: proposal
+    });
+    assert.equal(checkedQa.status, 'failed', 'JS string/template content is not a JSX text node');
+    assert.match(checkedQa.findings.join(' '), /Rendered JSX edit/);
+    const changedLine = unsafe.split('\n').find((line) => !baseline.split('\n').includes(line));
+    const checkedDiff = '@@ -5 +5 @@\n+ ' + (changedLine || '') + '\n';
+    const checkedSecurity = inspectModelDiff({
+      original: baseline, actual: unsafe, changedPaths, diff: checkedDiff, report: proposal
+    });
+    const forgedQa = {
+      ...inspectModelQa({
+        original: baseline, actual: allowed, changedPaths, report: attested(allowed)
+      }),
+      proposedHash: hash(unsafe)
+    };
+    assert.equal(inspectModelReviewer({
+      original: baseline, actual: unsafe, changedPaths,
+      diff: checkedDiff, proposal, qa: forgedQa, security: checkedSecurity
+    }).status, 'blocked', 'Reviewer recomputes QA and refuses forged success');
+  }
+});
