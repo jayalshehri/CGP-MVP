@@ -183,3 +183,42 @@ test('reject stale base and multi-commit candidate even with one allowed final f
     assert.equal(f.git('rev-parse', 'main'), f.base, 'main must stay untouched');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('refuse an untrusted local checkout even when PR API and trusted SHA agree', () => {
+  const f = setup();
+  try {
+    assert.equal(f.run('developer').status, 0, 'trusted base checkout should pass');
+    f.git('switch', '-q', branch);
+    assert.notEqual(f.run('developer').status, 0,
+      'the candidate checkout must never execute independent trusted role checks');
+    f.git('switch', '-q', 'main');
+    assert.equal(f.run('developer').status, 0, 'returning to trusted main must pass');
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('reject a one-commit, one-path candidate that changes executable file mode', () => {
+  const f = setup();
+  try {
+    f.git('switch', '-q', branch);
+    // Recreate a SINGLE proposal commit directly on trusted base: only the
+    // permission/type gate (not the parent-commit or changed-path gate) can fail.
+    f.git('reset', '--hard', 'main');
+    writeFileSync(join(f.cwd, path), candidate);
+    f.git('add', path);
+    f.git('update-index', '--chmod=+x', path);
+    f.git('commit', '-qm', 'one-commit candidate with unapproved executable mode');
+    const head = f.git('rev-parse', 'HEAD');
+    f.git('push', '-q', '--force', 'origin', branch);
+    f.pr.head.sha = head;
+    f.savePr();
+    f.git('switch', '-q', 'main');
+    assert.equal(f.git('rev-list', '--parents', '-n', '1', head), head + ' ' + f.base);
+    assert.equal(f.git('diff', '--name-only', f.base, head), path);
+    assert.equal(f.git('ls-tree', head, '--', path).split(' ')[0], '100755');
+    assert.notEqual(f.run('developer').status, 0,
+      'mode-changing candidate must be rejected even when content and parentage pass');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'main must remain unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
