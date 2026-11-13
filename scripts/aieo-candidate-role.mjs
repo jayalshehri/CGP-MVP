@@ -68,8 +68,8 @@ function verifiedRemoteContext(env) {
     // The path-only diff check misses chmod/symlink/type changes to that file.
     for (const revision of [base, head]) {
       const entry = git(['ls-tree', revision, '--', MODEL_ALLOWED_PATH]).trimEnd();
-      if (!/^100644 blob [a-f0-9]{40}\\t/.test(entry) ||
-          !entry.endsWith('\\t' + MODEL_ALLOWED_PATH)) block();
+      if (!/^100644 blob [a-f0-9]{40}\t/.test(entry) ||
+          !entry.endsWith('\t' + MODEL_ALLOWED_PATH)) block();
     }
   } catch { block(); }
   return { base, head, number: Number(number) };
