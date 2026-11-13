@@ -77,8 +77,17 @@ function isOnlyRenderedTextEdit(original, actual) {
   const renderStart = original.indexOf(marker);
   if (renderStart < 0) return true; // Legacy route-only synthetic fixtures.
   const offset = renderStart + marker.length;
+  // Element contents are not always harmless copy. CSS inside <style>,
+  // JavaScript inside <script>, and implicit <option>/<textarea> values can
+  // affect behavior even when the tags and attributes are unchanged.
+  // Allow only explicitly reviewed display-text elements, never arbitrary tags.
+  const literalTextTags = new Set([
+    'span', 'strong', 'em', 'b', 'i', 'small', 'p', 'label', 'div',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'button', 'a'
+  ]);
   const literalElement = /<([a-z][\w-]*)(?:\s+[^<>{}\r\n]*)?>([^<>{}\r\n]+)<\/\1>/gi;
   for (const match of original.slice(offset).matchAll(literalElement)) {
+    if (!literalTextTags.has(match[1].toLowerCase())) continue;
     const previousText = match[2];
     if (!previousText.trim()) continue;
     const start = offset + match.index + match[0].indexOf('>') + 1;
