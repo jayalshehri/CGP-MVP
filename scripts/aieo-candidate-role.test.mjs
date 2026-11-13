@@ -300,3 +300,29 @@ test('independent CLI QA fails closed on a bot Draft that comments out the live 
     assert.equal(f.git('rev-parse', 'main'), f.base, 'main stays unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test('independent Git QA rejects a route decoy inside a multiline template with valid commit provenance', () => {
+  const f = setup();
+  try {
+    f.git('switch', '-q', branch);
+    f.git('reset', '--hard', 'main');
+    const hidden = candidate.replace(route,
+      ['  const decoy = `', route, '`;', '  const controlId = null;'].join('\n'));
+    assert.equal(hidden.split('\n').filter((line) => line === route).length, 1,
+      'the prior exact-line check would wrongly certify the template literal');
+    writeFileSync(join(f.cwd, path), hidden);
+    f.git('add', path);
+    f.git('commit', '-qm', 'synthetic inactive route guard in a template');
+    f.git('push', '-q', '--force', 'origin', branch);
+    f.pr.head.sha = f.git('rev-parse', 'HEAD');
+    f.savePr();
+    f.git('switch', '-q', 'main');
+
+    assert.equal(f.run('developer').status, 0, 'Git provenance alone is valid');
+    assert.notEqual(f.run('qa').status, 0, 'independent QA must reject inert route');
+    assert.equal(f.run('security').status, 0,
+      'generic Security review cannot substitute for the route invariant');
+    assert.notEqual(f.run('reviewer').status, 0, 'Reviewer must reject QA failure');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main remains unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
