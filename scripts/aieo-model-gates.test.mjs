@@ -110,3 +110,34 @@ test('QA and Reviewer reject non-executable route decoys within block comments o
     }).status, 'blocked');
   }
 });
+
+test('QA and Reviewer reject live-looking route guard relocated into unreachable code', () => {
+  const relocated = [
+    ['  if (false) {', route, '  }', '  const controlId = null;'].join('\n'),
+    ['  function neverCalled() {', route, '  }', '  const controlId = null;'].join('\n')
+  ];
+  for (const replacement of relocated) {
+    const hidden = actual.replace(route, replacement);
+    assert.equal(hidden.split('\n').filter((line) => line === route).length, 1,
+      'unchanged code line still appears exactly once outside comments and strings');
+    const bound = { ...proposal, proposedHash: hash(hidden) };
+    const verifiedQa = inspectModelQa({ ...input, actual: hidden, report: bound });
+    assert.equal(verifiedQa.status, 'failed',
+      'unchanged route in a dead scope must not count as the live component hook');
+    assert.equal(verifiedQa.routeCasesPassed, 0);
+
+    const additions = replacement.split('\n');
+    const realDiff = '@@ -2 +2,' + additions.length + ' @@\n-' + route + '\n' +
+      additions.map((line) => '+' + line).join('\n') + '\n';
+    const verifiedSecurity = inspectModelDiff({
+      ...input, actual: hidden, diff: realDiff, report: bound
+    });
+    assert.equal(verifiedSecurity.status, 'passed',
+      'generic diff safety checks must not be mistaken for route validity');
+    assert.equal(inspectModelReviewer({
+      ...input, actual: hidden, diff: realDiff, proposal: bound,
+      qa: { ...qa, proposedHash: hash(hidden) },
+      security: verifiedSecurity
+    }).status, 'blocked', 'Reviewer independently rejects forged QA success');
+  }
+});
