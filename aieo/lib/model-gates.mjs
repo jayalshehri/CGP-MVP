@@ -53,6 +53,14 @@ const hasLiveRouteLine = (source) => {
   return matches.length === 1 && routeIsCode(normalized, matches[0]);
 };
 
+// Compare only the protected source prefix, leaving later UI copy/layout edits
+// possible while forbidding candidate edits to the hook's lexical surroundings.
+function guardedRoutePrefix(source) {
+  const normalized = source.replace(/\r\n?/g, '\n');
+  const position = normalized.indexOf(routeLine);
+  return position < 0 ? null : normalized.slice(0, position + routeLine.length);
+}
+
 export function inspectModelQa({ original, actual, changedPaths, report }) {
   const findings = [];
   if (!exactScope(changedPaths)) findings.push('QA scope is not exactly the allowlisted file');
@@ -67,7 +75,12 @@ export function inspectModelQa({ original, actual, changedPaths, report }) {
   }
   // Confirm the already-fixed route boundary survives any model edit.
   // Route cases use the known expected matcher, not untrusted model code.
-  const hasInvariant = hasLiveRouteLine(original) && hasLiveRouteLine(actual);
+  // Preserve the entire trusted preamble through the route declaration.
+  // A line can be real code yet inert if moved into an unreachable conditional
+  // or an unused nested function. Matching its text and lexical state alone
+  // must not certify a model proposal. This intentionally freezes the preamble.
+  const hasInvariant = hasLiveRouteLine(original) && hasLiveRouteLine(actual) &&
+    guardedRoutePrefix(original) === guardedRoutePrefix(actual);
   const regressions = routeCases.filter(([path, expected]) =>
     (routeMatcher.exec(path)?.[1] ?? null) === expected).length;
   if (!hasInvariant || regressions !== routeCases.length) {
