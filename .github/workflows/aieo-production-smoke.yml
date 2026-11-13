@@ -20,7 +20,7 @@ jobs:
       - run: node scripts/aieo-production-smoke.mjs
   authenticated-smoke:
     if: github.event_name == 'workflow_dispatch'
-    environment: Production
+    environment: aieo-production-smoke
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
