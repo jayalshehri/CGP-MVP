@@ -14,7 +14,8 @@ const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const fail = () => { throw new Error('AIEO post-build check blocked: candidate or remote Draft changed'); };
-const git = (...args) => execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 }).trimEnd();
+const git = (...args) => execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
+const gitTrim = (...args) => git(...args).trim();
 
 function report(role) {
   try { return JSON.parse(readFileSync('aieo-output/candidate-' + role + '.json', 'utf8')); }
@@ -38,23 +39,23 @@ export function verifyPostBuild(env = process.env) {
   const head = developer.headSha;
 
   if (!SHA.test(head || '') || head === base ||
-      git('rev-parse', 'HEAD') !== base ||
-      git('diff', '--cached', '--name-only') !== '' ||
-      git('diff', '--name-only') !== path ||
+      gitTrim('rev-parse', 'HEAD') !== base ||
+      gitTrim('diff', '--cached', '--name-only') !== '' ||
+      gitTrim('diff', '--name-only') !== path ||
       developer.baseSha !== base || developer.prNumber !== Number(number)) fail();
 
   // The build must compile exactly the previously reviewed immutable blob.
   const file = lstatSync(path);
   if (!file.isFile() || file.isSymbolicLink() || (file.mode & 0o111)) fail();
-  const original = git('show', base + ':' + path) + '\n';
-  const actual = git('show', head + ':' + path) + '\n';
+  const original = git('show', base + ':' + path);
+  const actual = git('show', head + ':' + path);
   const worktree = readFileSync(path, 'utf8');
-  const changedPaths = git('diff', '--no-ext-diff', '--name-only', base, head)
+  const changedPaths = gitTrim('diff', '--no-ext-diff', '--name-only', base, head)
     .split('\n').filter(Boolean);
-  const diff = git('diff', '--no-ext-diff', '--unified=0', base, head, '--', path) + '\n';
+  const diff = git('diff', '--no-ext-diff', '--unified=0', base, head, '--', path);
   if (changedPaths.length !== 1 || changedPaths[0] !== path ||
       worktree !== actual || original === actual || diff.length > 20000 ||
-      git('rev-list', '--parents', '-n', '1', head) !== head + ' ' + base) fail();
+      gitTrim('rev-list', '--parents', '-n', '1', head) !== head + ' ' + base) fail();
 
   const expectedDeveloper = {
     schemaVersion: 1, role: 'developer', status: 'proposed', path,
