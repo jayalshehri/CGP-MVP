@@ -39,10 +39,17 @@ try {
   await page.waitForURL(origin + '/');
   console.log('PASS login');
   for (const [path, heading] of pages) {
-    phase = path;
-    await page.goto(origin + path, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('heading', { level: 1, name: heading, exact: true }).waitFor();
-    console.log('PASS', path);
+    try {
+      await page.goto(origin + path, { waitUntil: 'domcontentloaded' });
+      await page.getByRole('heading', { level: 1, name: heading, exact: true }).waitFor();
+      console.log('PASS', path);
+    } catch (error) {
+      const state = new URL(page.url()).pathname === '/login' ? 'redirected-to-login'
+        : await page.getByRole('heading', { name: 'تعذر تحميل البيانات', exact: true }).isVisible()
+          ? 'data-load-error' : 'expected-heading-missing';
+      console.error('FAIL', path, error.name, state);
+      process.exitCode = 1;
+    }
   }
 } catch (error) {
   console.error('FAIL', phase, error.name);
