@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
@@ -337,5 +338,56 @@ test('QA and Reviewer reject behavior-bearing JSX element contents while allowin
       original: baseline, actual: unsafe, changedPaths, diff: delta,
       proposal, qa: forgedQa, security: checkedSecurity
     }).status, 'blocked', 'Reviewer must independently reject forged QA success');
+  }
+});
+
+
+test('actual FeedbackWidget TSX permits Arabic display copy but rejects bidi spoofing and JSX behavior edits', () => {
+  // Unlike the synthetic fixtures, this catches drift in the real bounded source.
+  const baseline = readFileSync(new URL('../components/FeedbackWidget.tsx', import.meta.url), 'utf8');
+  const originalTag = '<strong>تم حفظ الملاحظة</strong>';
+  assert.equal(baseline.split(originalTag).length, 2, 'real feedback label must be unique');
+  assert.ok(baseline.includes('  return <>\n'), 'real source must have the guarded render boundary');
+  const makeProposal = (current) => ({
+    schemaVersion: 1, status: 'proposed', path: MODEL_ALLOWED_PATH,
+    sourceHash: hash(baseline), proposedHash: hash(current)
+  });
+  const evaluate = (current) => {
+    const report = makeProposal(current);
+    const baselineLines = baseline.split('\n');
+    const changed = current.split('\n').find((line, i) => line !== baselineLines[i]);
+    assert.ok(changed, 'candidate must contain a real changed line');
+    const updatedDiff = '@@ -1 +1 @@\n+' + changed + '\n';
+    const checkedQa = inspectModelQa({
+      original: baseline, actual: current, changedPaths, report
+    });
+    const checkedSecurity = inspectModelDiff({
+      original: baseline, actual: current, changedPaths, diff: updatedDiff, report
+    });
+    const review = inspectModelReviewer({
+      original: baseline, actual: current, changedPaths, diff: updatedDiff,
+      proposal: report, qa: checkedQa, security: checkedSecurity
+    });
+    return { checkedQa, checkedSecurity, review };
+  };
+
+  const harmless = baseline.replace(originalTag, '<strong>تم حفظ الملاحظة بنجاح</strong>');
+  const allowed = evaluate(harmless);
+  assert.equal(allowed.checkedQa.status, 'passed', 'real Arabic UI copy is in scope');
+  assert.equal(allowed.checkedSecurity.status, 'passed');
+  assert.equal(allowed.review.status, 'draft-pr-eligible');
+  assert.equal(allowed.review.requiresHumanMerge, true);
+
+  for (const [name, candidate] of [
+    ['right-to-left override', baseline.replace(originalTag, '<strong>تم حفظ\u202e الملاحظة</strong>')],
+    ['isolated bidirectional text', baseline.replace(originalTag, '<strong>تم حفظ\u2066 الملاحظة</strong>')],
+    ['numeric hex JSX entity', baseline.replace(originalTag, '<strong>تم حفظ &#x202E; الملاحظة</strong>')],
+    ['numeric decimal JSX entity', baseline.replace(originalTag, '<strong>تم حفظ &#8238; الملاحظة</strong>')],
+    ['JSX visibility bypass', baseline.replace('state === "success"', 'true')]
+  ]) {
+    const result = evaluate(candidate);
+    assert.equal(result.checkedQa.status, 'failed', name + ': QA must fail closed');
+    assert.equal(result.review.status, 'blocked', name + ': Reviewer must recompute failed QA');
+    assert.equal(result.review.requiresHumanMerge, true);
   }
 });
