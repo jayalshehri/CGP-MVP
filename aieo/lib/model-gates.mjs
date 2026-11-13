@@ -53,12 +53,19 @@ const hasLiveRouteLine = (source) => {
   return matches.length === 1 && routeIsCode(normalized, matches[0]);
 };
 
-// Compare only the protected source prefix, leaving later UI copy/layout edits
-// possible while forbidding candidate edits to the hook's lexical surroundings.
+// Preserve the trusted component's setup, visibility condition, hook state and
+// submission handler through the start of JSX render. Replacements in this
+// executable pre-render region can silently disable the entire widget while
+// leaving the route hook and form binding untouched. Synthetic route-only
+// fixtures without a render boundary retain the narrower route-line check.
 function guardedRoutePrefix(source) {
   const normalized = source.replace(/\r\n?/g, '\n');
   const position = normalized.indexOf(routeLine);
-  return position < 0 ? null : normalized.slice(0, position + routeLine.length);
+  if (position < 0) return null;
+  const marker = '\n  return <>';
+  const renderStart = normalized.indexOf(marker, position + routeLine.length);
+  const end = renderStart < 0 ? position + routeLine.length : renderStart + marker.length;
+  return normalized.slice(0, end);
 }
 
 export function inspectModelQa({ original, actual, changedPaths, report }) {
@@ -75,10 +82,9 @@ export function inspectModelQa({ original, actual, changedPaths, report }) {
   }
   // Confirm the already-fixed route boundary survives any model edit.
   // Route cases use the known expected matcher, not untrusted model code.
-  // Preserve the entire trusted preamble through the route declaration.
-  // A line can be real code yet inert if moved into an unreachable conditional
-  // or an unused nested function. Matching its text and lexical state alone
-  // must not certify a model proposal. This intentionally freezes the preamble.
+  // Preserve the trusted pre-render source through the JSX entry point when
+  // present. An unchanged route hook is insufficient if a model turns the
+  // widget invisible, moves it into dead code, or rewrites subsequent hooks.
   const hasInvariant = hasLiveRouteLine(original) && hasLiveRouteLine(actual) &&
     guardedRoutePrefix(original) === guardedRoutePrefix(actual);
   const regressions = routeCases.filter(([path, expected]) =>
