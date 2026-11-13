@@ -1,5 +1,6 @@
-// Read-only, independent review of an already-created model Draft PR.
-// This runs trusted base-branch scripts against Git objects, never untrusted PR code.
+// Read-only roles for an already-created, official GitHub Actions model Draft PR.
+// All role processes run trusted main-branch code and inspect immutable Git commits.
+// This is post-creation QA, not authorization to merge, publish or disclose source.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -15,34 +16,52 @@ const hash = (value) => createHash('sha256').update(value).digest('hex');
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 function block() {
-  throw new Error('AIEO candidate role blocked: unverified Draft PR or candidate evidence');
+  throw new Error('AIEO candidate role blocked: unverified remote Draft PR or candidate evidence');
 }
 function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe' });
+  return execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
 }
 function readReport(role) {
   try {
     return JSON.parse(readFileSync('aieo-output/candidate-' + role + '.json', 'utf8'));
   } catch { block(); }
 }
-function verifyEvent(env) {
-  const { AIEO_BASE_SHA: base, AIEO_HEAD_SHA: head } = env;
-  if (env.GITHUB_EVENT_NAME !== 'pull_request' ||
-      env.AIEO_REPOSITORY !== REPO || env.AIEO_HEAD_REPOSITORY !== REPO ||
-      env.AIEO_PR_AUTHOR !== 'github-actions[bot]' ||
-      env.AIEO_PR_AUTHOR_ID !== '41898282' ||
-      env.AIEO_PR_STATE !== 'open' || env.AIEO_PR_DRAFT !== 'true' ||
-      !BRANCH.test(env.AIEO_HEAD_REF || '') ||
+function verifiedRemoteContext(env) {
+  const number = env.AIEO_PR_NUMBER;
+  if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
+      env.GITHUB_REF !== 'refs/heads/main' ||
+      env.GITHUB_REPOSITORY !== REPO ||
+      !/^[1-9][0-9]*$/.test(number || '') ||
+      !env.GH_TOKEN) block();
+  let pr;
+  try {
+    pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
+      { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 }));
+  } catch { block(); }
+  const base = pr?.base?.sha;
+  const head = pr?.head?.sha;
+  const headRef = pr?.head?.ref;
+  if (pr.number !== Number(number) ||
+      pr.html_url !== 'https://github.com/' + REPO + '/pull/' + number ||
+      pr.state !== 'open' || pr.draft !== true ||
+      pr.user?.login !== 'github-actions[bot]' ||
+      pr.user?.id !== 41898282 || pr.user?.type !== 'Bot' ||
+      pr.base?.repo?.full_name !== REPO || pr.head?.repo?.full_name !== REPO ||
+      pr.base?.ref !== 'main' || !BRANCH.test(headRef || '') ||
       !SHA.test(base || '') || !SHA.test(head || '') || base === head) block();
-  // The candidate must descend from the exact PR base commit. No automatic merges.
-  try { git(['merge-base', '--is-ancestor', base, head]); }
-  catch { block(); }
-  return { base, head };
+  // Fetch only this verified same-repository candidate ref; check that it has not
+  // moved since the API attestation. This avoids trusting a stale PR observation.
+  try {
+    git(['fetch', '--no-tags', 'origin', 'refs/heads/' + headRef]);
+    if (git(['rev-parse', 'FETCH_HEAD']).trim() !== head) block();
+    git(['merge-base', '--is-ancestor', base, head]);
+  } catch { block(); }
+  return { base, head, number: Number(number) };
 }
 
 export function runCandidateRole(role, env = process.env) {
   if (!ROLES.includes(role)) block();
-  const { base, head } = verifyEvent(env);
+  const { base, head, number } = verifiedRemoteContext(env);
   let original, actual, changedPaths, diff;
   try {
     original = git(['show', base + ':' + MODEL_ALLOWED_PATH]);
@@ -56,9 +75,9 @@ export function runCandidateRole(role, env = process.env) {
 
   const developer = {
     schemaVersion: 1, role: 'developer', status: 'proposed', path: MODEL_ALLOWED_PATH,
-    baseSha: base, headSha: head, sourceHash: hash(original),
-    proposedHash: hash(actual), diffHash: hash(diff),
-    changedPaths
+    prNumber: number, baseSha: base, headSha: head,
+    sourceHash: hash(original), proposedHash: hash(actual),
+    diffHash: hash(diff), changedPaths
   };
   let report;
   if (role === 'developer') {
@@ -82,11 +101,11 @@ export function runCandidateRole(role, env = process.env) {
   }
   mkdirSync('aieo-output', { recursive: true });
   writeFileSync('aieo-output/candidate-' + role + '.json', JSON.stringify(report, null, 2) + '\n');
-  return { role, status: report.status, baseSha: base, headSha: head };
+  return { role, status: report.status, prNumber: number, baseSha: base, headSha: head };
 }
 
 if (process.argv[1]?.endsWith('/aieo-candidate-role.mjs')) {
   const outcome = runCandidateRole(process.argv[2]);
-  // No source, provider response, environment variables or secrets in logs.
+  // No source, provider response, prompts or credentials in logs.
   console.log(JSON.stringify(outcome));
 }
