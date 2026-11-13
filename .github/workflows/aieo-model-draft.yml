@@ -6,6 +6,7 @@ on:
       - 'aieo/**'
       - 'scripts/aieo-model-*.mjs'
       - 'scripts/aieo-publish-draft*.mjs'
+      - 'scripts/aieo-candidate-role*.mjs'
   workflow_dispatch:
     inputs:
       task:
