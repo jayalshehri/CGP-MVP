@@ -548,3 +548,61 @@ test('independent real-Git roles allow display copy but block CSS text changes i
     assert.equal(f.git('rev-parse', 'main'), trusted, 'trusted fixture main remains unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test('four independent real-Git roles accept actual widget copy and reject refactored JSX trust drift', () => {
+  const f = setup();
+  try {
+    const source = readFileSync(new URL('../components/FeedbackWidget.tsx', import.meta.url), 'utf8');
+    const copyTag = '<strong>تم حفظ الملاحظة</strong>';
+    assert.ok(source.includes(copyTag));
+    assert.ok(source.includes('\n  return <>'));
+    const publish = (base, next, label) => {
+      f.git('switch', '-q', 'main');
+      writeFileSync(join(f.cwd, path), base);
+      f.git('add', path);
+      f.git('commit', '-qm', 'fixture trusted ' + label);
+      const trusted = f.git('rev-parse', 'HEAD');
+      f.git('push', '-q', 'origin', 'main');
+      f.git('switch', '-q', branch);
+      f.git('reset', '--hard', 'main');
+      writeFileSync(join(f.cwd, path), next);
+      f.git('add', path);
+      f.git('commit', '-qm', 'candidate ' + label);
+      f.git('push', '-q', '--force', 'origin', branch);
+      f.pr.base.sha = trusted;
+      f.pr.head.sha = f.git('rev-parse', 'HEAD');
+      f.savePr();
+      f.git('switch', '-q', 'main');
+      return { GITHUB_SHA: trusted };
+    };
+
+    const good = source.replace(copyTag, '<strong>تم حفظ الملاحظة بنجاح</strong>');
+    const goodEnv = publish(source, good, 'real-source-copy');
+    for (const [role, status] of [
+      ['developer', 'proposed'], ['qa', 'passed'],
+      ['security', 'passed'], ['reviewer', 'draft-pr-eligible']
+    ]) {
+      const result = f.run(role, goodEnv);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+      assert.equal(JSON.parse(result.stdout).status, status, role);
+    }
+
+    const drifted = source.replace('\n  return <>', '\n  return (\n    <>')
+      .replace('\n  </>;', '\n    </>\n  );');
+    const unsafe = drifted.replace('{state === "success" ?', '{true ?');
+    assert.notEqual(unsafe, drifted);
+    const badEnv = publish(drifted, unsafe, 'real-source-render-drift');
+    assert.equal(f.run('developer', badEnv).status, 0,
+      'valid Git provenance alone cannot detect unsafe JSX changes');
+    assert.notEqual(f.run('qa', badEnv).status, 0,
+      'QA must fail closed instead of using synthetic fixture fallback');
+    assert.notEqual(f.run('security', badEnv).status, 0,
+      'Security refuses unexpected submit-handler render boundary');
+    assert.notEqual(f.run('reviewer', badEnv).status, 0,
+      'Reviewer must reject stale prior-pass artifacts and unsafe new candidate');
+    assert.equal(f.git('rev-parse', 'main'), badEnv.GITHUB_SHA,
+      'isolated main commit stays untouched by every role');
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});

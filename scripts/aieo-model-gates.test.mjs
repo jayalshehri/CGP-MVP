@@ -481,3 +481,45 @@ test('actual feedback gate rejects Unicode Other text while retaining Arabic dia
     assert.equal(reviewer.requiresHumanMerge, true);
   }
 });
+
+test('real feedback source with a refactored JSX return fails closed before certifying any copy', () => {
+  const source = readFileSync(new URL('../components/FeedbackWidget.tsx', import.meta.url), 'utf8');
+  assert.ok(source.includes('\n  return <>'));
+  assert.ok(source.includes('\n  </>;'));
+  // A future maintainer may wrap JSX in parentheses. The old synthetic-fixture
+  // fallback would then approve arbitrary changes to existing JSX behavior.
+  const reformatted = source.replace('\n  return <>', '\n  return (\n    <>')
+    .replace('\n  </>;', '\n    </>\n  );');
+  assert.ok(reformatted.includes('export default function FeedbackWidget'));
+  assert.ok(!reformatted.includes('\n  return <>'));
+  for (const [kind, candidate] of [
+    ['visible-copy', reformatted.replace('<strong>تم حفظ الملاحظة</strong>',
+      '<strong>تم حفظ الملاحظة بنجاح</strong>')],
+    ['disabled-success-guard', reformatted.replace('{state === "success" ?',
+      '{true ?')]
+  ]) {
+    assert.notEqual(candidate, reformatted, kind + ': expected distinct candidate');
+    const attestation = {
+      schemaVersion: 1, status: 'proposed', path: MODEL_ALLOWED_PATH,
+      sourceHash: hash(reformatted), proposedHash: hash(candidate)
+    };
+    const observed = inspectModelQa({
+      original: reformatted, actual: candidate, changedPaths,
+      report: attestation
+    });
+    assert.equal(observed.status, 'failed', kind + ': no JSX boundary must block QA');
+    assert.match(observed.findings.join(' '), /Rendered JSX edit/);
+    const delta = '@@ -1 +1 @@\n+sample\n';
+    const security = inspectModelDiff({
+      original: reformatted, actual: candidate, changedPaths,
+      diff: delta, report: attestation
+    });
+    const fabricatedQa = { ...observed, status: 'passed', findings: [] };
+    const reviewer = inspectModelReviewer({
+      original: reformatted, actual: candidate, changedPaths, diff: delta,
+      proposal: attestation, qa: fabricatedQa, security
+    });
+    assert.equal(reviewer.status, 'blocked', kind + ': Reviewer fails closed');
+    assert.equal(reviewer.requiresHumanMerge, true);
+  }
+});
