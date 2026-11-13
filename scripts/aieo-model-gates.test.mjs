@@ -437,3 +437,47 @@ test('actual feedback copy gate blocks default-ignorables, C1 controls and named
     assert.equal(reviewer.requiresHumanMerge, true);
   }
 });
+
+
+test('actual feedback gate rejects Unicode Other text while retaining Arabic diacritics', () => {
+  const baseline = readFileSync(new URL('../components/FeedbackWidget.tsx', import.meta.url), 'utf8');
+  const tag = '<strong>تم حفظ الملاحظة</strong>';
+  assert.equal(baseline.split(tag).length, 2, 'actual source text anchor is unique');
+  const attested = (candidate) => ({
+    schemaVersion: 1, status: 'proposed', path: MODEL_ALLOWED_PATH,
+    sourceHash: hash(baseline), proposedHash: hash(candidate)
+  });
+  const harmless = baseline.replace(tag, '<strong>تمَ حفظ الملاحظة بنجاح</strong>');
+  const safeQa = inspectModelQa({
+    original: baseline, actual: harmless, changedPaths, report: attested(harmless)
+  });
+  assert.equal(safeQa.status, 'passed', 'Arabic combining vowel marks remain allowed');
+
+  // These characters are neither ordinary visible text nor necessarily
+  // Default_Ignorable_Code_Point. Earlier Cc-only checks missed them.
+  for (const [kind, codepoint] of [
+    ['Arabic number sign (Cf)', '\u0600'],
+    ['private-use codepoint (Co)', '\uE000'],
+    ['isolated high surrogate (Cs)', '\uD800'],
+    ['Unicode noncharacter (Cn)', '\uFDD0']
+  ]) {
+    const text = 'تم' + codepoint + ' حفظ الملاحظة';
+    const candidate = baseline.replace(tag, '<strong>' + text + '</strong>');
+    const proposal = attested(candidate);
+    const qa = inspectModelQa({
+      original: baseline, actual: candidate, changedPaths, report: proposal
+    });
+    assert.equal(qa.status, 'failed', kind + ': QA rejects non-printing text');
+    assert.match(qa.findings.join(' '), /Rendered JSX edit/);
+    const diff = '@@ -1 +1 @@\n+<strong>' + text + '</strong>\n';
+    const security = inspectModelDiff({
+      original: baseline, actual: candidate, changedPaths, diff, report: proposal
+    });
+    const reviewer = inspectModelReviewer({
+      original: baseline, actual: candidate, changedPaths, diff,
+      proposal, qa: { ...safeQa, proposedHash: hash(candidate) }, security
+    });
+    assert.equal(reviewer.status, 'blocked', kind + ': Reviewer rejects forged QA pass');
+    assert.equal(reviewer.requiresHumanMerge, true);
+  }
+});
