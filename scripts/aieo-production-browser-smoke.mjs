@@ -10,7 +10,6 @@ const origin = 'https://cgp-mvp-grc13.vercel.app';
 const pages = [
   ['/', 'لوحة المتابعة التشغيلية'],
   ['/executive', 'اللوحة التنفيذية'],
-  ['/reports', 'تقارير الالتزام'],
   ['/controls', 'مكتبة الضوابط'],
   ['/tasks', 'التكليفات'],
   ['/evidence', 'الأدلة'],
@@ -51,6 +50,11 @@ try {
       process.exitCode = 1;
     }
   }
+  phase = '/reports-access';
+  await page.goto(origin + '/reports', { waitUntil: 'domcontentloaded' });
+  await page.waitForURL(origin + '/');
+  await page.getByRole('heading', { level: 1, name: 'لوحة المتابعة التشغيلية', exact: true }).waitFor();
+  console.log('PASS /reports access restriction');
 } catch (error) {
   console.error('FAIL', phase, error.name);
   process.exitCode = 1;
