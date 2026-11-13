@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync, symlinkSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync, symlinkSync, linkSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -140,6 +140,14 @@ for (const [name, mutate] of [
     writeFileSync(outside, readFileSync(f.target, 'utf8'));
     unlinkSync(f.target);
     symlinkSync(outside, f.target);
+  }],
+  ['hardlink replacing tracked source', (f) => {
+    const outside = join(f.root, 'external-source-hardlink.tsx');
+    writeFileSync(outside, readFileSync(f.target, 'utf8'));
+    unlinkSync(f.target);
+    linkSync(outside, f.target);
+    assert.equal(git(f.workspace, 'diff', '--name-only'), MODEL_ALLOWED_PATH,
+      'Git sees only the same approved path, not the external inode alias');
   }]
 ]) {
   test('publisher refuses untrusted checkout before any branch or remote write: ' + name, () => {
