@@ -495,3 +495,56 @@ test('independent real-Git roles reject markup-shaped JS string edits while allo
     assert.equal(f.git('rev-parse', 'main'), trusted, 'fixture main remains unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('independent real-Git roles allow display copy but block CSS text changes in JSX', () => {
+  const f = setup();
+  try {
+    f.git('switch', '-q', 'main');
+    const baseline = original.replace('  const statusLabel = "Old status";', [
+      '  const statusLabel = "Old status";',
+      '  return <>',
+      '    <span>Visible label</span>',
+      '    <style>visibility: visible;</style>',
+      '  </>;'
+    ].join('\n'));
+    writeFileSync(join(f.cwd, path), baseline);
+    f.git('add', path);
+    f.git('commit', '-qm', 'trusted JSX baseline with style element');
+    const trusted = f.git('rev-parse', 'HEAD');
+    f.git('push', '-q', '--force', 'origin', 'main');
+    f.pr.base.sha = trusted;
+    const overrides = { GITHUB_SHA: trusted };
+
+    const publish = (source, message) => {
+      f.git('switch', '-q', branch);
+      f.git('reset', '--hard', 'main');
+      writeFileSync(join(f.cwd, path), source);
+      f.git('add', path);
+      f.git('commit', '-qm', message);
+      f.git('push', '-q', '--force', 'origin', branch);
+      f.pr.head.sha = f.git('rev-parse', 'HEAD');
+      f.savePr();
+      f.git('switch', '-q', 'main');
+    };
+
+    publish(baseline.replace('Visible label', 'Updated label'), 'safe display-only copy');
+    for (const [role, status] of [
+      ['developer', 'proposed'], ['qa', 'passed'],
+      ['security', 'passed'], ['reviewer', 'draft-pr-eligible']
+    ]) {
+      const result = f.run(role, overrides);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+      assert.equal(JSON.parse(result.stdout).status, status);
+    }
+
+    publish(baseline.replace('visibility: visible;', 'visibility: hidden;'),
+      'unsafe style body mutation');
+    assert.equal(f.run('developer', overrides).status, 0, 'candidate Git provenance is valid');
+    assert.notEqual(f.run('qa', overrides).status, 0,
+      'QA must reject style content as executable presentation behavior');
+    assert.notEqual(f.run('reviewer', overrides).status, 0,
+      'Reviewer must refuse absent independently passing QA');
+    assert.equal(f.git('rev-parse', 'main'), trusted, 'trusted fixture main remains unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
