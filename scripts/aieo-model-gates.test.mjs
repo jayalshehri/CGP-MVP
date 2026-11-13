@@ -70,8 +70,8 @@ test('QA and Reviewer reject a route expression retained only as a comment, with
     assert.equal(observedQa.status, 'failed');
     assert.equal(observedQa.routeCasesPassed, 0);
     assert.match(observedQa.findings.join(' '), /route-boundary invariant/);
-    const observedDiff = '@@ -2 +2 @@\\n-' + route + '\\n+' +
-      hidden.split('\\n')[1] + '\\n';
+    const observedDiff = '@@ -2 +2 @@\n-' + route + '\n+' +
+      hidden.split('\n')[1] + '\n';
     const observedSecurity = inspectModelDiff({
       original, actual: hidden, changedPaths, diff: observedDiff, report: legitimateProposal
     });
