@@ -61,7 +61,7 @@ export function verifyPostBuild(env = process.env) {
     'aieo-output/candidate-reviewer.json'
   ]);
   const untracked = git('ls-files', '--others', '--exclude-standard', '-z')
-    .split('\\0').filter(Boolean);
+    .split('\0').filter(Boolean);
   if (untracked.some((entry) => !allowedHandoffs.has(entry))) fail();
   // The build must compile exactly the previously reviewed immutable blob.
   const file = lstatSync(path);
