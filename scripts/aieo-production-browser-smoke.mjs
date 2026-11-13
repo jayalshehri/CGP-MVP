@@ -17,15 +17,25 @@ const pages = [
   ['/review', 'مراجعة الأدلة'],
 ];
 const browser = await chromium.launch();
-let phase = 'login';
+let phase = 'open-login';
 try {
   const page = await browser.newPage();
   page.setDefaultTimeout(12_000);
   await page.goto(origin + '/login', { waitUntil: 'domcontentloaded' });
   if (new URL(page.url()).origin !== origin) throw new Error();
-  await page.getByRole('textbox', { name: 'البريد الإلكتروني' }).fill(CGP_SMOKE_EMAIL);
-  await page.getByLabel('كلمة المرور', { exact: true }).fill(CGP_SMOKE_PASSWORD);
+  page.on('response', response => {
+    const url = new URL(response.url());
+    if (url.hostname === 'ahfindosbawqfvhbcplq.supabase.co' && url.pathname === '/auth/v1/token') {
+      console.log('AUTH HTTP', response.status());
+    }
+  });
+  phase = 'fill-email';
+  await page.locator('#email').fill(CGP_SMOKE_EMAIL);
+  phase = 'fill-password';
+  await page.locator('#password').fill(CGP_SMOKE_PASSWORD);
+  phase = 'submit-login';
   await page.getByRole('button', { name: 'دخول إلى CGP' }).click();
+  phase = 'wait-for-dashboard';
   await page.waitForURL(origin + '/');
   console.log('PASS login');
   for (const [path, heading] of pages) {
@@ -34,8 +44,8 @@ try {
     await page.getByRole('heading', { level: 1, name: heading, exact: true }).waitFor();
     console.log('PASS', path);
   }
-} catch {
-  console.error('FAIL', phase);
+} catch (error) {
+  console.error('FAIL', phase, error.name);
   process.exitCode = 1;
 } finally {
   await browser.close();
