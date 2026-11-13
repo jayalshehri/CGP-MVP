@@ -175,7 +175,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          cp aieo-output/candidate-reviewer.json aieo-output/candidate-prebuild-reviewer.json
           node scripts/aieo-candidate-role.mjs reviewer
+          cmp aieo-output/candidate-prebuild-reviewer.json aieo-output/candidate-reviewer.json
           cp aieo-output/candidate-reviewer.json aieo-output/candidate-final.json
       - uses: actions/upload-artifact@v4
         with:
