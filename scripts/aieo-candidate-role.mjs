@@ -41,6 +41,9 @@ function verifiedRemoteContext(env) {
   const base = pr?.base?.sha;
   const head = pr?.head?.sha;
   const headRef = pr?.head?.ref;
+  // Pin the PR base to the trusted default-branch workflow commit. A stale
+  // candidate must not be reviewed against a different baseline.
+  if (!SHA.test(env.GITHUB_SHA || '') || base !== env.GITHUB_SHA) block();
   if (pr.number !== Number(number) ||
       pr.html_url !== 'https://github.com/' + REPO + '/pull/' + number ||
       pr.state !== 'open' || pr.draft !== true ||
@@ -54,7 +57,10 @@ function verifiedRemoteContext(env) {
   try {
     git(['fetch', '--no-tags', 'origin', 'refs/heads/' + headRef]);
     if (git(['rev-parse', 'FETCH_HEAD']).trim() !== head) block();
-    git(['merge-base', '--is-ancestor', base, head]);
+    // The guarded publisher creates exactly ONE commit on the approved main
+    // base. A simple ancestor check would silently accept multi-commit or merge
+    // histories, even when their final tree changes just the allowlisted file.
+    if (git(['rev-list', '--parents', '-n', '1', head]).trim() !== head + ' ' + base) block();
   } catch { block(); }
   return { base, head, number: Number(number) };
 }
