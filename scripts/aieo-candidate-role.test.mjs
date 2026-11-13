@@ -326,3 +326,29 @@ test('independent Git QA rejects a route decoy inside a multiline template with 
     assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main remains unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test('independent Git QA rejects unchanged route relocated under a dead branch', () => {
+  const f = setup();
+  try {
+    f.git('switch', '-q', branch);
+    f.git('reset', '--hard', 'main');
+    const hidden = candidate.replace(route,
+      ['  if (false) {', route, '  }', '  const controlId = null;'].join('\n'));
+    assert.equal(hidden.split('\n').filter((line) => line === route).length, 1);
+    writeFileSync(join(f.cwd, path), hidden);
+    f.git('add', path);
+    f.git('commit', '-qm', 'synthetic route relocation into an unreachable branch');
+    f.git('push', '-q', '--force', 'origin', branch);
+    f.pr.head.sha = f.git('rev-parse', 'HEAD');
+    f.savePr();
+    f.git('switch', '-q', 'main');
+
+    assert.equal(f.run('developer').status, 0, 'trusted one-commit provenance passes');
+    assert.notEqual(f.run('qa').status, 0,
+      'independent QA must reject relocation despite an unchanged executable line');
+    assert.equal(f.run('security').status, 0,
+      'generic Security still passes, proving dedicated QA is the blocker');
+    assert.notEqual(f.run('reviewer').status, 0, 'Reviewer must fail closed');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted fixture main is unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
