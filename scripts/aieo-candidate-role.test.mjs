@@ -392,3 +392,51 @@ test('independent real-Git QA refuses a model candidate that forces a hidden wid
     assert.equal(f.git('rev-parse', 'main'), trustedHead, 'main fixture stays unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('independent real-Git roles accept copy but reject JSX state bypass on a bot Draft', () => {
+  const f = setup();
+  try {
+    f.git('switch', '-q', 'main');
+    const baseline = original.replace('  const statusLabel = "Old status";',
+      '  const statusLabel = "Old status";\n' +
+      '  return <><div>{open && <span>Old label</span>}</div></>;');
+    writeFileSync(join(f.cwd, path), baseline);
+    f.git('add', path);
+    f.git('commit', '-qm', 'trusted rendered JSX baseline');
+    const trusted = f.git('rev-parse', 'HEAD');
+    f.git('push', '-q', '--force', 'origin', 'main');
+    const overrides = { GITHUB_SHA: trusted };
+    f.pr.base.sha = trusted;
+
+    const publishFixture = (content, message) => {
+      f.git('switch', '-q', branch);
+      f.git('reset', '--hard', 'main');
+      writeFileSync(join(f.cwd, path), content);
+      f.git('add', path);
+      f.git('commit', '-qm', message);
+      f.git('push', '-q', '--force', 'origin', branch);
+      f.pr.head.sha = f.git('rev-parse', 'HEAD');
+      f.savePr();
+      f.git('switch', '-q', 'main');
+    };
+    publishFixture(baseline.replace('Old label', 'Updated label'), 'safe static copy');
+    for (const [role, status] of [
+      ['developer', 'proposed'], ['qa', 'passed'],
+      ['security', 'passed'], ['reviewer', 'draft-pr-eligible']
+    ]) {
+      const result = f.run(role, overrides);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+      assert.equal(JSON.parse(result.stdout).status, status);
+    }
+
+    publishFixture(baseline.replace('open &&', 'false &&'), 'unsafe JSX visibility bypass');
+    assert.equal(f.run('developer', overrides).status, 0, 'Git provenance still passes');
+    assert.notEqual(f.run('qa', overrides).status, 0, 'independent QA blocks JSX control flow');
+    assert.equal(f.run('security', overrides).status, 0,
+      'generic security regex does not detect this JSX state bypass');
+    assert.notEqual(f.run('reviewer', overrides).status, 0,
+      'Reviewer fails closed without matching successful QA evidence');
+    assert.equal(f.git('rev-parse', 'main'), trusted, 'trusted fixture main is unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
