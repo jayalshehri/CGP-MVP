@@ -2,7 +2,7 @@
 // All role processes run trusted main-branch code and inspect immutable Git commits.
 // This is post-creation QA, not authorization to merge, publish or disclose source.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, lstatSync, openSync, fstatSync, ftruncateSync, closeSync, constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
@@ -21,10 +21,42 @@ function block() {
 function git(args) {
   return execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
 }
-function readReport(role) {
+// An artifact handoff is untrusted input. Do not follow a link to an external
+// file, accept aliased inodes, or read unbounded data even if its JSON matches.
+function trustedReportDirectory() {
   try {
-    return JSON.parse(readFileSync('aieo-output/candidate-' + role + '.json', 'utf8'));
+    const directory = lstatSync('aieo-output');
+    if (!directory.isDirectory() || directory.isSymbolicLink()) block();
   } catch { block(); }
+}
+function readReport(role) {
+  trustedReportDirectory();
+  try {
+    const name = 'aieo-output/candidate-' + role + '.json';
+    const file = lstatSync(name);
+    if (!file.isFile() || file.isSymbolicLink() || file.nlink !== 1 ||
+        (file.mode & 0o111) || file.size < 2 || file.size > 65536) block();
+    return JSON.parse(readFileSync(name, 'utf8'));
+  } catch { block(); }
+}
+
+// Also protect the handoff *output*: ordinary writeFileSync follows a symlink
+// and truncates an external file before the next role ever sees its report.
+// Open without following links and verify the opened inode before truncation.
+function writeReport(role, report) {
+  mkdirSync('aieo-output', { recursive: true });
+  trustedReportDirectory();
+  const name = 'aieo-output/candidate-' + role + '.json';
+  let fd;
+  try {
+    fd = openSync(name, constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
+    const file = fstatSync(fd);
+    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o111) ||
+        file.size > 65536) block();
+    ftruncateSync(fd, 0);
+    writeFileSync(fd, JSON.stringify(report, null, 2) + '\n');
+  } catch { block(); }
+  finally { if (fd !== undefined) closeSync(fd); }
 }
 function verifiedRemoteContext(env) {
   const number = env.AIEO_PR_NUMBER;
@@ -125,8 +157,7 @@ export function runCandidateRole(role, env = process.env) {
       if (report.status !== 'draft-pr-eligible') block();
     }
   }
-  mkdirSync('aieo-output', { recursive: true });
-  writeFileSync('aieo-output/candidate-' + role + '.json', JSON.stringify(report, null, 2) + '\n');
+  writeReport(role, report);
   return { role, status: report.status, prNumber: number, baseSha: base, headSha: head };
 }
 

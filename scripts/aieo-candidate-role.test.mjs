@@ -813,3 +813,68 @@ test('post-build gate reattests the exact independently reviewed blob and curren
     assert.equal(verify().status, 0, 'restored evidence and unchanged Draft pass');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('independent QA, Security and Reviewer reject aliased inbound role artifacts', () => {
+  const f = setup();
+  try {
+    assert.equal(f.run('developer').status, 0);
+    const directory = join(f.cwd, 'aieo-output');
+    const developerPath = join(directory, 'candidate-developer.json');
+    const originalDeveloper = readFileSync(developerPath, 'utf8');
+    const externalDeveloper = join(f.root, 'external-developer.json');
+    writeFileSync(externalDeveloper, originalDeveloper);
+    for (const alias of [symlinkSync, linkSync]) {
+      rmSync(developerPath);
+      alias(externalDeveloper, developerPath);
+      assert.notEqual(f.run('qa').status, 0,
+        'QA must not consume a linked Developer artifact, even if bytes match');
+      assert.notEqual(f.run('security').status, 0,
+        'Security must independently reject linked Developer evidence');
+    }
+    rmSync(developerPath);
+    writeFileSync(developerPath, originalDeveloper);
+    assert.equal(f.run('qa').status, 0, 'ordinary restored Developer evidence is valid');
+    assert.equal(f.run('security').status, 0);
+
+    const qaPath = join(directory, 'candidate-qa.json');
+    const originalQa = readFileSync(qaPath, 'utf8');
+    const externalQa = join(f.root, 'external-qa.json');
+    writeFileSync(externalQa, originalQa);
+    for (const alias of [symlinkSync, linkSync]) {
+      rmSync(qaPath);
+      alias(externalQa, qaPath);
+      assert.notEqual(f.run('reviewer').status, 0,
+        'Reviewer must not consume aliased QA evidence');
+    }
+    rmSync(qaPath);
+    writeFileSync(qaPath, originalQa);
+    assert.equal(f.run('reviewer').status, 0,
+      'Reviewer can verify ordinary restored QA and Security evidence');
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('independent role output cannot overwrite external files through symlinks or hardlinks', () => {
+  const f = setup();
+  try {
+    const directory = join(f.cwd, 'aieo-output');
+    mkdirSync(directory);
+    const output = join(directory, 'candidate-developer.json');
+    const outside = join(f.root, 'external-report.txt');
+    const sentinel = 'DO NOT MODIFY EXTERNAL CONTENT\n';
+    writeFileSync(outside, sentinel);
+    for (const alias of [symlinkSync, linkSync]) {
+      alias(outside, output);
+      assert.notEqual(f.run('developer').status, 0,
+        'output artifact path must be an unaliased regular file');
+      assert.equal(readFileSync(outside, 'utf8'), sentinel,
+        'reject before truncating aliased external content');
+      rmSync(output);
+    }
+    assert.equal(f.run('developer').status, 0,
+      'regular output is accepted after removing aliases');
+    assert.ok(readFileSync(output, 'utf8').includes('"role": "developer"'));
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
