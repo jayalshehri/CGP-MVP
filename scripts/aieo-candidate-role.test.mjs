@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync, symlinkSync, linkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -695,6 +695,34 @@ test('post-build gate reattests the exact independently reviewed blob and curren
     assert.equal(outcome.headSha, f.head);
     assert.equal(outcome.requiresHumanMerge, true);
     assert.equal(f.git('rev-parse', 'main'), f.base);
+
+    // The old byte-only verifier would accept a handoff symlink or hardlink
+    // pointing outside the trusted workspace, provided its JSON matched.
+    // Neither alias must be accepted, even when the allowed untracked path
+    // and all independently recomputed report bytes are unchanged.
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const reportPath = join(f.cwd, 'aieo-output/candidate-' + role + '.json');
+      const prior = readFileSync(reportPath, 'utf8');
+      const outside = join(f.root, 'external-' + role + '.json');
+      for (const [alias, create] of [
+        ['symbolic', symlinkSync], ['hard', linkSync]
+      ]) {
+        writeFileSync(outside, prior);
+        rmSync(reportPath);
+        create(outside, reportPath);
+        assert.equal(f.git('ls-files', '--others', '--exclude-standard',
+          '--', 'aieo-output/candidate-' + role + '.json'),
+          'aieo-output/candidate-' + role + '.json',
+          'Git lists the aliased report under an otherwise allowlisted path');
+        assert.notEqual(verify().status, 0,
+          'post-build gate must reject ' + alias + '-linked ' + role + ' evidence');
+        rmSync(reportPath);
+        rmSync(outside);
+        writeFileSync(reportPath, prior);
+        assert.equal(verify().status, 0,
+          'restoring ordinary ' + role + ' evidence must pass');
+      }
+    }
 
     // Untracked files do not appear in git diff. Do not attest a build that
     // generated a new source/config or an unexpected extra role artifact.
