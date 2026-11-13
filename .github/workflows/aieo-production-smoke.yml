@@ -18,3 +18,31 @@ jobs:
         with:
           node-version: '24'
       - run: node scripts/aieo-production-smoke.mjs
+  authenticated-smoke:
+    if: github.event_name == 'workflow_dispatch'
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Require dedicated smoke credentials
+        env:
+          CGP_SMOKE_EMAIL: ${{ secrets.CGP_SMOKE_EMAIL }}
+          CGP_SMOKE_PASSWORD: ${{ secrets.CGP_SMOKE_PASSWORD }}
+        run: |
+          if [[ -z "$CGP_SMOKE_EMAIL" || -z "$CGP_SMOKE_PASSWORD" ]]; then
+            echo "::error::NOT TESTED: dedicated production smoke account is not configured."
+            exit 1
+          fi
+      - run: npm install --no-save --package-lock=false playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - name: Check authenticated pages
+        env:
+          CGP_SMOKE_EMAIL: ${{ secrets.CGP_SMOKE_EMAIL }}
+          CGP_SMOKE_PASSWORD: ${{ secrets.CGP_SMOKE_PASSWORD }}
+        run: node scripts/aieo-production-browser-smoke.mjs
