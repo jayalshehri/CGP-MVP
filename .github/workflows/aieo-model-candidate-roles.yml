@@ -145,3 +145,40 @@ jobs:
           name: aieo-candidate-reviewer
           path: aieo-output/candidate-reviewer.json
           retention-days: 7
+
+  # A fresh runner re-fetches the live Draft PR AFTER build. This prevents a
+  # stale head/closed PR from being reported as reviewed just because the
+  # earlier Developer/QA/Security/Reviewer jobs once passed.
+  # It never checks out or executes the untrusted candidate worktree.
+  final-attestation:
+    name: Post-build immutable Draft PR evidence
+    needs: [reviewer]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: aieo-candidate-*
+          path: aieo-output
+          merge-multiple: true
+      - name: Independently recheck PR state, exact commits and all role evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node scripts/aieo-candidate-role.mjs reviewer
+          cp aieo-output/candidate-reviewer.json aieo-output/candidate-final.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-candidate-final
+          path: aieo-output/candidate-final.json
+          retention-days: 7
