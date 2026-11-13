@@ -9,6 +9,7 @@ import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const roleScript = join(dirname(fileURLToPath(import.meta.url)), 'aieo-candidate-role.mjs');
+const finalizerScript = join(dirname(fileURLToPath(import.meta.url)), 'aieo-candidate-finalize.mjs');
 const path = 'components/FeedbackWidget.tsx';
 const repo = 'jayalshehri/CGP-MVP';
 const branch = 'aieo/model-proposal-77331-1';
@@ -74,7 +75,7 @@ function setup() {
   const run = (role, envOverrides = {}) => spawnSync(process.execPath, [roleScript, role], {
     cwd, env: { ...env, ...envOverrides }, encoding: 'utf8', timeout: 25000
   });
-  return { root, cwd, git, pr, savePr, run, base, head };
+  return { root, cwd, git, pr, savePr, run, base, head, env };
 }
 
 test('developer, QA, Security and Reviewer pass independently using immutable real Git commits', () => {
@@ -667,5 +668,60 @@ test('independent roles reject a real feedback network-error handler fix outside
     assert.notEqual(f.run('reviewer', env).status, 0,
       'Reviewer must refuse an otherwise legitimate but unapproved model-scope repair');
     assert.equal(f.git('rev-parse', 'main'), baseSha, 'trusted main stays unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+
+test('post-build gate reattests the exact independently reviewed blob and current remote Draft', () => {
+  const f = setup();
+  try {
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const result = f.run(role);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+    }
+    // Simulate the read-only workflow's candidate replay before npm build.
+    const reviewedSource = execFileSync('git', ['show', f.head + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' });
+    writeFileSync(join(f.cwd, path), reviewedSource);
+    const verify = (overrides = {}) => spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: { ...f.env, ...overrides }, encoding: 'utf8', timeout: 25000
+    });
+    const good = verify();
+    assert.equal(good.status, 0, good.stderr);
+    const outcome = JSON.parse(good.stdout);
+    assert.equal(outcome.status, 'post-build-draft-reverified');
+    assert.equal(outcome.headSha, f.head);
+    assert.equal(outcome.requiresHumanMerge, true);
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+
+    writeFileSync(join(f.cwd, path), reviewedSource.replace('Current status', 'Changed after review'));
+    assert.notEqual(verify().status, 0, 'source mutated during build must be rejected');
+    writeFileSync(join(f.cwd, path), reviewedSource);
+    assert.equal(verify().status, 0, 'restoring reviewed bytes recovers the check');
+
+    for (const mutate of [
+      (pr) => { pr.head.sha = 'f'.repeat(40); },
+      (pr) => { pr.base.sha = 'f'.repeat(40); },
+      (pr) => { pr.draft = false; },
+      (pr) => { pr.state = 'closed'; },
+      (pr) => { pr.merged_at = '2026-11-13T00:00:00Z'; },
+      (pr) => { pr.user.id = 191056639; },
+      (pr) => { pr.head.repo.full_name = 'foreign/CGP-MVP'; }
+    ]) {
+      const saved = JSON.parse(JSON.stringify(f.pr));
+      mutate(f.pr);
+      f.savePr();
+      assert.notEqual(verify().status, 0, 'remote PR drift must fail closed');
+      Object.assign(f.pr, saved);
+      f.savePr();
+    }
+    const reviewerFile = join(f.cwd, 'aieo-output/candidate-reviewer.json');
+    const prior = readFileSync(reviewerFile, 'utf8');
+    writeFileSync(reviewerFile, '{"status":"draft-pr-eligible"}');
+    assert.notEqual(verify().status, 0, 'forged reviewer evidence must be rejected');
+    writeFileSync(reviewerFile, prior);
+    assert.notEqual(verify({ GITHUB_SHA: '0'.repeat(40) }).status, 0,
+      'stale trusted workflow SHA must be rejected');
+    assert.equal(verify().status, 0, 'restored evidence and unchanged Draft pass');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
