@@ -58,6 +58,10 @@ function verifiedRemoteContext(env) {
     // The independent role must execute from the trusted workflow checkout,
     // never from a candidate branch or another local revision.
     if (git(['rev-parse', 'HEAD']).trim() !== env.GITHUB_SHA) block();
+    // The role must examine a pristine trusted worktree. A matching HEAD alone
+    // does not detect a staged or unstaged edit to checked-out trusted files.
+    // Untracked aieo-output/ reports are expected handoff artifacts.
+    if (git(['status', '--porcelain=v1', '--untracked-files=no']).trim()) block();
     git(['fetch', '--no-tags', 'origin', 'refs/heads/' + headRef]);
     if (git(['rev-parse', 'FETCH_HEAD']).trim() !== head) block();
     // The guarded publisher creates exactly ONE commit on the approved main
