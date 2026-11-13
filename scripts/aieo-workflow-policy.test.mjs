@@ -10,6 +10,7 @@ const developer = read('.github/workflows/aieo-developer-draft.yml');
 const foundation = read('.github/workflows/aieo-multi-agent.yml');
 const publisher = read('scripts/aieo-publish-draft.mjs');
 const provider = read('aieo/lib/model-provider.mjs');
+const candidateRoles = read('.github/workflows/aieo-model-candidate-roles.yml');
 
 test('provider-backed source sharing stays manual, explicit, and environment-scoped', () => {
   const guard = "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true";
@@ -44,4 +45,22 @@ test('publisher cannot bypass human review or invoke model from untrusted PR', (
   assert.doesNotMatch(publisher, /(?:['"]pr merge['"]|--auto-merge|--force-with-lease)/);
   assert.ok(provider.includes("env.AIEO_SOURCE_SHARING_APPROVED !== 'true'"));
   assert.ok(provider.includes("env.GITHUB_EVENT_NAME !== 'workflow_dispatch'"));
+});
+
+test('dispatched independent model candidate roles are read-only and run trusted main code', () => {
+  assert.match(candidateRoles, /workflow_dispatch:\s*\n/);
+  assert.doesNotMatch(candidateRoles, /(?:^|\n)\s*pull_request(?:_target)?:/);
+  assert.match(candidateRoles, /permissions:\s*\n\s*contents: read\s*\n\s*pull-requests: read/);
+  assert.doesNotMatch(candidateRoles, /(?:contents|actions|pull-requests|id-token): write/);
+  assert.match(candidateRoles, /ref: \$\{\{ github.sha \}\}/);
+  assert.match(candidateRoles, /persist-credentials: false/);
+  for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+    assert.ok(candidateRoles.includes('node scripts/aieo-candidate-role.mjs ' + role));
+  }
+  assert.doesNotMatch(candidateRoles, /^env:\s*\n\s*GH_TOKEN:/m,
+    'candidate build must not inherit GitHub credentials at workflow scope');
+  assert.equal((candidateRoles.match(/GH_TOKEN: \$\{\{ github.token \}\}/g) || []).length, 4,
+    'only the four trusted role CLI steps may receive a read-only GitHub token');
+  assert.ok(publisher.includes("'aieo-model-candidate-roles.yml'"));
+  assert.ok(publisher.includes("'dispatched-not-proven'"));
 });

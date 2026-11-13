@@ -106,8 +106,17 @@ export function publishDraft({ env = process.env } = {}) {
   // Failure stops downstream CI dispatch and success reporting; no auto-delete/merge.
   const attested = verifyRemoteDraft({ url: pr, branch, baseSha, candidateSha,
     path, gh: command });
-  if (mode === 'model') command('gh', ['workflow', 'run', 'cgp-required-ci.yml', '--ref', branch]);
-  return { status: 'draft-pr-created', branch, pr: attested.url, requiresHumanMerge: true };
+  if (mode === 'model') {
+    command('gh', ['workflow', 'run', 'cgp-required-ci.yml', '--ref', branch]);
+    // GITHUB_TOKEN-created PRs do not fire pull_request workflows. Explicitly
+    // dispatch four read-only independent jobs using trusted main-branch code.
+    // Dispatch is NOT evidence of successful review, merge or production readiness.
+    command('gh', ['workflow', 'run', 'aieo-model-candidate-roles.yml',
+      '--ref', 'main', '-f', 'pr_number=' + attested.number]);
+  }
+  return { status: 'draft-pr-created', branch, pr: attested.url,
+    independentRoles: mode === 'model' ? 'dispatched-not-proven' : 'not-applicable',
+    requiresHumanMerge: true };
 }
 
 if (process.argv[1]?.endsWith('/aieo-publish-draft.mjs')) {

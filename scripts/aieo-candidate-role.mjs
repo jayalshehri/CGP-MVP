@@ -1,0 +1,111 @@
+// Read-only roles for an already-created, official GitHub Actions model Draft PR.
+// All role processes run trusted main-branch code and inspect immutable Git commits.
+// This is post-creation QA, not authorization to merge, publish or disclose source.
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
+import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
+import { inspectModelDiff } from './aieo-model-security.mjs';
+
+const SHA = /^[a-f0-9]{40}$/;
+const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
+const REPO = 'jayalshehri/CGP-MVP';
+const ROLES = ['developer', 'qa', 'security', 'reviewer'];
+const hash = (value) => createHash('sha256').update(value).digest('hex');
+const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+function block() {
+  throw new Error('AIEO candidate role blocked: unverified remote Draft PR or candidate evidence');
+}
+function git(args) {
+  return execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
+}
+function readReport(role) {
+  try {
+    return JSON.parse(readFileSync('aieo-output/candidate-' + role + '.json', 'utf8'));
+  } catch { block(); }
+}
+function verifiedRemoteContext(env) {
+  const number = env.AIEO_PR_NUMBER;
+  if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
+      env.GITHUB_REF !== 'refs/heads/main' ||
+      env.GITHUB_REPOSITORY !== REPO ||
+      !/^[1-9][0-9]*$/.test(number || '') ||
+      !env.GH_TOKEN) block();
+  let pr;
+  try {
+    pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
+      { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 }));
+  } catch { block(); }
+  const base = pr?.base?.sha;
+  const head = pr?.head?.sha;
+  const headRef = pr?.head?.ref;
+  if (pr.number !== Number(number) ||
+      pr.html_url !== 'https://github.com/' + REPO + '/pull/' + number ||
+      pr.state !== 'open' || pr.draft !== true ||
+      pr.user?.login !== 'github-actions[bot]' ||
+      pr.user?.id !== 41898282 || pr.user?.type !== 'Bot' ||
+      pr.base?.repo?.full_name !== REPO || pr.head?.repo?.full_name !== REPO ||
+      pr.base?.ref !== 'main' || !BRANCH.test(headRef || '') ||
+      !SHA.test(base || '') || !SHA.test(head || '') || base === head) block();
+  // Fetch only this verified same-repository candidate ref; check that it has not
+  // moved since the API attestation. This avoids trusting a stale PR observation.
+  try {
+    git(['fetch', '--no-tags', 'origin', 'refs/heads/' + headRef]);
+    if (git(['rev-parse', 'FETCH_HEAD']).trim() !== head) block();
+    git(['merge-base', '--is-ancestor', base, head]);
+  } catch { block(); }
+  return { base, head, number: Number(number) };
+}
+
+export function runCandidateRole(role, env = process.env) {
+  if (!ROLES.includes(role)) block();
+  const { base, head, number } = verifiedRemoteContext(env);
+  let original, actual, changedPaths, diff;
+  try {
+    original = git(['show', base + ':' + MODEL_ALLOWED_PATH]);
+    actual = git(['show', head + ':' + MODEL_ALLOWED_PATH]);
+    changedPaths = git(['diff', '--no-ext-diff', '--name-only', base, head])
+      .trim().split('\n').filter(Boolean);
+    diff = git(['diff', '--no-ext-diff', '--unified=0', base, head, '--', MODEL_ALLOWED_PATH]);
+  } catch { block(); }
+  if (changedPaths.length !== 1 || changedPaths[0] !== MODEL_ALLOWED_PATH ||
+      original === actual || !diff || diff.length > 20000) block();
+
+  const developer = {
+    schemaVersion: 1, role: 'developer', status: 'proposed', path: MODEL_ALLOWED_PATH,
+    prNumber: number, baseSha: base, headSha: head,
+    sourceHash: hash(original), proposedHash: hash(actual),
+    diffHash: hash(diff), changedPaths
+  };
+  let report;
+  if (role === 'developer') {
+    report = developer;
+  } else {
+    if (!equal(readReport('developer'), developer)) block();
+    if (role === 'qa') {
+      report = inspectModelQa({ original, actual, changedPaths, report: developer });
+      if (report.status !== 'passed') block();
+    } else if (role === 'security') {
+      report = inspectModelDiff({ original, actual, changedPaths, diff, report: developer });
+      if (report.status !== 'passed') block();
+    } else {
+      const qa = readReport('qa');
+      const security = readReport('security');
+      report = inspectModelReviewer({
+        original, actual, changedPaths, diff, proposal: developer, qa, security
+      });
+      if (report.status !== 'draft-pr-eligible') block();
+    }
+  }
+  mkdirSync('aieo-output', { recursive: true });
+  writeFileSync('aieo-output/candidate-' + role + '.json', JSON.stringify(report, null, 2) + '\n');
+  return { role, status: report.status, prNumber: number, baseSha: base, headSha: head };
+}
+
+if (process.argv[1]?.endsWith('/aieo-candidate-role.mjs')) {
+  const outcome = runCandidateRole(process.argv[2]);
+  // No source, provider response, prompts or credentials in logs.
+  console.log(JSON.stringify(outcome));
+}

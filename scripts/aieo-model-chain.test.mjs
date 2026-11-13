@@ -135,6 +135,8 @@ test('mocked provider proposal travels through real QA, Security, Reviewer and G
     assert.match(ghCommands, /pr view https:\/\/github.com\/jayalshehri\/CGP-MVP\/pull\/777 --json/);
     assert.match(ghCommands, /api repos\/jayalshehri\/CGP-MVP\/pulls\/777 --jq/);
     assert.match(ghCommands, /workflow run cgp-required-ci.yml --ref aieo\/model-proposal-77331-1/);
+    assert.match(ghCommands, /workflow run aieo-model-candidate-roles.yml --ref main -f pr_number=777/);
+    assert.equal(result.independentRoles, 'dispatched-not-proven');
     assert.doesNotMatch(ghCommands, /^pr merge\b|^release create\b|^deploy\b|--auto-merge\b/m);
   } finally {
     rmSync(root, { recursive: true, force: true });

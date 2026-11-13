@@ -1,0 +1,147 @@
+name: AIEO Independent Model PR Roles
+
+# A bot-created PR using GITHUB_TOKEN does not trigger a new pull_request workflow.
+# The guarded publisher explicitly dispatches this read-only workflow on main.
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Exact bot-created model Draft PR number to independently inspect
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: aieo-model-roles-${{ inputs.pr_number }}
+  cancel-in-progress: false
+
+env:
+  AIEO_PR_NUMBER: ${{ inputs.pr_number }}
+
+jobs:
+  developer:
+    name: Independent Developer candidate provenance
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify bounded candidate using trusted code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-role.mjs developer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-candidate-developer
+          path: aieo-output/candidate-developer.json
+          retention-days: 7
+
+  qa:
+    name: Independent QA review of candidate commit
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: aieo-candidate-developer
+          path: aieo-output
+      - name: Verify bounded candidate using trusted code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-role.mjs qa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-candidate-qa
+          path: aieo-output/candidate-qa.json
+          retention-days: 7
+
+  security:
+    name: Independent Security review of candidate diff
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: aieo-candidate-developer
+          path: aieo-output
+      - name: Verify bounded candidate using trusted code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-role.mjs security
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-candidate-security
+          path: aieo-output/candidate-security.json
+          retention-days: 7
+
+  reviewer:
+    name: Independent Reviewer and candidate build
+    needs: [qa, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: aieo-candidate-*
+          path: aieo-output
+          merge-multiple: true
+      - name: Verify bounded candidate using trusted code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-role.mjs reviewer
+      # Only after independent QA+Security+Reviewer approve the one-file diff,
+      # compile candidate source with trusted main-branch build tools.
+      - name: Independently lint, typecheck and build approved candidate
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('aieo-output/candidate-developer.json','utf8')).headSha)")"
+          git show "$HEAD_SHA:components/FeedbackWidget.tsx" > components/FeedbackWidget.tsx
+          npm ci
+          npm run lint
+          npx next typegen
+          npx tsc --noEmit
+          npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aieo-candidate-reviewer
+          path: aieo-output/candidate-reviewer.json
+          retention-days: 7
