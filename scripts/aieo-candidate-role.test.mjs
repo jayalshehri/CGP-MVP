@@ -48,7 +48,7 @@ function setup() {
   const pr = {
     number: 777,
     html_url: 'https://github.com/' + repo + '/pull/777',
-    state: 'open', draft: true,
+    state: 'open', draft: true, merged_at: null,
     user: { login: 'github-actions[bot]', id: 41898282, type: 'Bot' },
     base: { sha: base, ref: 'main', repo: { full_name: repo } },
     head: { sha: head, ref: branch, repo: { full_name: repo } }
