@@ -391,3 +391,49 @@ test('actual FeedbackWidget TSX permits Arabic display copy but rejects bidi spo
     assert.equal(result.review.requiresHumanMerge, true);
   }
 });
+
+
+test('actual feedback copy gate blocks default-ignorables, C1 controls and named JSX entities', () => {
+  const baseline = readFileSync(new URL('../components/FeedbackWidget.tsx', import.meta.url), 'utf8');
+  const tag = '<strong>تم حفظ الملاحظة</strong>';
+  assert.equal(baseline.split(tag).length, 2, 'real text anchor must be unique');
+  const attested = (candidate) => ({
+    schemaVersion: 1, status: 'proposed', path: MODEL_ALLOWED_PATH,
+    sourceHash: hash(baseline), proposedHash: hash(candidate)
+  });
+  const harmless = baseline.replace(tag, '<strong>تم حفظ الملاحظة بنجاح</strong>');
+  const validQa = inspectModelQa({
+    original: baseline, actual: harmless, changedPaths, report: attested(harmless)
+  });
+  assert.equal(validQa.status, 'passed', 'normal Arabic display text remains permitted');
+  for (const [name, text] of [
+    ['soft hyphen', 'تم\u00ad حفظ الملاحظة'],
+    ['combining grapheme joiner', 'تم\u034f حفظ الملاحظة'],
+    ['word joiner', 'تم\u2060 حفظ الملاحظة'],
+    ['C1 next-line control', 'تم\u0085 حفظ الملاحظة'],
+    ['Unicode line separator', 'تم\u2028 حفظ الملاحظة'],
+    ['named zero-width joiner', 'تم &zwj; حفظ الملاحظة'],
+    ['named soft hyphen', 'تم &shy; حفظ الملاحظة'],
+    ['named tab', 'تم &Tab; حفظ الملاحظة'],
+    ['named line separator', 'تم &NewLine; حفظ الملاحظة'],
+    ['named ordinary entity (fail closed)', 'تم &amp; حفظ الملاحظة']
+  ]) {
+    const candidate = baseline.replace(tag, '<strong>' + text + '</strong>');
+    const report = attested(candidate);
+    const checkedQa = inspectModelQa({
+      original: baseline, actual: candidate, changedPaths, report
+    });
+    assert.equal(checkedQa.status, 'failed', name + ': QA must reject encoded or hidden copy');
+    assert.match(checkedQa.findings.join(' '), /Rendered JSX edit/);
+    const diff = '@@ -1 +1 @@\n+<strong>' + text + '</strong>\n';
+    const security = inspectModelDiff({
+      original: baseline, actual: candidate, changedPaths, diff, report
+    });
+    const reviewer = inspectModelReviewer({
+      original: baseline, actual: candidate, changedPaths, diff,
+      proposal: report, qa: { ...validQa, proposedHash: hash(candidate) }, security
+    });
+    assert.equal(reviewer.status, 'blocked', name + ': Reviewer must recompute failed QA');
+    assert.equal(reviewer.requiresHumanMerge, true);
+  }
+});

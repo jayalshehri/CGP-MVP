@@ -103,10 +103,12 @@ function isOnlyRenderedTextEdit(original, actual) {
     const replacement = actual.slice(start, actual.length - suffix.length);
     if (!replacement.trim() || replacement === previousText ||
         replacement.length > 240 ||
-        // Reject Trojan-Source bidi controls and numeric JSX character references:
-        // invisible/reordered text must not be certified as safe visible copy.
-        /[\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/u.test(replacement) ||
-        /&#(?:x[0-9a-f]+|[0-9]+);|&(?:lrm|rlm|lre|rle|lro|rlo|pdf|lri|rli|fsi|pdi);/i.test(replacement) ||
+        // Fail closed on Unicode default-ignorables (soft hyphen, joiners,
+        // bidi controls, etc.), control/line separators and *all* JSX entities.
+        // Named entities such as &shy; or &Tab; can otherwise smuggle hidden
+        // characters past a numeric/bidi-only entity filter.
+        /[\p{Default_Ignorable_Code_Point}\p{Cc}\p{Zl}\p{Zp}]/u.test(replacement) ||
+        /&(?:#[xX][0-9a-f]+|#[0-9]+|[a-z][a-z0-9]+);/i.test(replacement) ||
         /[<>{}\r\n"'\x60\\\x00-\x1f]/.test(replacement)) continue;
     return true;
   }
