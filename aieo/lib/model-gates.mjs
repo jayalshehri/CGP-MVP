@@ -75,7 +75,14 @@ function guardedRoutePrefix(source) {
 function isOnlyRenderedTextEdit(original, actual) {
   const marker = '\n  return <>';
   const renderStart = original.indexOf(marker);
-  if (renderStart < 0) return true; // Legacy route-only synthetic fixtures.
+  if (renderStart < 0) {
+    // Keep legacy route-only synthetic fixtures in tests, but fail closed if
+    // the real widget's JSX entry point is refactored or disappears. Without
+    // this boundary, a future trusted-source change could make every JSX
+    // mutation appear to be an inert copy edit.
+    return !/\bFeedbackWidget\b/.test(original) &&
+      !/<\/?[A-Za-z][\w.-]*(?:\s|>)/.test(original);
+  }
   const offset = renderStart + marker.length;
   // Element contents are not always harmless copy. CSS inside <style>,
   // JavaScript inside <script>, and implicit <option>/<textarea> values can
