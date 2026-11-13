@@ -59,8 +59,11 @@ test('dispatched independent model candidate roles are read-only and run trusted
   }
   assert.doesNotMatch(candidateRoles, /^env:\s*\n\s*GH_TOKEN:/m,
     'candidate build must not inherit GitHub credentials at workflow scope');
-  assert.equal((candidateRoles.match(/GH_TOKEN: \$\{\{ github.token \}\}/g) || []).length, 4,
-    'only the four trusted role CLI steps may receive a read-only GitHub token');
+  assert.equal((candidateRoles.match(/GH_TOKEN: \$\{\{ github.token \}\}/g) || []).length, 5,
+    'only the four role steps and final clean-runner recheck may receive a read-only GitHub token');
+  assert.match(candidateRoles, /final-attestation:\s*\n\s*name: Post-build immutable Draft PR evidence\s*\n\s*needs: \[reviewer\]/);
+  assert.match(candidateRoles, /node scripts\/aieo-candidate-role\.mjs reviewer\s*\n\s*cmp aieo-output\/candidate-prebuild-reviewer\.json aieo-output\/candidate-reviewer\.json/);
+  assert.match(candidateRoles, /name: aieo-candidate-final\s*\n\s*path: aieo-output\/candidate-final\.json/);
   assert.ok(publisher.includes("'aieo-model-candidate-roles.yml'"));
   assert.ok(publisher.includes("'dispatched-not-proven'"));
 });
