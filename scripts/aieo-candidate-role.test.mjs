@@ -878,3 +878,55 @@ test('independent role output cannot overwrite external files through symlinks o
     assert.equal(f.git('rev-parse', 'main'), f.base);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('independent QA, Security and Reviewer use bounded role handoffs and recover from invalid evidence', () => {
+  const f = setup();
+  try {
+    assert.equal(f.run('developer').status, 0);
+    const developerPath = join(f.cwd, 'aieo-output/candidate-developer.json');
+    const originalDeveloper = readFileSync(developerPath, 'utf8');
+    for (const evidence of [
+      originalDeveloper + ' '.repeat(65537), // valid JSON but over byte limit
+      '' // empty/truncated handoff
+    ]) {
+      writeFileSync(developerPath, evidence);
+      assert.notEqual(f.run('qa').status, 0, 'QA rejects invalid Developer evidence');
+      assert.notEqual(f.run('security').status, 0, 'Security independently rejects invalid Developer evidence');
+    }
+    writeFileSync(developerPath, originalDeveloper);
+    assert.equal(f.run('qa').status, 0, 'ordinary Developer evidence restores QA');
+    assert.equal(f.run('security').status, 0, 'ordinary Developer evidence restores Security');
+    const securityPath = join(f.cwd, 'aieo-output/candidate-security.json');
+    const originalSecurity = readFileSync(securityPath, 'utf8');
+    writeFileSync(securityPath, originalSecurity + ' '.repeat(65537));
+    assert.notEqual(f.run('reviewer').status, 0, 'Reviewer rejects oversized valid JSON evidence');
+    writeFileSync(securityPath, originalSecurity);
+    assert.equal(f.run('reviewer').status, 0, 'Reviewer accepts restored bounded Security evidence');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main is unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('post-build reattestation enforces bounded role evidence and accepts exact restoration', () => {
+  const f = setup();
+  try {
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const result = f.run(role);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+    }
+    const reviewed = execFileSync('git', ['show', f.head + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' });
+    writeFileSync(join(f.cwd, path), reviewed);
+    const verify = () => spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(verify().status, 0, 'valid remote Draft and role evidence pass');
+    const reviewerPath = join(f.cwd, 'aieo-output/candidate-reviewer.json');
+    const originalReviewer = readFileSync(reviewerPath, 'utf8');
+    writeFileSync(reviewerPath, originalReviewer + ' '.repeat(65537));
+    assert.notEqual(verify().status, 0, 'post-build check rejects oversized valid JSON Reviewer evidence');
+    writeFileSync(reviewerPath, originalReviewer);
+    assert.equal(verify().status, 0, 'restoring the exact ordinary evidence passes');
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});

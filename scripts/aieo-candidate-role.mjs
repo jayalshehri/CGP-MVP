@@ -2,11 +2,12 @@
 // All role processes run trusted main-branch code and inspect immutable Git commits.
 // This is post-creation QA, not authorization to merge, publish or disclose source.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync, lstatSync, openSync, fstatSync, ftruncateSync, closeSync, constants } from 'node:fs';
+import { writeFileSync, mkdirSync, lstatSync, openSync, fstatSync, ftruncateSync, closeSync, constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
+import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
 
 const SHA = /^[a-f0-9]{40}$/;
 const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
@@ -30,15 +31,9 @@ function trustedReportDirectory() {
   } catch { block(); }
 }
 function readReport(role) {
-  trustedReportDirectory();
-  try {
-    const name = 'aieo-output/candidate-' + role + '.json';
-    const file = lstatSync(name);
-    if (!file.isFile() || file.isSymbolicLink() || file.nlink !== 1 ||
-        (file.mode & 0o111) || file.size < 2 || file.size > 65536) block();
-    return JSON.parse(readFileSync(name, 'utf8'));
-  } catch { block(); }
+  return readBoundedRoleReport(role);
 }
+
 
 // Also protect the handoff *output*: ordinary writeFileSync follows a symlink
 // and truncates an external file before the next role ever sees its report.
