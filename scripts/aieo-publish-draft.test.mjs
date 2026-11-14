@@ -293,3 +293,59 @@ for (const [name, alter] of [
     }
   });
 }
+
+// A lossy UTF-8 decode can make the reviewer approve a normalized string
+// while Git publishes different raw candidate bytes. This fixture deliberately
+// recomputes *valid* QA/Security/Reviewer reports over the lossy decoded text:
+// the publisher must reject the underlying raw bytes before any remote write.
+test('publisher rejects invalid UTF-8 bytes even when decoded candidate evidence passes', () => {
+  const f = fixture();
+  try {
+    const decoded = f.args.actual.replace(
+      '  const sample = 2;', '  const sample = 2; //\uFFFD');
+    assert.notEqual(decoded, f.args.actual);
+    const raw = Buffer.from(decoded.replace('\uFFFD', '\0'), 'utf8');
+    const marker = raw.indexOf(0);
+    assert.ok(marker >= 0);
+    raw[marker] = 0xff;
+    writeFileSync(f.target, raw);
+    const observed = readFileSync(f.target, 'utf8');
+    assert.equal(observed, decoded, 'Node silently replaces invalid input on decode');
+    assert.notDeepEqual(Buffer.from(observed, 'utf8'), raw,
+      'reviewed decoded text is not identical to the bytes Git would publish');
+    const args = {
+      original: f.args.original, actual: observed,
+      changedPaths: [MODEL_ALLOWED_PATH],
+      diff: git(f.workspace, 'diff', '--unified=0', '--', MODEL_ALLOWED_PATH)
+    };
+    const proposal = { ...f.args.proposal, proposedHash: hash(observed) };
+    const qa = inspectModelQa({ ...args, report: proposal });
+    const security = inspectModelDiff({ ...args, report: proposal });
+    const reviewer = inspectModelReviewer({
+      ...args, proposal, qa, security
+    });
+    assert.equal(qa.status, 'passed', 'control: QA approves the decoded text');
+    assert.equal(security.status, 'passed', 'control: Security approves decoded text');
+    assert.equal(reviewer.status, 'draft-pr-eligible',
+      'control: reviewer sees consistent synthetic evidence');
+    for (const [kind, report] of Object.entries({
+      proposal, qa, security, reviewer
+    })) {
+      writeFileSync(join(f.workspace, 'aieo-output', 'model-' + kind + '.json'),
+        JSON.stringify(report) + '\n');
+    }
+    const mainBefore = git(f.workspace, 'rev-parse', 'main');
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0, 'raw invalid bytes must be blocked');
+    assert.match(child.stderr, /untrusted candidate source or directory/);
+    assert.equal(existsSync(f.log), false, 'GitHub CLI never contacted');
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), mainBefore);
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+      /refs\/heads\/aieo\/model-proposal-99123-1/);
+  } finally {
+    rmSync(f.root, { force: true, recursive: true });
+  }
+});
