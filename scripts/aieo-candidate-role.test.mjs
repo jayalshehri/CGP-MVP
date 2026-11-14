@@ -696,6 +696,20 @@ test('post-build gate reattests the exact independently reviewed blob and curren
     assert.equal(outcome.requiresHumanMerge, true);
     assert.equal(f.git('rev-parse', 'main'), f.base);
 
+    // Source bytes are unchanged, but insecure permissions could let an
+    // unrelated process alter the build replay between two approvals.
+    const reviewedPath = join(f.cwd, path);
+    chmodSync(reviewedPath, 0o666);
+    assert.notEqual(verify().status, 0,
+      'post-build source readable but writable by others must fail');
+    chmodSync(reviewedPath, 0o644);
+    assert.equal(verify().status, 0, 'secure source mode must recover');
+    const componentDir = join(f.cwd, 'components');
+    chmodSync(componentDir, 0o777);
+    assert.notEqual(verify().status, 0, 'writable source directory must fail');
+    chmodSync(componentDir, 0o755);
+    assert.equal(verify().status, 0, 'secure directory must recover');
+
     // The old byte-only verifier would accept a handoff symlink or hardlink
     // pointing outside the trusted workspace, provided its JSON matched.
     // Neither alias must be accepted, even when the allowed untracked path
