@@ -165,3 +165,21 @@ test('independent security rejects alternate JSX network sinks, spread props and
   }
   assert.equal(inspectModelDiff({ ...input, diff: '+<img alt="decorative" />' }).status, 'passed');
 });
+
+test('independent Security rejects direct and computed browser location redirects', () => {
+  const redirects = [
+    'window.location = unsafeUrl;',
+    'globalThis["location"] = unsafeUrl;',
+    'self?.location = unsafeUrl;',
+    'parent.location = unsafeUrl;',
+    'document["location"].href = unsafeUrl;',
+    'location = unsafeUrl;',
+    'window?.["location"] = unsafeUrl;'
+  ];
+  for (const addition of redirects) {
+    const result = inspectModelDiff({ ...input, diff: '+' + addition });
+    assert.equal(result.status, 'failed', addition);
+    assert.ok(result.findings.includes('Potentially unsafe new code'));
+  }
+  assert.equal(inspectModelDiff({ ...input, diff: '+const locationLabel = "Current status";' }).status, 'passed');
+});
