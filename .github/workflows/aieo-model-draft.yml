@@ -7,6 +7,7 @@ on:
       - 'scripts/aieo-model-*.mjs'
       - 'scripts/aieo-publish-draft*.mjs'
       - 'scripts/aieo-candidate-role*.mjs'
+      - 'scripts/aieo-review-readiness*.mjs'
   workflow_dispatch:
     inputs:
       task:
@@ -39,7 +40,7 @@ jobs:
         with:
           node-version: '24'
       - name: Run model adapter and independent security unit tests (mock only)
-        run: node --test scripts/aieo-model-provider.test.mjs scripts/aieo-model-source-read.test.mjs scripts/aieo-model-security.test.mjs scripts/aieo-model-gates.test.mjs scripts/aieo-model-e2e.test.mjs scripts/aieo-model-chain.test.mjs scripts/aieo-publish-draft.test.mjs scripts/aieo-remote-draft.test.mjs scripts/aieo-candidate-role.test.mjs scripts/aieo-workflow-policy.test.mjs
+        run: node --test scripts/aieo-model-provider.test.mjs scripts/aieo-model-source-read.test.mjs scripts/aieo-model-security.test.mjs scripts/aieo-model-gates.test.mjs scripts/aieo-model-e2e.test.mjs scripts/aieo-model-chain.test.mjs scripts/aieo-publish-draft.test.mjs scripts/aieo-remote-draft.test.mjs scripts/aieo-candidate-role.test.mjs scripts/aieo-workflow-policy.test.mjs scripts/aieo-review-readiness.test.mjs
       - name: Assert no source changed
         run: git diff --exit-code -- components/FeedbackWidget.tsx
 
@@ -61,6 +62,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Block absent or stale independent-review workflow before model disclosure
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-review-readiness.mjs
       - name: Request one bounded model suggestion and audit its exact source diff
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
