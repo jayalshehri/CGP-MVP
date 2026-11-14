@@ -60,7 +60,13 @@ function readVerifiedBuildSource(path) {
         !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
         (directoryNow.mode & 0o022) ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) fail();
-    return buffer.toString('utf8', 0, used);
+    // Post-build verification must bind to the actual bytes compiled, not a
+    // lossy UTF-8 string. Node replaces malformed sequences with U+FFFD,
+    // which could compare equal to a valid Git blob containing that character.
+    const raw = buffer.subarray(0, used);
+    const source = raw.toString('utf8');
+    if (!Buffer.from(source, 'utf8').equals(raw)) fail();
+    return source;
   } catch { fail(); }
   finally { if (fd !== undefined) closeSync(fd); }
 }
