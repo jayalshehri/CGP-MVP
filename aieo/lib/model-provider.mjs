@@ -11,9 +11,9 @@ const forbidden = /(?:\beval\s*\(|\bFunction\s*\(|\bchild_process\b|\bprocess\.e
 // Block browser navigation and side-channel transports in even a one-line UI patch.
 const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fetch|WebSocket)["']\s*\])\s*\(|\bnavigator\s*(?:\.\s*sendBeacon|\[\s*["']sendBeacon["']\s*\])\s*\(|\b(?:window\s*\.\s*)?location\s*(?:\.\s*(?:assign|replace)\s*\(|\.\s*href\b|\[\s*["'](?:href|assign|replace)["']\s*\])|\bnew\s+(?:Image|Worker|SharedWorker)\s*\(|\bdocument\s*\.\s*createElement\s*\(\s*["'](?:iframe|script|img)["']/i;
 
-// Even without fetch(), JSX links, images, forms and CSS can transmit data to external hosts.
+// Conservatively catch long JSX attributes and quoted '>' before an outbound sink.
 // Deliberately reject new outbound-capable markup in this one-file proposal workflow.
-const outboundMarkup = /<\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\b(?:(?!>).){0,350}?\b(?:href|src|srcSet|action|formAction|data)\s*=/is;
+const outboundMarkup = /<\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\b[\s\S]{0,4096}?\b(?:href|src|srcSet|action|formAction|data)\s*=/i;
 const outboundCss = /\burl\s*\(|\bbackgroundImage\s*:/i;
 
 // Never buffer an unbounded provider response: real fetch supplies a readable byte stream.

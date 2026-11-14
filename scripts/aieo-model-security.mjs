@@ -11,8 +11,8 @@ const suspect = /\b(?:eval|Function)\s*\(|\b(?:child_process|process\.env|docume
 // Screen newly added browser navigation, beacon and image-based exfiltration paths.
 const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fetch|WebSocket)["']\s*\])\s*\(|\bnavigator\s*(?:\.\s*sendBeacon|\[\s*["']sendBeacon["']\s*\])\s*\(|\b(?:window\s*\.\s*)?location\s*(?:\.\s*(?:assign|replace)\s*\(|\.\s*href\b|\[\s*["'](?:href|assign|replace)["']\s*\])|\bnew\s+(?:Image|Worker|SharedWorker)\s*\(|\bdocument\s*\.\s*createElement\s*\(\s*["'](?:iframe|script|img)["']/i;
 
-// Browser data can also leave through markup attributes and CSS, without an explicit fetch().
-const outboundMarkup = /<\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\b(?:(?!>).){0,350}?\b(?:href|src|srcSet|action|formAction|data)\s*=/is;
+// Conservatively catch long JSX attributes and quoted '>' before an outbound sink.
+const outboundMarkup = /<\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\b[\s\S]{0,4096}?\b(?:href|src|srcSet|action|formAction|data)\s*=/i;
 const outboundCss = /\burl\s*\(|\bbackgroundImage\s*:/i;
 
 // The source-bearing submit handler is security-critical. Preserve its complete body,
