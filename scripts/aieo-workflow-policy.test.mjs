@@ -92,3 +92,16 @@ test('independent model QA and Security read candidate through bounded inode ver
   }
   assert.ok(model.includes('scripts/aieo-model-candidate-read.test.mjs'));
 });
+
+
+test('model preflight also runs when security-critical role evidence and reviewer workflow change', () => {
+  for (const path of [
+    'scripts/aieo-role-artifact-io.mjs',
+    'scripts/aieo-candidate-finalize*.mjs',
+    'scripts/aieo-workflow-policy.test.mjs',
+    '.github/workflows/aieo-model-candidate-roles.yml'
+  ]) {
+    assert.ok(model.includes("      - '" + path + "'"),
+      'safety preflight must cover changed ' + path);
+  }
+});

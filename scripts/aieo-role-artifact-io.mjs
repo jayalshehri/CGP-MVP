@@ -105,7 +105,13 @@ function readTrustedJsonReport(path) {
         !currentDirectory.isDirectory() || currentDirectory.isSymbolicLink() ||
         (currentDirectory.mode & 0o022) ||
         currentDirectory.dev !== directory.dev || currentDirectory.ino !== directory.ino) block();
-    return JSON.parse(bytes.toString('utf8', 0, used));
+    // Buffer.toString('utf8') silently replaces malformed byte sequences with
+    // U+FFFD. Handoff evidence must not be interpreted as text different from
+    // its original bytes, even when the lossy result happens to be valid JSON.
+    const raw = bytes.subarray(0, used);
+    const json = raw.toString('utf8');
+    if (!Buffer.from(json, 'utf8').equals(raw)) block();
+    return JSON.parse(json);
   } catch { block(); }
   finally { if (fd !== undefined) closeSync(fd); }
 }

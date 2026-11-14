@@ -1155,3 +1155,47 @@ test('independent Developer rejects malformed trusted baseline Git blob', () => 
     assert.equal(f.git('rev-parse', 'main'), base);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('candidate and model role readers reject malformed UTF-8 evidence before parsing lossy JSON', () => {
+  const f = setup();
+  try {
+    assert.equal(f.run('developer').status, 0);
+    const reportPath = join(f.cwd, 'aieo-output/candidate-developer.json');
+    const original = readFileSync(reportPath);
+    const json = original.toString('utf8');
+    assert.match(json, /\n}\n$/);
+    const malformed = Buffer.from(json.replace(/\n}\n$/,
+      ',\n  "untrusted": "MARKER"\n}\n'), 'utf8');
+    const at = malformed.indexOf(Buffer.from('MARKER'));
+    assert.ok(at >= 0);
+    malformed[at] = 0xff;
+    assert.equal(JSON.parse(malformed.toString('utf8')).untrusted.startsWith('\ufffd'), true,
+      'the lossy text would otherwise parse as valid JSON');
+    assert.notDeepEqual(Buffer.from(malformed.toString('utf8')), malformed,
+      'original evidence bytes cannot round-trip through UTF-8');
+
+    const reader = new URL('./aieo-role-artifact-io.mjs', import.meta.url).href;
+    const check = (kind) => spawnSync(process.execPath, ['--input-type=module', '-e',
+      'import { readBoundedRoleReport, readBoundedModelReport } from ' +
+      JSON.stringify(reader) + '; ' +
+      (kind === 'candidate' ? 'readBoundedRoleReport("developer");' :
+        'readBoundedModelReport("qa");')], {
+      cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    writeFileSync(reportPath, malformed);
+    assert.notEqual(check('candidate').status, 0,
+      'candidate handoff must reject invalid UTF-8 bytes even if JSON.parse accepts the decoded string');
+
+    const modelPath = join(f.cwd, 'aieo-output/model-qa.json');
+    writeFileSync(modelPath, malformed, { mode: 0o600 });
+    assert.notEqual(check('model').status, 0,
+      'model handoff shares the same strict-byte provenance requirement');
+    rmSync(modelPath);
+    writeFileSync(reportPath, original);
+    assert.equal(check('candidate').status, 0,
+      'the restored byte-valid report remains independently readable');
+    assert.equal(f.run('qa').status, 0, 'normal downstream QA can still consume restored evidence');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'fixture trusted main stays unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
