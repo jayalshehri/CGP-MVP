@@ -1,9 +1,10 @@
 // Manual, provider-backed proposal. Never sends source without explicit opt-in.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { readApprovedModelSource } from './aieo-model-source-read.mjs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH, requestModelPatch } from '../aieo/lib/model-provider.mjs';
 
-const source = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
+const source = readApprovedModelSource(process.env);
 const task = process.env.AIEO_MODEL_TASK || '';
 const result = await requestModelPatch({ source, task, env: process.env });
 
