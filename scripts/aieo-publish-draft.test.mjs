@@ -202,3 +202,67 @@ for (const fakeResponse of ['foreign-create-url', 'view-not-draft', 'view-extra-
     }
   });
 }
+
+
+for (const linkType of ['symlink', 'hardlink']) {
+  test('model publisher rejects same-byte external ' + linkType + ' evidence for all four gates', () => {
+    const f = fixture();
+    try {
+      const main = git(f.workspace, 'rev-parse', 'main');
+      for (const kind of ['proposal', 'qa', 'security', 'reviewer']) {
+        const reportPath = join(f.workspace, 'aieo-output', 'model-' + kind + '.json');
+        const original = readFileSync(reportPath, 'utf8');
+        const outside = join(f.root, 'outside-' + kind + '.json');
+        writeFileSync(outside, original);
+        unlinkSync(reportPath);
+        if (linkType === 'symlink') symlinkSync(outside, reportPath);
+        else linkSync(outside, reportPath);
+        const child = spawnSync(process.execPath, [publisher], {
+          cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+        });
+        assert.notEqual(child.status, 0, kind + ' must reject external ' + linkType);
+        assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+        assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
+        assert.equal(existsSync(f.log), false, 'blocked handoff must never invoke gh');
+        assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+          /refs\\/heads\\/aieo\\/model-proposal-/);
+        unlinkSync(reportPath);
+        writeFileSync(reportPath, original);
+      }
+    } finally { rmSync(f.root, { force: true, recursive: true }); }
+  });
+}
+
+test('model publisher rejects writable and oversized reports or a writable handoff directory', () => {
+  const f = fixture();
+  try {
+    const dir = join(f.workspace, 'aieo-output');
+    const main = git(f.workspace, 'rev-parse', 'main');
+    const report = join(dir, 'model-reviewer.json');
+    const original = readFileSync(report, 'utf8');
+    const blocked = (description) => {
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, description);
+      assert.equal(existsSync(f.log), false, 'no GitHub CLI access: ' + description);
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
+    };
+    chmodSync(report, 0o666);
+    blocked('world-writable Reviewer evidence');
+    chmodSync(report, 0o600);
+    writeFileSync(report, original + ' '.repeat(65537));
+    blocked('valid JSON evidence exceeds the 64KiB bound');
+    writeFileSync(report, original);
+    chmodSync(dir, 0o777);
+    blocked('writable handoff directory');
+    chmodSync(dir, 0o755);
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.equal(child.status, 0, 'restored trusted reports should publish: ' + child.stderr);
+    assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
+  } finally { rmSync(f.root, { force: true, recursive: true }); }
+});
