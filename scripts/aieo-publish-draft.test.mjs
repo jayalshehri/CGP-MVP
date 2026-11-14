@@ -224,8 +224,8 @@ for (const linkType of ['symlink', 'hardlink']) {
         assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
         assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
         assert.equal(existsSync(f.log), false, 'blocked handoff must never invoke gh');
-        assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
-          /refs\\/heads\\/aieo\\/model-proposal-/);
+        assert.equal(git(f.workspace, 'ls-remote', '--heads', f.remote)
+          .includes('refs/heads/aieo/model-proposal-'), false);
         unlinkSync(reportPath);
         writeFileSync(reportPath, original);
       }
