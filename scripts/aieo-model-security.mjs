@@ -16,6 +16,10 @@ const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fe
 const browserLocation = /\b(?:window|globalThis|document|self|top|parent)\s*(?:(?:\?\.|\.)\s*location\b|(?:\?\.)?\s*\[\s*['"]location['"]\s*\])|\blocation\s*=(?!=)/i;
 
 // Conservatively catch long JSX attributes and quoted '>' before an outbound sink.
+// Optional chaining and computed calls can invoke browser transports without
+// matching direct call syntax (fetch?.(), navigator?.sendBeacon?.(), etc.).
+const optionalNetworkCall = /\b(?:fetch|sendBeacon|postMessage|WebSocket|EventSource|XMLHttpRequest)\s*\?\.\s*\(|\b(?:window|globalThis|self|navigator|document)\s*(?:\?\.|\.)\s*(?:fetch|open|sendBeacon|postMessage|WebSocket|EventSource|createElement)\s*(?:\?\.)?\s*\(|\b(?:window|globalThis|self|navigator|document)\s*(?:\?\.)?\s*\[\s*['"](?:fetch|open|sendBeacon|postMessage|WebSocket|EventSource|createElement)['"]\s*\]\s*(?:\?\.)?\s*\(|\bnew\s+(?:EventSource|XMLHttpRequest)\s*\(/i;
+
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
 const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
 
@@ -47,7 +51,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   if (typeof diff !== 'string' || diff.length > 20000) findings.push('Invalid or oversized source delta');
   const additions = typeof diff === 'string' ? diff.split('\n').filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1)) : [];
   if (additions.length > 20) findings.push('Too many new code lines');
-  if (additions.some((line) => suspect.test(line) || browserExfil.test(line) || browserLocation.test(line)) ||
+  if (additions.some((line) => suspect.test(line) || browserExfil.test(line) || browserLocation.test(line) || optionalNetworkCall.test(line)) ||
       outboundMarkup.test(additions.join('\n')) || outboundCss.test(additions.join('\n'))) {
     findings.push('Potentially unsafe new code');
   }
