@@ -2,7 +2,7 @@
 // All role processes run trusted main-branch code and inspect immutable Git commits.
 // This is post-creation QA, not authorization to merge, publish or disclose source.
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, mkdirSync, lstatSync, openSync, fstatSync, ftruncateSync, closeSync, constants } from 'node:fs';
+import { mkdirSync, lstatSync, openSync, fstatSync, ftruncateSync, writeSync, closeSync, constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
@@ -29,29 +29,44 @@ function trustedReportDirectory() {
     const directory = lstatSync('aieo-output');
     if (!directory.isDirectory() || directory.isSymbolicLink() ||
         (directory.mode & 0o022)) block();
+    return directory;
   } catch { block(); }
 }
 function readReport(role) {
   return readBoundedRoleReport(role);
 }
 
-
-// Also protect the handoff *output*: ordinary writeFileSync follows a symlink
-// and truncates an external file before the next role ever sees its report.
-// Open without following links and verify the opened inode before truncation.
-// Refuse files writable by other users: their bytes could change after review.
+// Candidate role handoffs may be rerun in a local test fixture. Never truncate
+// a pre-existing file with group/other read access, nor publish a partial,
+// oversized, aliased or directory-swapped report as trusted evidence.
 function writeReport(role, report) {
-  mkdirSync('aieo-output', { recursive: true });
-  trustedReportDirectory();
+  mkdirSync('aieo-output', { recursive: true, mode: 0o700 });
+  const directory = trustedReportDirectory();
   const name = 'aieo-output/candidate-' + role + '.json';
+  const data = Buffer.from(JSON.stringify(report, null, 2) + '\n', 'utf8');
+  if (data.length < 2 || data.length > 65536) block();
   let fd;
   try {
     fd = openSync(name, constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
-    const file = fstatSync(fd);
-    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o133) ||
-        file.size > 65536) block();
+    const before = fstatSync(fd);
+    // 0o177 excludes owner execute plus every group/other permission.
+    if (!before.isFile() || before.nlink !== 1 || (before.mode & 0o177) ||
+        before.size > 65536) block();
     ftruncateSync(fd, 0);
-    writeFileSync(fd, JSON.stringify(report, null, 2) + '\n');
+    let written = 0;
+    while (written < data.length) {
+      const count = writeSync(fd, data, written, data.length - written);
+      if (count <= 0) block();
+      written += count;
+    }
+    const file = fstatSync(fd);
+    const current = lstatSync(name);
+    const directoryNow = trustedReportDirectory();
+    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o177) ||
+        file.size !== data.length ||
+        !current.isFile() || current.isSymbolicLink() ||
+        current.dev !== file.dev || current.ino !== file.ino ||
+        directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) block();
   } catch { block(); }
   finally { if (fd !== undefined) closeSync(fd); }
 }
