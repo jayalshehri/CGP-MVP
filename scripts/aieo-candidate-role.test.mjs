@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync, symlinkSync, linkSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, symlinkSync, linkSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1032,5 +1032,54 @@ test('candidate role outputs refuse public pre-existing reports and preserve pri
         'each independent role must create private evidence');
     }
     assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+
+test('bounded role reader rejects a same-byte inode replacement during a report read', () => {
+  const f = setup();
+  try {
+    assert.equal(f.run('developer').status, 0, 'fixture Developer must create private evidence');
+    const reportPath = join(f.cwd, 'aieo-output/candidate-developer.json');
+    const shim = join(f.root, 'swap-after-read.mjs');
+    // The imported reader obtains the original fd, then the injected readSync
+    // replaces its pathname with an identical new file before the final fstat.
+    // The old fd remains unchanged; only a final pathname inode check detects it.
+    writeFileSync(shim, [
+      "import fs from 'node:fs';",
+      "import { syncBuiltinESMExports } from 'node:module';",
+      'const originalRead = fs.readSync;',
+      'let swapped = false;',
+      'fs.readSync = (...args) => {',
+      '  const count = originalRead(...args);',
+      "  const name = 'aieo-output/candidate-developer.json';",
+      '  const opened = fs.fstatSync(args[0]);',
+      '  const report = fs.lstatSync(name);',
+      '  if (!swapped && opened.dev === report.dev && opened.ino === report.ino) {',
+      '    swapped = true;',
+      '    const bytes = fs.readFileSync(name);',
+      "    fs.renameSync(name, name + '.parked');",
+      '    fs.writeFileSync(name, bytes, { mode: 0o600 });',
+      '  }',
+      '  return count;',
+      '};',
+      'syncBuiltinESMExports();',
+      ''
+    ].join('\n'));
+    const readerUrl = new URL('./aieo-role-artifact-io.mjs', import.meta.url).href;
+    const code = 'import { readBoundedRoleReport } from ' +
+      JSON.stringify(readerUrl) + ";\nreadBoundedRoleReport('developer');";
+    const result = spawnSync(process.execPath,
+      ['--import', shim, '--input-type=module', '--eval', code], {
+        cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
+      });
+    assert.equal(existsSync(reportPath + '.parked'), true,
+      'test hook must demonstrably replace the original evidence path');
+    assert.notEqual(result.status, 0, 'a post-read pathname swap must fail closed');
+    assert.match(result.stderr, /AIEO role artifact rejected/,
+      'the failure must come from the evidence boundary, not the test shim');
+    assert.equal(readFileSync(reportPath, 'utf8'),
+      readFileSync(reportPath + '.parked', 'utf8'),
+      'rejected replacement deliberately has identical contents');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });

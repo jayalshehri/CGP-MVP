@@ -91,10 +91,17 @@ function readTrustedJsonReport(path) {
     // An added byte or a shorter read invalidates the handoff, even when the
     // underlying file is mutated concurrently during the read.
     const after = fstatSync(fd);
+    // Attest the directory entry as well as the opened fd. A same-byte file
+    // swapped into this name during read is not the reviewed evidence inode.
+    const currentPath = lstatSync(path);
     const currentDirectory = lstatSync('aieo-output');
     if (used !== file.size || after.size !== file.size ||
         after.nlink !== 1 || (after.mode & 0o133) ||
         after.mtimeMs !== file.mtimeMs || after.ctimeMs !== file.ctimeMs ||
+        !currentPath.isFile() || currentPath.isSymbolicLink() ||
+        currentPath.nlink !== 1 || (currentPath.mode & 0o133) ||
+        currentPath.dev !== file.dev || currentPath.ino !== file.ino ||
+        currentPath.size !== file.size ||
         !currentDirectory.isDirectory() || currentDirectory.isSymbolicLink() ||
         (currentDirectory.mode & 0o022) ||
         currentDirectory.dev !== directory.dev || currentDirectory.ino !== directory.ino) block();
