@@ -238,3 +238,27 @@ test('rejects JSX network-capable alternate tags and property spreads before pub
     explanation: 'Harmless non-network markup text' });
   assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
 });
+
+test('model proposals reject direct, optional and computed browser location redirects', () => {
+  const redirects = [
+    'window.location = unsafeUrl;',
+    'globalThis["location"] = unsafeUrl;',
+    'self?.location = unsafeUrl;',
+    'parent.location = unsafeUrl;',
+    'document["location"].href = unsafeUrl;',
+    'location = unsafeUrl;',
+    'window?.["location"] = unsafeUrl;'
+  ];
+  for (const replace of redirects) {
+    const attempted = JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic direct-location redirect regression'
+    });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected', replace);
+  }
+  const benign = JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: '  const locationLabel = "Current status";',
+    explanation: 'Benign label does not modify browser location'
+  });
+  assert.equal(validateModelPatch({ response: benign, source }).status, 'proposed');
+});
