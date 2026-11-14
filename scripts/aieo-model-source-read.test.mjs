@@ -338,7 +338,7 @@ test('pre-share refuses a clean committed malformed UTF-8 source before any HTTP
     // lossy decoder, both the worktree bytes and HEAD:source previously
     // normalized 0xff to U+FFFD, bypassing the string equality check.
     const malformed = Buffer.from('function syntheticFixture() { return "x"; }\n');
-    malformed[malformed.indexOf('x')] = 0xff;
+    malformed[malformed.lastIndexOf('x')] = 0xff;
     assert.equal(Buffer.from(malformed.toString('utf8')).equals(malformed), false);
     writeFileSync(f.target, malformed);
     cmd(f.workspace, 'add', '--', 'components/FeedbackWidget.tsx');
