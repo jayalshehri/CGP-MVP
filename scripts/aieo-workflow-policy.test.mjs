@@ -82,3 +82,13 @@ test('dispatched independent model candidate roles are read-only and run trusted
   assert.ok(publisher.includes("'aieo-model-candidate-roles.yml'"));
   assert.ok(publisher.includes("'dispatched-not-proven'"));
 });
+
+test('independent model QA and Security read candidate through bounded inode verification', () => {
+  const qa = read('scripts/aieo-model-gates.mjs');
+  const security = read('scripts/aieo-model-security.mjs');
+  for (const script of [qa, security]) {
+    assert.ok(script.includes('readVerifiedModelCandidate()'));
+    assert.doesNotMatch(script, /readFileSync\(MODEL_ALLOWED_PATH/);
+  }
+  assert.ok(model.includes('scripts/aieo-model-candidate-read.test.mjs'));
+});
