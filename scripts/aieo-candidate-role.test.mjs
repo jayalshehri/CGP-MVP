@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync, symlinkSync, linkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync, symlinkSync, linkSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -989,6 +989,34 @@ test('Developer refuses a writable preexisting output before truncating its cont
     chmodSync(output, 0o600);
     assert.equal(f.run('developer').status, 0, 'secure output is allowed');
     assert.ok(readFileSync(output, 'utf8').includes('"role": "developer"'));
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('candidate role outputs refuse public pre-existing reports and preserve private evidence', () => {
+  const f = setup();
+  try {
+    const dir = join(f.cwd, 'aieo-output');
+    mkdirSync(dir);
+    const output = join(dir, 'candidate-developer.json');
+    const sentinel = 'DO NOT OVERWRITE READABLE EVIDENCE';
+    // The old O_NOFOLLOW-only writer truncated these ordinary, readable files.
+    for (const mode of [0o644, 0o640, 0o604]) {
+      writeFileSync(output, sentinel, { mode: 0o600 });
+      chmodSync(output, mode);
+      assert.notEqual(f.run('developer').status, 0,
+        'refuse pre-existing evidence readable or executable by other users');
+      assert.equal(readFileSync(output, 'utf8'), sentinel,
+        'reject exposed output before truncation');
+      rmSync(output);
+    }
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const result = f.run(role);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+      const file = join(dir, 'candidate-' + role + '.json');
+      assert.equal(statSync(file).mode & 0o777, 0o600,
+        'each independent role must create private evidence');
+    }
     assert.equal(f.git('rev-parse', 'main'), f.base);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
