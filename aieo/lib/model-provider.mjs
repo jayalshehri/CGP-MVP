@@ -13,8 +13,8 @@ const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fe
 
 // Conservatively catch long JSX attributes and quoted '>' before an outbound sink.
 // Deliberately reject new outbound-capable markup in this one-file proposal workflow.
-const outboundMarkup = /<\s*(?:a|area|img|iframe|script|link|form|video|audio|source|embed|object)\b[\s\S]{0,4096}?\b(?:href|src|srcSet|action|formAction|data)\s*=/i;
-const outboundCss = /\burl\s*\(|\bbackgroundImage\s*:/i;
+const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
+const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
 
 // Never buffer an unbounded provider response: real fetch supplies a readable byte stream.
 const MAX_PROVIDER_BYTES = 18000;
