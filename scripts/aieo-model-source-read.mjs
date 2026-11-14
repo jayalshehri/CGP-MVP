@@ -1,4 +1,6 @@
 // Read a trusted, unchanged source inode BEFORE any optional external-model request.
+// Recheck file mode at pathname as well as opened descriptor after reads;
+// a concurrent chmod on the SAME inode must invalidate source consent.
 // The publisher's later checkout check is too late to prevent source disclosure.
 import { execFileSync } from 'node:child_process';
 import { lstatSync, openSync, fstatSync, readSync, writeSync, ftruncateSync, closeSync, constants } from 'node:fs';
@@ -65,8 +67,10 @@ export function readApprovedModelSource(env = process.env) {
     if (used !== opened.size || after.size !== opened.size ||
         after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs ||
         after.nlink !== 1 || (after.mode & 0o133) ||
+        !pathNow.isFile() || pathNow.isSymbolicLink() ||
+        (pathNow.mode & 0o133) || pathNow.nlink !== 1 ||
+        pathNow.size !== opened.size ||
         pathNow.dev !== opened.dev || pathNow.ino !== opened.ino ||
-        !pathNow.isFile() || pathNow.nlink !== 1 ||
         dirNow.dev !== directory.dev || dirNow.ino !== directory.ino ||
         !dirNow.isDirectory() || (dirNow.mode & 0o022)) block();
 
@@ -119,9 +123,10 @@ export function applyApprovedModelPatch({ original, candidate, env = process.env
     if (used !== opened.size || !buffer.equals(Buffer.from(original, 'utf8')) ||
         after.size !== opened.size || after.mtimeMs !== opened.mtimeMs ||
         after.ctimeMs !== opened.ctimeMs || after.nlink !== 1 ||
-        (after.mode & 0o133) || pathNow.dev !== opened.dev ||
-        pathNow.ino !== opened.ino || !pathNow.isFile() ||
-        pathNow.isSymbolicLink() || pathNow.nlink !== 1 ||
+        (after.mode & 0o133) || !pathNow.isFile() ||
+        pathNow.isSymbolicLink() || (pathNow.mode & 0o133) ||
+        pathNow.nlink !== 1 || pathNow.size !== opened.size ||
+        pathNow.dev !== opened.dev || pathNow.ino !== opened.ino ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino ||
         !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
         (directoryNow.mode & 0o022)) block();
