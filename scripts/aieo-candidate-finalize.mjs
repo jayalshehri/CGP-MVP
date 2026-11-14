@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
+import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
 const SHA = /^[a-f0-9]{40}$/;
@@ -20,15 +21,9 @@ const gitTrim = (...args) => git(...args).trim();
 // A post-build handoff must be a bounded, ordinary file in the current workspace.
 // A symlink or external hardlink with matching bytes is not trusted provenance.
 function report(role) {
-  try {
-    const directory = lstatSync('aieo-output');
-    const file = lstatSync('aieo-output/candidate-' + role + '.json');
-    if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        !file.isFile() || file.isSymbolicLink() || file.nlink !== 1 ||
-        (file.mode & 0o111) || file.size < 2 || file.size > 65536) fail();
-    return JSON.parse(readFileSync('aieo-output/candidate-' + role + '.json', 'utf8'));
-  } catch { fail(); }
+  return readBoundedRoleReport(role);
 }
+
 
 export function verifyPostBuild(env = process.env) {
   const number = env.AIEO_PR_NUMBER;
