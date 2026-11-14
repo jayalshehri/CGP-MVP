@@ -125,3 +125,17 @@ test('security freezes submit handler against comment-only auth bypass while all
   const blockComment = base.replace('    if (!auth.user)', '    /* if (!auth.user)');
   assert.equal(assess(blockComment, '+    /* if (!auth.user) { return; }').status, 'failed');
 });
+
+test('independent security rejects concealed long or quote-terminated JSX outbound attributes', () => {
+  const attempts = [
+    '<img ' + ' '.repeat(380) + ' src={unsafeUrl} />',
+    '<img title=">" src={unsafeUrl} />',
+    '<form title=">" ' + ' '.repeat(375) + ' action={unsafeUrl}>Send</form>'
+  ];
+  for (const addition of attempts) {
+    const result = inspectModelDiff({ ...input, diff: '+' + addition });
+    assert.equal(result.status, 'failed',
+      'independent security must reject attribute hidden past spacing or a quoted >');
+    assert.ok(result.findings.includes('Potentially unsafe new code'));
+  }
+});
