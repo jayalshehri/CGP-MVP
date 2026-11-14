@@ -1,5 +1,6 @@
 // Independent review of a model-generated working tree against the prior HEAD.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { readBoundedModelReport, writeExclusiveModelRoleReport } from './aieo-role-artifact-io.mjs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
@@ -75,10 +76,9 @@ if (process.argv[1]?.endsWith('/aieo-model-security.mjs')) {
   const actual = readFileSync(MODEL_ALLOWED_PATH, 'utf8');
   const changedPaths = execFileSync('git', ['diff', '--name-only'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
   const diff = execFileSync('git', ['diff', '--unified=0', '--', MODEL_ALLOWED_PATH], { encoding: 'utf8' });
-  const report = JSON.parse(readFileSync('aieo-output/model-proposal.json', 'utf8'));
+  const report = readBoundedModelReport('proposal');
   const result = inspectModelDiff({ original, actual, changedPaths, diff, report });
-  mkdirSync('aieo-output', { recursive: true });
-  writeFileSync('aieo-output/model-security.json', JSON.stringify(result, null, 2) + '\n');
+  writeExclusiveModelRoleReport('security', result);
   console.log(JSON.stringify({ status: result.status, findings: result.findings.length }));
   if (result.status !== 'passed') process.exitCode = 1;
 }
