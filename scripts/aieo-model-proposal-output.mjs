@@ -34,8 +34,12 @@ export function assertModelProposalDestination() {
   return directory;
 }
 
-export function writeExclusiveModelProposalReport(report) {
+// The report directory must be the SAME inode attested before the provider call.
+// A replacement (even a new safe-looking directory) must never receive the report.
+export function writeExclusiveModelProposalReport(report, approvedDirectory) {
   const directory = assertModelProposalDestination();
+  if (!approvedDirectory || directory.dev !== approvedDirectory.dev ||
+      directory.ino !== approvedDirectory.ino) block();
   const bytes = Buffer.from(JSON.stringify(report, null, 2) + '\n', 'utf8');
   if (bytes.length < 2 || bytes.length > MAX_BYTES) block();
   let fd;
