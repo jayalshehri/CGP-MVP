@@ -930,3 +930,65 @@ test('post-build reattestation enforces bounded role evidence and accepts exact 
     assert.equal(f.git('rev-parse', 'main'), f.base);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('independent roles and final attestation reject group/world-writable handoffs', () => {
+  const f = setup();
+  try {
+    const dir = join(f.cwd, 'aieo-output');
+    assert.equal(f.run('developer').status, 0);
+    const developer = join(dir, 'candidate-developer.json');
+    chmodSync(developer, 0o666);
+    assert.notEqual(f.run('qa').status, 0, 'QA rejects world-writable Developer evidence');
+    assert.notEqual(f.run('security').status, 0, 'Security rejects world-writable Developer evidence');
+    chmodSync(developer, 0o600);
+    assert.equal(f.run('qa').status, 0);
+    assert.equal(f.run('security').status, 0);
+    const qa = join(dir, 'candidate-qa.json');
+    chmodSync(qa, 0o664);
+    assert.notEqual(f.run('reviewer').status, 0, 'Reviewer rejects group-writable QA evidence');
+    chmodSync(qa, 0o600);
+    assert.equal(f.run('reviewer').status, 0);
+
+    const reviewed = execFileSync('git', ['show', f.head + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' });
+    writeFileSync(join(f.cwd, path), reviewed);
+    const verify = () => spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(verify().status, 0, 'clean evidence passes post-build verification');
+    const reviewer = join(dir, 'candidate-reviewer.json');
+    chmodSync(reviewer, 0o666);
+    assert.notEqual(verify().status, 0, 'finalizer rejects world-writable Reviewer evidence');
+    chmodSync(reviewer, 0o600);
+    assert.equal(verify().status, 0, 'restored Reviewer evidence passes');
+
+    chmodSync(dir, 0o777);
+    assert.notEqual(f.run('developer').status, 0, 'Developer cannot write into writable handoff directory');
+    assert.notEqual(f.run('qa').status, 0, 'QA cannot read evidence in writable handoff directory');
+    assert.notEqual(f.run('security').status, 0, 'Security cannot read evidence in writable handoff directory');
+    assert.notEqual(f.run('reviewer').status, 0, 'Reviewer cannot read evidence in writable handoff directory');
+    assert.notEqual(verify().status, 0, 'post-build verifier rejects writable handoff directory');
+    chmodSync(dir, 0o755);
+    assert.equal(verify().status, 0, 'safe directory permissions restore final attestation');
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('Developer refuses a writable preexisting output before truncating its contents', () => {
+  const f = setup();
+  try {
+    const dir = join(f.cwd, 'aieo-output');
+    mkdirSync(dir);
+    const output = join(dir, 'candidate-developer.json');
+    const sentinel = 'PRESERVE UNTRUSTED FILE';
+    writeFileSync(output, sentinel);
+    chmodSync(output, 0o666);
+    assert.notEqual(f.run('developer').status, 0, 'untrusted writable output must fail');
+    assert.equal(readFileSync(output, 'utf8'), sentinel, 'reject before truncation');
+    chmodSync(output, 0o600);
+    assert.equal(f.run('developer').status, 0, 'secure output is allowed');
+    assert.ok(readFileSync(output, 'utf8').includes('"role": "developer"'));
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
