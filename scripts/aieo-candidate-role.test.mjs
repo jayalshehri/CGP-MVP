@@ -1199,3 +1199,57 @@ test('candidate and model role readers reject malformed UTF-8 evidence before pa
     assert.equal(f.git('rev-parse', 'main'), f.base, 'fixture trusted main stays unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('post-build finalizer rejects malformed replay bytes that decode to approved U+FFFD text', () => {
+  const f = setup();
+  try {
+    // A valid Git proposal may contain the literal U+FFFD codepoint. A
+    // malformed worktree with 0xff at that position decodes to the identical
+    // JavaScript string, but it is NOT the byte-identical compiled source.
+    const reviewed = candidate.replace('Current status', 'Current \ufffd status');
+    assert.notEqual(reviewed, candidate);
+    f.git('switch', '-q', branch);
+    f.git('reset', '--hard', 'main');
+    writeFileSync(join(f.cwd, path), reviewed);
+    f.git('add', path);
+    f.git('commit', '-qm', 'fixture valid UTF-8 replacement character');
+    const reviewedHead = f.git('rev-parse', 'HEAD');
+    f.git('push', '-q', '--force', 'origin', branch);
+    f.pr.head.sha = reviewedHead;
+    f.savePr();
+    f.git('switch', '-q', 'main');
+
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const result = f.run(role);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+    }
+
+    const replayPath = join(f.cwd, path);
+    const verify = () => spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    writeFileSync(replayPath, reviewed);
+    assert.equal(verify().status, 0, 'valid reviewed UTF-8 source must pass');
+
+    const bytes = Buffer.from(reviewed, 'utf8');
+    const marker = Buffer.from('\ufffd', 'utf8');
+    const at = bytes.indexOf(marker);
+    assert.ok(at >= 0);
+    const malformed = Buffer.concat([
+      bytes.subarray(0, at), Buffer.from([0xff]), bytes.subarray(at + marker.length)
+    ]);
+    assert.equal(malformed.toString('utf8'), reviewed,
+      'lossy text still matches the independently approved Git candidate');
+    assert.equal(Buffer.from(malformed.toString('utf8')).equals(malformed), false);
+    writeFileSync(replayPath, malformed);
+    assert.equal(f.git('diff', '--name-only'), path,
+      'normal Git scope check still sees the approved path');
+    assert.notEqual(verify().status, 0,
+      'post-build finalizer must reject malformed compiled source bytes');
+
+    writeFileSync(replayPath, reviewed);
+    assert.equal(verify().status, 0, 'restored byte-identical source passes');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main remains untouched');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
