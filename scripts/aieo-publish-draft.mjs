@@ -1,6 +1,6 @@
 // Trusted, fail-closed publisher. It cannot merge, approve, or deploy.
 // Call only after a manual main-branch dispatch and successful application gates.
-import { readFileSync, lstatSync } from 'node:fs';
+import { lstatSync, openSync, fstatSync, readSync, closeSync, constants } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
@@ -13,6 +13,54 @@ function command(binary, args) {
 }
 function identical(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+// Read the candidate from one bounded, private, ordinary inode. This happens
+// before any branch, push, or PR write; a Git diff alone cannot prove that a
+// group-writable file, swapped symlink, or replaced parent path is trusted.
+function readTrustedCandidate(path) {
+  let fd;
+  try {
+    const directory = lstatSync('components');
+    const prior = lstatSync(path);
+    if (!directory.isDirectory() || directory.isSymbolicLink() ||
+        (directory.mode & 0o022) || !prior.isFile() ||
+        prior.isSymbolicLink() || prior.nlink !== 1 ||
+        (prior.mode & 0o133) || prior.size < 1 ||
+        prior.size > 48000) fail('candidate source permissions or size are unsafe');
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.nlink !== 1 || (opened.mode & 0o133) ||
+        opened.dev !== prior.dev || opened.ino !== prior.ino ||
+        opened.size !== prior.size) fail('candidate source inode changed before read');
+    const bytes = Buffer.alloc(opened.size + 1);
+    let used = 0;
+    while (used < bytes.length) {
+      const count = readSync(fd, bytes, used, bytes.length - used, null);
+      if (count === 0) break;
+      used += count;
+    }
+    const after = fstatSync(fd);
+    const pathname = lstatSync(path);
+    const directoryNow = lstatSync('components');
+    if (used !== opened.size || after.size !== opened.size ||
+        after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs ||
+        after.nlink !== 1 || (after.mode & 0o133) ||
+        !pathname.isFile() || pathname.isSymbolicLink() ||
+        pathname.nlink !== 1 || (pathname.mode & 0o133) ||
+        pathname.dev !== opened.dev || pathname.ino !== opened.ino ||
+        pathname.size !== opened.size ||
+        !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
+        (directoryNow.mode & 0o022) ||
+        directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) {
+      fail('candidate source or parent path changed during read');
+    }
+    return bytes.toString('utf8', 0, used);
+  } catch {
+    fail('untrusted candidate source or directory');
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
 }
 function fail(message) {
   throw new Error('AIEO draft publisher blocked: ' + message);
@@ -99,7 +147,7 @@ export function publishDraft({ env = process.env } = {}) {
   }
   command('git', ['diff', '--check']);
   const original = command('git', ['show', 'HEAD:' + path]);
-  const actual = readFileSync(path, 'utf8');
+  const actual = readTrustedCandidate(path);
   const changedPaths = command('git', ['diff', '--name-only']).trim().split('\n').filter(Boolean);
   const diff = command('git', ['diff', '--unified=0', '--', path]);
   const reports = mode === 'model' ? {
@@ -119,6 +167,17 @@ export function publishDraft({ env = process.env } = {}) {
   if (command('git', ['diff', '--cached', '--name-only']).trim() !== path) fail('unexpected staged scope');
   command('git', ['commit', '-m', 'feat(aieo): bounded candidate for human review']);
   const candidateSha = command('git', ['rev-parse', 'HEAD']).trim();
+  // A file can change between independent review and git add. Compare the
+  // immutable commit with the verified bytes before contacting GitHub.
+  const committedPaths = command('git', ['diff', '--name-only', baseSha, candidateSha]).trim();
+  const committedMode = command('git', ['ls-tree', candidateSha, '--', path]).trim();
+  if (command('git', ['show', candidateSha + ':' + path]) !== actual ||
+      committedPaths !== path ||
+      !/^100644 blob [a-f0-9]{40}\tcomponents\/FeedbackWidget\.tsx$/.test(committedMode) ||
+      command('git', ['rev-list', '--parents', '-n', '1', candidateSha]).trim() !==
+        candidateSha + ' ' + baseSha) {
+    fail('committed proposal differs from independently reviewed candidate');
+  }
   command('gh', ['auth', 'setup-git']);
   command('git', ['push', 'origin', 'HEAD:refs/heads/' + branch]);
   const body = 'Candidate scope, independent checks and build were verified before publishing. ' +

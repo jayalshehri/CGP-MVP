@@ -266,3 +266,30 @@ test('model publisher rejects writable and oversized reports or a writable hando
     assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
   } finally { rmSync(f.root, { force: true, recursive: true }); }
 });
+
+
+for (const [name, alter] of [
+  ['group-writable candidate', (f) => chmodSync(f.target, 0o664)],
+  ['world-writable candidate', (f) => chmodSync(f.target, 0o666)],
+  ['group-writable source directory', (f) => chmodSync(join(f.workspace, 'components'), 0o775)]
+]) {
+  test('publisher refuses an unsafe pre-push source inode: ' + name, () => {
+    const f = fixture();
+    try {
+      const main = git(f.workspace, 'rev-parse', 'main');
+      alter(f);
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, 'untrusted source must be rejected');
+      assert.match(child.stderr, /untrusted candidate source or directory/);
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.equal(existsSync(f.log), false, 'must not contact GitHub CLI');
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /refs\/heads\/aieo\/model-proposal-99123-1/);
+    } finally {
+      rmSync(f.root, { force: true, recursive: true });
+    }
+  });
+}
