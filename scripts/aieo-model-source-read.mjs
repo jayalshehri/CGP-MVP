@@ -81,7 +81,7 @@ export function readApprovedModelSource(env = process.env) {
     const raw = buffer.subarray(0, used);
     const source = raw.toString('utf8');
     if (!Buffer.from(source, 'utf8').equals(raw)) block();
-    const pinned = execFileSync('git', ['show', 'HEAD:' + MODEL_ALLOWED_PATH],
+    const pinned = execFileSync('git', ['show', env.GITHUB_SHA + ':' + MODEL_ALLOWED_PATH],
       { stdio: 'pipe', maxBuffer: 256000 });
     if (!Buffer.isBuffer(pinned) || pinned.length < 1 ||
         pinned.length > MAX_BYTES || !pinned.equals(raw)) block();
