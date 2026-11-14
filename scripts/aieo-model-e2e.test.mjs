@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, linkSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, linkSync, statSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,10 +50,13 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     assert.equal(reviewer.status, 'draft-pr-eligible');
     assert.equal(reviewer.requiresHumanMerge, true);
     const qa = JSON.parse(readFileSync(artifact('qa'), 'utf8'));
+    unlinkSync(artifact('reviewer'));
     writeFileSync(artifact('qa'), JSON.stringify({ ...qa, sourceHash: '0'.repeat(64) }));
     assert.notEqual(run('gates', 'reviewer').status, 0, 'Forged QA evidence must fail');
     writeFileSync(artifact('qa'), JSON.stringify(qa));
     const security = JSON.parse(readFileSync(artifact('security'), 'utf8'));
+    // An absent destination ensures the failure reflects forged evidence,
+    // not merely the exclusive report writer rejecting a duplicate path.
     writeFileSync(artifact('security'), JSON.stringify({ ...security, addedLines: 0 }));
     assert.notEqual(run('gates', 'reviewer').status, 0, 'Forged security evidence must fail');
     assert.equal(readFileSync(path, 'utf8'), actual);
