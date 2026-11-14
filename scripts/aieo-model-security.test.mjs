@@ -139,3 +139,29 @@ test('independent security rejects concealed long or quote-terminated JSX outbou
     assert.ok(result.findings.includes('Potentially unsafe new code'));
   }
 });
+
+
+test('independent security rejects alternate JSX network sinks, spread props and image-set', () => {
+  const additions = [
+    '<input type="image" src={unsafeUrl} />',
+    '<button formAction={unsafeUrl}>Send</button>',
+    '<svg><image href={unsafeUrl} /></svg>',
+    '<svg><use xlinkHref={unsafeUrl} /></svg>',
+    '<meta httpEquiv="refresh" content={unsafeUrl} />',
+    '<base href={unsafeUrl} />',
+    '<video poster={unsafeUrl} />',
+    '<track src={unsafeUrl} />',
+    '<link imageSrcSet={unsafeUrl} />',
+    '<img {...remoteProps} />',
+    '<img {...{ src: unsafeUrl }} />',
+    '<img\n+  {...remoteProps}\n+/>',
+    'const style = { background: image-set("https://example.invalid/track" 1x) };',
+    'const style = { background: -webkit-image-set("https://example.invalid/track" 1x) };'
+  ];
+  for (const addition of additions) {
+    const result = inspectModelDiff({ ...input, diff: '+' + addition });
+    assert.equal(result.status, 'failed', addition);
+    assert.ok(result.findings.includes('Potentially unsafe new code'));
+  }
+  assert.equal(inspectModelDiff({ ...input, diff: '+<img alt="decorative" />' }).status, 'passed');
+});

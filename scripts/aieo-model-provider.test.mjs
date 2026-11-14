@@ -210,3 +210,31 @@ test('rejects outbound JSX attributes concealed by long spacing or quoted greate
       'external-model validator must block concealed JSX sink');
   }
 });
+
+
+test('rejects JSX network-capable alternate tags and property spreads before publishing', () => {
+  const attempts = [
+    '<input type="image" src={unsafeUrl} />',
+    '<button formAction={unsafeUrl}>Send</button>',
+    '<svg><image href={unsafeUrl} /></svg>',
+    '<svg><use xlinkHref={unsafeUrl} /></svg>',
+    '<meta httpEquiv="refresh" content={unsafeUrl} />',
+    '<base href={unsafeUrl} />',
+    '<video poster={unsafeUrl} />',
+    '<track src={unsafeUrl} />',
+    '<link imageSrcSet={unsafeUrl} />',
+    '<img {...remoteProps} />',
+    '<img {...{ src: unsafeUrl }} />',
+    '<img\n  {...remoteProps}\n/>',
+    'const style = { background: image-set("https://example.invalid/track" 1x) };',
+    'const style = { background: -webkit-image-set("https://example.invalid/track" 1x) };'
+  ];
+  for (const replace of attempts) {
+    const attempted = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace, explanation: 'Synthetic JSX/CSS sink regression' });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected', replace);
+  }
+  const safe = JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+    replace: '  const sample = 101; // <img alt="decorative" />',
+    explanation: 'Harmless non-network markup text' });
+  assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
+});
