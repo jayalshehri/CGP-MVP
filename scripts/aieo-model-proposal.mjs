@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH, requestModelPatch } from '../aieo/lib/model-provider.mjs';
 
 // An unsafe report alias must be rejected BEFORE any external provider call.
-assertModelProposalDestination();
+const approvedOutputDirectory = assertModelProposalDestination();
 const source = readApprovedModelSource(process.env);
 const task = process.env.AIEO_MODEL_TASK || '';
 const result = await requestModelPatch({ source, task, env: process.env });
@@ -21,7 +21,7 @@ const redacted = {
   changedBytes: result.changedBytes ?? null,
   sourceShared: process.env.AIEO_SOURCE_SHARING_APPROVED === 'true'
 };
-writeExclusiveModelProposalReport(redacted);
+writeExclusiveModelProposalReport(redacted, approvedOutputDirectory);
 console.log(JSON.stringify({ status: redacted.status, path: redacted.path, reason: redacted.reason, sourceShared: redacted.sourceShared }));
 
 if (result.status !== 'proposed') process.exitCode = 1;
