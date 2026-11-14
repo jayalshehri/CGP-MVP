@@ -1,9 +1,11 @@
 // Manual, provider-backed proposal. Never sends source without explicit opt-in.
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { readApprovedModelSource } from './aieo-model-source-read.mjs';
+import { readApprovedModelSource, applyApprovedModelPatch } from './aieo-model-source-read.mjs';
+import { assertModelProposalDestination, writeExclusiveModelProposalReport } from './aieo-model-proposal-output.mjs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH, requestModelPatch } from '../aieo/lib/model-provider.mjs';
 
+// An unsafe report alias must be rejected BEFORE any external provider call.
+assertModelProposalDestination();
 const source = readApprovedModelSource(process.env);
 const task = process.env.AIEO_MODEL_TASK || '';
 const result = await requestModelPatch({ source, task, env: process.env });
@@ -19,8 +21,7 @@ const redacted = {
   changedBytes: result.changedBytes ?? null,
   sourceShared: process.env.AIEO_SOURCE_SHARING_APPROVED === 'true'
 };
-mkdirSync('aieo-output', { recursive: true });
-writeFileSync('aieo-output/model-proposal.json', JSON.stringify(redacted, null, 2) + '\n');
+writeExclusiveModelProposalReport(redacted);
 console.log(JSON.stringify({ status: redacted.status, path: redacted.path, reason: redacted.reason, sourceShared: redacted.sourceShared }));
 
 if (result.status !== 'proposed') process.exitCode = 1;
@@ -32,6 +33,6 @@ if (process.env.AIEO_MODEL_APPLY === '1') {
     throw new Error('Untrusted invocation cannot apply model code');
   }
   if (result.status !== 'proposed') throw new Error('No valid model patch to apply');
-  writeFileSync(MODEL_ALLOWED_PATH, result.patchedSource);
+  applyApprovedModelPatch({ original: source, candidate: result.patchedSource, env: process.env });
   console.log('Applied validated proposal to local workspace only; no commit or merge');
 }

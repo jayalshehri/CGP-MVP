@@ -117,3 +117,101 @@ test('model proposal never contacts external transport for a same-byte source sy
     assert.equal(cmd(f.workspace, 'rev-parse', 'HEAD'), f.env.GITHUB_SHA);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+// These regressions exercise the REAL model proposal CLI with an injected
+// transport. They must never reach a provider or edit any file outside Git.
+for (const alias of ['symlink', 'hardlink']) {
+  test('model proposal refuses a preexisting ' + alias + ' report alias before fetch', () => {
+    const f = fixture();
+    try {
+      const output = join(f.workspace, 'aieo-output');
+      mkdirSync(output);
+      const protectedFile = join(f.root, 'protected-report.json');
+      writeFileSync(protectedFile, 'external file must remain untouched\n');
+      const report = join(output, 'model-proposal.json');
+      if (alias === 'symlink') symlinkSync(protectedFile, report);
+      else linkSync(protectedFile, report);
+      const log = join(f.root, 'provider-called');
+      const shim = join(f.root, 'intercept-output.mjs');
+      writeFileSync(shim, [
+        "import { writeFileSync } from 'node:fs';",
+        "globalThis.fetch = async () => { writeFileSync(" + JSON.stringify(log) +
+          ", 'called'); throw new Error('unexpected provider call'); };",
+        ''
+      ].join('\n'));
+      const result = spawnSync(process.execPath, ['--import', shim, proposal], {
+        cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 15000
+      });
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /model proposal report blocked/);
+      assert.equal(existsSync(log), false, 'unsafe output must never reach HTTP');
+      assert.equal(readFileSync(protectedFile, 'utf8'), 'external file must remain untouched\n');
+      assert.equal(readFileSync(f.target, 'utf8'), 'function syntheticFixture() { return 1; }\n');
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+}
+
+test('model proposal rejects group-writable output directory before fetch', () => {
+  const f = fixture();
+  try {
+    const output = join(f.workspace, 'aieo-output');
+    mkdirSync(output);
+    chmodSync(output, 0o777);
+    const log = join(f.root, 'provider-called');
+    const shim = join(f.root, 'intercept-output.mjs');
+    writeFileSync(shim, [
+      "import { writeFileSync } from 'node:fs';",
+      "globalThis.fetch = async () => { writeFileSync(" + JSON.stringify(log) +
+        ", 'called'); throw new Error('unexpected provider call'); };",
+      ''
+    ].join('\n'));
+    const result = spawnSync(process.execPath, ['--import', shim, proposal], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 15000
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /model proposal report blocked/);
+    assert.equal(existsSync(log), false);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+for (const alias of ['symlink', 'hardlink']) {
+  test('post-provider ' + alias + ' source swap cannot redirect an applied edit', () => {
+    const f = fixture();
+    try {
+      const source = readFileSync(f.target, 'utf8');
+      const external = join(f.root, 'outside.tsx');
+      writeFileSync(external, source);
+      const transportLog = join(f.root, 'provider-called');
+      const shim = join(f.root, 'swap-during-provider.mjs');
+      const response = JSON.stringify({
+        path: 'components/FeedbackWidget.tsx',
+        find: 'function syntheticFixture() { return 1; }',
+        replace: 'function syntheticFixture() { return 2; }',
+        explanation: 'Update synthetic fixture in bounded test'
+      });
+      writeFileSync(shim, [
+        "import { writeFileSync, unlinkSync, symlinkSync, linkSync } from 'node:fs';",
+        "globalThis.fetch = async () => {",
+        "  writeFileSync(" + JSON.stringify(transportLog) + ", 'called');",
+        "  unlinkSync(" + JSON.stringify(f.target) + ");",
+        "  " + (alias === 'symlink' ? 'symlinkSync' : 'linkSync') +
+          "(" + JSON.stringify(external) + ", " + JSON.stringify(f.target) + ");",
+        "  return { ok: true, text: async () => JSON.stringify({",
+        "    choices: [{ message: { content: " + JSON.stringify(response) + " } }]",
+        "  }) };",
+        "};",
+        ''
+      ].join('\n'));
+      const result = spawnSync(process.execPath, ['--import', shim, proposal], {
+        cwd: f.workspace,
+        env: { ...f.env, AIEO_MODEL_APPLY: '1' },
+        encoding: 'utf8', timeout: 15000
+      });
+      assert.notEqual(result.status, 0, 're-attestation must block the swapped checkout');
+      assert.match(result.stderr, /model source blocked/);
+      assert.equal(readFileSync(transportLog, 'utf8'), 'called');
+      assert.equal(readFileSync(external, 'utf8'), source, 'external inode must not be modified');
+      assert.equal(cmd(f.workspace, 'rev-parse', 'HEAD'), f.env.GITHUB_SHA);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+}

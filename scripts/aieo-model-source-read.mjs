@@ -1,7 +1,7 @@
 // Read a trusted, unchanged source inode BEFORE any optional external-model request.
 // The publisher's later checkout check is too late to prevent source disclosure.
 import { execFileSync } from 'node:child_process';
-import { lstatSync, openSync, fstatSync, readSync, closeSync, constants } from 'node:fs';
+import { lstatSync, openSync, fstatSync, readSync, writeSync, ftruncateSync, closeSync, constants } from 'node:fs';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 
 const MAX_BYTES = 48000;
@@ -75,6 +75,65 @@ export function readApprovedModelSource(env = process.env) {
     // workflow commit, not merely the pathname or an untrusted workspace diff.
     if (source !== git('show', 'HEAD:' + MODEL_ALLOWED_PATH)) block();
     return source;
+  } catch {
+    block();
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+// The network can be in flight while the checkout changes. Re-attest after
+// receiving the model response, then edit ONLY the opened, verified source
+// inode; a late symlink swap must never redirect a write outside the checkout.
+export function applyApprovedModelPatch({ original, candidate, env = process.env }) {
+  if (typeof original !== 'string' || typeof candidate !== 'string' ||
+      original === candidate || Buffer.byteLength(candidate, 'utf8') > MAX_BYTES ||
+      readApprovedModelSource(env) !== original) block();
+
+  let fd;
+  try {
+    const directory = lstatSync('components');
+    const before = lstatSync(MODEL_ALLOWED_PATH);
+    if (!directory.isDirectory() || directory.isSymbolicLink() ||
+        (directory.mode & 0o022) || !before.isFile() ||
+        before.isSymbolicLink() || before.nlink !== 1 ||
+        (before.mode & 0o133) || before.size < 1 || before.size > MAX_BYTES) block();
+
+    fd = openSync(MODEL_ALLOWED_PATH,
+      constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.nlink !== 1 || (opened.mode & 0o133) ||
+        opened.dev !== before.dev || opened.ino !== before.ino ||
+        opened.size !== before.size) block();
+
+    const buffer = Buffer.alloc(opened.size);
+    let used = 0;
+    while (used < buffer.length) {
+      const n = readSync(fd, buffer, used, buffer.length - used, used);
+      if (n === 0) break;
+      used += n;
+    }
+    const after = fstatSync(fd);
+    const pathNow = lstatSync(MODEL_ALLOWED_PATH);
+    const directoryNow = lstatSync('components');
+    if (used !== opened.size || !buffer.equals(Buffer.from(original, 'utf8')) ||
+        after.size !== opened.size || after.mtimeMs !== opened.mtimeMs ||
+        after.ctimeMs !== opened.ctimeMs || after.nlink !== 1 ||
+        (after.mode & 0o133) || pathNow.dev !== opened.dev ||
+        pathNow.ino !== opened.ino || !pathNow.isFile() ||
+        pathNow.isSymbolicLink() || pathNow.nlink !== 1 ||
+        directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino ||
+        !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
+        (directoryNow.mode & 0o022)) block();
+
+    const output = Buffer.from(candidate, 'utf8');
+    let written = 0;
+    while (written < output.length) {
+      const n = writeSync(fd, output, written, output.length - written, written);
+      if (n <= 0) block();
+      written += n;
+    }
+    ftruncateSync(fd, output.length);
   } catch {
     block();
   } finally {
