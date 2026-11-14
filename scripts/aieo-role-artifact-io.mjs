@@ -2,7 +2,7 @@
 // Inspect and read ONE opened inode with a strict byte cap. Do not trust a
 // path-only lstat followed by readFileSync(path), which can follow a swapped link.
 // Group/world-writable handoffs or directories are unsafe regardless of hashes.
-import { lstatSync, openSync, fstatSync, readSync, closeSync, constants } from 'node:fs';
+import { mkdirSync, lstatSync, openSync, fstatSync, readSync, writeSync, closeSync, constants } from 'node:fs';
 
 const MAX_BYTES = 65536;
 const ROLES = new Set(['developer', 'qa', 'security', 'reviewer']);
@@ -21,6 +21,47 @@ export function readBoundedRoleReport(role) {
 export function readBoundedModelReport(kind) {
   if (!MODEL_REPORTS.has(kind)) block();
   return readTrustedJsonReport('aieo-output/model-' + kind + '.json');
+}
+
+// QA, Security and Reviewer reports are handoffs just as sensitive as their
+// inputs. Never let an existing path (symlink, hardlink, or ordinary file) be
+// truncated by a later role. Each role produces one exclusive report per run.
+export function writeExclusiveModelRoleReport(role, report) {
+  if (!new Set(['qa', 'security', 'reviewer']).has(role)) block();
+  let fd;
+  try {
+    const data = Buffer.from(JSON.stringify(report, null, 2) + '\n', 'utf8');
+    if (data.length < 2 || data.length > MAX_BYTES) block();
+    mkdirSync('aieo-output', { recursive: true, mode: 0o700 });
+    const directory = lstatSync('aieo-output');
+    if (!directory.isDirectory() || directory.isSymbolicLink() ||
+        (directory.mode & 0o022)) block();
+    const path = 'aieo-output/model-' + role + '.json';
+    // Exclusivity must be enforced by the open syscall, not an earlier
+    // existence check. O_NOFOLLOW adds another barrier to alias swaps.
+    fd = openSync(path, constants.O_WRONLY | constants.O_CREAT |
+      constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    let used = 0;
+    while (used < data.length) {
+      const count = writeSync(fd, data, used, data.length - used);
+      if (count <= 0) block();
+      used += count;
+    }
+    const file = fstatSync(fd);
+    const current = lstatSync(path);
+    const directoryNow = lstatSync('aieo-output');
+    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o133) ||
+        file.size !== data.length ||
+        !current.isFile() || current.isSymbolicLink() ||
+        current.dev !== file.dev || current.ino !== file.ino ||
+        !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
+        (directoryNow.mode & 0o022) ||
+        directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) block();
+  } catch {
+    block();
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
 }
 
 function readTrustedJsonReport(path) {
