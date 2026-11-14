@@ -329,3 +329,61 @@ test('model apply refuses a same-inode chmod between opened read and edit', () =
     assert.equal(cmd(f.workspace, 'rev-parse', 'HEAD'), f.env.GITHUB_SHA);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('pre-share refuses a clean committed malformed UTF-8 source before any HTTP transport', () => {
+  const f = fixture();
+  try {
+    // Git can legitimately store arbitrary bytes in a blob. With Node's
+    // lossy decoder, both the worktree bytes and HEAD:source previously
+    // normalized 0xff to U+FFFD, bypassing the string equality check.
+    const malformed = Buffer.from('function syntheticFixture() { return "x"; }\n');
+    malformed[malformed.indexOf('x')] = 0xff;
+    assert.equal(Buffer.from(malformed.toString('utf8')).equals(malformed), false);
+    writeFileSync(f.target, malformed);
+    cmd(f.workspace, 'add', '--', 'components/FeedbackWidget.tsx');
+    cmd(f.workspace, 'commit', '-qm', 'synthetic malformed Git blob');
+    f.env.GITHUB_SHA = cmd(f.workspace, 'rev-parse', 'HEAD');
+    assert.equal(cmd(f.workspace, 'status', '--porcelain'), '',
+      'fixture has a clean, matching commit; only raw-byte validation can reject it');
+    assert.equal(readFileSync(f.target, 'utf8'),
+      execFileSync('git', ['show', 'HEAD:components/FeedbackWidget.tsx'],
+        { cwd: f.workspace, encoding: 'utf8' }),
+      'legacy lossy text comparison would incorrectly accept these bytes');
+
+    const read = readSource(f);
+    assert.notEqual(read.status, 0);
+    assert.match(read.stderr, /model source blocked/);
+
+    const log = join(f.root, 'unexpected-fetch');
+    const shim = join(f.root, 'intercept-malformed-source.mjs');
+    writeFileSync(shim, [
+      "import { writeFileSync } from 'node:fs';",
+      "globalThis.fetch = async () => { writeFileSync(" + JSON.stringify(log) +
+        ", 'called'); throw new Error('transport must not be called'); };",
+      ''
+    ].join('\n'));
+    const run = spawnSync(process.execPath, ['--import', shim, proposal], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 15000
+    });
+    assert.notEqual(run.status, 0);
+    assert.match(run.stderr, /model source blocked/);
+    assert.equal(existsSync(log), false, 'malformed committed source must not reach transport');
+    assert.equal(existsSync(join(f.workspace, 'aieo-output', 'model-proposal.json')), false);
+    assert.equal(cmd(f.workspace, 'rev-parse', 'HEAD'), f.env.GITHUB_SHA);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('pre-share still accepts a clean, valid UTF-8 replacement character in committed Git', () => {
+  const f = fixture();
+  try {
+    const valid = 'function syntheticFixture() { return "\\ufffd"; }\n'.replace('\\ufffd', '\ufffd');
+    writeFileSync(f.target, valid);
+    cmd(f.workspace, 'add', '--', 'components/FeedbackWidget.tsx');
+    cmd(f.workspace, 'commit', '-qm', 'synthetic valid UTF-8 replacement codepoint');
+    f.env.GITHUB_SHA = cmd(f.workspace, 'rev-parse', 'HEAD');
+    const outcome = readSource(f);
+    assert.equal(outcome.status, 0, outcome.stderr);
+    assert.equal(outcome.stdout, valid, 'raw bytes round-trip without accidental rejection');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
