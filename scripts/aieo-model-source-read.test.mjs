@@ -215,3 +215,41 @@ for (const alias of ['symlink', 'hardlink']) {
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   });
 }
+
+test('provider-time replacement of a safe-looking output directory is refused', () => {
+  const f = fixture();
+  try {
+    const output = join(f.workspace, 'aieo-output');
+    const relocated = join(f.root, 'old-approved-output');
+    const response = JSON.stringify({
+      path: 'components/FeedbackWidget.tsx',
+      find: 'function syntheticFixture() { return 1; }',
+      replace: 'function syntheticFixture() { return 2; }',
+      explanation: 'One bounded synthetic fixture edit'
+    });
+    const shim = join(f.root, 'replace-artifact-directory.mjs');
+    // The provider is a local stub; a new mode-0700 directory must not
+    // silently inherit the old directory's authorization to receive a report.
+    writeFileSync(shim, [
+      "import { renameSync, mkdirSync } from 'node:fs';",
+      "globalThis.fetch = async () => {",
+      "  renameSync(" + JSON.stringify(output) + ", " + JSON.stringify(relocated) + ");",
+      "  mkdirSync(" + JSON.stringify(output) + ", { mode: 0o700 });",
+      "  return { ok: true, text: async () => JSON.stringify({",
+      "    choices: [{ message: { content: " + JSON.stringify(response) + " } }]",
+      "  }) };",
+      "};",
+      ''
+    ].join('\n'));
+    const result = spawnSync(process.execPath, ['--import', shim, proposal], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 15000
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /model proposal report blocked/);
+    assert.equal(existsSync(join(output, 'model-proposal.json')), false);
+    assert.equal(existsSync(join(relocated, 'model-proposal.json')), false);
+    assert.equal(readFileSync(f.target, 'utf8'),
+      'function syntheticFixture() { return 1; }\n');
+    assert.equal(cmd(f.workspace, 'rev-parse', 'HEAD'), f.env.GITHUB_SHA);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
