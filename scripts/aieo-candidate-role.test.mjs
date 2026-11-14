@@ -1071,6 +1071,8 @@ test('bounded role reader rejects a same-byte inode replacement during a report 
       ['--import', shim, '--input-type=module', '--eval', code], {
         cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
       });
+    assert.equal(existsSync(reportPath + '.parked'), true,
+      'test hook must demonstrably replace the original evidence path');
     assert.notEqual(result.status, 0, 'a post-read pathname swap must fail closed');
     assert.match(result.stderr, /AIEO role artifact rejected/,
       'the failure must come from the evidence boundary, not the test shim');
