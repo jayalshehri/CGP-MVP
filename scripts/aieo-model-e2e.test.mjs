@@ -130,7 +130,7 @@ test('model QA and Security CLIs reject linked candidate source without emitting
       mkdirSync(dirname(target));
       mkdirSync(join(root, 'aieo-output'));
       const original = ['function fixture() {', route,
-        '  const sample = 1;', '}', ''].join('\\n');
+        '  const sample = 1;', '}', ''].join('\n');
       const candidate = original.replace('  const sample = 1;', '  const sample = 2;');
       git('init', '-q');
       writeFileSync(target, original);
