@@ -63,7 +63,7 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
 });
 
 test('independent model-role CLI refuses output aliases and pre-existing reports without truncation', () => {
-  const routeLine = String.raw`  const controlId = useMemo(() => /^\\/controls\\/(\\d+)(?:\\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
+  const routeLine = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
   for (const [role, alias] of [
     ['qa', 'symlink'], ['security', 'hardlink'], ['reviewer', 'existing-file']
   ]) {
@@ -79,7 +79,7 @@ test('independent model-role CLI refuses output aliases and pre-existing reports
     try {
       mkdirSync(dirname(target), { recursive: true });
       mkdirSync(evidence);
-      const original = ['function fixture() {', routeLine, '  const sample = 1;', '}', ''].join('\\n');
+      const original = ['function fixture() {', routeLine, '  const sample = 1;', '}', ''].join('\n');
       const actual = original.replace('  const sample = 1;', '  const sample = 2;');
       git('init', '-q');
       writeFileSync(target, original);
@@ -96,7 +96,7 @@ test('independent model-role CLI refuses output aliases and pre-existing reports
         assert.equal(run('gates', 'qa').status, 0);
         assert.equal(run('security').status, 0);
       }
-      const sentinel = 'PRESERVE EXTERNAL FILE CONTENT\\n';
+      const sentinel = 'PRESERVE EXTERNAL FILE CONTENT\n';
       writeFileSync(external, sentinel);
       if (alias === 'symlink') symlinkSync(external, report(role));
       else if (alias === 'hardlink') linkSync(external, report(role));
