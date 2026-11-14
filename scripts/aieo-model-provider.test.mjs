@@ -193,3 +193,20 @@ test('provider reads bounded streamed responses and rejects oversized bodies wit
   assert.equal(declaredOversize.status, 'rejected');
   assert.equal(readBody, false);
 });
+
+test('rejects outbound JSX attributes concealed by long spacing or quoted greater-than', () => {
+  // The old 350-character, first-'>' matcher missed all these attributes.
+  const attempts = [
+    '<img ' + ' '.repeat(380) + ' src={unsafeUrl} />',
+    '<img title=">" src={unsafeUrl} />',
+    '<form title=">" ' + ' '.repeat(375) + ' action={unsafeUrl}>Send</form>'
+  ];
+  for (const replace of attempts) {
+    const response = JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic outbound-attribute regression'
+    });
+    assert.equal(validateModelPatch({ response, source }).status, 'rejected',
+      'external-model validator must block concealed JSX sink');
+  }
+});
