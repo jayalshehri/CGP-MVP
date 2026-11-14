@@ -6,13 +6,24 @@ import { lstatSync, openSync, fstatSync, readSync, closeSync, constants } from '
 
 const MAX_BYTES = 65536;
 const ROLES = new Set(['developer', 'qa', 'security', 'reviewer']);
+const MODEL_REPORTS = new Set(['proposal', 'qa', 'security', 'reviewer']);
 function block() {
   throw new Error('AIEO role artifact rejected: untrusted file or changed evidence');
 }
 
 export function readBoundedRoleReport(role) {
   if (!ROLES.has(role)) block();
-  const path = 'aieo-output/candidate-' + role + '.json';
+  return readTrustedJsonReport('aieo-output/candidate-' + role + '.json');
+}
+
+// Model handoffs also contain untrusted provider-derived data. Never read them
+// through an unbounded or link-following path before the Draft PR publisher.
+export function readBoundedModelReport(kind) {
+  if (!MODEL_REPORTS.has(kind)) block();
+  return readTrustedJsonReport('aieo-output/model-' + kind + '.json');
+}
+
+function readTrustedJsonReport(path) {
   let fd;
   try {
     const directory = lstatSync('aieo-output');
