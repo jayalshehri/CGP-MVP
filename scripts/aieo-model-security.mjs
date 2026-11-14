@@ -11,6 +11,9 @@ const suspect = /\b(?:eval|Function)\s*\(|\b(?:child_process|process\.env|docume
 // Screen newly added browser navigation, beacon and image-based exfiltration paths.
 const browserExfil = /\b(?:window|globalThis)\s*(?:\.\s*open|\[\s*["'](?:open|fetch|WebSocket)["']\s*\])\s*\(|\bnavigator\s*(?:\.\s*sendBeacon|\[\s*["']sendBeacon["']\s*\])\s*\(|\b(?:window\s*\.\s*)?location\s*(?:\.\s*(?:assign|replace)\s*\(|\.\s*href\b|\[\s*["'](?:href|assign|replace)["']\s*\])|\bnew\s+(?:Image|Worker|SharedWorker)\s*\(|\bdocument\s*\.\s*createElement\s*\(\s*["'](?:iframe|script|img)["']/i;
 
+// Direct or computed browser location redirects can exfiltrate without fetch().
+const browserLocation = /\b(?:window|globalThis|document|self|top|parent)\s*(?:(?:\?\.|\.)\s*location\b|(?:\?\.)?\s*\[\s*['"]location['"]\s*\])|\blocation\s*=(?!=)/i;
+
 // Conservatively catch long JSX attributes and quoted '>' before an outbound sink.
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
 const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
@@ -43,7 +46,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   if (typeof diff !== 'string' || diff.length > 20000) findings.push('Invalid or oversized source delta');
   const additions = typeof diff === 'string' ? diff.split('\n').filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1)) : [];
   if (additions.length > 20) findings.push('Too many new code lines');
-  if (additions.some((line) => suspect.test(line) || browserExfil.test(line)) ||
+  if (additions.some((line) => suspect.test(line) || browserExfil.test(line) || browserLocation.test(line)) ||
       outboundMarkup.test(additions.join('\n')) || outboundCss.test(additions.join('\n'))) {
     findings.push('Potentially unsafe new code');
   }
