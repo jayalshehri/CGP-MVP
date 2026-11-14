@@ -55,7 +55,14 @@ function readTrustedCandidate(path) {
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) {
       fail('candidate source or parent path changed during read');
     }
-    return bytes.toString('utf8', 0, used);
+    const text = bytes.toString('utf8', 0, used);
+    // Model review hashes the decoded string. Reject malformed bytes that
+    // would silently decode to U+FFFD and let Git commit different raw bytes
+    // from the candidate independently reviewed by the role gates.
+    if (!Buffer.from(text, 'utf8').equals(bytes.subarray(0, used))) {
+      fail('candidate source contains invalid UTF-8');
+    }
+    return text;
   } catch {
     fail('untrusted candidate source or directory');
   } finally {
