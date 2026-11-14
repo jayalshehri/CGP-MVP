@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, linkSync, statSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, linkSync, statSync, unlinkSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -112,6 +112,57 @@ test('independent model-role CLI refuses output aliases and pre-existing reports
         role + ' must not alter an external file');
       assert.equal(readFileSync(target, 'utf8'), actual,
         role + ' must not change candidate source');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test('model QA and Security CLIs reject linked candidate source without emitting evidence', () => {
+  for (const alias of ['symlink', 'hardlink']) {
+    const root = mkdtempSync(join(tmpdir(), 'aieo-untrusted-candidate-role-'));
+    const target = join(root, 'components', 'FeedbackWidget.tsx');
+    const external = join(root, 'external-candidate.tsx');
+    const report = (role) => join(root, 'aieo-output', 'model-' + role + '.json');
+    const git = (...args) => execFileSync('git', args,
+      { cwd: root, stdio: 'pipe', encoding: 'utf8' }).trim();
+    try {
+      mkdirSync(dirname(target));
+      mkdirSync(join(root, 'aieo-output'));
+      const original = ['function fixture() {', route,
+        '  const sample = 1;', '}', ''].join('\\n');
+      const candidate = original.replace('  const sample = 1;', '  const sample = 2;');
+      git('init', '-q');
+      writeFileSync(target, original);
+      git('add', 'components/FeedbackWidget.tsx');
+      git('-c', 'user.email=aieo@example.invalid', '-c', 'user.name=AIEO Test',
+        'commit', '-qm', 'source fixture');
+      const baseline = git('rev-parse', 'HEAD');
+      writeFileSync(report('proposal'), JSON.stringify({
+        schemaVersion: 1, status: 'proposed',
+        path: 'components/FeedbackWidget.tsx',
+        sourceHash: sha(original), proposedHash: sha(candidate)
+      }), { mode: 0o600 });
+      writeFileSync(external, candidate);
+      unlinkSync(target);
+      if (alias === 'symlink') symlinkSync(external, target);
+      else linkSync(external, target);
+
+      const run = (name, role) => spawnSync(process.execPath,
+        [join(scriptRoot, 'aieo-model-' + name + '.mjs'), ...(role ? [role] : [])],
+        { cwd: root, timeout: 15000, encoding: 'utf8' });
+      const qa = run('gates', 'qa');
+      const security = run('security');
+      for (const result of [qa, security]) {
+        assert.notEqual(result.status, 0, alias + ': linked candidate must not be reviewed');
+        assert.match(result.stderr, /AIEO independent model review blocked/);
+      }
+      assert.equal(existsSync(report('qa')), false, 'QA must not write an approval');
+      assert.equal(existsSync(report('security')), false, 'Security must not write an approval');
+      assert.equal(readFileSync(external, 'utf8'), candidate,
+        'independent roles never mutate the linked target');
+      assert.equal(git('rev-parse', 'HEAD'), baseline,
+        'trusted local source commit must remain unchanged');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
