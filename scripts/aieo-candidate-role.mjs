@@ -22,6 +22,18 @@ function block() {
 function git(args) {
   return execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
 }
+// A Unicode string from execFileSync(encoding: 'utf8') is not proof of the
+// immutable Git blob's actual bytes: Node silently inserts U+FFFD for malformed
+// UTF-8. Independent role attestations must bind to exactly the bytes published,
+// including when the previous trusted base or the candidate is malformed.
+function readStrictGitSource(revision) {
+  const bytes = execFileSync('git', ['show', revision + ':' + MODEL_ALLOWED_PATH],
+    { stdio: 'pipe', maxBuffer: 256000 });
+  if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > 48000) block();
+  const source = bytes.toString('utf8');
+  if (!Buffer.from(source, 'utf8').equals(bytes)) block();
+  return source;
+}
 // An artifact handoff is untrusted input. Do not follow a link to an external
 // file, accept aliased inodes, or read unbounded data even if its JSON matches.
 function trustedReportDirectory() {
@@ -134,8 +146,8 @@ export function runCandidateRole(role, env = process.env) {
   const { base, head, number } = verifiedRemoteContext(env);
   let original, actual, changedPaths, diff;
   try {
-    original = git(['show', base + ':' + MODEL_ALLOWED_PATH]);
-    actual = git(['show', head + ':' + MODEL_ALLOWED_PATH]);
+    original = readStrictGitSource(base);
+    actual = readStrictGitSource(head);
     changedPaths = git(['diff', '--no-ext-diff', '--name-only', base, head])
       .trim().split('\n').filter(Boolean);
     diff = git(['diff', '--no-ext-diff', '--unified=0', base, head, '--', MODEL_ALLOWED_PATH]);
