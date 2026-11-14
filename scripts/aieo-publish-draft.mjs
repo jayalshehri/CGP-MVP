@@ -6,12 +6,10 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
 import { verifyRemoteDraft } from '../aieo/lib/remote-draft.mjs';
+import { readBoundedModelReport } from './aieo-role-artifact-io.mjs';
 
 function command(binary, args) {
   return execFileSync(binary, args, { encoding: 'utf8', stdio: 'pipe' });
-}
-function readJson(path) {
-  return JSON.parse(readFileSync(path, 'utf8'));
 }
 function identical(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -105,10 +103,10 @@ export function publishDraft({ env = process.env } = {}) {
   const changedPaths = command('git', ['diff', '--name-only']).trim().split('\n').filter(Boolean);
   const diff = command('git', ['diff', '--unified=0', '--', path]);
   const reports = mode === 'model' ? {
-    proposal: readJson('aieo-output/model-proposal.json'),
-    qa: readJson('aieo-output/model-qa.json'),
-    security: readJson('aieo-output/model-security.json'),
-    reviewer: readJson('aieo-output/model-reviewer.json')
+    proposal: readBoundedModelReport('proposal'),
+    qa: readBoundedModelReport('qa'),
+    security: readBoundedModelReport('security'),
+    reviewer: readBoundedModelReport('reviewer')
   } : {};
   verifyCandidate({ mode, original, actual, changedPaths, diff, reports });
   const baseSha = command('git', ['rev-parse', 'HEAD']).trim();
