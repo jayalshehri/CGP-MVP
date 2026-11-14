@@ -34,7 +34,10 @@ test('model provider source cannot be contacted before trusted main role preflig
   assert.ok(preflight > 0 && provider > preflight,
     'main reviewer workflow and independent role files must be checked before source disclosure');
   assert.match(model, /Block absent or stale independent-review workflow before model disclosure/);
-  assert.ok(model.includes('GH_TOKEN: ' + '
+  assert.ok(model.includes('GH_TOKEN:'), 'workflow preflight must use GitHub token');
+});
+
+test('developer publisher remains manual and no privileged PR event is added', () => {
   assert.ok(developer.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"));
   assert.ok(developer.includes('permissions:\n  contents: read'));
   assert.doesNotMatch(developer, /pull_request_target\s*:/);
