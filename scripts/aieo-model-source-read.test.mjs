@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync,
-  unlinkSync, symlinkSync, linkSync, renameSync, chmodSync, existsSync, rmSync } from 'node:fs';
+  unlinkSync, symlinkSync, linkSync, renameSync, chmodSync, statSync, existsSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -250,6 +250,82 @@ test('provider-time replacement of a safe-looking output directory is refused', 
     assert.equal(existsSync(join(relocated, 'model-proposal.json')), false);
     assert.equal(readFileSync(f.target, 'utf8'),
       'function syntheticFixture() { return 1; }\n');
+    assert.equal(cmd(f.workspace, 'rev-parse', 'HEAD'), f.env.GITHUB_SHA);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+
+test('pre-share reader rejects a same-inode chmod during its bounded read', () => {
+  const f = fixture();
+  try {
+    const shim = join(f.root, 'source-chmod-during-read.mjs');
+    writeFileSync(shim, [
+      "import fs from 'node:fs';",
+      "import { syncBuiltinESMExports } from 'node:module';",
+      "const originalRead = fs.readSync;",
+      "let changed = false;",
+      "fs.readSync = (...args) => {",
+      "  const n = originalRead(...args);",
+      "  if (!changed) {",
+      "    changed = true;",
+      "    fs.chmodSync(" + JSON.stringify(f.target) + ", 0o666);",
+      "  }",
+      "  return n;",
+      "};",
+      "syncBuiltinESMExports();",
+      ''
+    ].join('\n'));
+    const result = spawnSync(process.execPath, ['--import', shim, '--input-type=module', '-e',
+      'import { readApprovedModelSource } from ' + JSON.stringify(reader) +
+      '; process.stdout.write(readApprovedModelSource())'], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 15000
+    });
+    assert.notEqual(result.status, 0, 'a source chmod race must invalidate sharing authorization');
+    assert.match(result.stderr, /model source blocked/);
+    assert.notEqual(statSync(f.target).mode & 0o022, 0, 'the adversarial chmod actually occurred');
+    assert.equal(readFileSync(f.target, 'utf8'), 'function syntheticFixture() { return 1; }\n');
+    assert.equal(cmd(f.workspace, 'rev-parse', 'HEAD'), f.env.GITHUB_SHA);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('model apply refuses a same-inode chmod between opened read and edit', () => {
+  const f = fixture();
+  try {
+    const shim = join(f.root, 'apply-chmod-during-read.mjs');
+    const response = JSON.stringify({
+      path: 'components/FeedbackWidget.tsx',
+      find: 'function syntheticFixture() { return 1; }',
+      replace: 'function syntheticFixture() { return 2; }',
+      explanation: 'Change one bounded synthetic fixture'
+    });
+    writeFileSync(shim, [
+      "import fs from 'node:fs';",
+      "import { syncBuiltinESMExports } from 'node:module';",
+      "const originalRead = fs.readSync;",
+      "let changed = false;",
+      "fs.readSync = (...args) => {",
+      "  const n = originalRead(...args);",
+      "  if (!changed && typeof args[4] === 'number') {",
+      "    changed = true;",
+      "    fs.chmodSync(" + JSON.stringify(f.target) + ", 0o666);",
+      "  }",
+      "  return n;",
+      "};",
+      "syncBuiltinESMExports();",
+      "globalThis.fetch = async () => ({ ok: true, text: async () => JSON.stringify({",
+      "  choices: [{ message: { content: " + JSON.stringify(response) + " } }]",
+      "}) });",
+      ''
+    ].join('\n'));
+    const result = spawnSync(process.execPath, ['--import', shim, proposal], {
+      cwd: f.workspace, env: { ...f.env, AIEO_MODEL_APPLY: '1' },
+      encoding: 'utf8', timeout: 15000
+    });
+    assert.notEqual(result.status, 0, 'local patch must not edit the now group-writable inode');
+    assert.match(result.stderr, /model source blocked/);
+    assert.notEqual(statSync(f.target).mode & 0o022, 0, 'chmod took place within the apply read');
+    assert.equal(readFileSync(f.target, 'utf8'), 'function syntheticFixture() { return 1; }\n',
+      'no partial or unauthorized model edit');
     assert.equal(cmd(f.workspace, 'rev-parse', 'HEAD'), f.env.GITHUB_SHA);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
