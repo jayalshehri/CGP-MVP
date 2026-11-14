@@ -74,10 +74,17 @@ export function readApprovedModelSource(env = process.env) {
         dirNow.dev !== directory.dev || dirNow.ino !== directory.ino ||
         !dirNow.isDirectory() || (dirNow.mode & 0o022)) block();
 
-    const source = buffer.toString('utf8', 0, used);
-    // The bytes eligible for external sharing must exactly match the pinned
-    // workflow commit, not merely the pathname or an untrusted workspace diff.
-    if (source !== git('show', 'HEAD:' + MODEL_ALLOWED_PATH)) block();
+    // Compare the exact bytes before any source can reach the provider.
+    // Node's implicit UTF-8 decoder silently replaces malformed sequences
+    // with U+FFFD, so two different Git/worktree byte streams could appear
+    // equal as strings. Consent is bound to the immutable Git blob's bytes.
+    const raw = buffer.subarray(0, used);
+    const source = raw.toString('utf8');
+    if (!Buffer.from(source, 'utf8').equals(raw)) block();
+    const pinned = execFileSync('git', ['show', env.GITHUB_SHA + ':' + MODEL_ALLOWED_PATH],
+      { stdio: 'pipe', maxBuffer: 256000 });
+    if (!Buffer.isBuffer(pinned) || pinned.length < 1 ||
+        pinned.length > MAX_BYTES || !pinned.equals(raw)) block();
     return source;
   } catch {
     block();
