@@ -27,7 +27,8 @@ function git(args) {
 function trustedReportDirectory() {
   try {
     const directory = lstatSync('aieo-output');
-    if (!directory.isDirectory() || directory.isSymbolicLink()) block();
+    if (!directory.isDirectory() || directory.isSymbolicLink() ||
+        (directory.mode & 0o022)) block();
   } catch { block(); }
 }
 function readReport(role) {
@@ -38,6 +39,7 @@ function readReport(role) {
 // Also protect the handoff *output*: ordinary writeFileSync follows a symlink
 // and truncates an external file before the next role ever sees its report.
 // Open without following links and verify the opened inode before truncation.
+// Refuse files writable by other users: their bytes could change after review.
 function writeReport(role, report) {
   mkdirSync('aieo-output', { recursive: true });
   trustedReportDirectory();
@@ -46,7 +48,7 @@ function writeReport(role, report) {
   try {
     fd = openSync(name, constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
     const file = fstatSync(fd);
-    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o111) ||
+    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o133) ||
         file.size > 65536) block();
     ftruncateSync(fd, 0);
     writeFileSync(fd, JSON.stringify(report, null, 2) + '\n');
