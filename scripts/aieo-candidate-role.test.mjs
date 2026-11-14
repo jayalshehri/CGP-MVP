@@ -1083,3 +1083,75 @@ test('bounded role reader rejects a same-byte inode replacement during a report 
       'rejected replacement deliberately has identical contents');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('independent Developer rejects malformed candidate Git blob before emitting provenance evidence', () => {
+  const f = setup();
+  try {
+    f.git('switch', '-q', branch);
+    f.git('reset', '--hard', 'main');
+    const bytes = Buffer.from(candidate.replace(
+      '  const statusLabel = "Current status";',
+      '  const statusLabel = "Current status"; // X'));
+    const marker = bytes.indexOf(Buffer.from('// X'));
+    assert.ok(marker >= 0);
+    bytes[marker + 3] = 0xff;
+    assert.notDeepEqual(Buffer.from(bytes.toString('utf8')), bytes,
+      'decoded Git content differs from its original bytes');
+    writeFileSync(join(f.cwd, path), bytes);
+    f.git('add', path);
+    f.git('commit', '-qm', 'fixture malformed candidate blob');
+    f.git('push', '-q', '--force', 'origin', branch);
+    f.pr.head.sha = f.git('rev-parse', 'HEAD');
+    f.savePr();
+    f.git('switch', '-q', 'main');
+    assert.equal(f.git('rev-list', '--parents', '-n', '1', f.pr.head.sha),
+      f.pr.head.sha + ' ' + f.base, 'one-commit candidate has valid ancestry');
+    assert.equal(f.git('diff', '--name-only', f.base, f.pr.head.sha), path,
+      'only the allowlisted source file changed');
+    const result = f.run('developer');
+    assert.notEqual(result.status, 0, 'malformed candidate bytes cannot be attested');
+    assert.equal(existsSync(join(f.cwd, 'aieo-output/candidate-developer.json')), false);
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('independent Developer rejects malformed trusted baseline Git blob', () => {
+  const f = setup();
+  try {
+    f.git('switch', '-q', 'main');
+    const bytes = Buffer.from(original.replace(
+      '  const statusLabel = "Old status";',
+      '  const statusLabel = "Old status"; // X'));
+    const marker = bytes.indexOf(Buffer.from('// X'));
+    assert.ok(marker >= 0);
+    bytes[marker + 3] = 0xff;
+    writeFileSync(join(f.cwd, path), bytes);
+    f.git('add', path);
+    f.git('commit', '-qm', 'fixture malformed trusted baseline');
+    const base = f.git('rev-parse', 'HEAD');
+    f.git('push', '-q', '--force', 'origin', 'main');
+    f.git('switch', '-q', branch);
+    f.git('reset', '--hard', 'main');
+    const updated = Buffer.from(bytes);
+    const old = Buffer.from('Old status');
+    const offset = updated.indexOf(old);
+    assert.ok(offset >= 0);
+    Buffer.from('New status').copy(updated, offset);
+    writeFileSync(join(f.cwd, path), updated);
+    f.git('add', path);
+    f.git('commit', '-qm', 'fixture still contains invalid baseline bytes');
+    f.git('push', '-q', '--force', 'origin', branch);
+    const head = f.git('rev-parse', 'HEAD');
+    f.pr.base.sha = base;
+    f.pr.head.sha = head;
+    f.savePr();
+    f.git('switch', '-q', 'main');
+    assert.equal(f.git('rev-list', '--parents', '-n', '1', head), head + ' ' + base);
+    assert.equal(f.git('diff', '--name-only', base, head), path);
+    const result = f.run('developer', { GITHUB_SHA: base });
+    assert.notEqual(result.status, 0, 'malformed base bytes cannot be trusted');
+    assert.equal(existsSync(join(f.cwd, 'aieo-output/candidate-developer.json')), false);
+    assert.equal(f.git('rev-parse', 'main'), base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
