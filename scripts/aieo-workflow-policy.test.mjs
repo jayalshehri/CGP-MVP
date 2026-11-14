@@ -24,6 +24,64 @@ test('provider-backed source sharing stays manual, explicit, and environment-sco
   assert.doesNotMatch(model, /pull_request_target\s*:/);
 });
 
+test('model provider source cannot be contacted before trusted main role preflight', () => {
+  assert.ok(model.includes('scripts/aieo-review-readiness.test.mjs'),
+    'mock-only preflight tests must exercise missing main review workflow');
+  assert.ok(model.includes("      - 'scripts/aieo-review-readiness*.mjs'"),
+    'readiness changes must trigger pull request preflight');
+  const preflight = model.indexOf('run: node scripts/aieo-review-readiness.mjs');
+  const provider = model.indexOf('node scripts/aieo-model-proposal.mjs');
+  assert.ok(preflight > 0 && provider > preflight,
+    'main reviewer workflow and independent role files must be checked before source disclosure');
+  assert.match(model, /Block absent or stale independent-review workflow before model disclosure/);
+  assert.ok(model.includes('GH_TOKEN: ' + '
+  assert.ok(developer.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"));
+  assert.ok(developer.includes('permissions:\n  contents: read'));
+  assert.doesNotMatch(developer, /pull_request_target\s*:/);
+  assert.ok(developer.includes('persist-credentials: false'));
+});
+
+test('multi-agent pull-request checks never request write access', () => {
+  assert.ok(foundation.includes('permissions:\n  contents: read'));
+  assert.doesNotMatch(foundation, /(?:contents|actions|pull-requests|id-token): write/);
+  assert.doesNotMatch(foundation, /pull_request_target\s*:/);
+  assert.ok(foundation.includes('persist-credentials: false'));
+});
+
+test('publisher cannot bypass human review or invoke model from untrusted PR', () => {
+  assert.ok(publisher.includes("env.GITHUB_EVENT_NAME !== 'workflow_dispatch'"));
+  assert.ok(publisher.includes("env.GITHUB_REF !== 'refs/heads/main'"));
+  assert.ok(publisher.includes("env.GITHUB_REPOSITORY !== 'jayalshehri/CGP-MVP'"));
+  assert.ok(publisher.includes("'--draft'"));
+  assert.doesNotMatch(publisher, /(?:['"]pr merge['"]|--auto-merge|--force-with-lease)/);
+  assert.ok(provider.includes("env.AIEO_SOURCE_SHARING_APPROVED !== 'true'"));
+  assert.ok(provider.includes("env.GITHUB_EVENT_NAME !== 'workflow_dispatch'"));
+});
+
+test('dispatched independent model candidate roles are read-only and run trusted main code', () => {
+  assert.match(candidateRoles, /workflow_dispatch:\s*\n/);
+  assert.doesNotMatch(candidateRoles, /(?:^|\n)\s*pull_request(?:_target)?:/);
+  assert.match(candidateRoles, /permissions:\s*\n\s*contents: read\s*\n\s*pull-requests: read/);
+  assert.doesNotMatch(candidateRoles, /(?:contents|actions|pull-requests|id-token): write/);
+  assert.match(candidateRoles, /ref: \$\{\{ github.sha \}\}/);
+  assert.match(candidateRoles, /persist-credentials: false/);
+  for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+    assert.ok(candidateRoles.includes('node scripts/aieo-candidate-role.mjs ' + role));
+  }
+  assert.doesNotMatch(candidateRoles, /^env:\s*\n\s*GH_TOKEN:/m,
+    'candidate build must not inherit GitHub credentials at workflow scope');
+  assert.equal((candidateRoles.match(/GH_TOKEN: \$\{\{ github.token \}\}/g) || []).length, 5,
+    'only the four role CLI steps and post-build re-attestation receive a read-only token');
+  assert.ok(candidateRoles.includes('node scripts/aieo-candidate-finalize.mjs'));
+  assert.ok(finalizer.includes("pr.draft !== true"));
+  assert.ok(finalizer.includes("pr.head?.sha !== head"));
+  assert.doesNotMatch(finalizer, /(?:['"]pr merge['"]|--auto-merge|--force-with-lease)/);
+  assert.ok(publisher.includes("'aieo-model-candidate-roles.yml'"));
+  assert.ok(publisher.includes("'dispatched-not-proven'"));
+});
+ + '{{ github.token }}'));
+});
+
 test('developer publisher remains manual and no privileged PR event is added', () => {
   assert.ok(developer.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"));
   assert.ok(developer.includes('permissions:\n  contents: read'));
