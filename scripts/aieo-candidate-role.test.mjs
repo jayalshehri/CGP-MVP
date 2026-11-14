@@ -1164,13 +1164,13 @@ test('candidate and model role readers reject malformed UTF-8 evidence before pa
     const reportPath = join(f.cwd, 'aieo-output/candidate-developer.json');
     const original = readFileSync(reportPath);
     const json = original.toString('utf8');
-    assert.match(json, /\\n}\\n$/);
-    const malformed = Buffer.from(json.replace(/\\n}\\n$/,
-      ',\\n  "untrusted": "MARKER"\\n}\\n'), 'utf8');
+    assert.match(json, /\n}\n$/);
+    const malformed = Buffer.from(json.replace(/\n}\n$/,
+      ',\n  "untrusted": "MARKER"\n}\n'), 'utf8');
     const at = malformed.indexOf(Buffer.from('MARKER'));
     assert.ok(at >= 0);
     malformed[at] = 0xff;
-    assert.equal(JSON.parse(malformed.toString('utf8')).untrusted.startsWith('\\ufffd'), true,
+    assert.equal(JSON.parse(malformed.toString('utf8')).untrusted.startsWith('\ufffd'), true,
       'the lossy text would otherwise parse as valid JSON');
     assert.notDeepEqual(Buffer.from(malformed.toString('utf8')), malformed,
       'original evidence bytes cannot round-trip through UTF-8');
