@@ -2,7 +2,7 @@
 // An earlier approved PR head is not proof that the remote Draft stayed unchanged
 // throughout npm install, lint, typecheck and build. No merge/publish/approval.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, lstatSync } from 'node:fs';
+import { lstatSync, openSync, fstatSync, readSync, closeSync, constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
@@ -11,12 +11,59 @@ import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
 const SHA = /^[a-f0-9]{40}$/;
+const MAX_SOURCE_BYTES = 48000;
 const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const fail = () => { throw new Error('AIEO post-build check blocked: candidate or remote Draft changed'); };
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
 const gitTrim = (...args) => git(...args).trim();
+
+// The build replay is the final approval boundary for source bytes. Read a
+// bounded, opened inode, not a path that could become a symlink between lstat
+// and readFileSync. Group/world-writable source or parent directories allow a
+// local actor to alter build inputs after the immutable Git review.
+function readVerifiedBuildSource(path) {
+  let fd;
+  try {
+    const directory = lstatSync('components');
+    const prior = lstatSync(path);
+    if (!directory.isDirectory() || directory.isSymbolicLink() ||
+        (directory.mode & 0o022) || !prior.isFile() ||
+        prior.isSymbolicLink() || prior.nlink !== 1 ||
+        (prior.mode & 0o133) || prior.size < 1 ||
+        prior.size > MAX_SOURCE_BYTES) fail();
+
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.nlink !== 1 || (opened.mode & 0o133) ||
+        opened.dev !== prior.dev || opened.ino !== prior.ino ||
+        opened.size !== prior.size) fail();
+
+    const buffer = Buffer.alloc(opened.size + 1);
+    let used = 0;
+    while (used < buffer.length) {
+      const count = readSync(fd, buffer, used, buffer.length - used, null);
+      if (count === 0) break;
+      used += count;
+    }
+    const after = fstatSync(fd);
+    const pathNow = lstatSync(path);
+    const directoryNow = lstatSync('components');
+    if (used !== opened.size || after.size !== opened.size ||
+        after.nlink !== 1 || (after.mode & 0o133) ||
+        after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs ||
+        !pathNow.isFile() || pathNow.isSymbolicLink() ||
+        pathNow.nlink !== 1 || (pathNow.mode & 0o133) ||
+        pathNow.dev !== opened.dev || pathNow.ino !== opened.ino ||
+        pathNow.size !== opened.size ||
+        !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
+        (directoryNow.mode & 0o022) ||
+        directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) fail();
+    return buffer.toString('utf8', 0, used);
+  } catch { fail(); }
+  finally { if (fd !== undefined) closeSync(fd); }
+}
 
 // A post-build handoff must be a bounded, ordinary file in the current workspace.
 // A symlink or external hardlink with matching bytes is not trusted provenance.
@@ -67,14 +114,9 @@ export function verifyPostBuild(env = process.env) {
     .split('\0').filter(Boolean);
   if (untracked.some((entry) => !allowedHandoffs.has(entry))) fail();
   // The build must compile exactly the previously reviewed immutable blob.
-  const file = lstatSync(path);
-  // A byte-identical hardlink may alias an external, untrusted source inode.
-  // A reviewed build input must be an ordinary, singly-linked local file.
-  if (!file.isFile() || file.isSymbolicLink() || file.nlink !== 1 ||
-      (file.mode & 0o111)) fail();
   const original = git('show', base + ':' + path);
   const actual = git('show', head + ':' + path);
-  const worktree = readFileSync(path, 'utf8');
+  const worktree = readVerifiedBuildSource(path);
   const changedPaths = gitTrim('diff', '--no-ext-diff', '--name-only', base, head)
     .split('\n').filter(Boolean);
   const diff = git('diff', '--no-ext-diff', '--unified=0', base, head, '--', path);
