@@ -1253,3 +1253,59 @@ test('post-build finalizer rejects malformed replay bytes that decode to approve
     assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main remains untouched');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test('post-build Git blobs preserve exact UTF-8 bytes, not lossy decoded strings', () => {
+  const f = setup();
+  try {
+    const invoke = 'import { readStrictReviewedGitSource } from ' +
+      JSON.stringify(new URL('./aieo-candidate-finalize.mjs', import.meta.url).href) +
+      '; process.stdout.write(readStrictReviewedGitSource(process.argv[1]));';
+    const inspect = (sha) => spawnSync(process.execPath,
+      ['--input-type=module', '--eval', invoke, sha],
+      { cwd: f.cwd, encoding: 'utf8', timeout: 25000 });
+
+    assert.equal(inspect(f.base).status, 0, 'valid original Git bytes must be accepted');
+    assert.equal(inspect(f.head).status, 0, 'valid proposed Git bytes must be accepted');
+    assert.notEqual(inspect('HEAD:untrusted').status, 0,
+      'revision/path injection must not be interpreted as a trusted commit');
+
+    // A lossy Node git-show reader sees U+FFFD for an invalid source byte.
+    // Another *valid* UTF-8 blob containing U+FFFD would decode identically.
+    // Post-build attestation must distinguish their actual immutable bytes.
+    const decoded = candidate.replace('Current status', 'Current \uFFFD status');
+    assert.notEqual(decoded, candidate);
+    const validBytes = Buffer.from(decoded, 'utf8');
+    const replacement = Buffer.from('\uFFFD', 'utf8');
+    const index = validBytes.indexOf(replacement);
+    assert.ok(index >= 0, 'fixture contains one replacement character');
+    const invalidBytes = Buffer.concat([
+      validBytes.subarray(0, index), Buffer.from([0xff]),
+      validBytes.subarray(index + replacement.length)
+    ]);
+    assert.equal(invalidBytes.toString('utf8'), decoded,
+      'ordinary Node UTF-8 decoding loses the byte-level distinction');
+
+    f.git('switch', '-q', branch);
+    f.git('reset', '--hard', 'main');
+    writeFileSync(join(f.cwd, path), invalidBytes);
+    f.git('add', path);
+    f.git('commit', '-qm', 'fixture invalid UTF-8 candidate');
+    const invalidSha = f.git('rev-parse', 'HEAD');
+    assert.equal(execFileSync('git', ['show', invalidSha + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' }), decoded,
+    'the old text reader would have accepted the silently replaced content');
+    assert.notEqual(inspect(invalidSha).status, 0,
+      'finalizer must reject Git blobs with malformed UTF-8');
+
+    // Positive recovery control: identical decoded text stored as genuinely
+    // valid UTF-8 is allowed when read from a distinct real Git commit.
+    writeFileSync(join(f.cwd, path), validBytes);
+    f.git('add', path);
+    f.git('commit', '-qm', 'fixture valid UTF-8 candidate');
+    const repairedSha = f.git('rev-parse', 'HEAD');
+    assert.equal(inspect(repairedSha).status, 0,
+      'valid UTF-8 bytes must still pass the strict post-build reader');
+    assert.equal(inspect(repairedSha).stdout, decoded);
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'fixture main is untouched');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
