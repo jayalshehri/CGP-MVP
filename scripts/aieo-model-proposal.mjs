@@ -19,7 +19,12 @@ const redacted = {
   sourceHash: createHash('sha256').update(source).digest('hex'),
   proposedHash: result.proposedHash || null,
   changedBytes: result.changedBytes ?? null,
-  sourceShared: process.env.AIEO_SOURCE_SHARING_APPROVED === 'true'
+  sourceShared: process.env.AIEO_SOURCE_SHARING_APPROVED === 'true',
+  // Bind downstream publication to this exact consented task and trusted run.
+  // No task text, prompts, response or credentials enter this artifact.
+  taskHash: createHash('sha256').update(task).digest('hex'),
+  dispatchRunId: process.env.GITHUB_RUN_ID || null,
+  dispatchRunAttempt: process.env.GITHUB_RUN_ATTEMPT || null
 };
 writeExclusiveModelProposalReport(redacted, approvedOutputDirectory);
 console.log(JSON.stringify({ status: redacted.status, path: redacted.path, reason: redacted.reason, sourceShared: redacted.sourceShared }));

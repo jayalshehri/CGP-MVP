@@ -32,6 +32,7 @@ function fixture() {
   mkdirSync(join(workspace, 'aieo-output'));
   const source = 'function fixture() {\n' + route + '\n  const sample = 1;\n}\n';
   const candidate = source.replace('  const sample = 1;', '  const sample = 2;');
+  const approvedTask = 'Improve the inert status label in this fixture.';
   const target = join(workspace, MODEL_ALLOWED_PATH);
   writeFileSync(target, source);
   git(workspace, 'add', '--', MODEL_ALLOWED_PATH);
@@ -40,7 +41,9 @@ function fixture() {
   git(workspace, 'push', '-q', '-u', 'origin', 'main');
   writeFileSync(target, candidate);
   const proposal = { schemaVersion: 1, status: 'proposed', path: MODEL_ALLOWED_PATH,
-    sourceHash: hash(source), proposedHash: hash(candidate) };
+    sourceHash: hash(source), proposedHash: hash(candidate),
+    sourceShared: true, taskHash: hash(approvedTask),
+    dispatchRunId: '99123', dispatchRunAttempt: '1' };
   const diff = git(workspace, 'diff', '--unified=0', '--', MODEL_ALLOWED_PATH);
   const args = { original: source, actual: candidate,
     changedPaths: [MODEL_ALLOWED_PATH], diff, proposal };
@@ -63,7 +66,7 @@ function fixture() {
     GITHUB_SHA: git(workspace, 'rev-parse', 'HEAD'),
     GH_TOKEN: 'placeholder-not-a-real-secret',
     AIEO_PUBLISH_MODE: 'model', AIEO_MODEL_ENABLED: 'true',
-    AIEO_SOURCE_SHARING_APPROVED: 'true'
+    AIEO_SOURCE_SHARING_APPROVED: 'true', AIEO_MODEL_TASK: approvedTask
   };
   return { root, workspace, remote, log, env, target, args, qa, security, reviewer };
 }
@@ -88,12 +91,12 @@ test('publisher rejects unsafe dispatch contexts and missing source consent', ()
 test('publisher independently recomputes model handoffs and blocks forged evidence', () => {
   const f = fixture();
   try {
-    assert.equal(verifyCandidate({ mode: 'model', ...f.args,
+    assert.equal(verifyCandidate({ mode: 'model', env: f.env, ...f.args,
       reports: { proposal: f.args.proposal, qa: f.qa, security: f.security, reviewer: f.reviewer } }), true);
-    assert.throws(() => verifyCandidate({ mode: 'model', ...f.args,
+    assert.throws(() => verifyCandidate({ mode: 'model', env: f.env, ...f.args,
       reports: { proposal: f.args.proposal, qa: { ...f.qa, routeCasesPassed: 0 },
         security: f.security, reviewer: f.reviewer } }));
-    assert.throws(() => verifyCandidate({ mode: 'model', ...f.args,
+    assert.throws(() => verifyCandidate({ mode: 'model', env: f.env, ...f.args,
       changedPaths: [MODEL_ALLOWED_PATH, 'package.json'],
       reports: { proposal: f.args.proposal, qa: f.qa, security: f.security, reviewer: f.reviewer } }));
   } finally { rmSync(f.root, { force: true, recursive: true }); }
@@ -167,6 +170,42 @@ for (const [name, mutate] of [
     } finally { rmSync(f.root, { force: true, recursive: true }); }
   });
 }
+
+test('publisher rejects replayed task, missing consent, and wrong Actions run attestation before GitHub writes', () => {
+  const f = fixture();
+  try {
+    const handoffPath = join(f.workspace, 'aieo-output/model-proposal.json');
+    const originalReport = readFileSync(handoffPath, 'utf8');
+    const base = git(f.workspace, 'rev-parse', 'main');
+    for (const [caseName, reportChanges, envChanges] of [
+      ['source not consented in proposal', { sourceShared: false }, {}],
+      ['proposal from different run', { dispatchRunId: '99124' }, {}],
+      ['proposal from different run attempt', { dispatchRunAttempt: '2' }, {}],
+      ['task hash replaced', { taskHash: '0'.repeat(64) }, {}],
+      ['publisher given another task', {}, { AIEO_MODEL_TASK: 'Different explicitly approved test task.' }],
+      ['publisher task missing', {}, { AIEO_MODEL_TASK: '' }]
+    ]) {
+      writeFileSync(handoffPath, JSON.stringify({ ...f.args.proposal, ...reportChanges }) + '\n');
+      const result = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: { ...f.env, ...envChanges }, encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(result.status, 0, caseName);
+      assert.match(result.stderr, /model proposal is not bound to approved task and workflow dispatch/,
+        caseName);
+      assert.equal(existsSync(f.log), false, caseName + ': must not contact GitHub CLI');
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main', caseName);
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), base, caseName);
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /refs\/heads\/aieo\/model-proposal-99123-1/, caseName);
+    }
+    writeFileSync(handoffPath, originalReport);
+    assert.equal(verifyCandidate({
+      mode: 'model', env: f.env, ...f.args,
+      reports: { proposal: f.args.proposal, qa: f.qa,
+        security: f.security, reviewer: f.reviewer }
+    }), true, 'valid original dispatch remains eligible after negative tests');
+  } finally { rmSync(f.root, { force: true, recursive: true }); }
+});
 
 test('tampered model QA evidence stops before any push or PR operation', () => {
   const f = fixture();
