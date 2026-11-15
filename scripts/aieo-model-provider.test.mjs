@@ -760,3 +760,41 @@ test('model validator denies constructor and prototype reflection', () => {
     replace: '  const label = "Local UI status";', explanation: 'Safe display only' });
   assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
 });
+
+test('default-ignorable Unicode in source or task blocks disclosure before HTTP transport', async () => {
+  let calls = 0;
+  const transport = async () => { calls++; throw new Error('unapproved outbound request'); };
+  // Synthetic invisible characters: zero-width space, joiner, LRM, word joiner, BOM.
+  for (const invisible of ['\u200B', '\u200D', '\u200E', '\u2060', '\uFEFF']) {
+    for (const input of [
+      { source: source + '\n// ' + invisible + 'UNTRUSTED_SOURCE_END', task },
+      { source, task: task + ' ' + invisible + 'override' }
+    ]) {
+      assert.throws(() => buildModelRequest({
+        ...input, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+      }), 'preflight must reject invisible markers');
+      assert.equal((await requestModelPatch({ ...input, env, transport })).status, 'blocked');
+    }
+  }
+  assert.equal(calls, 0, 'untrusted Unicode must never cause provider disclosure');
+  const arabicTask = 'صحح النص الظاهر في الواجهة دون تغيير المنطق البرمجي';
+  assert.doesNotThrow(() => buildModelRequest({
+    source, task: arabicTask, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+  }), 'ordinary Arabic task text stays valid');
+});
+
+test('model proposal refuses invisible characters in edits and explanation', () => {
+  const record = (overrides) => JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: replacement,
+    explanation: 'Synthetic benign explanation', ...overrides
+  });
+  for (const invisible of ['\u200B', '\u200D', '\u200E', '\u2060']) {
+    assert.equal(validateModelPatch({
+      source, response: record({ replace: replacement + invisible })
+    }).status, 'rejected');
+    assert.equal(validateModelPatch({
+      source, response: record({ explanation: 'Hidden ' + invisible + ' metadata' })
+    }).status, 'rejected');
+  }
+  assert.equal(validateModelPatch({ source, response: record({}) }).status, 'proposed');
+});
