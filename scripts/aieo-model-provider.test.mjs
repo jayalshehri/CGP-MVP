@@ -739,3 +739,24 @@ test('unquoted key assignments are refused before any external source sharing', 
     })
   }).status, 'proposed');
 });
+
+// A function constructor can be reached through ordinary array/object methods,
+// without the literal words Function, eval, fetch, or a global identifier.
+test('model validator denies constructor and prototype reflection', () => {
+  const attempts = [
+    '  const run = ([]).filter.constructor("return 42");',
+    '  const run = ({})["constructor"]["constructor"]("return 42");',
+    '  const proto = ({})["__proto__"];',
+    '  const proto = Object.getPrototypeOf({});',
+    '  Object.setPrototypeOf(target, other);',
+    '  Object.defineProperty(target, "code", { value: 1 });'
+  ];
+  for (const replace of attempts) {
+    const response = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic reflection denial' });
+    assert.equal(validateModelPatch({ response, source }).status, 'rejected', replace);
+  }
+  const safe = JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+    replace: '  const label = "Local UI status";', explanation: 'Safe display only' });
+  assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
+});
