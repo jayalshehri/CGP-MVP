@@ -139,6 +139,42 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
       'draft-pr-eligible');
 
     if (scenario.name === 'real checked-in FeedbackWidget TSX') {
+      // A successful chain is not proof that each independent process will
+      // reject a candidate changed AFTER the model proposal. Exercise the
+      // actual QA, Security and Reviewer CLIs separately, not only the final
+      // publisher. Each role uses an exclusive output path; remove its prior
+      // valid report before rerunning and restore it afterwards.
+      const modified = candidate.replace('if (!visible) return null;', 'if (true) return null;');
+      assert.notEqual(modified, candidate, 'fixture must contain the visibility guard');
+      for (const [role, script, args, refusedStatus] of [
+        ['qa', 'aieo-model-gates.mjs', ['qa'], 'failed'],
+        ['security', 'aieo-model-security.mjs', [], 'failed'],
+        ['reviewer', 'aieo-model-gates.mjs', ['reviewer'], 'blocked']
+      ]) {
+        const evidencePath = report(role);
+        const approvedReport = readFileSync(evidencePath, 'utf8');
+        rmSync(evidencePath);
+        writeFileSync(target, modified);
+        try {
+          const refusedRole = run([join(scripts, script), ...args]);
+          assert.notEqual(refusedRole.status, 0,
+            role + ' must independently reject changed executable source');
+          const refusedReport = JSON.parse(readFileSync(evidencePath, 'utf8'));
+          assert.equal(refusedReport.status, refusedStatus,
+            role + ' must issue its own negative verdict');
+          assert.equal(existsSync(ghLog), false,
+            role + ' rejection must not contact GitHub CLI');
+          assert.equal(git('branch', '--show-current').trim(), 'main');
+          assert.equal(git('show', 'main:' + MODEL_ALLOWED_PATH), original);
+          assert.doesNotMatch(git('ls-remote', '--heads', remote),
+            /refs\/heads\/aieo\/model-proposal-/);
+        } finally {
+          writeFileSync(target, candidate);
+          rmSync(evidencePath, { force: true });
+          writeFileSync(evidencePath, approvedReport, { mode: 0o600 });
+        }
+      }
+
       // Even after all role reports pass, the publisher must independently
       // reject a post-review executable mutation before invoking git push or gh.
       const tampered = candidate.replace('if (!visible) return null;', 'if (true) return null;');
