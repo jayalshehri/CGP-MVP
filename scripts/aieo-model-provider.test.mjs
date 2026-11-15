@@ -16,6 +16,41 @@ const env = {
 };
 const task = 'Correct the sample constant in a bounded manner.';
 
+test('private-use and unassigned Unicode fail closed at disclosure and proposal boundaries', async () => {
+  const unsupported = ['\uE000', '\uFDD0', '\uFFFF'];
+  let outbound = 0;
+  const transport = async () => { outbound++; throw new Error('must never transmit unsupported Unicode'); };
+  for (const marker of unsupported) {
+    assert.throws(() => buildModelRequest({
+      source: source + '// hidden ' + marker, task,
+      model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.throws(() => buildModelRequest({
+      source, task: task + marker,
+      model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.equal((await requestModelPatch({
+      source: source + '// hidden ' + marker, task, env, transport
+    })).status, 'blocked');
+    for (const candidate of [
+      { find: find + marker, replace: replacement },
+      { find, replace: replacement + marker },
+      { find, replace: replacement, explanation: 'status ' + marker }
+    ]) {
+      const response = JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find: candidate.find,
+        replace: candidate.replace, explanation: candidate.explanation || 'synthetic fixture'
+      });
+      assert.equal(validateModelPatch({ response, source }).status, 'rejected');
+    }
+  }
+  assert.equal(outbound, 0, 'forbidden Unicode must not reach external provider');
+  assert.equal(validateModelPatch({ response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: replacement + ' // الحالة',
+    explanation: 'تعديل نص الواجهة'
+  }), source }).status, 'proposed', 'ordinary Arabic remains accepted');
+});
+
 test('non-printing Unicode line separators and C1 controls fail closed before disclosure', async () => {
   const forbiddenControls = ['\u2028', '\u2029', '\u0085', '\u0000'];
   let sent = 0;
