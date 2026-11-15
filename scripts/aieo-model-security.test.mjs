@@ -348,3 +348,23 @@ test('independent Security rejects encoded JavaScript globals and call targets',
     ...input, diff: '+const label = "Locally rendered status";'
   }).status, 'passed');
 });
+
+
+test('independent Security rejects added unquoted key assignments', () => {
+  const markers = [
+    'AWS_SECRET_ACCESS_KEY=' + 'x'.repeat(40),
+    'AccountKey=' + 'A'.repeat(48) + '==',
+    'client_secret:' + 'b'.repeat(36),
+    'api_key=' + 'c'.repeat(30),
+    'password=' + 'd'.repeat(25),
+    'service_role=' + 'e'.repeat(32)
+  ];
+  for (const marker of markers) {
+    const result = inspectModelDiff({
+      ...input, diff: '+const field = "' + marker + '";'
+    });
+    assert.equal(result.status, 'failed', marker);
+    assert.ok(result.findings.includes('Potentially unsafe new code'), marker);
+  }
+  assert.equal(inspectModelDiff({ ...input, diff: '+const displayLabel = "Ready";' }).status, 'passed');
+});
