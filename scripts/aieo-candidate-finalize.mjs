@@ -19,6 +19,22 @@ const fail = () => { throw new Error('AIEO post-build check blocked: candidate o
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
 const gitTrim = (...args) => git(...args).trim();
 
+// The immutable base/head Git blobs must be checked as raw bytes. Decoding
+// git show as UTF-8 first can silently turn malformed data into U+FFFD; the
+// compiled worktree could then appear equal despite different committed bytes.
+export function readStrictReviewedGitSource(revision) {
+  try {
+    if (!SHA.test(revision || '')) fail();
+    const raw = execFileSync('git', ['show', revision + ':' + MODEL_ALLOWED_PATH],
+      { stdio: 'pipe', maxBuffer: 256000 });
+    if (!Buffer.isBuffer(raw) || raw.length < 1 ||
+        raw.length > MAX_SOURCE_BYTES) fail();
+    const source = raw.toString('utf8');
+    if (!Buffer.from(source, 'utf8').equals(raw)) fail();
+    return source;
+  } catch { fail(); }
+}
+
 // The build replay is the final approval boundary for source bytes. Read a
 // bounded, opened inode, not a path that could become a symlink between lstat
 // and readFileSync. Group/world-writable source or parent directories allow a
@@ -120,8 +136,8 @@ export function verifyPostBuild(env = process.env) {
     .split('\0').filter(Boolean);
   if (untracked.some((entry) => !allowedHandoffs.has(entry))) fail();
   // The build must compile exactly the previously reviewed immutable blob.
-  const original = git('show', base + ':' + path);
-  const actual = git('show', head + ':' + path);
+  const original = readStrictReviewedGitSource(base);
+  const actual = readStrictReviewedGitSource(head);
   const worktree = readVerifiedBuildSource(path);
   const changedPaths = gitTrim('diff', '--no-ext-diff', '--name-only', base, head)
     .split('\n').filter(Boolean);
