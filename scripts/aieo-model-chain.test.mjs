@@ -151,6 +151,32 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
       assert.doesNotMatch(git('ls-remote', '--heads', remote),
         /refs\/heads\/aieo\/model-proposal-/, 'rejected patch must not create a remote branch');
       writeFileSync(target, candidate);
+
+      // A successful run of QA, Security and Reviewer is not itself authority
+      // to publish. Corrupt each independent handoff *after* it passed, then
+      // demonstrate that the unchanged publisher refuses every forged report
+      // before contacting gh or pushing a branch.
+      for (const role of ['qa', 'security', 'reviewer']) {
+        const evidencePath = report(role);
+        const verified = readFileSync(evidencePath, 'utf8');
+        const forged = JSON.parse(verified);
+        forged.proposedHash = '0'.repeat(64);
+        try {
+          writeFileSync(evidencePath, JSON.stringify(forged) + '\n');
+          const deniedEvidence = run([join(scripts, 'aieo-publish-draft.mjs')]);
+          assert.notEqual(deniedEvidence.status, 0,
+            role + ' evidence tampering must block publication');
+          assert.equal(existsSync(ghLog), false,
+            role + ' tampering must not invoke any GitHub CLI operation');
+          assert.equal(git('branch', '--show-current').trim(), 'main');
+          assert.equal(git('show', 'main:' + MODEL_ALLOWED_PATH), original);
+          assert.doesNotMatch(git('ls-remote', '--heads', remote),
+            /refs\/heads\/aieo\/model-proposal-/,
+            role + ' tampering must not create a remote candidate branch');
+        } finally {
+          writeFileSync(evidencePath, verified);
+        }
+      }
     }
 
     // The real publisher operates against a temporary Git remote and fake gh executable.
