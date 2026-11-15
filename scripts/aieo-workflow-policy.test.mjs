@@ -38,7 +38,9 @@ test('model provider source cannot be contacted before trusted main role preflig
 });
 
 test('approved source-sharing task is bound at proposal and publisher boundaries', () => {
-  assert.equal(model.split('AIEO_MODEL_TASK: ' + '
+  const dispatchInput = 'AIEO_MODEL_TASK: ' + String.fromCharCode(36, 123, 123) +
+    ' inputs.task ' + String.fromCharCode(125, 125);
+  assert.equal(model.split(dispatchInput).length - 1, 2,
     'the same manual task must reach both the model provider and Draft publisher');
   assert.ok(publisher.includes('proposal?.sourceShared !== true'));
   assert.ok(publisher.includes('proposal?.taskHash'));
