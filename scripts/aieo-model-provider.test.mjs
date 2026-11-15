@@ -349,3 +349,29 @@ test('model rejects indirect network invocations before a proposal can proceed',
     replace: '  const sample = 102; // a local UI-only change', explanation: 'No network capability' });
   assert.equal(validateModelPatch({ response: benign, source }).status, 'proposed');
 });
+
+test('model rejects aliased transport references and dynamic-code capabilities', () => {
+  const attempts = [
+    "const sender = fetch; sender(unsafeUrl);",
+    "const sender = globalThis[\"fetch\"]; sender(unsafeUrl);",
+    "const { sendBeacon: beacon } = navigator; beacon(unsafeUrl, body);",
+    "const SocketCtor = WebSocket; new SocketCtor(unsafeUrl);",
+    "const PixelCtor = Image; new PixelCtor().src = unsafeUrl;",
+    "const opener = globalThis[\"open\"]; opener(unsafeUrl);",
+    "const maker = document.createElement; maker(\"img\").src = unsafeUrl;",
+    "const remote = Reflect[\"apply\"](fetch, globalThis, [unsafeUrl]);",
+    "const WorkerCtor = SharedWorker; new WorkerCtor(unsafeUrl);",
+    "const load = importScripts; load(unsafeUrl);",
+    "const remoteModule = import(unsafeUrl);",
+    "const run = eval; run(unsafeCode);",
+    "const codeConstructor = Function; codeConstructor(unsafeCode)();"
+  ];
+  for (const replace of attempts) {
+    const attempted = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic alias bypass regression' });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected', replace);
+  }
+  const safe = JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+    replace: "  const fetchStatus = \"local\"; const imageLabel = \"Decorative\";", explanation: 'Local labels only' });
+  assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
+});
