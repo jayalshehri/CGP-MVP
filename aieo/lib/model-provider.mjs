@@ -42,6 +42,13 @@ const dynamicGlobalMember = /\b(?:globalThis|window|self|top|parent|document|nav
 // Text screening is not a general JavaScript proof of side-effect freedom.
 const ambientGlobalReference = /\b(?:globalThis|window|self|top|parent|document|navigator|location|global|frames|opener|this)\b/;
 
+
+// A JavaScript identifier such as \u0066etch can execute the same API without
+// exposing its literal name to source scanners. The bounded UI change does not
+// require JS Unicode/hex escapes, even inside strings: fail closed on these
+// spellings rather than silently approving an obfuscated capability.
+const encodedJavaScriptEscape = /\\(?:u(?:[0-9a-f]{4}|\{[0-9a-f]{1,6}\})|x[0-9a-f]{2})/i;
+
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
 const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
 
@@ -130,7 +137,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     return { status: 'rejected', reason: 'Proposed edit outside bounded size limits' };
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
-  if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) || dynamicGlobalMember.test(replace) || ambientGlobalReference.test(replace) ||
+  if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) || dynamicGlobalMember.test(replace) || ambientGlobalReference.test(replace) || encodedJavaScriptEscape.test(replace) ||
       outboundMarkup.test(replace) || outboundCss.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };

@@ -330,3 +330,21 @@ test('independent Security rejects unprefixed JWT-shaped credentials', () => {
     ...input, diff: '+const status = "Authenticated locally";'
   }).status, 'passed');
 });
+
+
+test('independent Security rejects encoded JavaScript globals and call targets', () => {
+  const attempts = [
+    String.raw`const sender = \u0066etch; sender(unsafeUrl);`,
+    String.raw`const root = \u0067lobalThis; root['fe' + 'tch'](unsafeUrl);`,
+    String.raw`const root = \u{67}lobalThis; root['fe' + 'tch'](unsafeUrl);`,
+    String.raw`const sender = \u0067lobalThis['\x66etch']; sender(unsafeUrl);`
+  ];
+  for (const addition of attempts) {
+    const verdict = inspectModelDiff({ ...input, diff: '+' + addition });
+    assert.equal(verdict.status, 'failed', addition);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), addition);
+  }
+  assert.equal(inspectModelDiff({
+    ...input, diff: '+const label = "Locally rendered status";'
+  }).status, 'passed');
+});

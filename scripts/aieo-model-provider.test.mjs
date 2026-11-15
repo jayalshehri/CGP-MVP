@@ -647,3 +647,23 @@ test('provider rejects credential echoes, malformed metadata and lossy Unicode t
   assert.equal(Buffer.from(accepted.explanation, 'utf8').toString('utf8'),
     accepted.explanation, 'metadata may not split a surrogate pair');
 });
+
+
+test('model validator rejects JavaScript escape sequences masking browser transports', () => {
+  // Raw strings retain the backslash escapes; JS/TS interprets these in code.
+  const attempts = [
+    String.raw`  const sender = \u0066etch; sender(unsafeUrl);`,
+    String.raw`  const root = \u0067lobalThis; root['fe' + 'tch'](unsafeUrl);`,
+    String.raw`  const root = \u{67}lobalThis; root['fe' + 'tch'](unsafeUrl);`,
+    String.raw`  const remote = \u0067lobalThis['\x66etch']; remote(unsafeUrl);`
+  ];
+  for (const replace of attempts) {
+    const response = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic escaped identifier test' });
+    assert.equal(validateModelPatch({ response, source }).status, 'rejected', replace);
+  }
+  const safe = JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+    replace: '  const sample = 102; // harmless label update',
+    explanation: 'Harmless local edit' });
+  assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
+});
