@@ -194,6 +194,51 @@ test('provider reads bounded streamed responses and rejects oversized bodies wit
   assert.equal(readBody, false);
 });
 
+
+test('streamed provider bytes reject invalid UTF-8 but accept split valid multibyte characters', async () => {
+  // The original lossy TextDecoder normalized an invalid byte inside the
+  // model's explanation and would have approved an altered JSON proposal.
+  const envelope = (content) => JSON.stringify({
+    choices: [{ message: { content } }]
+  });
+  const streamOf = (parts) => new ReadableStream({
+    start(controller) {
+      for (const part of parts) controller.enqueue(part);
+      controller.close();
+    }
+  });
+  const encoded = new TextEncoder().encode(envelope(proposal));
+  const offset = envelope(proposal).indexOf('Correct a simple constant');
+  assert.ok(offset > 0, 'fixture contains an ASCII explanation');
+  const malformed = encoded.slice();
+  malformed[offset] = 0xff;
+  const rejected = await requestModelPatch({
+    source, task, env,
+    transport: async () => ({ ok: true, body: streamOf([malformed]) })
+  });
+  assert.equal(rejected.status, 'failed', 'invalid provider bytes must not become an approved patch');
+  assert.equal(rejected.patchedSource, undefined);
+
+  // The decoder must still handle correctly encoded Unicode split across
+  // streaming chunks rather than treating each chunk as an isolated string.
+  const unicodeProposal = proposal.replace('Correct a simple constant', 'Correct ✅ constant');
+  const valid = new TextEncoder().encode(envelope(unicodeProposal));
+  const multibyte = valid.indexOf(0xe2);
+  assert.ok(multibyte > 0, 'fixture has a UTF-8 multibyte codepoint');
+  const accepted = await requestModelPatch({
+    source, task, env,
+    transport: async () => ({
+      ok: true, body: streamOf([
+        valid.subarray(0, multibyte + 1),
+        valid.subarray(multibyte + 1, multibyte + 2),
+        valid.subarray(multibyte + 2)
+      ])
+    })
+  });
+  assert.equal(accepted.status, 'proposed');
+  assert.equal(accepted.patchedSource, source.replace(find, replacement));
+});
+
 test('rejects outbound JSX attributes concealed by long spacing or quoted greater-than', () => {
   // The old 350-character, first-'>' matcher missed all these attributes.
   const attempts = [
