@@ -557,3 +557,34 @@ test('cloud access-key markers are blocked before any provider request or propos
   }
   assert.equal(sent, 0);
 });
+
+test('signed request URLs and SaaS token markers fail closed before provider disclosure', async () => {
+  // All values are synthetic and cannot authenticate against any provider.
+  const markers = [
+    '?X-Amz-Signature=' + 'a'.repeat(64),
+    '&X-Amz-Credential=' + 'X'.repeat(40),
+    '?sv=2023-11-03&sig=' + 'A'.repeat(44),
+    'xoxb-' + '1'.repeat(18) + '-' + 'a'.repeat(16),
+    'AIza' + 'a'.repeat(35)
+  ];
+  let calls = 0;
+  const transport = async () => { calls++; throw new Error('no outbound request expected'); };
+  for (const marker of markers) {
+    assert.throws(() => buildModelRequest({ source: source + '\n' + marker,
+      task, model: env.OPENROUTER_MODEL_ID, shareApproved: true }), marker);
+    assert.throws(() => buildModelRequest({ source, task: task + ' ' + marker,
+      model: env.OPENROUTER_MODEL_ID, shareApproved: true }), marker);
+    assert.equal((await requestModelPatch({
+      source: source + '\n' + marker, task, env, transport
+    })).status, 'blocked', marker);
+    const attempted = JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+      replace: '  const sample = "' + marker + '";',
+      explanation: 'Synthetic sensitive URL and token regression' });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected', marker);
+  }
+  assert.equal(calls, 0, 'sensitive URL/token material must never reach external transport');
+  const safe = JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+    replace: '  const label = "Signed in locally";',
+    explanation: 'Benign local display text' });
+  assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
+});
