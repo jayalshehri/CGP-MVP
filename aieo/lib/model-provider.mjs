@@ -167,6 +167,19 @@ export async function requestModelPatch({ source, path = MODEL_ALLOWED_PATH, tas
   if (text === null) return { status: 'rejected', reason: 'Provider response too large' };
   let data;
   try { data = JSON.parse(text); } catch { return { status: 'rejected', reason: 'Invalid provider envelope' }; }
-  const answer = data?.choices?.[0]?.message?.content;
-  return validateModelPatch({ response: answer, source, path });
+  // A parseable JSON patch is not enough: the provider must attest that one
+  // assistant answer finished normally. A length/content-filter/tool-call stop
+  // may leave valid-looking but incomplete or non-final instructions. Never
+  // promote those to candidate source for independent review.
+  if (!Array.isArray(data?.choices) || data.choices.length !== 1) {
+    return { status: 'rejected', reason: 'Expected exactly one provider completion' };
+  }
+  const completion = data.choices[0];
+  const message = completion?.message;
+  if (completion?.finish_reason !== 'stop' || message?.role !== 'assistant' ||
+      typeof message.content !== 'string' || message.refusal != null ||
+      message.tool_calls != null || message.function_call != null) {
+    return { status: 'rejected', reason: 'Provider did not return a complete final assistant message' };
+  }
+  return validateModelPatch({ response: message.content, source, path });
 }
