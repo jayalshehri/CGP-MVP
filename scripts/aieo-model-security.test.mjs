@@ -300,3 +300,21 @@ test('independent Security refuses AWS temporary IDs and cloud account key mater
     assert.ok(verdict.findings.includes('Potentially unsafe new code'));
   }
 });
+
+test('independent Security refuses signed URL and SaaS token disclosure', () => {
+  const markers = [
+    '?X-Amz-Signature=' + 'a'.repeat(64),
+    '&X-Amz-Credential=' + 'X'.repeat(40),
+    '?sv=2023-11-03&sig=' + 'A'.repeat(44),
+    'xoxb-' + '1'.repeat(18) + '-' + 'a'.repeat(16),
+    'AIza' + 'a'.repeat(35)
+  ];
+  for (const marker of markers) {
+    const result = inspectModelDiff({ ...input, diff: '+const sensitive = "' + marker + '";' });
+    assert.equal(result.status, 'failed', marker);
+    assert.ok(result.findings.includes('Potentially unsafe new code'), marker);
+  }
+  assert.equal(inspectModelDiff({
+    ...input, diff: '+const signatureStatus = "Pending";'
+  }).status, 'passed');
+});
