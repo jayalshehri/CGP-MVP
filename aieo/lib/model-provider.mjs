@@ -110,6 +110,14 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
         Object.prototype.hasOwnProperty.call(parsed, key))) {
     return { status: 'rejected', reason: 'Unexpected model proposal keys' };
   }
+  // The provider's free-form explanation is untrusted too. Reject potential
+  // credential echoes and invalid Unicode before any consumer receives it.
+  // Limits are byte-based; truncation below is by code point, not UTF-16 unit.
+  if (!exactUtf8(parsed.explanation) ||
+      Buffer.byteLength(parsed.explanation, 'utf8') > 1200 ||
+      credentials.test(parsed.explanation) || /[\u0000-\u001F\u007F]/.test(parsed.explanation)) {
+    return { status: 'rejected', reason: 'Unsafe model explanation' };
+  }
   const { find, replace } = parsed;
   // Model patch limits and the audit delta must measure the bytes that will
   // actually be written, not UTF-16 code units in an untrusted JSON string.
@@ -131,7 +139,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   return {
     status: 'proposed', path, sourceHash: sha256(source),
     proposedHash: sha256(patchedSource), patchedSource,
-    explanation: parsed.explanation.slice(0, 300), // text is untrusted, never execute it
+    explanation: Array.from(parsed.explanation).slice(0, 300).join(''), // Unicode-safe metadata only
     changedBytes: Math.abs(replaceBytes - findBytes),
   };
 }
