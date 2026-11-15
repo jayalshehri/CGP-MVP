@@ -386,3 +386,22 @@ test('independent Security rejects constructor and prototype reflection', () => 
   assert.equal(inspectModelDiff({ ...input,
     diff: '+const label = "Local UI status";' }).status, 'passed');
 });
+
+test('independent Security blocks invisible Unicode in actual candidate additions', () => {
+  const assess = (candidate) => inspectModelDiff({
+    original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-const items = 1;\n+' + candidate,
+    report: { status: 'proposed', sourceHash: hash(original),
+      proposedHash: hash(candidate) }
+  });
+  // This is an independent review of the committed diff, not a validation of
+  // the earlier model response. An altered candidate must fail closed too.
+  for (const invisible of ['\u200B', '\u200D', '\u200E', '\u2060', '\uFEFF']) {
+    const candidate = 'const items = 2; // display' + invisible + 'status;\n';
+    const verdict = assess(candidate);
+    assert.equal(verdict.status, 'failed', 'invisible candidate must be rejected');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  assert.equal(assess('const items = 2; // حالة العرض\n').status, 'passed',
+    'normal Arabic display text remains permissible');
+});
