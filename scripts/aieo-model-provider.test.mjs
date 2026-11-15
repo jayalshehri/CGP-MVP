@@ -615,3 +615,35 @@ test('JWT-shaped tokens without Bearer prefix never leave the approved preflight
       explanation: 'harmless local text' })
   }).status, 'proposed');
 });
+
+test('provider rejects credential echoes, malformed metadata and lossy Unicode truncation', () => {
+  const message = (explanation) => JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: replacement, explanation
+  });
+  const syntheticCredentials = [
+    'ghp_' + 'Z'.repeat(30),
+    'eyJ' + 'A'.repeat(18) + '.' + 'eyJ' + 'B'.repeat(24) + '.' + 'C'.repeat(32),
+    'ASIA' + 'A'.repeat(16)
+  ];
+  for (const marker of syntheticCredentials) {
+    const result = validateModelPatch({ response: message('Generated ' + marker), source });
+    assert.equal(result.status, 'rejected', 'provider explanation must not contain credentials');
+    assert.equal(JSON.stringify(result).includes(marker), false,
+      'rejection details must never echo credential data');
+  }
+  for (const explanation of [
+    'Generated ' + '\\uD800',
+    'Generated ' + String.fromCharCode(0) + ' record',
+    'Generated ' + String.fromCharCode(10) + ' extra line',
+    'x'.repeat(1201)
+  ]) {
+    assert.equal(validateModelPatch({ response: message(explanation), source }).status,
+      'rejected', 'invalid or excessive provider narrative must fail closed');
+  }
+  const safeExplanation = 'a'.repeat(299) + '💡' + ' trailing text';
+  const accepted = validateModelPatch({ response: message(safeExplanation), source });
+  assert.equal(accepted.status, 'proposed');
+  assert.equal(accepted.explanation, 'a'.repeat(299) + '💡');
+  assert.equal(Buffer.from(accepted.explanation, 'utf8').toString('utf8'),
+    accepted.explanation, 'metadata may not split a surrogate pair');
+});
