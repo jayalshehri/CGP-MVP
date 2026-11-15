@@ -11,6 +11,27 @@ const report = { status: 'proposed', sourceHash: hash(original), proposedHash: h
 const diff = '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n';
 const input = { original, actual, changedPaths: [MODEL_ALLOWED_PATH], diff, report };
 
+test('independent Security rejects non-printing line controls in actual diff', () => {
+  for (const control of ['\u2028', '\u2029', '\u0085', '\u0000']) {
+    const candidate = 'const items = 2; // status' + control + 'boundary;\n';
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -1 +1 @@\n-const items = 1;\n+' + candidate,
+      report: { status: 'proposed', sourceHash: hash(original),
+        proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  const safe = 'const items = 2; // حالة الواجهة\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-const items = 1;\n+' + safe,
+    report: { status: 'proposed', sourceHash: hash(original),
+      proposedHash: hash(safe) }
+  }).status, 'passed');
+});
+
 test('independent security accepts one exact clean change', () => {
   assert.equal(inspectModelDiff(input).status, 'passed');
 });
