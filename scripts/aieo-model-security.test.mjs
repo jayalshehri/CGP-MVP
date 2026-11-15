@@ -263,3 +263,27 @@ test('independent Security blocks dynamically resolved browser globals', () => {
   assert.equal(inspectModelDiff({ ...input,
     diff: '+const localStatus = "Ready";' }).status, 'passed');
 });
+
+test('independent Security rejects aliases of ambient globals and computed sinks', () => {
+  const attempts = [
+    "const root = globalThis; root['fe' + 'tch'](unsafeUrl);",
+    "const root = window; root['loc' + 'ation'] = unsafeUrl;",
+    "const host = navigator; host['send' + 'Beacon'](unsafeUrl, data);",
+    "const scope = self; scope['op' + 'en'](unsafeUrl);",
+    "const scope = global; scope['fe' + 'tch'](unsafeUrl);",
+    "const dest = location; dest['ass' + 'ign'](unsafeUrl);",
+    "const frameSet = frames; frameSet[0]['loc' + 'ation'] = unsafeUrl;",
+    "const scope = this; scope['fe' + 'tch'](unsafeUrl);"
+  ];
+  for (const addition of attempts) {
+    const verdict = inspectModelDiff({ ...input, diff: '+' + addition });
+    assert.equal(verdict.status, 'failed', addition);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), addition);
+  }
+  for (const addition of [
+    'const windowStatus = "Ready";',
+    'const locationLabel = "Current status";'
+  ]) {
+    assert.equal(inspectModelDiff({ ...input, diff: '+' + addition }).status, 'passed', addition);
+  }
+});
