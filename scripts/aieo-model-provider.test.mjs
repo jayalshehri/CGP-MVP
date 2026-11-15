@@ -458,3 +458,23 @@ test('model edit quotas and changedBytes use exact UTF-8 bytes', () => {
   assert.equal(valid.changedBytes,
     Math.abs(Buffer.byteLength(validReplacement, 'utf8') - Buffer.byteLength(find, 'utf8')));
 });
+
+test('model blocks dynamically resolved browser globals before creating a proposal', () => {
+  const attempts = [
+    "const sender = globalThis['fe' + 'tch']; sender(unsafeUrl);",
+    "const opener = window?.['op' + 'en']; opener(unsafeUrl);",
+    "navigator['send' + 'Beacon'](unsafeUrl, data);",
+    "document['create' + 'Element']('img').src = unsafeUrl;",
+    "self['loc' + 'ation'] = unsafeUrl;",
+    "const SocketCtor = Reflect.get(globalThis, 'Web' + 'Socket'); new SocketCtor(unsafeUrl);"
+];
+  for (const replace of attempts) {
+    const response = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic dynamic-global bypass regression' });
+    assert.equal(validateModelPatch({ response, source }).status, 'rejected', replace);
+  }
+  const safe = JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+    replace: '  const sample = 102; // safe local-only value',
+    explanation: 'No dynamic global access' });
+  assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
+});

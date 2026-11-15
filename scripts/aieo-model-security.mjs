@@ -29,6 +29,11 @@ const indirectNetworkCall = /\b(?:fetch|WebSocket|EventSource|XMLHttpRequest|sen
 // intentionally conservative and is not a general-purpose JavaScript analysis.
 const networkCapabilityReference = /\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|sendBeacon|postMessage|importScripts|Image|Worker|SharedWorker|import|require|eval|Function)\b|\b(?:window|globalThis|self|navigator|document)\s*(?:\?\.|\.)\s*(?:open|createElement)\b|\b(?:window|globalThis|self|navigator|document)\s*(?:\?\.)?\s*\[\s*['"](?:open|createElement)['"]\s*\]/;
 
+// Deny computed access to powerful browser globals: concatenated keys can
+// reconstruct fetch/open/location without spelling any blocked API name.
+// Reflect.get can obtain the same capability without bracket syntax.
+const dynamicGlobalMember = /\b(?:globalThis|window|self|top|parent|document|navigator)\s*(?:\?\.)?\s*\[|\bReflect\s*(?:\.|\?\.)\s*(?:get|apply|construct)\s*\(/i;
+
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
 const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
 
@@ -63,6 +68,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   if (additions.some((line) => suspect.test(line) || browserExfil.test(line) || browserLocation.test(line) || optionalNetworkCall.test(line)) ||
       indirectNetworkCall.test(additions.join('\n')) ||
       networkCapabilityReference.test(additions.join('\n')) ||
+      dynamicGlobalMember.test(additions.join('\n')) ||
       outboundMarkup.test(additions.join('\n')) || outboundCss.test(additions.join('\n'))) {
     findings.push('Potentially unsafe new code');
   }

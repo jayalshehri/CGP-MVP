@@ -29,6 +29,11 @@ const indirectNetworkCall = /\b(?:fetch|WebSocket|EventSource|XMLHttpRequest|sen
 // intentionally conservative and is not a general-purpose JavaScript analysis.
 const networkCapabilityReference = /\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|sendBeacon|postMessage|importScripts|Image|Worker|SharedWorker|import|require|eval|Function)\b|\b(?:window|globalThis|self|navigator|document)\s*(?:\?\.|\.)\s*(?:open|createElement)\b|\b(?:window|globalThis|self|navigator|document)\s*(?:\?\.)?\s*\[\s*['"](?:open|createElement)['"]\s*\]/;
 
+// Deny computed access to powerful browser globals: concatenated keys can
+// reconstruct fetch/open/location without spelling any blocked API name.
+// Reflect.get can obtain the same capability without bracket syntax.
+const dynamicGlobalMember = /\b(?:globalThis|window|self|top|parent|document|navigator)\s*(?:\?\.)?\s*\[|\bReflect\s*(?:\.|\?\.)\s*(?:get|apply|construct)\s*\(/i;
+
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
 const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
 
@@ -94,7 +99,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     return { status: 'rejected', reason: 'Proposed edit outside bounded size limits' };
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
-  if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) ||
+  if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) || dynamicGlobalMember.test(replace) ||
       outboundMarkup.test(replace) || outboundCss.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
