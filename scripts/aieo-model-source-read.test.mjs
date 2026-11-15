@@ -197,7 +197,7 @@ for (const alias of ['symlink', 'hardlink']) {
         "  " + (alias === 'symlink' ? 'symlinkSync' : 'linkSync') +
           "(" + JSON.stringify(external) + ", " + JSON.stringify(f.target) + ");",
         "  return { ok: true, text: async () => JSON.stringify({",
-        "    choices: [{ message: { content: " + JSON.stringify(response) + " } }]",
+        "    choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: " + JSON.stringify(response) + " } }]",
         "  }) };",
         "};",
         ''
@@ -236,7 +236,7 @@ test('provider-time replacement of a safe-looking output directory is refused', 
       "  renameSync(" + JSON.stringify(output) + ", " + JSON.stringify(relocated) + ");",
       "  mkdirSync(" + JSON.stringify(output) + ", { mode: 0o700 });",
       "  return { ok: true, text: async () => JSON.stringify({",
-      "    choices: [{ message: { content: " + JSON.stringify(response) + " } }]",
+      "    choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: " + JSON.stringify(response) + " } }]",
       "  }) };",
       "};",
       ''
@@ -313,7 +313,7 @@ test('model apply refuses a same-inode chmod between opened read and edit', () =
       "};",
       "syncBuiltinESMExports();",
       "globalThis.fetch = async () => ({ ok: true, text: async () => JSON.stringify({",
-      "  choices: [{ message: { content: " + JSON.stringify(response) + " } }]",
+      "  choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: " + JSON.stringify(response) + " } }]",
       "}) });",
       ''
     ].join('\n'));
