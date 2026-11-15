@@ -368,3 +368,21 @@ test('independent Security rejects added unquoted key assignments', () => {
   }
   assert.equal(inspectModelDiff({ ...input, diff: '+const displayLabel = "Ready";' }).status, 'passed');
 });
+
+test('independent Security rejects constructor and prototype reflection', () => {
+  const additions = [
+    'const execute = [].filter.constructor("return 42")();',
+    'const execute = ({})["constructor"]["constructor"]("return 42")();',
+    'const proto = obj.__proto__;',
+    'const proto = Object.getPrototypeOf(obj);',
+    'Object.setPrototypeOf(obj, other);',
+    'Object.defineProperty(obj, "code", { value: 1 });'
+  ];
+  for (const addition of additions) {
+    const verdict = inspectModelDiff({ ...input, diff: '+' + addition });
+    assert.equal(verdict.status, 'failed', addition);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), addition);
+  }
+  assert.equal(inspectModelDiff({ ...input,
+    diff: '+const label = "Local UI status";' }).status, 'passed');
+});
