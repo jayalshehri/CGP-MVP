@@ -700,3 +700,42 @@ test('untrusted task and source cannot forge model prompt boundaries before disc
   assert.equal(valid.messages[1].content.includes('UNTRUSTED_SOURCE_END'), true,
     'trusted wrapper retains its original single closing delimiter');
 });
+
+
+test('unquoted key assignments are refused before any external source sharing', async () => {
+  // Entirely synthetic values: these are not real credentials.
+  const markers = [
+    'AWS_SECRET_ACCESS_KEY=' + 'x'.repeat(40),
+    'AccountKey=' + 'A'.repeat(48) + '==',
+    'client_secret:' + 'b'.repeat(36),
+    'api_key=' + 'c'.repeat(30),
+    'password=' + 'd'.repeat(25),
+    'service_role=' + 'e'.repeat(32)
+  ];
+  let calls = 0;
+  const transport = async () => { calls++; throw new Error('unsafe payload escaped preflight'); };
+  for (const marker of markers) {
+    const unsafeSource = source + '\n// ' + marker;
+    assert.throws(() => buildModelRequest({
+      source: unsafeSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }), marker);
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }), marker);
+    assert.equal((await requestModelPatch({ source: unsafeSource, task, env, transport })).status, 'blocked');
+    assert.equal((await requestModelPatch({ source, task: task + ' ' + marker, env, transport })).status, 'blocked');
+    assert.equal(validateModelPatch({
+      source, response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find, replace: '  const sample = "' + marker + '";',
+        explanation: 'Synthetic key assignment regression'
+      })
+    }).status, 'rejected');
+  }
+  assert.equal(calls, 0, 'no unquoted credential-like assignment may contact OpenRouter');
+  assert.equal(validateModelPatch({
+    source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace: '  const sample = 103;',
+      explanation: 'Safe local value'
+    })
+  }).status, 'proposed');
+});
