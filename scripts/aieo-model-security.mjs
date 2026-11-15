@@ -54,6 +54,9 @@ const encodedJavaScriptEscape = /\\(?:u(?:[0-9a-f]{4}|\{[0-9a-f]{1,6}\})|x[0-9a-
 // repeat this check on the *actual remote candidate diff* rather than trusting
 // a model proposal report, which is not an attestation of the committed bytes.
 const unsafeInvisible = /\p{Default_Ignorable_Code_Point}/u;
+// Independently reject JS line separators and non-printing controls in the
+// *actual diff*, even if upstream proposal validation was bypassed.
+const unsafeLineControl = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u2028\u2029]/u;
 
 // Reflective constructor/prototype chains can obtain dynamic code execution
 // without literal eval/Function. Fail closed on these names in added lines.
@@ -95,7 +98,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
       networkCapabilityReference.test(additions.join('\n')) ||
       dynamicGlobalMember.test(additions.join('\n')) || ambientGlobalReference.test(additions.join('\n')) ||
       encodedJavaScriptEscape.test(additions.join('\n')) ||
-      unsafeInvisible.test(additions.join('\n')) ||
+      unsafeInvisible.test(additions.join('\n')) || unsafeLineControl.test(additions.join('\n')) ||
       dynamicCodeReflection.test(additions.join('\n')) ||
       outboundMarkup.test(additions.join('\n')) || outboundCss.test(additions.join('\n'))) {
     findings.push('Potentially unsafe new code');
