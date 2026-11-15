@@ -245,3 +245,21 @@ test('independent Security rejects aliased transports and dynamic-code invokers'
   }
   assert.equal(inspectModelDiff({ ...input, diff: '+' + "  const fetchStatus = \"local\"; const imageLabel = \"Decorative\";" }).status, 'passed');
 });
+
+test('independent Security blocks dynamically resolved browser globals', () => {
+  const attempts = [
+    "const sender = globalThis['fe' + 'tch']; sender(unsafeUrl);",
+    "const opener = window?.['op' + 'en']; opener(unsafeUrl);",
+    "navigator['send' + 'Beacon'](unsafeUrl, data);",
+    "document['create' + 'Element']('img').src = unsafeUrl;",
+    "self['loc' + 'ation'] = unsafeUrl;",
+    "const SocketCtor = Reflect.get(globalThis, 'Web' + 'Socket'); new SocketCtor(unsafeUrl);"
+];
+  for (const addition of attempts) {
+    const verdict = inspectModelDiff({ ...input, diff: '+' + addition });
+    assert.equal(verdict.status, 'failed', addition);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), addition);
+  }
+  assert.equal(inspectModelDiff({ ...input,
+    diff: '+const localStatus = "Ready";' }).status, 'passed');
+});
