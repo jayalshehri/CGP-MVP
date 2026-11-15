@@ -108,6 +108,9 @@ const unsafeInvisible = /\p{Default_Ignorable_Code_Point}/u;
 // reject them and non-printing C0/C1 controls (apart from normal source
 // whitespace) before disclosure or accepting an untrusted model edit.
 const unsafeLineControl = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u2028\u2029]/u;
+// Private-use and unassigned/noncharacter Unicode are ambiguous in code review.
+// This one-file UI proposal has no need for them; fail closed at both boundaries.
+const unsafeNonstandardUnicode = /[\p{Co}\p{Cn}]/u;
 
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 // The provider is allowed to propose exactly four flat JSON string fields.
@@ -145,7 +148,8 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   if (!exactUtf8(parsed.explanation) ||
       Buffer.byteLength(parsed.explanation, 'utf8') > 1200 ||
       credentials.test(parsed.explanation) || /[\u0000-\u001F\u007F]/.test(parsed.explanation) ||
-      unsafeInvisible.test(parsed.explanation) || unsafeLineControl.test(parsed.explanation)) {
+      unsafeInvisible.test(parsed.explanation) || unsafeLineControl.test(parsed.explanation) ||
+      unsafeNonstandardUnicode.test(parsed.explanation)) {
     return { status: 'rejected', reason: 'Unsafe model explanation' };
   }
   const { find, replace } = parsed;
@@ -156,6 +160,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   if (!exactUtf8(find) || !exactUtf8(replace) ||
       unsafeInvisible.test(find) || unsafeInvisible.test(replace) ||
       unsafeLineControl.test(find) || unsafeLineControl.test(replace) ||
+      unsafeNonstandardUnicode.test(find) || unsafeNonstandardUnicode.test(replace) ||
       findBytes < 12 || findBytes > 800 ||
       replaceBytes < 1 || replaceBytes > 1200 ||
       find === replace || Math.abs(replaceBytes - findBytes) > 500) {
@@ -182,6 +187,7 @@ export function buildModelRequest({ source, path = MODEL_ALLOWED_PATH, task, mod
       Buffer.byteLength(source, 'utf8') > 12000 || !exactUtf8(source) ||
       credentials.test(source) || promptBoundaryMarker.test(source) ||
       unsafeInvisible.test(source) || unsafeLineControl.test(source) ||
+      unsafeNonstandardUnicode.test(source) ||
       /(?:\.env|secrets\/|service_role)/i.test(path)) {
     throw new Error('Source cannot be shared with an external model');
   }
@@ -189,6 +195,7 @@ export function buildModelRequest({ source, path = MODEL_ALLOWED_PATH, task, mod
       Buffer.byteLength(task, 'utf8') > 500 || !exactUtf8(task) ||
       credentials.test(task) || promptBoundaryMarker.test(task) ||
       unsafeTaskControl.test(task) || unsafeInvisible.test(task) || unsafeLineControl.test(task) ||
+      unsafeNonstandardUnicode.test(task) ||
       typeof model !== 'string' || !/^[a-z0-9_.-]+\/[a-z0-9_.:-]+$/i.test(model)) {
     throw new Error('Invalid task or configured model');
   }
