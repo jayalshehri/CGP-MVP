@@ -61,7 +61,7 @@ test('mock provider call sends bounded source and returns validated proposal onl
     assert.equal(body.model, env.OPENROUTER_MODEL_ID);
     assert.ok(body.messages[1].content.includes(source));
     assert.equal(JSON.stringify(body).includes(env.OPENROUTER_API_KEY), false);
-    return { ok: true, text: async () => JSON.stringify({ choices: [{ message: { content: proposal } }] }) };
+    return { ok: true, text: async () => JSON.stringify({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: proposal } }] }) };
   };
   const result = await requestModelPatch({ source, task, env, transport });
   assert.equal(result.status, 'proposed');
@@ -73,6 +73,39 @@ test('provider errors do not expose source or credentials', async () => {
   assert.deepEqual(failed, { status: 'failed', reason: 'Provider did not accept request' });
   const malformed = await requestModelPatch({ source, task, env, transport: async () => ({ ok: true, text: async () => 'garbage' }) });
   assert.equal(malformed.status, 'rejected');
+});
+
+test('provider envelope must attest a single complete final assistant answer', async () => {
+  // A valid JSON proposal must not be accepted when the model hit a token
+  // limit, content filter, tool-call handoff, or omitted its finish attestation.
+  const complete = {
+    finish_reason: 'stop',
+    message: { role: 'assistant', content: proposal }
+  };
+  const invalidEnvelopes = [
+    { choices: [{ ...complete, finish_reason: 'length' }] },
+    { choices: [{ ...complete, finish_reason: 'content_filter' }] },
+    { choices: [{ ...complete, finish_reason: 'tool_calls' }] },
+    { choices: [{ ...complete, finish_reason: null }] },
+    { choices: [{ message: complete.message }] },
+    { choices: [complete, complete] },
+    { choices: [] },
+    { choices: [{ ...complete, message: { ...complete.message, role: 'tool' } }] },
+    { choices: [{ ...complete, message: { ...complete.message, tool_calls: [{ id: 'synthetic' }] } }] },
+    { choices: [{ ...complete, message: { ...complete.message, function_call: { name: 'synthetic' } } }] },
+    { choices: [{ ...complete, message: { ...complete.message, refusal: 'refused' } }] }
+  ];
+  for (const envelope of invalidEnvelopes) {
+    const result = await requestModelPatch({
+      source, task, env,
+      transport: async () => ({
+        ok: true, text: async () => JSON.stringify(envelope)
+      })
+    });
+    assert.equal(result.status, 'rejected', JSON.stringify(envelope));
+    assert.equal(result.patchedSource, undefined,
+      'no incomplete completion may become candidate code');
+  }
 });
 
 test('model replacements cannot add browser side-channel transports', () => {
@@ -161,7 +194,7 @@ test('provider source sharing refuses redirects and strips referrers', async () 
 
 test('provider reads bounded streamed responses and rejects oversized bodies without buffering them', async () => {
   const encoded = new TextEncoder();
-  const response = JSON.stringify({ choices: [{ message: { content: proposal } }] });
+  const response = JSON.stringify({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: proposal } }] });
   const streamOf = (value) => new ReadableStream({
     start(controller) {
       controller.enqueue(encoded.encode(value));
@@ -199,7 +232,7 @@ test('streamed provider bytes reject invalid UTF-8 but accept split valid multib
   // The original lossy TextDecoder normalized an invalid byte inside the
   // model's explanation and would have approved an altered JSON proposal.
   const envelope = (content) => JSON.stringify({
-    choices: [{ message: { content } }]
+    choices: [{ finish_reason: 'stop', message: { role: 'assistant', content } }]
   });
   const streamOf = (parts) => new ReadableStream({
     start(controller) {
