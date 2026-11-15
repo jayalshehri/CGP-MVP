@@ -16,6 +16,42 @@ const env = {
 };
 const task = 'Correct the sample constant in a bounded manner.';
 
+test('non-printing Unicode line separators and C1 controls fail closed before disclosure', async () => {
+  const forbiddenControls = ['\u2028', '\u2029', '\u0085', '\u0000'];
+  let sent = 0;
+  const transport = async () => { sent++; throw new Error('unsafe input must never leave the process'); };
+  for (const control of forbiddenControls) {
+    assert.throws(() => buildModelRequest({
+      source: source + '// invisible' + control + 'boundary',
+      task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.throws(() => buildModelRequest({
+      source, task: task + control + 'tail', model: env.OPENROUTER_MODEL_ID,
+      shareApproved: true
+    }));
+    assert.equal((await requestModelPatch({
+      source: source + '// invisible' + control + 'boundary', task, env, transport
+    })).status, 'blocked');
+    for (const patch of [
+      { find, replace: replacement + control },
+      { find, replace: replacement, explanation: 'status' + control + 'boundary' },
+      { find: find + control, replace: replacement }
+    ]) {
+      const response = JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find: patch.find, replace: patch.replace,
+        explanation: patch.explanation || 'synthetic test only'
+      });
+      assert.equal(validateModelPatch({ response, source }).status, 'rejected',
+        'untrusted response control must not become an approved candidate');
+    }
+  }
+  assert.equal(sent, 0);
+  assert.equal(validateModelPatch({ response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: '  const sample = 101; // الحالة',
+    explanation: 'تحديث تسمية الواجهة'
+  }), source }).status, 'proposed', 'ordinary Arabic text remains allowed');
+});
+
 test('scope and exact single replacement are enforced', () => {
   const result = validateModelPatch({ response: proposal, source });
   assert.equal(result.status, 'proposed');
