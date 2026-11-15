@@ -34,7 +34,10 @@ async function readLimitedProviderBody(response) {
     return Buffer.byteLength(text, 'utf8') <= MAX_PROVIDER_BYTES ? text : null;
   }
   const reader = response.body.getReader();
-  const decoder = new TextDecoder();
+  // The provider response is untrusted bytes. Never silently replace invalid
+  // UTF-8 with U+FFFD and treat the altered proposal as reviewed source.
+  // Streaming mode still permits a valid multibyte character across chunks.
+  const decoder = new TextDecoder('utf-8', { fatal: true });
   const fragments = [];
   let bytes = 0;
   try {
