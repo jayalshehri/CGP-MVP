@@ -125,6 +125,11 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
     assert.equal(attestation.sourceHash, hash(original));
     assert.equal(attestation.proposedHash, hash(candidate));
     assert.equal(attestation.sourceShared, true);
+    assert.equal(attestation.taskHash, hash(task));
+    assert.equal(attestation.dispatchRunId, env.GITHUB_RUN_ID);
+    assert.equal(attestation.dispatchRunAttempt, env.GITHUB_RUN_ATTEMPT);
+    assert.equal(attestation.sourceCommitSha, env.GITHUB_SHA,
+      'the mocked provider-to-publisher handoff must attest the exact trusted commit');
 
     // Three independent child processes use their real CLI scripts and actual Git diff.
     for (const [filename, role] of [

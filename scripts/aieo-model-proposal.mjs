@@ -24,7 +24,10 @@ const redacted = {
   // No task text, prompts, response or credentials enter this artifact.
   taskHash: createHash('sha256').update(task).digest('hex'),
   dispatchRunId: process.env.GITHUB_RUN_ID || null,
-  dispatchRunAttempt: process.env.GITHUB_RUN_ATTEMPT || null
+  dispatchRunAttempt: process.env.GITHUB_RUN_ATTEMPT || null,
+  // Attest the exact trusted source checkout as well as its individual file hash.
+  // A same-file proposal from another main commit is never valid evidence.
+  sourceCommitSha: process.env.GITHUB_SHA || null
 };
 writeExclusiveModelProposalReport(redacted, approvedOutputDirectory);
 console.log(JSON.stringify({ status: redacted.status, path: redacted.path, reason: redacted.reason, sourceShared: redacted.sourceShared }));

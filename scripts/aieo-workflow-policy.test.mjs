@@ -46,6 +46,7 @@ test('approved source-sharing task is bound at proposal and publisher boundaries
   assert.ok(publisher.includes('proposal?.taskHash'));
   assert.ok(publisher.includes('proposal?.dispatchRunId'));
   assert.ok(publisher.includes('proposal?.dispatchRunAttempt'));
+  assert.ok(publisher.includes('proposal?.sourceCommitSha !== env.GITHUB_SHA'));
 });
 
 test('developer publisher remains manual and no privileged PR event is added', () => {

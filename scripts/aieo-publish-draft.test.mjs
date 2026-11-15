@@ -43,7 +43,8 @@ function fixture() {
   const proposal = { schemaVersion: 1, status: 'proposed', path: MODEL_ALLOWED_PATH,
     sourceHash: hash(source), proposedHash: hash(candidate),
     sourceShared: true, taskHash: hash(approvedTask),
-    dispatchRunId: '99123', dispatchRunAttempt: '1' };
+    dispatchRunId: '99123', dispatchRunAttempt: '1',
+    sourceCommitSha: git(workspace, 'rev-parse', 'HEAD') };
   const diff = git(workspace, 'diff', '--unified=0', '--', MODEL_ALLOWED_PATH);
   const args = { original: source, actual: candidate,
     changedPaths: [MODEL_ALLOWED_PATH], diff, proposal };
@@ -171,7 +172,7 @@ for (const [name, mutate] of [
   });
 }
 
-test('publisher rejects replayed task, missing consent, and wrong Actions run attestation before GitHub writes', () => {
+test('publisher rejects replayed task, missing consent, wrong run or source commit before GitHub writes', () => {
   const f = fixture();
   try {
     const handoffPath = join(f.workspace, 'aieo-output/model-proposal.json');
@@ -182,6 +183,8 @@ test('publisher rejects replayed task, missing consent, and wrong Actions run at
       ['proposal from different run', { dispatchRunId: '99124' }, {}],
       ['proposal from different run attempt', { dispatchRunAttempt: '2' }, {}],
       ['task hash replaced', { taskHash: '0'.repeat(64) }, {}],
+      ['proposal from another trusted source commit', { sourceCommitSha: '0'.repeat(40) }, {}],
+      ['proposal missing source commit', { sourceCommitSha: null }, {}],
       ['publisher given another task', {}, { AIEO_MODEL_TASK: 'Different explicitly approved test task.' }],
       ['publisher task missing', {}, { AIEO_MODEL_TASK: '' }]
     ]) {
