@@ -221,3 +221,27 @@ test('independent Security blocks indirect network calls and Reflect invocation'
   }
   assert.equal(inspectModelDiff({ ...input, diff: '+const label = "Safe local status";' }).status, 'passed');
 });
+
+test('independent Security rejects aliased transports and dynamic-code invokers', () => {
+  const attempts = [
+    "const sender = fetch; sender(unsafeUrl);",
+    "const sender = globalThis[\"fetch\"]; sender(unsafeUrl);",
+    "const { sendBeacon: beacon } = navigator; beacon(unsafeUrl, body);",
+    "const SocketCtor = WebSocket; new SocketCtor(unsafeUrl);",
+    "const PixelCtor = Image; new PixelCtor().src = unsafeUrl;",
+    "const opener = globalThis[\"open\"]; opener(unsafeUrl);",
+    "const maker = document.createElement; maker(\"img\").src = unsafeUrl;",
+    "const remote = Reflect[\"apply\"](fetch, globalThis, [unsafeUrl]);",
+    "const WorkerCtor = SharedWorker; new WorkerCtor(unsafeUrl);",
+    "const load = importScripts; load(unsafeUrl);",
+    "const remoteModule = import(unsafeUrl);",
+    "const run = eval; run(unsafeCode);",
+    "const codeConstructor = Function; codeConstructor(unsafeCode)();"
+  ];
+  for (const addition of attempts) {
+    const verdict = inspectModelDiff({ ...input, diff: '+' + addition });
+    assert.equal(verdict.status, 'failed', addition);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), addition);
+  }
+  assert.equal(inspectModelDiff({ ...input, diff: '+' + "  const fetchStatus = \"local\"; const imageLabel = \"Decorative\";" }).status, 'passed');
+});
