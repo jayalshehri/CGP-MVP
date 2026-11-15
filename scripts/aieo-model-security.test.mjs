@@ -318,3 +318,15 @@ test('independent Security refuses signed URL and SaaS token disclosure', () => 
     ...input, diff: '+const signatureStatus = "Pending";'
   }).status, 'passed');
 });
+
+
+test('independent Security rejects unprefixed JWT-shaped credentials', () => {
+  // Synthetic bytes, not a functional bearer token.
+  const jwt = 'eyJ' + 'A'.repeat(18) + '.' + 'eyJ' + 'B'.repeat(24) + '.' + 'C'.repeat(32);
+  const blocked = inspectModelDiff({ ...input, diff: '+const value = "' + jwt + '";' });
+  assert.equal(blocked.status, 'failed');
+  assert.ok(blocked.findings.includes('Potentially unsafe new code'));
+  assert.equal(inspectModelDiff({
+    ...input, diff: '+const status = "Authenticated locally";'
+  }).status, 'passed');
+});
