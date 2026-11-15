@@ -106,7 +106,9 @@ export function verifyCandidate({ mode, original, actual, changedPaths, diff, re
         proposal?.schemaVersion !== 1 || proposal?.sourceShared !== true ||
         proposal?.taskHash !== createHash('sha256').update(approvedTask).digest('hex') ||
         proposal?.dispatchRunId !== env.GITHUB_RUN_ID ||
-        proposal?.dispatchRunAttempt !== env.GITHUB_RUN_ATTEMPT) {
+        proposal?.dispatchRunAttempt !== env.GITHUB_RUN_ATTEMPT ||
+        !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA || '') ||
+        proposal?.sourceCommitSha !== env.GITHUB_SHA) {
       fail('model proposal is not bound to approved task and workflow dispatch');
     }
     const recomputed = inspectModelReviewer({
