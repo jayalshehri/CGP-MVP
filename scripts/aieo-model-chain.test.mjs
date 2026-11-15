@@ -167,7 +167,7 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
           assert.equal(git('branch', '--show-current').trim(), 'main');
           assert.equal(git('show', 'main:' + MODEL_ALLOWED_PATH), original);
           assert.doesNotMatch(git('ls-remote', '--heads', remote),
-            /refs\\/heads\\/aieo\\/model-proposal-/);
+            /refs\/heads\/aieo\/model-proposal-/);
         } finally {
           writeFileSync(target, candidate);
           rmSync(evidencePath, { force: true });
