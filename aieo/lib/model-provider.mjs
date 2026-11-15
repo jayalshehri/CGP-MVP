@@ -24,6 +24,11 @@ const optionalNetworkCall = /\b(?:fetch|sendBeacon|postMessage|WebSocket|EventSo
 // Reflect invocation, constructors and importScripts) within the bounded one-file patch.
 const indirectNetworkCall = /\b(?:fetch|WebSocket|EventSource|XMLHttpRequest|sendBeacon|postMessage|importScripts)\b[\s\S]{0,48}?(?:(?:\?\.|\.)\s*(?:call|apply|bind)\s*\(|\[\s*['"](?:call|apply|bind)['"]\s*\]\s*\()|\bReflect\s*(?:\?\.|\.)\s*(?:apply|construct)\s*\(|\bimportScripts\s*(?:\?\.)?\s*\(|\bnew\s+WebSocket\s*\(/i;
 
+// Reject network-capable API references before they can be aliased, destructured,
+// or passed to indirect invokers. Restricted model patches are UI-only; this is
+// intentionally conservative and is not a general-purpose JavaScript analysis.
+const networkCapabilityReference = /\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|sendBeacon|postMessage|importScripts|Image|Worker|SharedWorker|import|require|eval|Function)\b|\b(?:window|globalThis|self|navigator|document)\s*(?:\?\.|\.)\s*(?:open|createElement)\b|\b(?:window|globalThis|self|navigator|document)\s*(?:\?\.)?\s*\[\s*['"](?:open|createElement)['"]\s*\]/;
+
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
 const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
 
@@ -80,7 +85,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     return { status: 'rejected', reason: 'Proposed edit outside bounded size limits' };
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
-  if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) ||
+  if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) ||
       outboundMarkup.test(replace) || outboundCss.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
