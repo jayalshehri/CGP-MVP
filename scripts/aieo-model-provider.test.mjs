@@ -33,6 +33,33 @@ test('untrusted or malformed model output fails closed', () => {
     JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace: find, explanation: 'x' })
   ]) assert.equal(validateModelPatch({ response, source }).status, 'rejected');
 });
+test('model proposal requires one unambiguous four-field JSON object', () => {
+  const valid = { path: MODEL_ALLOWED_PATH, find, replace: replacement,
+    explanation: 'Synthetic harmless edit' };
+  const duplicated = '{"path":"' + MODEL_ALLOWED_PATH + '","path":"' +
+    MODEL_ALLOWED_PATH + '","find":' + JSON.stringify(find) +
+    ',"replace":' + JSON.stringify(replacement) +
+    ',"explanation":"Synthetic harmless edit"}';
+  const invalid = [
+    duplicated,
+    JSON.stringify({ ...valid, commands: 'ignore later checks' }),
+    JSON.stringify({ ...valid, metadata: { approved: true } }),
+    JSON.stringify({ ...valid, explanation: { text: 'nested' } }),
+    JSON.stringify([valid]),
+    '{"path":"' + MODEL_ALLOWED_PATH + '","find":' + JSON.stringify(find) +
+      ',"replace":' + JSON.stringify(replacement) +
+      ',"replace":' + JSON.stringify(replacement) +
+      ',"explanation":"duplicate replacement"}'
+  ];
+  for (const response of invalid) {
+    assert.equal(validateModelPatch({ response, source }).status, 'rejected', response);
+  }
+  // Whitespace and any ordering of the same four keys are still valid JSON.
+  const reordered = JSON.stringify({ explanation: valid.explanation,
+    replace: valid.replace, find: valid.find, path: valid.path }, null, 2);
+  assert.equal(validateModelPatch({ response: reordered, source }).status, 'proposed');
+});
+
 test('no source disclosure without explicit consent and privacy scan', () => {
   assert.throws(() => buildModelRequest({ source, task, model: env.OPENROUTER_MODEL_ID, shareApproved: false }));
   assert.throws(() => buildModelRequest({ source: 'const api_key = "plaintext-secret";', task, model: env.OPENROUTER_MODEL_ID, shareApproved: true }));
