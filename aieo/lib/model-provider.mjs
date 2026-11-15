@@ -87,6 +87,14 @@ async function readLimitedProviderBody(response) {
   }
 }
 
+// User-provided tasks and repository source are untrusted prompt data. If they
+// contain our own source-boundary markers, the apparent boundary presented to
+// the model becomes ambiguous. Refuse disclosure rather than relying on the
+// model to interpret conflicting delimiters. Tasks are one printable line;
+// bidi direction controls and line breaks can conceal forged instructions.
+const promptBoundaryMarker = /UNTRUSTED_SOURCE_(?:START|END)/i;
+const unsafeTaskControl = /[\u0000-\u001f\u007f\u0085\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
+
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 // The provider is allowed to propose exactly four flat JSON string fields.
 // JSON.parse silently collapses repeated keys, so checking the parsed object
@@ -155,12 +163,14 @@ export function buildModelRequest({ source, path = MODEL_ALLOWED_PATH, task, mod
   if (shareApproved !== true) throw new Error('External source sharing must be explicitly approved');
   if (path !== MODEL_ALLOWED_PATH || typeof source !== 'string' ||
       Buffer.byteLength(source, 'utf8') > 12000 || !exactUtf8(source) ||
-      credentials.test(source) || /(?:\.env|secrets\/|service_role)/i.test(path)) {
+      credentials.test(source) || promptBoundaryMarker.test(source) ||
+      /(?:\.env|secrets\/|service_role)/i.test(path)) {
     throw new Error('Source cannot be shared with an external model');
   }
   if (typeof task !== 'string' || task.length < 12 ||
       Buffer.byteLength(task, 'utf8') > 500 || !exactUtf8(task) ||
-      credentials.test(task) ||
+      credentials.test(task) || promptBoundaryMarker.test(task) ||
+      unsafeTaskControl.test(task) ||
       typeof model !== 'string' || !/^[a-z0-9_.-]+\/[a-z0-9_.:-]+$/i.test(model)) {
     throw new Error('Invalid task or configured model');
   }
