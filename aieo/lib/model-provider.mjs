@@ -68,9 +68,12 @@ async function readLimitedProviderBody(response) {
 }
 
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
+// A JSON string can contain a lone surrogate. Encoding that string to Git or
+// HTTP bytes silently substitutes U+FFFD, so refuse lossy text before approval.
+const exactUtf8 = (text) => Buffer.from(text, 'utf8').toString('utf8') === text;
 
 export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH }) {
-  if (path !== MODEL_ALLOWED_PATH || typeof source !== 'string' || typeof response !== 'string' || response.length > 10000) {
+  if (path !== MODEL_ALLOWED_PATH || typeof source !== 'string' || typeof response !== 'string' || Buffer.byteLength(response, 'utf8') > 10000) {
     return { status: 'rejected', reason: 'Invalid scope or response size' };
   }
   let parsed;
@@ -80,8 +83,14 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     return { status: 'rejected', reason: 'Invalid proposal schema' };
   }
   const { find, replace } = parsed;
-  if (find.length < 12 || find.length > 800 || replace.length < 1 || replace.length > 1200 ||
-      find === replace || Math.abs(replace.length - find.length) > 500) {
+  // Model patch limits and the audit delta must measure the bytes that will
+  // actually be written, not UTF-16 code units in an untrusted JSON string.
+  const findBytes = Buffer.byteLength(find, 'utf8');
+  const replaceBytes = Buffer.byteLength(replace, 'utf8');
+  if (!exactUtf8(find) || !exactUtf8(replace) ||
+      findBytes < 12 || findBytes > 800 ||
+      replaceBytes < 1 || replaceBytes > 1200 ||
+      find === replace || Math.abs(replaceBytes - findBytes) > 500) {
     return { status: 'rejected', reason: 'Proposed edit outside bounded size limits' };
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
@@ -95,17 +104,20 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     status: 'proposed', path, sourceHash: sha256(source),
     proposedHash: sha256(patchedSource), patchedSource,
     explanation: parsed.explanation.slice(0, 300), // text is untrusted, never execute it
-    changedBytes: Math.abs(replace.length - find.length),
+    changedBytes: Math.abs(replaceBytes - findBytes),
   };
 }
 
 export function buildModelRequest({ source, path = MODEL_ALLOWED_PATH, task, model, shareApproved }) {
   if (shareApproved !== true) throw new Error('External source sharing must be explicitly approved');
-  if (path !== MODEL_ALLOWED_PATH || typeof source !== 'string' || source.length > 12000 ||
+  if (path !== MODEL_ALLOWED_PATH || typeof source !== 'string' ||
+      Buffer.byteLength(source, 'utf8') > 12000 || !exactUtf8(source) ||
       credentials.test(source) || /(?:\.env|secrets\/|service_role)/i.test(path)) {
     throw new Error('Source cannot be shared with an external model');
   }
-  if (typeof task !== 'string' || task.length < 12 || task.length > 500 || credentials.test(task) ||
+  if (typeof task !== 'string' || task.length < 12 ||
+      Buffer.byteLength(task, 'utf8') > 500 || !exactUtf8(task) ||
+      credentials.test(task) ||
       typeof model !== 'string' || !/^[a-z0-9_.-]+\/[a-z0-9_.:-]+$/i.test(model)) {
     throw new Error('Invalid task or configured model');
   }
