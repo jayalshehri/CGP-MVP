@@ -34,6 +34,13 @@ const networkCapabilityReference = /\b(?:fetch|XMLHttpRequest|WebSocket|EventSou
 // Reflect.get can obtain the same capability without bracket syntax.
 const dynamicGlobalMember = /\b(?:globalThis|window|self|top|parent|document|navigator)\s*(?:\?\.)?\s*\[|\bReflect\s*(?:\.|\?\.)\s*(?:get|apply|construct)\s*\(/i;
 
+// A bare ambient global can be aliased and accessed later through a computed
+// key (const root = globalThis; root['fe' + 'tch'](...)), evading member-only
+// network guards. Bounded one-file UI edits do not need ambient globals.
+// Conservatively reject these identifiers, including 'this', before review.
+// Text screening is not a general JavaScript proof of side-effect freedom.
+const ambientGlobalReference = /\b(?:globalThis|window|self|top|parent|document|navigator|location|global|frames|opener|this)\b/;
+
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
 const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
 
@@ -68,7 +75,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   if (additions.some((line) => suspect.test(line) || browserExfil.test(line) || browserLocation.test(line) || optionalNetworkCall.test(line)) ||
       indirectNetworkCall.test(additions.join('\n')) ||
       networkCapabilityReference.test(additions.join('\n')) ||
-      dynamicGlobalMember.test(additions.join('\n')) ||
+      dynamicGlobalMember.test(additions.join('\n')) || ambientGlobalReference.test(additions.join('\n')) ||
       outboundMarkup.test(additions.join('\n')) || outboundCss.test(additions.join('\n'))) {
     findings.push('Potentially unsafe new code');
   }
