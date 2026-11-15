@@ -632,7 +632,7 @@ test('provider rejects credential echoes, malformed metadata and lossy Unicode t
       'rejection details must never echo credential data');
   }
   for (const explanation of [
-    'Generated ' + '\\uD800',
+    'Generated ' + String.fromCharCode(0xD800),
     'Generated ' + String.fromCharCode(0) + ' record',
     'Generated ' + String.fromCharCode(10) + ' extra line',
     'x'.repeat(1201)
