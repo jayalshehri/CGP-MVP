@@ -50,6 +50,10 @@ const ambientGlobalReference = /\b(?:globalThis|window|self|top|parent|document|
 // spellings rather than silently approving an obfuscated capability.
 const encodedJavaScriptEscape = /\\(?:u(?:[0-9a-f]{4}|\{[0-9a-f]{1,6}\})|x[0-9a-f]{2})/i;
 
+// Reflective constructor/prototype chains can obtain dynamic code execution
+// without literal eval/Function. Fail closed on these names in added lines.
+const dynamicCodeReflection = /\b(?:constructor|__proto__|prototype|setPrototypeOf|getPrototypeOf|defineProperty|defineProperties)\b/i;
+
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
 const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
 
@@ -86,6 +90,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
       networkCapabilityReference.test(additions.join('\n')) ||
       dynamicGlobalMember.test(additions.join('\n')) || ambientGlobalReference.test(additions.join('\n')) ||
       encodedJavaScriptEscape.test(additions.join('\n')) ||
+      dynamicCodeReflection.test(additions.join('\n')) ||
       outboundMarkup.test(additions.join('\n')) || outboundCss.test(additions.join('\n'))) {
     findings.push('Potentially unsafe new code');
   }
