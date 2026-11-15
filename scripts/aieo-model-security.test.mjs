@@ -245,3 +245,25 @@ test('independent Security rejects aliased transports and dynamic-code invokers'
   }
   assert.equal(inspectModelDiff({ ...input, diff: '+' + "  const fetchStatus = \"local\"; const imageLabel = \"Decorative\";" }).status, 'passed');
 });
+
+
+test('independent Security rejects encoded identifiers and split browser-global capabilities', () => {
+  const attempts = [
+    "const send = globalThis['fe' + 'tch']; send(unsafeUrl);",
+    "const send = navigator['send' + 'Beacon']; send(unsafeUrl, body);",
+    "const root = (globalThis); root['fetch'](unsafeUrl);",
+    "const { sendBeacon: send } = navigator; send(unsafeUrl, body);",
+    "const send = \\u0066etch; send(unsafeUrl);",
+    "const send = \\x66etch; send(unsafeUrl);",
+    "const send = \\u{66}etch; send(unsafeUrl);",
+    "const root = self; root['Web' + 'Socket'](unsafeUrl);"
+];
+  for (const addition of attempts) {
+    const verdict = inspectModelDiff({ ...input, diff: '+' + addition });
+    assert.equal(verdict.status, 'failed', addition);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), addition);
+  }
+  for (const addition of ["const windowLabel = 'Preview';","const documentName = 'Local memo';","const beaconStatus = 'disabled';"]) {
+    assert.equal(inspectModelDiff({ ...input, diff: '+' + addition }).status, 'passed', addition);
+  }
+});
