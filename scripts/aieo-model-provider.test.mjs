@@ -375,3 +375,53 @@ test('model rejects aliased transport references and dynamic-code capabilities',
     replace: "  const fetchStatus = \"local\"; const imageLabel = \"Decorative\";", explanation: 'Local labels only' });
   assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
 });
+
+
+test('pre-disclosure source and task budgets use UTF-8 bytes, not UTF-16 length', async () => {
+  // Multi-byte content used to bypass the documented source/task limits even
+  // when every code-unit length check passed.
+  const largeSource = 'é'.repeat(6001); // 6,001 code units, 12,002 bytes
+  const largeTask = 'Review this ' + 'é'.repeat(250); // <500 units, >500 bytes
+  assert.throws(() => buildModelRequest({
+    source: largeSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+  }));
+  assert.throws(() => buildModelRequest({
+    source, task: largeTask, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+  }));
+  assert.doesNotThrow(() => buildModelRequest({
+    source: 'é'.repeat(6000), task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+  }), 'exactly 12,000 source bytes remains within policy');
+  let sent = 0;
+  const transport = async () => { sent++; throw new Error('no disclosure expected'); };
+  for (const input of [
+    { source: largeSource, task },
+    { source, task: largeTask }
+  ]) {
+    const result = await requestModelPatch({ ...input, env, transport });
+    assert.equal(result.status, 'blocked');
+  }
+  assert.equal(sent, 0, 'byte-budget failures must block before any HTTP attempt');
+});
+
+test('model edit quotas and changedBytes use exact UTF-8 bytes', () => {
+  // The previous code-unit delta was under 500, but the actual byte delta was
+  // much larger. The candidate must be rejected before any independent review.
+  const oversized = JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: 'é'.repeat(501), explanation: 'synthetic quota'
+  });
+  assert.equal(validateModelPatch({ response: oversized, source }).status, 'rejected');
+  const lossy = JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: '  const sample = "\\uD800";',
+    explanation: 'synthetic isolated surrogate'
+  }).replace('\\\\uD800', '\\uD800');
+  assert.equal(validateModelPatch({ response: lossy, source }).status, 'rejected');
+  const validReplacement = '  const sample = "✅";';
+  const valid = validateModelPatch({
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace: validReplacement, explanation: 'valid unicode'
+    }), source
+  });
+  assert.equal(valid.status, 'proposed');
+  assert.equal(valid.changedBytes,
+    Math.abs(Buffer.byteLength(validReplacement, 'utf8') - Buffer.byteLength(find, 'utf8')));
+});
