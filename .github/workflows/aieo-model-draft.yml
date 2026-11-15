@@ -103,4 +103,5 @@ jobs:
           AIEO_PUBLISH_MODE: model
           AIEO_MODEL_ENABLED: 'true'
           AIEO_SOURCE_SHARING_APPROVED: 'true'
+          AIEO_MODEL_TASK: ${{ inputs.task }}
         run: node scripts/aieo-publish-draft.mjs

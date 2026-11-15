@@ -37,6 +37,17 @@ test('model provider source cannot be contacted before trusted main role preflig
   assert.ok(model.includes('GH_TOKEN:'), 'workflow preflight must use GitHub token');
 });
 
+test('approved source-sharing task is bound at proposal and publisher boundaries', () => {
+  const dispatchInput = 'AIEO_MODEL_TASK: ' + String.fromCharCode(36, 123, 123) +
+    ' inputs.task ' + String.fromCharCode(125, 125);
+  assert.equal(model.split(dispatchInput).length - 1, 2,
+    'the same manual task must reach both the model provider and Draft publisher');
+  assert.ok(publisher.includes('proposal?.sourceShared !== true'));
+  assert.ok(publisher.includes('proposal?.taskHash'));
+  assert.ok(publisher.includes('proposal?.dispatchRunId'));
+  assert.ok(publisher.includes('proposal?.dispatchRunAttempt'));
+});
+
 test('developer publisher remains manual and no privileged PR event is added', () => {
   assert.ok(developer.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"));
   assert.ok(developer.includes('permissions:\n  contents: read'));

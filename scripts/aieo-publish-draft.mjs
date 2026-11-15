@@ -2,6 +2,7 @@
 // Call only after a manual main-branch dispatch and successful application gates.
 import { lstatSync, openSync, fstatSync, readSync, closeSync, constants } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
@@ -90,13 +91,24 @@ export function validateDispatch(env) {
   return env.AIEO_PUBLISH_MODE;
 }
 
-export function verifyCandidate({ mode, original, actual, changedPaths, diff, reports }) {
+export function verifyCandidate({ mode, original, actual, changedPaths, diff, reports, env = process.env }) {
   if (!Array.isArray(changedPaths) || changedPaths.length !== 1 ||
       changedPaths[0] !== MODEL_ALLOWED_PATH || original === actual) {
     fail('candidate changes must affect exactly one allowlisted tracked file');
   }
   if (mode === 'model') {
     const { proposal, qa, security, reviewer } = reports;
+    // An otherwise correct candidate cannot reuse a report from another
+    // approved task, Actions run or rerun attempt. Source-sharing consent in
+    // the dispatch environment alone does not attest the proposal handoff.
+    const approvedTask = env.AIEO_MODEL_TASK;
+    if (typeof approvedTask !== 'string' || approvedTask.length < 12 ||
+        proposal?.schemaVersion !== 1 || proposal?.sourceShared !== true ||
+        proposal?.taskHash !== createHash('sha256').update(approvedTask).digest('hex') ||
+        proposal?.dispatchRunId !== env.GITHUB_RUN_ID ||
+        proposal?.dispatchRunAttempt !== env.GITHUB_RUN_ATTEMPT) {
+      fail('model proposal is not bound to approved task and workflow dispatch');
+    }
     const recomputed = inspectModelReviewer({
       original, actual, changedPaths, diff, proposal, qa, security
     });
@@ -163,7 +175,7 @@ export function publishDraft({ env = process.env } = {}) {
     security: readBoundedModelReport('security'),
     reviewer: readBoundedModelReport('reviewer')
   } : {};
-  verifyCandidate({ mode, original, actual, changedPaths, diff, reports });
+  verifyCandidate({ mode, original, actual, changedPaths, diff, reports, env });
   const baseSha = command('git', ['rev-parse', 'HEAD']).trim();
   const branch = 'aieo/' + (mode === 'model' ? 'model-proposal-' : 'repair-feedback-') +
     env.GITHUB_RUN_ID + '-' + env.GITHUB_RUN_ATTEMPT;
