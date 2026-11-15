@@ -80,6 +80,13 @@ async function readLimitedProviderBody(response) {
 }
 
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
+// The provider is allowed to propose exactly four flat JSON string fields.
+// JSON.parse silently collapses repeated keys, so checking the parsed object
+// alone would accept ambiguous raw responses with duplicate assignments.
+// A deliberately narrow JSON grammar rejects duplicates, nested structures,
+// extra fields and arrays before independent review ever sees a proposal.
+const strictPatchObject = /^\s*\{\s*(?:"(?:\\.|[^"\\])*"\s*:\s*"(?:\\.|[^"\\])*"\s*,\s*){3}"(?:\\.|[^"\\])*"\s*:\s*"(?:\\.|[^"\\])*"\s*\}\s*$/;
+
 // A JSON string can contain a lone surrogate. Encoding that string to Git or
 // HTTP bytes silently substitutes U+FFFD, so refuse lossy text before approval.
 const exactUtf8 = (text) => Buffer.from(text, 'utf8').toString('utf8') === text;
@@ -88,11 +95,19 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   if (path !== MODEL_ALLOWED_PATH || typeof source !== 'string' || typeof response !== 'string' || Buffer.byteLength(response, 'utf8') > 10000) {
     return { status: 'rejected', reason: 'Invalid scope or response size' };
   }
+  if (!strictPatchObject.test(response)) {
+    return { status: 'rejected', reason: 'Expected exactly four flat JSON string fields' };
+  }
   let parsed;
   try { parsed = JSON.parse(response); } catch { return { status: 'rejected', reason: 'Expected strict JSON' }; }
   if (!parsed || parsed.path !== path || typeof parsed.find !== 'string' ||
       typeof parsed.replace !== 'string' || typeof parsed.explanation !== 'string') {
     return { status: 'rejected', reason: 'Invalid proposal schema' };
+  }
+  if (Object.keys(parsed).length !== 4 ||
+      !['path', 'find', 'replace', 'explanation'].every((key) =>
+        Object.prototype.hasOwnProperty.call(parsed, key))) {
+    return { status: 'rejected', reason: 'Unexpected model proposal keys' };
   }
   const { find, replace } = parsed;
   // Model patch limits and the audit delta must measure the bytes that will
