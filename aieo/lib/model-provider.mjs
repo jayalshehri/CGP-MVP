@@ -115,7 +115,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   // Limits are byte-based; truncation below is by code point, not UTF-16 unit.
   if (!exactUtf8(parsed.explanation) ||
       Buffer.byteLength(parsed.explanation, 'utf8') > 1200 ||
-      credentials.test(parsed.explanation) || /[\\u0000-\\u001F\\u007F]/.test(parsed.explanation)) {
+      credentials.test(parsed.explanation) || /[\u0000-\u001F\u007F]/.test(parsed.explanation)) {
     return { status: 'rejected', reason: 'Unsafe model explanation' };
   }
   const { find, replace } = parsed;
