@@ -533,3 +533,27 @@ test('model rejects aliased ambient globals with computed outbound capabilities'
     assert.equal(validateModelPatch({ response, source }).status, 'proposed', replace);
   }
 });
+
+// Synthetic credential formats only. Never use or transmit real keys in tests.
+test('cloud access-key markers are blocked before any provider request or proposal approval', async () => {
+  const cloudMarkers = [
+    'ASIA' + 'Z'.repeat(16),
+    'AWS_SECRET_ACCESS_KEY = "' + 's'.repeat(40) + '"',
+    'AccountKey="' + 'A'.repeat(44) + '"'
+  ];
+  let sent = 0;
+  const transport = async () => { sent += 1; throw Error('must never send credential'); };
+  for (const marker of cloudMarkers) {
+    assert.throws(() => buildModelRequest({ source: source + '\\n' + marker,
+      task, model: env.OPENROUTER_MODEL_ID, shareApproved: true }));
+    assert.throws(() => buildModelRequest({ source,
+      task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true }));
+    assert.equal((await requestModelPatch({ source: source + '\\n' + marker,
+      task, env, transport })).status, 'blocked');
+    const attempted = JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+      replace: '  const sample = "' + marker + '";',
+      explanation: 'synthetic cloud-key regression' });
+    assert.equal(validateModelPatch({ response: attempted, source }).status, 'rejected');
+  }
+  assert.equal(sent, 0);
+});

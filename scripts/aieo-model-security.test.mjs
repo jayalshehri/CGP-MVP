@@ -287,3 +287,16 @@ test('independent Security rejects aliases of ambient globals and computed sinks
     assert.equal(inspectModelDiff({ ...input, diff: '+' + addition }).status, 'passed', addition);
   }
 });
+
+test('independent Security refuses AWS temporary IDs and cloud account key material', () => {
+  const cloudMarkers = [
+    'ASIA' + 'Z'.repeat(16),
+    'AWS_SECRET_ACCESS_KEY = "' + 's'.repeat(40) + '"',
+    'AccountKey="' + 'A'.repeat(44) + '"'
+  ];
+  for (const marker of cloudMarkers) {
+    const verdict = inspectModelDiff({ ...input, diff: '+const synthetic = ' + marker + ';' });
+    assert.equal(verdict.status, 'failed', 'Security must reject ' + marker.slice(0, 8));
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+});
