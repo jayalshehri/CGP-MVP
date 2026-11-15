@@ -588,3 +588,30 @@ test('signed request URLs and SaaS token markers fail closed before provider dis
     explanation: 'Benign local display text' });
   assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
 });
+
+
+test('JWT-shaped tokens without Bearer prefix never leave the approved preflight boundary', async () => {
+  // Deliberately synthetic, non-authenticating three-segment token.
+  const token = 'eyJ' + 'A'.repeat(18) + '.' + 'eyJ' + 'B'.repeat(24) + '.' + 'C'.repeat(32);
+  let attempts = 0;
+  const transport = async () => { attempts++; throw new Error('outbound request forbidden'); };
+  assert.throws(() => buildModelRequest({ source: source + '\n' + token,
+    task, model: env.OPENROUTER_MODEL_ID, shareApproved: true }));
+  assert.throws(() => buildModelRequest({ source,
+    task: task + ' ' + token, model: env.OPENROUTER_MODEL_ID, shareApproved: true }));
+  assert.equal((await requestModelPatch({ source: source + '\n' + token,
+    task, env, transport })).status, 'blocked');
+  assert.equal((await requestModelPatch({ source, task: task + ' ' + token,
+    env, transport })).status, 'blocked');
+  assert.equal(attempts, 0, 'the provider transport must never be invoked');
+  assert.equal(validateModelPatch({
+    source, response: JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+      replace: '  const sample = "' + token + '";',
+      explanation: 'synthetic token should be rejected' })
+  }).status, 'rejected');
+  assert.equal(validateModelPatch({
+    source, response: JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+      replace: '  const sample = "No sensitive token";',
+      explanation: 'harmless local text' })
+  }).status, 'proposed');
+});
