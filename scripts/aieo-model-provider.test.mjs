@@ -375,3 +375,25 @@ test('model rejects aliased transport references and dynamic-code capabilities',
     replace: "  const fetchStatus = \"local\"; const imageLabel = \"Decorative\";", explanation: 'Local labels only' });
   assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
 });
+
+
+test('model rejects encoded identifiers and split browser-global capabilities', () => {
+  const attempts = [
+    "const send = globalThis['fe' + 'tch']; send(unsafeUrl);",
+    "const send = navigator['send' + 'Beacon']; send(unsafeUrl, body);",
+    "const root = (globalThis); root['fetch'](unsafeUrl);",
+    "const { sendBeacon: send } = navigator; send(unsafeUrl, body);",
+    "const send = \\u0066etch; send(unsafeUrl);",
+    "const send = \\x66etch; send(unsafeUrl);",
+    "const send = \\u{66}etch; send(unsafeUrl);",
+    "const root = self; root['Web' + 'Socket'](unsafeUrl);"
+];
+  for (const replace of attempts) {
+    const response = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace, explanation: 'Synthetic obfuscated capability' });
+    assert.equal(validateModelPatch({ response, source }).status, 'rejected', replace);
+  }
+  for (const replace of ["const windowLabel = 'Preview';","const documentName = 'Local memo';","const beaconStatus = 'disabled';"]) {
+    const response = JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace, explanation: 'Harmless local label' });
+    assert.equal(validateModelPatch({ response, source }).status, 'proposed', replace);
+  }
+});
