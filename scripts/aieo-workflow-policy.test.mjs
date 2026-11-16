@@ -117,3 +117,16 @@ test('model preflight also runs when security-critical role evidence and reviewe
       'safety preflight must cover changed ' + path);
   }
 });
+
+test('inherited Git process guard is shared and covered by the model safety workflow', () => {
+  const guard = read('scripts/aieo-git-process-guard.mjs');
+  const role = read('scripts/aieo-candidate-role.mjs');
+  const finalize = read('scripts/aieo-candidate-finalize.mjs');
+  assert.match(model, /scripts\\/aieo-git-process-guard\\.mjs/);
+  for (const source of [role, finalize, publisher]) {
+    assert.match(source, /hasUnsafeGitEnvironment/);
+  }
+  assert.match(guard, /GIT_CONFIG/);
+  assert.match(guard, /GIT_TRACE/);
+  assert.match(guard, /GIT_SSL_NO_VERIFY/);
+});
