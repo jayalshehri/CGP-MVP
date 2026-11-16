@@ -1533,9 +1533,9 @@ test('independent role and post-build gate refuse executable clean filters befor
     const marker = join(f.root, 'clean-filter-was-executed');
     const helper = join(f.root, 'untrusted-clean-filter.sh');
     const attrs = join(f.cwd, '.git/info/attributes');
-    const attrsText = path + ' filter=unsafe\\n';
-    writeFileSync(helper, '#!/bin/sh\\n' +
-      'touch ' + JSON.stringify(marker) + '\\ncat\\n');
+    const attrsText = path + ' filter=unsafe\n';
+    writeFileSync(helper, '#!/bin/sh\n' +
+      'touch ' + JSON.stringify(marker) + '\ncat\n');
     chmodSync(helper, 0o755);
     f.git('config', 'filter.unsafe.clean', helper);
     writeFileSync(attrs, attrsText);
