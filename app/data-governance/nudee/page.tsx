@@ -1,6 +1,5 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import "../data-governance.css";
@@ -11,7 +10,6 @@ type User={user_id:string;display_name:string|null};
 type Submission={id:number;assignment_id:number;file_name:string;storage_path:string;submitted_at:string};
 const statusLabels:Record<string,string>={unassigned:"لم يكلّف",assigned:"بانتظار الرفع",submitted:"بانتظار المراجعة",changes_requested:"أعيد للتعديل",approved:"معتمد"};
 export default function NudeePage(){
- const router=useRouter();
  const [role,setRole]=useState<"office"|"assignee"|null>(null);
  const [requirements,setRequirements]=useState<Requirement[]>([]);
  const [assignments,setAssignments]=useState<Assignment[]>([]);
@@ -49,7 +47,7 @@ export default function NudeePage(){
    setRole("assignee");
   }else throw new Error("لا تملك صلاحية الدخول إلى مؤشر نُضيء.");
  },[]);
- useEffect(()=>{let active=true;load().catch(e=>{if(active)setError(e.message||"تعذر تحميل المؤشر");});return()=>{active=false};},[load]);
+ useEffect(()=>{let active=true;void Promise.resolve().then(()=>load()).catch(e=>{if(active)setError(e.message||"تعذر تحميل المؤشر");});return()=>{active=false};},[load]);
  const visible=useMemo(()=>requirements.filter(r=>(r.standard_code+" "+r.evidence_name+" "+r.domain_name).includes(filter)),[requirements,filter]);
  const current=requirements.find(r=>r.id===selected);
  const assignment=assignments.find(a=>a.requirement_id===selected);
