@@ -8,7 +8,7 @@ import { inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
 import { verifyRemoteDraft } from '../aieo/lib/remote-draft.mjs';
 import { readBoundedModelReport } from './aieo-role-artifact-io.mjs';
-import { hasUnsafeGitEnvironment } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
 
 function command(binary, args) {
   // Repository-local Git config is not a trust boundary: core.fsmonitor and
@@ -189,16 +189,13 @@ function assertTrustedCheckout(env, path) {
 export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
   const path = MODEL_ALLOWED_PATH;
+  // A clean filter on ANY tracked file can execute during an unscoped
+  // worktree diff, before the one-file scope check. Do not attest only the
+  // proposed source path: first verify every tracked path with credential-free,
+  // bounded Git subprocesses. Reject before any token-bearing diff or write.
+  try { assertNoTrackedGitFilters(); }
+  catch { fail('Git content filter; executable clean filters are forbidden'); }
   assertTrustedCheckout(env, path);
-  // Git content filters are executable: even a read-only "git diff" can invoke
-  // filter.<driver>.clean on this modified source under our write-scoped token.
-  // Refuse effective attributes from tracked .gitattributes, info/attributes
-  // and core.attributesFile BEFORE any diff, add, branch or remote operation.
-  // Requiring an unspecified filter is deliberately fail-closed.
-  const filterAttribute = command('git', ['check-attr', '-z', 'filter', '--', path]);
-  if (filterAttribute !== path + '\0filter\0unspecified\0') {
-    fail('candidate path has a Git content filter; executable clean filters are forbidden');
-  }
   // Refuse pre-staged changes, untracked files and whitespace errors before any write.
   if (command('git', ['diff', '--cached', '--name-only']).trim()) fail('unexpected staged files');
   if (command('git', ['ls-files', '--others', '--exclude-standard'])
