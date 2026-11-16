@@ -72,6 +72,47 @@ function fixture() {
   return { root, workspace, remote, log, env, target, args, qa, security, reviewer };
 }
 
+// An attribute-selected diff.textconv helper executes even with --no-ext-diff.
+// Demonstrate the fixture is executable outside the publisher, then ensure
+// every publisher diff uses raw bytes and never invokes the helper with GH_TOKEN.
+for (const attrOrigin of ['info', 'global']) {
+  test('publisher suppresses executable Git diff textconv: ' + attrOrigin, () => {
+    const f = fixture();
+    try {
+      const trusted = git(f.workspace, 'rev-parse', 'main');
+      const marker = join(f.root, 'untrusted-textconv-executed');
+      const executable = join(f.root, 'untrusted-textconv');
+      writeFileSync(executable, '#!/bin/sh\n' +
+        'printf invoked > ' + JSON.stringify(marker) + '\n' +
+        'printf "synthetic textconv\\n"\n');
+      chmodSync(executable, 0o755);
+      git(f.workspace, 'config', 'diff.untrusted.textconv', executable);
+      const attributes = attrOrigin === 'info'
+        ? join(f.workspace, '.git', 'info', 'attributes')
+        : join(f.root, 'global-textconv-attributes');
+      writeFileSync(attributes, 'components/FeedbackWidget.tsx diff=untrusted\n');
+      if (attrOrigin === 'global') {
+        git(f.workspace, 'config', 'core.attributesFile', attributes);
+      }
+      // Test-only control, with no publisher token: --no-ext-diff alone
+      // does not suppress this executable diff driver.
+      git(f.workspace, 'diff', '--no-ext-diff', '--unified=0', '--', MODEL_ALLOWED_PATH);
+      assert.equal(existsSync(marker), true, 'fixture did not activate textconv');
+      unlinkSync(marker);
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+      });
+      assert.equal(child.status, 0, child.stderr);
+      assert.equal(existsSync(marker), false, 'textconv executed with publisher credentials');
+      assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), trusted);
+      assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
+      assert.match(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /refs\\/heads\\/aieo\\/model-proposal-99123-1/);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+}
+
 // An untrusted clean filter can execute during *git diff*, before git add.
 // Reject it from every Git attribute source while the publisher holds GH_TOKEN.
 for (const attrOrigin of ['info', 'working-tree', 'global']) {
