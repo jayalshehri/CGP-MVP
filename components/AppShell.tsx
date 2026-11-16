@@ -217,5 +217,5 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
 // Project identity stays in the path; the bounded origin only shapes this breadcrumb.
 function ProjectBreadcrumb() {
   const context = projectReturn(useSearchParams());
-  return <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href={nudeeOnly ? "/data-governance/nudee" : "/"}>الرئيسية</Link><span aria-hidden="true">/</span><Link href={context.href}>{context.label}</Link><span aria-hidden="true">/</span><span aria-current="page">تفاصيل المشروع</span></nav>;
+  return <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link><span aria-hidden="true">/</span><Link href={context.href}>{context.label}</Link><span aria-hidden="true">/</span><span aria-current="page">تفاصيل المشروع</span></nav>;
 }
