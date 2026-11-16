@@ -8,7 +8,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
-import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
 
 const SHA = /^[a-f0-9]{40}$/;
 const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
@@ -154,6 +154,9 @@ export function runCandidateRole(role, env = process.env) {
   // change the trusted repository view or execute helpers under GH_TOKEN.
   if (hasUnsafeGitEnvironment(process.env) || hasUnsafeGitEnvironment(env)) block();
   if (!ROLES.includes(role)) block();
+  // A worktree diff may invoke an attribute-selected clean filter despite
+  // --no-textconv. Reject effective filters before any Git diff or handoff.
+  try { assertNoTrackedGitFilters(process.env); } catch { block(); }
   const { base, head, number } = verifiedRemoteContext(env);
   let original, actual, changedPaths, diff;
   try {
