@@ -207,7 +207,7 @@ for (const movedRef of ['main', 'candidate']) {
         '    ' + update,
         '  fi',
         'done', ''
-      ].join('\\n'));
+      ].join('\n'));
       chmodSync(hook, 0o755);
       const child = spawnSync(process.execPath, [publisher], {
         cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
@@ -222,10 +222,10 @@ for (const movedRef of ['main', 'candidate']) {
       if (movedRef === 'candidate') {
         assert.equal(git(f.workspace, 'ls-remote', 'origin',
           'refs/heads/aieo/model-proposal-99123-1'),
-          base + '\\trefs/heads/aieo/model-proposal-99123-1');
+          base + '\trefs/heads/aieo/model-proposal-99123-1');
       } else {
         assert.notEqual(git(f.workspace, 'ls-remote', 'origin',
-          'refs/heads/main'), base + '\\trefs/heads/main');
+          'refs/heads/main'), base + '\trefs/heads/main');
       }
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   });
