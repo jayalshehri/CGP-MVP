@@ -34,7 +34,7 @@ export default function DataGovernancePage() {
   }, [router]);
 
   if (accessError) return <main className="dg-page"><div role="alert" className="dg-loading"><h1>تعذر فتح مكتب إدارة البيانات</h1><p>{accessError}</p><p>تأكد من أن دور حسابك في قاعدة البيانات هو مدير النظام أو فريق إدارة البيانات، ثم أعد تسجيل الدخول.</p></div></main>;
-  if (!ready) return <main className="dg-page"><p className="dg-loading">جاري فتح مساحة إدارة البيانات والحوكمة…</p></main;
+  if (!ready) return <main className="dg-page"><p className="dg-loading">جاري فتح مساحة إدارة البيانات والحوكمة…</p></main>;
 
   return <main className="dg-page">
     <div className="dg-eyebrow">مساحة عمل مستقلة</div>
