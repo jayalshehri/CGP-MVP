@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { readOnlyGitEnvironment } from './aieo-git-process-guard.mjs';
 
 const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 const model = read('.github/workflows/aieo-model-draft.yml');
@@ -137,7 +138,8 @@ test('independent role and finalizer Git calls scrub credentials while gh retain
   const finalize = read('scripts/aieo-candidate-finalize.mjs');
   assert.match(guard, /export function readOnlyGitEnvironment/);
   for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'OPENROUTER_API_KEY']) {
-    assert.ok(guard.includes("'" + key + "'"));
+    assert.equal(Object.hasOwn(readOnlyGitEnvironment({ [key]: 'synthetic-only' }), key), false,
+      key + ' must be absent from the Git child environment');
   }
   for (const script of [role, finalize]) {
     assert.ok((script.match(/env: readOnlyGitEnvironment\(process.env\)/g) || []).length >= 2,
