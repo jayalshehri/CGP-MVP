@@ -16,7 +16,16 @@ const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const fail = () => { throw new Error('AIEO post-build check blocked: candidate or remote Draft changed'); };
-const git = (...args) => execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
+// Post-build re-attestation must not execute Git config/attribute helpers
+// under the independent workflow's GH_TOKEN, including textconv on diffs.
+const git = (...args) => {
+  const safeArgs = ['-c', 'core.fsmonitor=false',
+    ...(args[0] === 'diff'
+      ? ['diff', '--no-ext-diff', '--no-textconv',
+        ...args.slice(1).filter((flag) => flag !== '--no-ext-diff')]
+      : args)];
+  return execFileSync('git', safeArgs, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
+};
 const gitTrim = (...args) => git(...args).trim();
 
 // The immutable base/head Git blobs must be checked as raw bytes. Decoding
@@ -25,7 +34,7 @@ const gitTrim = (...args) => git(...args).trim();
 export function readStrictReviewedGitSource(revision) {
   try {
     if (!SHA.test(revision || '')) fail();
-    const raw = execFileSync('git', ['show', revision + ':' + MODEL_ALLOWED_PATH],
+    const raw = execFileSync('git', ['-c', 'core.fsmonitor=false', 'show', revision + ':' + MODEL_ALLOWED_PATH],
       { stdio: 'pipe', maxBuffer: 256000 });
     if (!Buffer.isBuffer(raw) || raw.length < 1 ||
         raw.length > MAX_SOURCE_BYTES) fail();
