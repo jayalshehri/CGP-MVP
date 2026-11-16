@@ -191,12 +191,21 @@ export function publishDraft({ env = process.env } = {}) {
   }
   const branch = 'aieo/' + (mode === 'model' ? 'model-proposal-' : 'repair-feedback-') +
     env.GITHUB_RUN_ID + '-' + env.GITHUB_RUN_ATTEMPT;
+  // A retried or replayed run must not reuse a remote branch that already
+  // belongs to another attempt. Keep the push non-forcing; this is a fast-fail
+  // preflight, not a claim of atomic protection against concurrent ref races.
+  if (command('git', ['ls-remote', '--heads', 'origin', 'refs/heads/' + branch]).trim()) {
+    fail('candidate branch already exists on origin');
+  }
   command('git', ['config', 'user.name', 'github-actions[bot]']);
   command('git', ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com']);
   command('git', ['switch', '-c', branch]);
   command('git', ['add', '--', path]);
   if (command('git', ['diff', '--cached', '--name-only']).trim() !== path) fail('unexpected staged scope');
-  command('git', ['commit', '-m', 'feat(aieo): bounded candidate for human review']);
+  // Do not let runner-local or injected Git hooks execute with publisher
+  // credentials. The reviewed candidate and immutable commit are checked below.
+  command('git', ['-c', 'core.hooksPath=/dev/null', 'commit', '-m',
+    'feat(aieo): bounded candidate for human review']);
   const candidateSha = command('git', ['rev-parse', 'HEAD']).trim();
   // A file can change between independent review and git add. Compare the
   // immutable commit with the verified bytes before contacting GitHub.
