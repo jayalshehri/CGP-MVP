@@ -89,6 +89,7 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
     chmodSync(gh, 0o755);
     const env = {
       ...process.env, PATH: bin + delimiter + process.env.PATH,
+      GITHUB_ACTIONS: 'false', // offline local bare-remote rehearsal, never a trusted runner
       AIEO_FAKE_GH_LOG: ghLog,
       GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
       GITHUB_EVENT_NAME: 'workflow_dispatch',
