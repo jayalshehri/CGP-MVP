@@ -43,7 +43,7 @@ export default function NudeePage(){
   if(office){
    const [{data:r,error:re},{data:u,error:ue}]=await Promise.all([
     supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance").order("source_row").limit(1000),
-    supabase.from("profiles").select("user_id,display_name,role").eq("is_active",true).neq("role","nca_external_auditor").limit(200)
+    supabase.rpc("nudee_assignees")
    ]);
    if(re)throw re;if(ue)throw ue;
    setRequirements((r??[]) as Requirement[]);setUsers((u??[]) as User[]);setRole("office");
