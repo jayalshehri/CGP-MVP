@@ -18,7 +18,16 @@ function command(binary, args) {
   // An attribute-selected diff.<driver>.textconv runs executable code even
   // under --no-ext-diff. Suppress textconv for EVERY diff (including --check).
   const safeArgs = binary === 'git'
-    ? ['-c', 'core.fsmonitor=false',
+    ? [
+      // ls-remote and push inherit GH_TOKEN. A repository-local origin URL,
+      // pushurl or url.*.insteadOf must never select an executable remote
+      // helper (ext::), shell/SSH transport or git:// downgrade. Keep HTTPS
+      // for GitHub and file:// solely for isolated local Git test remotes.
+      '-c', 'protocol.allow=never',
+      '-c', 'protocol.https.allow=always',
+      '-c', 'protocol.file.allow=always',
+      '-c', 'protocol.ext.allow=never',
+      '-c', 'core.fsmonitor=false',
       ...(args[0] === 'diff'
         ? ['diff', '--no-ext-diff', '--no-textconv', ...args.slice(1)]
         : args)]
