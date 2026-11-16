@@ -82,13 +82,30 @@ export default function NudeeDashboard(){
     full,authority,levels:LEVELS.map(level=>{const subset=list.filter(r=>r.maturity_level===level);const denominator=subset.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق").length;return {n:subset.length,rate:denominator?percent(subset.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,denominator):null};})};
   }).sort((a,b)=>b.total-a.total);
  },[rows,mapped]);
- const weekly=useMemo(()=>Array.from({length:8},(_,i)=>{
-  const start=new Date("2026-11-08T00:00:00Z");start.setUTCDate(start.getUTCDate()+7*i);
-  const end=new Date(start);end.setUTCDate(end.getUTCDate()+4);
-  const d=end.toISOString().slice(0,10);
-  return {week:i+1,until:d,planned:rows.filter(r=>r.planned_end&&r.planned_end<=d).length,
-   actual:rows.filter(r=>r.actual_end&&r.actual_end<=d&&effectiveReview(r,mapped.get(r.id))==="مكتمل").length};
- }),[rows,mapped]);
+ // Reproduce the eight-week *weighted* Calc!D60:E67 trend, not a count of due evidence.
+ // The workbook snapshot uses AsOfDate=2026-11-05; this live view uses the Riyadh date.
+ const weekly=useMemo(()=>{
+  const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Riyadh"});
+  return Array.from({length:8},(_,i)=>{
+   const start=new Date("2026-11-08T00:00:00Z");start.setUTCDate(start.getUTCDate()+7*i);
+   const end=new Date(start);end.setUTCDate(end.getUTCDate()+4);
+   const until=end.toISOString().slice(0,10),starts=start.toISOString().slice(0,10);
+   const stageRate=LEVELS.map(level=>{
+    const list=rows.filter(r=>r.maturity_level===level);
+    if(!list.length)return 0;
+    if(starts>today)return 0;
+    if(until<today)return list.filter(r=>r.actual_end&&r.actual_end<=until&&effectiveReview(r,mapped.get(r.id))==="مكتمل").length/list.length;
+    return list.reduce((sum,r)=>{
+     const state=effectiveReview(r,mapped.get(r.id));
+     if(state==="مكتمل")return sum+1;
+     if(["قيد التنفيذ","بانتظار التحقق","معاد للتعديل"].includes(state))return sum+0.5;
+     if(state==="متأخر")return sum+0.25;
+     return sum+Number(r.source_progress||0);
+    },0)/list.length;
+   });
+   return {week:i+1,until,planned:(i+1)*12.5,actual:starts>today?0:25*stageRate.reduce((a,b)=>a+b,0)};
+  });
+ },[rows,mapped]);
  const stages=LEVELS.map((level,i)=>{const subset=rows.filter(r=>r.maturity_level===level);
   const completed=subset.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length;
   return {level,phase:i+1,n:subset.length,completed,start:subset.map(r=>r.planned_start).filter((x):x is string=>Boolean(x)).sort()[0]||null,
@@ -132,10 +149,10 @@ export default function NudeeDashboard(){
     </section>
    </div>
    <section className={styles.panel}><div className={styles.sectionHeader}><div><h2>مصفوفة الامتثال حسب المجال</h2><p>المجالات الأربعة عشر، النضج، عدد الأدلة المنطبقة والمقيّمة والمكتملة.</p></div><span className={styles.meta}>{domainMatrix.length} مجال</span></div><div className={styles.tableScroll}><table><thead><tr><th>المجال</th>{LEVELS.map((level,i)=><th key={level}>المستوى {i+1}</th>)}<th>NDMO</th><th>متطلبات الهيئة</th><th>الأدلة</th><th>المنطبقة</th><th>المقيّمة</th><th>المراجعة المكتملة</th></tr></thead><tbody>{domainMatrix.map(d=><tr key={d.name}><th scope="row">{d.name}</th>{d.levels.map((l,i)=><td key={i} title={l.n+" دليل"}>{l.rate===null?"—":l.rate.toLocaleString("ar-SA")+"%"}</td>)}<td>{fmtPct(d.full,d.applicable)}</td><td>{fmtPct(d.full+d.authority,d.applicable)}</td><td>{d.total}</td><td>{d.applicable}</td><td>{d.assessed}</td><td>{d.reviewed}</td></tr>)}<tr className={styles.totalRow}><th scope="row">الإجمالي</th>{LEVELS.map(level=>{const a=rows.filter(r=>r.maturity_level===level);const valid=a.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق");return <td key={level}>{valid.length?fmtPct(valid.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,valid.length):"—"}</td>})}<td>{fmtPct(stats.full,stats.applicable)}</td><td>{fmtPct(stats.full+stats.authority,stats.applicable)}</td><td>{stats.total}</td><td>{stats.applicable}</td><td>{stats.assessed}</td><td>{stats.reviewed}</td></tr></tbody></table></div></section>
-   <section className={styles.panel}><div className={styles.sectionHeader}><div><h2>الجدول الزمني ومراجعة الأدلة</h2><p>البرنامج الأساسي: 8 أسابيع تبدأ في 8 نوفمبر 2026. يظهر الإنجاز المؤرخ فقط في الرسم الزمني.</p></div><span className={styles.meta}>8 أسابيع</span></div>
+   <section className={styles.panel}><div className={styles.sectionHeader}><div><h2>الجدول الزمني ومراجعة الأدلة</h2><p>البرنامج الأساسي: 8 أسابيع من 8 نوفمبر إلى 31 ديسمبر 2026. المخطط تراكمي موزون حسب مدة المراحل الأربع (Calc)، والفعلي يقاس بتاريخ الرياض؛ الأسابيع السابقة تتطلب تاريخ إنجاز فعليًا.</p></div><span className={styles.meta}>8 أسابيع</span></div>
     <div className={styles.stages}>{stages.map(s=><article key={s.level}><b>المرحلة {s.phase}</b><h3>{s.level}</h3><p>{shortDate(s.start)} – {shortDate(s.end)}</p><div className={styles.track}><div style={{width:percent(s.completed,s.n)+"%"}}/></div><small>{s.completed} / {s.n} مكتمل</small></article>)}<article><b>المرحلة 4</b><h3>المراجعة النهائية الشاملة</h3><p>20 ديسمبر – 31 ديسمبر 2026</p><small>مراجعة شاملة لجميع المستويات</small></article></div>
-    <div className={styles.weekly}>{weekly.map(w=><div key={w.week} className={styles.week}><span>الأسبوع {w.week}</span><small>{shortDate(w.until)}</small><div className={styles.track}><div style={{width:percent(w.planned,stats.total)+"%"}}/></div><div className={styles.track+" "+styles.actual}><div style={{width:percent(w.actual,stats.total)+"%"}}/></div><small>المخطط {w.planned} · المؤرخ {w.actual}</small></div>)}</div>
-    <p className={styles.footnote}>المخطط: الأدلة المستحقة حتى نهاية الأسبوع. الفعلي: الأدلة المكتملة التي لها تاريخ انتهاء فعلي. قد توجد أدلة مكتملة دون تاريخ، فلا تُنسب إلى أسبوع محدد.</p>
+    <div className={styles.weekly}>{weekly.map(w=><div key={w.week} className={styles.week}><span>الأسبوع {w.week}</span><small>{shortDate(w.until)}</small><div className={styles.track} title={"المخطط: "+w.planned+"%"}><div style={{width:w.planned+"%"}}/></div><div className={styles.track+" "+styles.actual} title={"الفعلي: "+w.actual.toFixed(2)+"%"}><div style={{width:w.actual+"%"}}/></div><small>المخطط {w.planned.toLocaleString("ar-SA")}% · الفعلي {w.actual.toLocaleString("ar-SA",{maximumFractionDigits:2})}%</small></div>)}</div>
+    <p className={styles.footnote}>معادلة المخطط مستمدة من Calc!D60:D67 (12.5% كل أسبوع). الفعلي يعكس أوزان مراحل Excel؛ في الأسابيع المكتملة لا تُحسب إلا الأدلة المؤرخة، وفي الأسبوع الجاري يظهر تقدم المراجعة الحالي. تاريخ القياس المحفوظ بالمصنف الأصلي هو 5 نوفمبر 2026، لذلك قد يختلف الاتجاه الحي عن قيمه المحفوظة.</p>
    </section>
    <p className={styles.footnote}>المرجع: أوراق «متابعة الأدلة الداعمة» و«لوحة البيانات» و«الجدول الزمني» و«Calc» من ملف نُضيء الأصلي. معادلة امتثال الجهة في Calc!B10 تحتسب فقط النص «ممتثل للمعالي فقط»؛ نعرض التناقض مع بقية مسميات المصدر بوضوح دون تغيير أية بيانات. المراجعة تشمل حالة المصدر والأدلة المعتمدة في CGP، واعتماد الدليل لا يحوّله تلقائيًا إلى «ممتثل».</p>
   </>}
