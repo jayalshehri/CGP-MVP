@@ -168,6 +168,11 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
     <header className="cgp-topbar">
       <Link href="/" className="cgp-brand" aria-label="CGP — الصفحة الرئيسية"><span className="cgp-brand-mark">CGP</span><span>منصة الحوكمة السيبرانية<small>منصة موحدة للالتزام والمخاطر</small></span></Link>
       <div className="cgp-topbar-context" aria-label="موقعك الحالي"><span>{workspaceLabel}</span><i aria-hidden="true">/</i><strong>{leaf}</strong></div>
+      <nav aria-label="مساحات العمل" style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <Link href="/" aria-current={workspace === "cyber" ? "page" : undefined} style={{padding:"7px 12px",borderRadius:8,border:"1px solid currentColor",fontWeight:workspace === "cyber" ? 700 : 400}}>الأمن السيبراني</Link>
+        {(account?.role === "admin" || account?.role === "data_governance_team") && <Link href="/data-governance" aria-current={workspace === "data" ? "page" : undefined} style={{padding:"7px 12px",borderRadius:8,border:"1px solid currentColor",fontWeight:workspace === "data" ? 700 : 400}}>مكتب إدارة البيانات</Link>}
+        {(account?.role === "admin" || account?.role === "data_governance_team" || account?.role === "cybersecurity_team") && <Link href="/shared-controls" aria-current={workspace === "shared" ? "page" : undefined} style={{padding:"7px 12px",borderRadius:8,border:"1px solid currentColor",fontWeight:workspace === "shared" ? 700 : 400}}>المواءمة المشتركة</Link>}
+      </nav>
       <div className="cgp-topbar-tools">
         <button type="button" className="cgp-global-search" onClick={()=>setSearchOpen(true)} aria-haspopup="dialog"><span aria-hidden="true">⌕</span><span>بحث</span><kbd>⌘ K</kbd></button>
         <details className="cgp-account-menu"><summary aria-label="فتح قائمة الحساب"><span className="cgp-account-avatar" aria-hidden="true">{account?.name?.trim().slice(0, 1) || "ح"}</span><span className="cgp-account"><b>{account?.name || "حسابي"}</b><small>{account ? roleLabels[account.role] : "جاري التحقق من الحساب"}</small></span></summary><div className="cgp-account-panel"><p>{account ? roleLabels[account.role] : "جاري التحقق من الحساب"}</p><button type="button" onClick={signOut} disabled={signingOut} className="cgp-signout">{signingOut ? "جاري الخروج…" : "تسجيل الخروج"}</button></div></details>
