@@ -107,3 +107,18 @@
 @media(max-width:1120px){.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.weekly{grid-template-columns:repeat(4,minmax(0,1fr))}.stages{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.root{padding:12px}.heading{flex-direction:column;align-items:stretch}.back{text-align:center}.filters{grid-template-columns:1fr;padding:14px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.metric{padding:14px;min-height:128px}.metric strong{font-size:1.5rem}.workflow{align-items:stretch;flex-direction:column}.flowNumbers{gap:8px}.flowNumbers>span{flex:1;min-width:70px}.twoCols{grid-template-columns:1fr}.weekly{grid-template-columns:repeat(2,minmax(0,1fr))}.stages{grid-template-columns:1fr 1fr}.panel{padding:15px}}
 @media(max-width:390px){.metrics,.stages{grid-template-columns:1fr}.week{padding:9px}}
+
+
+/* Office-only manual phase-four progress, audited independently of evidence reviews. */
+.finalReviewPanel{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:20px;padding:18px;background:#f4faf9;border:1px solid #c9e5df;border-radius:14px;margin:18px 0}
+.finalReviewPanel h3{color:#14554f;font-size:1rem;margin:0 0 8px}
+.finalReviewPanel p{font-size:.8rem;line-height:1.8;color:#42636a;margin:0 0 7px}
+.finalReviewPanel strong{color:#0d766d;font-size:1.5rem;font-variant-numeric:tabular-nums}
+.finalReviewForm{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;min-width:0}
+.finalReviewForm label{display:grid;gap:6px;color:#36525b;font-size:.85rem;font-weight:700;min-width:0}
+.finalReviewForm input,.finalReviewForm textarea{width:100%;box-sizing:border-box;min-width:0;max-width:100%;font:inherit;border-radius:9px;padding:10px;border:1px solid #bfcecc;background:#fff;color:#123342}
+.finalReviewForm button{background:#0f766e;border:0;border-radius:9px;min-height:42px;padding:10px 14px;font-weight:700;color:white;cursor:pointer}
+.finalReviewForm button:disabled{opacity:.5;cursor:not-allowed}
+.finalReviewForm :is(button,input,textarea):focus-visible{outline:3px solid #0d9488;outline-offset:2px}
+.finalReviewForm p[role="status"]{margin:0;word-break:break-word}
+@media(max-width:700px){.finalReviewPanel{grid-template-columns:1fr;gap:12px;padding:14px}}
