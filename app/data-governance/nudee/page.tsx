@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import Link from "next/link";
 import "../data-governance.css";
 
 type Requirement={id:number;source_row:number;domain_name:string;standard_code:string;requirement_title:string;maturity_level:string;evidence_name:string;evidence_description:string|null;source_compliance:string|null};
@@ -60,28 +61,26 @@ export default function NudeePage(){
  async function assign(){
   if(!current||!assignee)return;setBusy(true);setError("");setNotice("");
   try{
-   const {user}=await requireProfile(["admin","data_governance_team"]);
-   const {error:e}=await supabase.from("nudee_assignments").upsert({requirement_id:current.id,assignee_id:assignee,assigned_by:user.id,due_date:due||null,status:"assigned",review_notes:null},{onConflict:"requirement_id"});
+   await requireProfile(["admin","data_governance_team"]);
+   const {error:e}=await supabase.rpc("nudee_assign",{p_requirement_id:current.id,p_assignee_id:assignee,p_due_date:due||null});
    if(e)throw e;setNotice("تم إنشاء التكليف");await load();
   }catch(e){setError(e instanceof Error?e.message:"فشل التكليف");}finally{setBusy(false)}
  }
  async function review(decision:"approved"|"changes_requested"){
   if(!assignment)return;setBusy(true);setError("");setNotice("");
   try{
-   const {user}=await requireProfile(["admin","data_governance_team"]);
+   await requireProfile(["admin","data_governance_team"]);
    if(assignment.status!=="submitted")throw new Error("يجب استلام الدليل قبل مراجعته");
    if(decision==="changes_requested"&&!note.trim())throw new Error("أدخل سبب الإعادة");
-   const {error:e}=await supabase.from("nudee_assignments").update({status:decision,review_notes:note||null,reviewer_id:user.id,reviewed_at:new Date().toISOString()}).eq("id",assignment.id).eq("status","submitted");
+   const {error:e}=await supabase.rpc("nudee_review_evidence",{p_assignment_id:assignment.id,p_decision:decision,p_notes:note||null});
    if(e)throw e;
-   const {error:logError}=await supabase.from("nudee_audit").insert({assignment_id:assignment.id,actor_id:user.id,action:decision,notes:note||null});
-   if(logError)throw logError;
    setNotice(decision==="approved"?"تم اعتماد الدليل":"أعيد الدليل للمكلّف");await load();
   }catch(e){setError(e instanceof Error?e.message:"فشلت المراجعة");}finally{setBusy(false)}
  }
  async function upload(){
   if(!assignment||!file)return;setBusy(true);setError("");setNotice("");
   try{
-   const {user}=await requireProfile();
+   await requireProfile();
    if(!["assigned","changes_requested"].includes(assignment.status))throw new Error("التكليف ليس متاحًا للرفع");
    if(file.size>20*1024*1024)throw new Error("الحد الأقصى للملف 20 ميجابايت");
    const allowed=["application/pdf","image/png","image/jpeg","application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
@@ -89,15 +88,14 @@ export default function NudeePage(){
    const path=`${assignment.id}/${crypto.randomUUID()}/${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
    const {error:ue}=await supabase.storage.from("nudee-evidence").upload(path,file,{upsert:false,contentType:file.type});
    if(ue)throw ue;
-   const {error:ie}=await supabase.from("nudee_submissions").insert({assignment_id:assignment.id,submitted_by:user.id,storage_path:path,file_name:file.name});
-   if(ie)throw ie;
-   const {error:se}=await supabase.rpc("nudee_mark_submitted",{p_assignment_id:assignment.id});
+   const {error:se}=await supabase.rpc("nudee_submit_evidence",{p_assignment_id:assignment.id,p_storage_path:path,p_file_name:file.name});
    if(se)throw se;
    setFile(null);setNotice("تم رفع الدليل وإرساله للمراجعة");await load();
   }catch(e){setError(e instanceof Error?e.message:"فشل رفع الدليل");}finally{setBusy(false)}
  }
  return <main className="dg-page" dir="rtl" style={{maxWidth:1200,margin:"auto"}}>
   <div className="workflow-heading"><div><span>مكتب إدارة البيانات</span><h1>مؤشر نُضيء — التكليفات والأدلة</h1><p>إدارة المتطلبات، إسناد الأدلة، الرفع والتحقق قبل الاعتماد</p></div></div>
+  <nav aria-label="صفحات مؤشر نُضيء" style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:16}}><Link href="/data-governance/nudee" aria-current="page">التكليفات والأدلة</Link>{role==="office"&&<Link href="/data-governance/nudee-dashboard">لوحة مؤشر نُضيء</Link>}</nav>
   {error&&<p role="alert" style={{color:"#b91c1c"}}>{error}</p>}
   {notice&&<p role="status" style={{color:"#047857"}}>{notice}</p>}
   {!role&&!error&&<p>جاري تحميل المؤشر…</p>}
