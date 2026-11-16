@@ -8,7 +8,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
-import { hasUnsafeGitEnvironment } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment } from './aieo-git-process-guard.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
 const SHA = /^[a-f0-9]{40}$/;
@@ -25,7 +25,10 @@ const git = (...args) => {
       ? ['diff', '--no-ext-diff', '--no-textconv',
         ...args.slice(1).filter((flag) => flag !== '--no-ext-diff')]
       : args)];
-  return execFileSync('git', safeArgs, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
+  return execFileSync('git', safeArgs, {
+    encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
+    env: readOnlyGitEnvironment(process.env)
+  });
 };
 const gitTrim = (...args) => git(...args).trim();
 
@@ -36,7 +39,7 @@ export function readStrictReviewedGitSource(revision) {
   try {
     if (!SHA.test(revision || '')) fail();
     const raw = execFileSync('git', ['-c', 'core.fsmonitor=false', 'show', revision + ':' + MODEL_ALLOWED_PATH],
-      { stdio: 'pipe', maxBuffer: 256000 });
+      { stdio: 'pipe', maxBuffer: 256000, env: readOnlyGitEnvironment(process.env) });
     if (!Buffer.isBuffer(raw) || raw.length < 1 ||
         raw.length > MAX_SOURCE_BYTES) fail();
     const source = raw.toString('utf8');

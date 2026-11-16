@@ -8,7 +8,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
-import { hasUnsafeGitEnvironment } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment } from './aieo-git-process-guard.mjs';
 
 const SHA = /^[a-f0-9]{40}$/;
 const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
@@ -29,7 +29,10 @@ function git(args) {
       ? ['diff', '--no-ext-diff', '--no-textconv',
         ...args.slice(1).filter((flag) => flag !== '--no-ext-diff')]
       : args)];
-  return execFileSync('git', safeArgs, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
+  return execFileSync('git', safeArgs, {
+    encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
+    env: readOnlyGitEnvironment(process.env)
+  });
 }
 // A Unicode string from execFileSync(encoding: 'utf8') is not proof of the
 // immutable Git blob's actual bytes: Node silently inserts U+FFFD for malformed
@@ -37,7 +40,7 @@ function git(args) {
 // including when the previous trusted base or the candidate is malformed.
 function readStrictGitSource(revision) {
   const bytes = execFileSync('git', ['-c', 'core.fsmonitor=false', 'show', revision + ':' + MODEL_ALLOWED_PATH],
-    { stdio: 'pipe', maxBuffer: 256000 });
+    { stdio: 'pipe', maxBuffer: 256000, env: readOnlyGitEnvironment(process.env) });
   if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > 48000) block();
   const source = bytes.toString('utf8');
   if (!Buffer.from(source, 'utf8').equals(bytes)) block();

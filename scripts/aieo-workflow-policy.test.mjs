@@ -130,3 +130,19 @@ test('inherited Git process guard is shared and covered by the model safety work
   assert.match(guard, /GIT_TRACE/);
   assert.match(guard, /GIT_SSL_NO_VERIFY/);
 });
+
+test('independent role and finalizer Git calls scrub credentials while gh retains API-only token', () => {
+  const guard = read('scripts/aieo-git-process-guard.mjs');
+  const role = read('scripts/aieo-candidate-role.mjs');
+  const finalize = read('scripts/aieo-candidate-finalize.mjs');
+  assert.match(guard, /export function readOnlyGitEnvironment/);
+  for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'OPENROUTER_API_KEY']) {
+    assert.ok(guard.includes("'" + key + "'"));
+  }
+  for (const script of [role, finalize]) {
+    assert.ok((script.match(/env: readOnlyGitEnvironment\(process.env\)/g) || []).length >= 2,
+      'every Git subprocess, including raw immutable-blob reads, must scrub tokens');
+    assert.ok(script.includes("execFileSync('gh'"),
+      'only explicit GitHub API subprocesses retain the scoped read token');
+  }
+});
