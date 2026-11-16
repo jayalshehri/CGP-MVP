@@ -158,22 +158,22 @@ test('publisher refuses an executable clean filter on an unrelated tracked file'
   const f = fixture();
   try {
     const other = 'components/Unrelated.tsx';
-    writeFileSync(join(f.workspace, other), 'export const unrelated = 1;\\n');
+    writeFileSync(join(f.workspace, other), 'export const unrelated = 1;\n');
     git(f.workspace, 'add', '--', other);
     git(f.workspace, 'commit', '-qm', 'additional trusted tracked file');
     git(f.workspace, 'push', '-q', 'origin', 'main');
     const trusted = git(f.workspace, 'rev-parse', 'HEAD');
     f.env.GITHUB_SHA = trusted;
-    writeFileSync(join(f.workspace, other), 'export const unrelated = 2;\\n');
+    writeFileSync(join(f.workspace, other), 'export const unrelated = 2;\n');
 
     const marker = join(f.root, 'other-clean-filter-executed');
     const executable = join(f.root, 'other-clean-filter');
-    writeFileSync(executable, '#!/bin/sh\\nprintf invoked > ' + JSON.stringify(marker) +
-      '\\ncat\\n');
+    writeFileSync(executable, '#!/bin/sh\nprintf invoked > ' + JSON.stringify(marker) +
+      '\ncat\n');
     chmodSync(executable, 0o755);
     git(f.workspace, 'config', 'filter.untrusted.clean', executable);
     writeFileSync(join(f.workspace, '.git', 'info', 'attributes'),
-      'components/Unrelated.tsx filter=untrusted\\n');
+      'components/Unrelated.tsx filter=untrusted\n');
 
     // Control proves this Git setup is actually capable of running the
     // helper (outside the publisher, with no synthetic publisher GH_TOKEN).
@@ -191,7 +191,7 @@ test('publisher refuses an executable clean filter on an unrelated tracked file'
     assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
     assert.equal(git(f.workspace, 'rev-parse', 'main'), trusted);
     assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
-      /refs\\/heads\\/aieo\\/model-proposal-99123-1/);
+      /refs\/heads\/aieo\/model-proposal-99123-1/);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
