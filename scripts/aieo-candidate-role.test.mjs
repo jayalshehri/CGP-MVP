@@ -1396,7 +1396,15 @@ test('independent roles and post-build reject inherited Git execution and trace 
       { GIT_SSH_COMMAND: 'synthetic-untrusted-transport' },
       { GIT_CEILING_DIRECTORIES: f.root },
       { GIT_DISCOVERY_ACROSS_FILESYSTEM: '1' },
-      { GIT_ALLOW_PROTOCOL: 'ext' }
+      { GIT_ALLOW_PROTOCOL: 'ext' },
+      // GH_TOKEN is legitimate, but GH_HOST / GH_REPO / CLI config overrides
+      // must not redirect independent verification to another repository.
+      { GH_HOST: 'untrusted.example.invalid' },
+      { GH_REPO: 'other/foreign-repository' },
+      { GH_CONFIG_DIR: join(f.root, 'foreign-gh-config') },
+      { GH_DEBUG: 'api' },
+      { GH_PAGER: 'untrusted-helper' },
+      { GH_ENTERPRISE_TOKEN: 'synthetic-placeholder-only' }
     ];
     for (const attack of attacks) {
       const rejected = f.run('developer', attack);
