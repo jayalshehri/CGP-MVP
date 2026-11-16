@@ -123,8 +123,8 @@ for (const remoteSetting of ['fetch-url', 'pushurl']) {
       const trusted = git(f.workspace, 'rev-parse', 'main');
       const marker = join(f.root, 'executable-transport-ran');
       const helper = join(f.root, 'untrusted-remote-helper');
-      writeFileSync(helper, '#!/bin/sh\\nprintf invoked > ' + JSON.stringify(marker) +
-        '\\nexit 93\\n');
+      writeFileSync(helper, '#!/bin/sh\nprintf invoked > ' + JSON.stringify(marker) +
+        '\nexit 93\n');
       chmodSync(helper, 0o755);
       const url = 'ext::' + helper;
       git(f.workspace, 'config',
