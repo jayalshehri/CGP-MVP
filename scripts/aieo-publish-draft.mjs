@@ -177,6 +177,27 @@ export function verifyCandidate({ mode, original, actual, changedPaths, diff, re
 // GitHub's event ref alone does not establish the checked-out source commit.
 // Reject a stale/mismatched checkout, concealed index flags, or a file mode/type
 // change before creating a branch, pushing code, or contacting the GitHub CLI.
+// A valid main SHA is not proof of a safe push destination: another bare
+// repository can mirror main and accept a complete candidate branch. In real
+// GitHub Actions the fetch AND push origin must resolve to this exact repo.
+// Git remote get-url expands url.*.insteadOf and pushurl before our check.
+// Local disposable Git fixtures deliberately use file remotes, never in Actions.
+export function verifyOfficialPublisherOrigin(fetchUrls, pushUrls) {
+  const isOfficial = (url) =>
+    /^https:\/\/github\.com\/jayalshehri\/CGP-MVP(?:\.git)?$/.test(url);
+  if (fetchUrls.length !== 1 || pushUrls.length !== 1 ||
+      !isOfficial(fetchUrls[0]) || !isOfficial(pushUrls[0])) {
+    fail('origin fetch and push URLs must target the official repository');
+  }
+  return true;
+}
+function assertTrustedOrigin(env) {
+  if (env.GITHUB_ACTIONS !== 'true') return; // isolated offline Git fixtures only
+  const urls = (options) => command('git', ['remote', 'get-url', ...options, 'origin'])
+    .trim().split('\n');
+  verifyOfficialPublisherOrigin(urls(['--all']), urls(['--push', '--all']));
+}
+
 function assertTrustedCheckout(env, path) {
   const expectedSha = env.GITHUB_SHA || '';
   const checkedOutSha = command('git', ['rev-parse', '--verify', 'HEAD']).trim();
@@ -209,6 +230,8 @@ export function publishDraft({ env = process.env } = {}) {
   try { assertNoTrackedGitFilters(); }
   catch { fail('Git content filter; executable clean filters are forbidden'); }
   assertTrustedCheckout(env, path);
+  // Fail before token-bearing remote reads, branch creation or publication.
+  assertTrustedOrigin(env);
   // Refuse pre-staged changes, untracked files and whitespace errors before any write.
   if (command('git', ['diff', '--cached', '--name-only']).trim()) fail('unexpected staged files');
   if (command('git', ['ls-files', '--others', '--exclude-standard'])
