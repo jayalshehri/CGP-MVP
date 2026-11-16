@@ -30,6 +30,16 @@ function effectiveReview(r:Requirement,assign?:Assignment){
  if(assign?.status==="assigned")return "قيد التنفيذ";
  return r.source_review_status?.trim()||"لم يبدأ";
 }
+// Keep Excel's progress weights (completed=1, in-progress=.5, overdue=.25)
+// as source data. An assignment alone is NOT evidence of progress.
+// Only submitted/approved work may add CGP workflow progress above the source.
+function evidenceProgress(r:Requirement,assignment?:Assignment){
+ const original=Math.max(0,Math.min(1,Number(r.source_progress||0)));
+ if(assignment?.status==="approved")return 1;
+ if(assignment?.status==="submitted")return Math.max(original,0.5);
+ if(assignment?.status==="changes_requested")return 0;
+ return original;
+}
 function percent(n:number,d:number){return d?Math.round(1000*n/d)/10:0;}
 function fmtPct(n:number,d:number){return percent(n,d).toLocaleString("ar-SA",{maximumFractionDigits:1})+"%";}
 function shortDate(date:string|null){return date?dateFormat.format(new Date(date+"T12:00:00Z")):"—";}
@@ -109,13 +119,7 @@ export default function NudeeDashboard(){
     if(!list.length)return 0;
     if(starts>today)return 0;
     if(until<today)return list.filter(r=>r.actual_end&&r.actual_end<=until&&effectiveReview(r,mapped.get(r.id))==="مكتمل").length/list.length;
-    return list.reduce((sum,r)=>{
-     const state=effectiveReview(r,mapped.get(r.id));
-     if(state==="مكتمل")return sum+1;
-     if(["قيد التنفيذ","بانتظار التحقق","معاد للتعديل"].includes(state))return sum+0.5;
-     if(state==="متأخر")return sum+0.25;
-     return sum+Number(r.source_progress||0);
-    },0)/list.length;
+    return list.reduce((sum,r)=>sum+evidenceProgress(r,mapped.get(r.id)),0)/list.length;
    });
    // Calc!E60:E67 weighs four independent phases at 25% each.
    // Its fourth stage is the Data Office's manual comprehensive-review progress
@@ -152,13 +156,7 @@ export default function NudeeDashboard(){
  const stages=LEVELS.map((level,i)=>{const subset=rows.filter(r=>r.maturity_level===level);
   const completed=subset.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length;
   // Excel timetable uses SUM(source_progress)/COUNT, including partial work (50%, 25%).
-  const progress=subset.length?subset.reduce((sum,r)=>{
-   const state=effectiveReview(r,mapped.get(r.id));
-   if(state==="مكتمل")return sum+1;
-   if(["قيد التنفيذ","بانتظار التحقق","معاد للتعديل"].includes(state))return sum+0.5;
-   if(state==="متأخر")return sum+0.25;
-   return sum+Number(r.source_progress||0);
-  },0)/subset.length:0;
+  const progress=subset.length?subset.reduce((sum,r)=>sum+evidenceProgress(r,mapped.get(r.id)),0)/subset.length:0;
   return {level,phase:i+1,n:subset.length,completed,progress,start:subset.map(r=>r.planned_start).filter((x):x is string=>Boolean(x)).sort()[0]||null,
    end:subset.map(r=>r.planned_end).filter((x):x is string=>Boolean(x)).sort().at(-1)||null};
  });
