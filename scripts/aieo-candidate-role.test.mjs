@@ -1456,7 +1456,8 @@ test('read-only Developer, QA, Security, Reviewer and finalizer Git subprocesses
       'const {spawnSync}=require("node:child_process");\n' +
       'if(process.env.GH_TOKEN||process.env.GITHUB_TOKEN||process.env.OPENROUTER_API_KEY||' +
       'process.env.NPM_TOKEN||process.env.AWS_SECRET_ACCESS_KEY||process.env.DATABASE_URL||' +
-      'process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SSH_AUTH_SOCK)' +
+      'process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SSH_AUTH_SOCK||' +
+      'process.env.ORG_SESSION_DATA||process.env.CUSTOM_PAT||process.env.HTTPS_PROXY)' +
       'appendFileSync(' + JSON.stringify(marker) + ', "credential seen\\n");\n' +
       'const run=spawnSync(' + JSON.stringify(systemGit) +
         ',process.argv.slice(2),{stdio:"inherit"});\n' +
@@ -1468,7 +1469,10 @@ test('read-only Developer, QA, Security, Reviewer and finalizer Git subprocesses
       AWS_SECRET_ACCESS_KEY: 'synthetic-cloud-key',
       DATABASE_URL: 'postgres://synthetic:password@example.invalid/db',
       SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-role-key',
-      SSH_AUTH_SOCK: '/tmp/synthetic-agent.sock' };
+      SSH_AUTH_SOCK: '/tmp/synthetic-agent.sock',
+      ORG_SESSION_DATA: 'synthetic-new-secret-name',
+      CUSTOM_PAT: 'synthetic-undocumented-pat',
+      HTTPS_PROXY: 'https://synthetic-proxy.invalid' };
     for (const [role, status] of [
       ['developer', 'proposed'], ['qa', 'passed'],
       ['security', 'passed'], ['reviewer', 'draft-pr-eligible']

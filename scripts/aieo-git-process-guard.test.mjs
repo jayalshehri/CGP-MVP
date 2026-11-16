@@ -36,9 +36,38 @@ test('independent read-only Git children do not inherit common CI or cloud crede
     HOME: '/home/runner',
     LANG: 'C.UTF-8',
     CI: 'true',
-    AIEO_PR_NUMBER: '123'
+    GIT_TERMINAL_PROMPT: '0'
   });
   assert.equal(input.GH_TOKEN, 'synthetic-gh-only', 'the parent process must remain unchanged for scoped gh API calls');
+});
+
+test('unknown future secret names and execution/proxy overrides never reach read-only Git', () => {
+  const input = {
+    PATH: '/usr/bin',
+    CI: 'true',
+    GITHUB_ACTIONS: 'true',
+    LC_ALL: 'C.UTF-8',
+    ORG_SESSION_DATA: 'synthetic-undocumented-secret',
+    CUSTOM_PAT: 'synthetic-private-token',
+    VENDOR_CLIENT_MATERIAL: 'synthetic-credential',
+    NPM_CONFIG_USERCONFIG: '/tmp/synthetic-npmrc',
+    NODE_OPTIONS: '--require=/tmp/synthetic-hook.js',
+    BASH_ENV: '/tmp/synthetic-shell-hook',
+    HTTPS_PROXY: 'https://synthetic-proxy.invalid',
+    XDG_CONFIG_HOME: '/tmp/synthetic-config',
+    SSH_ASKPASS: '/tmp/synthetic-askpass',
+    GIT_TERMINAL_PROMPT: '1'
+  };
+  const child = readOnlyGitEnvironment(input);
+  assert.deepEqual(child, {
+    PATH: '/usr/bin',
+    CI: 'true',
+    GITHUB_ACTIONS: 'true',
+    LC_ALL: 'C.UTF-8',
+    GIT_TERMINAL_PROMPT: '0'
+  });
+  assert.equal(input.ORG_SESSION_DATA, 'synthetic-undocumented-secret',
+    'the parent environment is untouched for explicitly scoped API calls');
 });
 
 test('Git and GitHub CLI environment overrides are still rejected before credential scrubbing', () => {
