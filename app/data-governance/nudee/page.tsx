@@ -99,7 +99,10 @@ export default function NudeePage(){
   }catch(e){setError(e instanceof Error?e.message:"فشلت المراجعة");}finally{setBusy(false)}
  }
  async function upload(){
-  if(!assignment||!file||assignment.assignee_id!==currentUserId)return;setBusy(true);setError("");setNotice("");
+  if(!assignment||!file||assignment.assignee_id!==currentUserId)return;
+  setBusy(true);setError("");setNotice("");
+  let uploadedPath:string|null=null;
+  let submissionConfirmed=false;
   try{
    await requireProfile();
    if(!["assigned","changes_requested"].includes(assignment.status))throw new Error("التكليف ليس متاحًا للرفع");
@@ -109,10 +112,31 @@ export default function NudeePage(){
    const path=`${assignment.id}/${crypto.randomUUID()}/${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
    const {error:ue}=await supabase.storage.from("nudee-evidence").upload(path,file,{upsert:false,contentType:file.type});
    if(ue)throw ue;
+   uploadedPath=path;
    const {error:se}=await supabase.rpc("nudee_submit_evidence",{p_assignment_id:assignment.id,p_storage_path:path,p_file_name:file.name});
    if(se)throw se;
+   submissionConfirmed=true;
    setFile(null);setNotice("تم رفع الدليل وإرساله للمراجعة");await load();
-  }catch(e){setError(e instanceof Error?e.message:"فشل رفع الدليل");}finally{setBusy(false)}
+  }catch(e){
+   let message=e instanceof Error?e.message:"فشل رفع الدليل";
+   if(uploadedPath&&!submissionConfirmed){
+    // A timed-out RPC may have committed; verify before removing its file.
+    const {data:submitted,error:checkError}=await supabase.from("nudee_submissions")
+     .select("id").eq("storage_path",uploadedPath).maybeSingle();
+    if(!checkError&&submitted){
+     setFile(null);setNotice("تم استلام الدليل رغم تعذر تأكيد الاستجابة الأولى.");
+     try{await load();}catch{setNotice("تم استلام الدليل. حدّث الصفحة لعرض الحالة.");}
+     setBusy(false);return;
+    }
+    if(!checkError){
+     const {error:cleanupError}=await supabase.storage.from("nudee-evidence").remove([uploadedPath]);
+     if(cleanupError)message+=". بقي ملف غير مُرسل في التخزين؛ تواصل مع مكتب البيانات لتنظيفه قبل إعادة الإسناد.";
+    }else{
+     message+=". تعذر التحقق من حالة الإرسال. حدّث الصفحة قبل محاولة الرفع مجددًا.";
+    }
+   }
+   setError(message);
+  }finally{setBusy(false)}
  }
  return <main className="dg-page" dir="rtl" style={{maxWidth:1200,margin:"auto"}}>
   <div className="workflow-heading"><div><span>مكتب إدارة البيانات</span><h1>مؤشر نُضيء — التكليفات والأدلة</h1><p>إدارة المتطلبات، إسناد الأدلة، الرفع والتحقق قبل الاعتماد</p></div></div>
