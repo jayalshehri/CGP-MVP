@@ -78,8 +78,8 @@ function fail(message) {
 // prior tools. Git honors environment-based config, alternate indexes and
 // executable transport helpers before its per-command hook suppression.
 // Refuse these overrides before invoking ANY Git subprocess with GH_TOKEN.
-// Harmless Git tracing/prompt flags are not part of this denylist.
-const UNTRUSTED_GIT_ENV = /^(?:GIT_CONFIG(?:_[A-Z0-9_]+)?|GIT_DIR|GIT_COMMON_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_OBJECT_DIRECTORY|GIT_ALTERNATE_OBJECT_DIRECTORIES|GIT_SSH(?:_COMMAND)?|GIT_ASKPASS|GIT_PROXY_COMMAND|GIT_TEMPLATE_DIR|GIT_NAMESPACE|GIT_REPLACE_REF_BASE|GIT_GRAFT_FILE)$/;
+// Harmless non-executable Git prompt flags may be used; trace and TLS bypasses are not allowed.
+const UNTRUSTED_GIT_ENV = /^(?:GIT_CONFIG(?:_[A-Z0-9_]+)?|GIT_DIR|GIT_COMMON_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_OBJECT_DIRECTORY|GIT_ALTERNATE_OBJECT_DIRECTORIES|GIT_SSH(?:_COMMAND)?|GIT_ASKPASS|GIT_PROXY_COMMAND|GIT_TEMPLATE_DIR|GIT_NAMESPACE|GIT_REPLACE_REF_BASE|GIT_GRAFT_FILE|GIT_EXEC_PATH|GIT_EXTERNAL_DIFF|GIT_PAGER|GIT_EDITOR|GIT_SEQUENCE_EDITOR|GIT_TRACE(?:[0-9A-Z_]*)|GIT_CURL_VERBOSE|GIT_SSL_NO_VERIFY)$/;
 
 function rejectGitEnvironmentOverrides(env) {
   if (Object.keys(env).some((key) => UNTRUSTED_GIT_ENV.test(key))) {
