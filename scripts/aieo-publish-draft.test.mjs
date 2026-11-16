@@ -769,3 +769,41 @@ test('publisher rejects invalid UTF-8 bytes even when decoded candidate evidence
     rmSync(f.root, { force: true, recursive: true });
   }
 });
+
+
+// Git runs post-index-change when git add writes the index. Prevent a
+// repository-local hook from executing under the privileged publisher token.
+// Earlier protections applied only to switch/commit/push, leaving git add open.
+test('publisher suppresses post-index-change on git add with scoped GH_TOKEN', () => {
+  const f = fixture();
+  try {
+    const base = git(f.workspace, 'rev-parse', 'main');
+    const marker = join(f.root, 'untrusted-index-hook-ran');
+    const hook = join(f.workspace, '.git', 'hooks', 'post-index-change');
+    writeFileSync(hook, '#!/bin/sh\nprintf invoked > ' + JSON.stringify(marker) + '\n');
+    chmodSync(hook, 0o755);
+
+    // Control: with no privileged credential, unprotected git add must
+    // execute this real hook. Reset restores the fixture's unstaged patch.
+    git(f.workspace, 'add', '--', MODEL_ALLOWED_PATH);
+    assert.equal(existsSync(marker), true,
+      'control must prove the injected hook actually executes');
+    git(f.workspace, 'reset', '-q', '--', MODEL_ALLOWED_PATH);
+    unlinkSync(marker);
+    assert.equal(git(f.workspace, 'diff', '--name-only'), MODEL_ALLOWED_PATH);
+
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.equal(child.status, 0, 'guarded publisher must succeed: ' + child.stderr);
+    assert.equal(existsSync(marker), false,
+      'post-index-change must never execute with publisher credentials');
+    assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), base);
+    assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
+    assert.match(git(f.workspace, 'ls-remote', '--heads', f.remote),
+      /refs\/heads\/aieo\/model-proposal-99123-1/);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
