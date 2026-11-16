@@ -122,7 +122,7 @@ test('inherited Git process guard is shared and covered by the model safety work
   const guard = read('scripts/aieo-git-process-guard.mjs');
   const role = read('scripts/aieo-candidate-role.mjs');
   const finalize = read('scripts/aieo-candidate-finalize.mjs');
-  assert.match(model, /scripts\\/aieo-git-process-guard\\.mjs/);
+  assert.ok(model.includes("'scripts/aieo-git-process-guard.mjs'"));
   for (const source of [role, finalize, publisher]) {
     assert.match(source, /hasUnsafeGitEnvironment/);
   }
