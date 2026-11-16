@@ -110,7 +110,15 @@ export default function NudeeDashboard(){
  },[rows,mapped]);
  const stages=LEVELS.map((level,i)=>{const subset=rows.filter(r=>r.maturity_level===level);
   const completed=subset.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length;
-  return {level,phase:i+1,n:subset.length,completed,start:subset.map(r=>r.planned_start).filter((x):x is string=>Boolean(x)).sort()[0]||null,
+  // Excel timetable uses SUM(source_progress)/COUNT, including partial work (50%, 25%).
+  const progress=subset.length?subset.reduce((sum,r)=>{
+   const state=effectiveReview(r,mapped.get(r.id));
+   if(state==="مكتمل")return sum+1;
+   if(["قيد التنفيذ","بانتظار التحقق","معاد للتعديل"].includes(state))return sum+0.5;
+   if(state==="متأخر")return sum+0.25;
+   return sum+Number(r.source_progress||0);
+  },0)/subset.length:0;
+  return {level,phase:i+1,n:subset.length,completed,progress,start:subset.map(r=>r.planned_start).filter((x):x is string=>Boolean(x)).sort()[0]||null,
    end:subset.map(r=>r.planned_end).filter((x):x is string=>Boolean(x)).sort().at(-1)||null};
  });
  const hasFilters=Object.values(filter).some(x=>x!==ALL);
@@ -170,10 +178,10 @@ export default function NudeeDashboard(){
     <div className={styles.stages}>{stages.map(s=><article key={s.level}><b>المرحلة {s.phase}</b><h3>{s.level}</h3><p>{shortDate(s.start)} – {shortDate(s.end)}</p><div className={styles.track}><div style={{width:percent(s.completed,s.n)+"%"}}/></div><small>{s.completed} / {s.n} مكتمل</small></article>)}<article><b>المرحلة 4</b><h3>المراجعة النهائية الشاملة</h3><p>20 ديسمبر – 31 ديسمبر 2026</p><small>مراجعة شاملة لجميع المستويات</small></article></div>
     <div className={styles.phaseHeader}><h3>مخطط المراحل الأربع — 8 أسابيع</h3><span>منجز / متبقٍ وفق حالة المراجعة</span></div>
     <div className={styles.phaseAxis}><span>المرحلة</span>{Array.from({length:8},(_,i)=><span key={i}>أ{i+1}</span>)}</div>
-    {[...stages,{level:"المراجعة النهائية",phase:4,n:stats.total,completed:0,start:"2026-12-20",end:"2026-12-31"}].map((phase,i)=><div className={styles.phaseBarRow} key={phase.phase}><span>{phase.level}</span><div className={styles.phaseBar}>
+    {[...stages,{level:"المراجعة النهائية",phase:4,n:stats.total,completed:0,progress:0,start:"2026-12-20",end:"2026-12-31"}].map((phase,i)=><div className={styles.phaseBarRow} key={phase.phase}><span>{phase.level}</span><div className={styles.phaseBar}>
       <div className={styles.phaseBlank} style={{width:i*25+"%"}}/>
-      <div className={styles.phaseDone} style={{width:(phase.n?25*phase.completed/phase.n:0)+"%"}}/>
-      <div className={styles.phaseRemain} style={{width:(phase.n?25*(1-phase.completed/phase.n):25)+"%"}}/>
+      <div className={styles.phaseDone} style={{width:(25*phase.progress)+"%"}}/>
+      <div className={styles.phaseRemain} style={{width:(25*(1-phase.progress))+"%"}}/>
       <div className={styles.phaseBlank} style={{width:(3-i)*25+"%"}}/>
      </div></div>)}
     <p className={styles.footnote}>مقابل مخطط Excel للمرحلة الأولى والثانية والثالثة والمراجعة الشاملة، موزعة على أسبوعين لكل مرحلة. عرض التقدم هنا مبني على الإتمام الفعلي داخل CGP وحالة المصدر، وليس قبول الامتثال الرسمي.</p>
