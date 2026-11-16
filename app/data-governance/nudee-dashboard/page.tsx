@@ -94,7 +94,7 @@ export default function NudeeDashboard(){
    const residual=n-full-authority-non-na; // Calc!AH30:AH43, includes blanks and nonstandard values.
    return {name,total:n,applicable:n-na,assessed:list.filter(r=>complianceStatus(r.source_compliance)!=="لم يُقيَّم").length,reviewed:list.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length,
     full,authority,non,na,residual,levels:LEVELS.map(level=>{const subset=list.filter(r=>r.maturity_level===level);const denominator=subset.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق").length;return {n:subset.length,rate:denominator?percent(subset.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,denominator):null};})};
-  }).sort((a,b)=>b.total-a.total);
+  }); // Preserve original Excel domain ordering from source_row; chart series use this same order.
  },[rows,mapped]);
  // Reproduce the eight-week *weighted* Calc!D60:E67 trend, not a count of due evidence.
  // The workbook snapshot uses AsOfDate=2026-11-05; this live view uses the Riyadh date.
