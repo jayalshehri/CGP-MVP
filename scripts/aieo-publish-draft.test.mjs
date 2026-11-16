@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyOfficialPublisherOrigin } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -61,6 +61,7 @@ function fixture() {
   chmodSync(gh, 0o755);
   const env = { ...process.env,
     PATH: bin + ':' + process.env.PATH, AIEO_FAKE_GH_LOG: log,
+    GITHUB_ACTIONS: 'false', // offline file:// fixture; production is always true
     GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main',
     GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
     GITHUB_RUN_ID: '99123', GITHUB_RUN_ATTEMPT: '1',
@@ -807,3 +808,63 @@ test('publisher suppresses post-index-change on git add with scoped GH_TOKEN', (
     rmSync(f.root, { recursive: true, force: true });
   }
 });
+
+
+test('official publisher origin policy accepts only one exact HTTPS repo fetch/push target', () => {
+  assert.equal(verifyOfficialPublisherOrigin(
+    ['https://github.com/jayalshehri/CGP-MVP'],
+    ['https://github.com/jayalshehri/CGP-MVP.git']), true);
+  for (const [fetchUrls, pushUrls] of [
+    [['https://evil.invalid/jayalshehri/CGP-MVP'], ['https://github.com/jayalshehri/CGP-MVP']],
+    [['https://github.com/jayalshehri/CGP-MVP'], ['file:///tmp/rogue.git']],
+    [['https://github.com/jayalshehri/CGP-MVP'], ['https://github.com/jayalshehri/CGP-MVP', 'https://example.org/mirror']],
+    [['https://user:token@github.com/jayalshehri/CGP-MVP'], ['https://github.com/jayalshehri/CGP-MVP']]
+  ]) {
+    assert.throws(() => verifyOfficialPublisherOrigin(fetchUrls, pushUrls),
+      /origin fetch and push URLs must target/);
+  }
+});
+
+// A rogue origin can mirror the exact approved main SHA, pass the existing
+// remote-main attestation, and accept a confidential patch. A local or global
+// insteadOf rewrite or a separate pushurl is equally dangerous. Prove each
+// destination is rejected BEFORE any branch, push, gh API call, or disclosure.
+for (const variant of ['fetch', 'push', 'insteadOf']) {
+  test('trusted Actions publisher rejects mirrored unapproved origin: ' + variant, () => {
+    const f = fixture();
+    try {
+      const base = git(f.workspace, 'rev-parse', 'main');
+      const rogue = join(f.root, 'rogue.git');
+      git(f.root, 'init', '-q', '--bare', rogue);
+      git(f.workspace, 'push', '-q', rogue, 'main:refs/heads/main');
+      assert.equal(git(f.workspace, 'ls-remote', rogue, 'refs/heads/main'),
+        base + '\trefs/heads/main',
+        'control: attacker remote mirrors the trusted source SHA');
+      if (variant === 'fetch') {
+        git(f.workspace, 'remote', 'set-url', 'origin', rogue);
+      } else if (variant === 'push') {
+        git(f.workspace, 'remote', 'set-url', '--push', 'origin', rogue);
+      } else {
+        git(f.workspace, 'remote', 'set-url', 'origin',
+          'https://github.com/jayalshehri/CGP-MVP');
+        git(f.workspace, 'config', 'url.' + rogue + '.insteadOf',
+          'https://github.com/jayalshehri/CGP-MVP');
+        assert.equal(git(f.workspace, 'remote', 'get-url', 'origin'), rogue,
+          'control: Git expands a repo-local insteadOf rewrite');
+      }
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: { ...f.env, GITHUB_ACTIONS: 'true' },
+        encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, 'unapproved origin must fail closed');
+      assert.match(child.stderr, /origin fetch and push URLs must target/);
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), base);
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.equal(existsSync(f.log), false, 'must never call GitHub CLI');
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', rogue),
+        /refs\/heads\/aieo\/model-proposal-99123-1/);
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', f.remote),
+        /refs\/heads\/aieo\/model-proposal-99123-1/);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+}
