@@ -74,3 +74,19 @@ grant usage,select on all sequences in schema public to authenticated;
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values ('nudee-evidence','nudee-evidence',false,20971520,array['application/pdf','image/png','image/jpeg','application/vnd.openxmlformats-officedocument.wordprocessingml.document']) on conflict(id) do nothing;
 create policy nudee_storage_read on storage.objects for select to authenticated using(bucket_id='nudee-evidence' and (public.nudee_is_office() or exists(select 1 from public.nudee_assignments a where a.id::text=(storage.foldername(name))[1] and a.assignee_id=(select auth.uid()))));
 create policy nudee_storage_upload on storage.objects for insert to authenticated with check(bucket_id='nudee-evidence' and exists(select 1 from public.nudee_assignments a where a.id::text=(storage.foldername(name))[1] and a.assignee_id=(select auth.uid()) and a.status in ('assigned','changes_requested')));
+
+-- Controlled state transition; only assigned uploader can submit, never approve.
+create or replace function public.nudee_mark_submitted(p_assignment_id bigint)
+returns void language plpgsql security definer set search_path='' as $$
+begin
+ if (select auth.uid()) is null then raise exception 'Not authenticated'; end if;
+ update public.nudee_assignments
+ set status='submitted', updated_at=now()
+ where id=p_assignment_id and assignee_id=(select auth.uid())
+   and status in ('assigned','changes_requested')
+   and exists(select 1 from public.nudee_submissions s where s.assignment_id=p_assignment_id and s.submitted_by=(select auth.uid()));
+ if not found then raise exception 'Assignment not eligible for submission'; end if;
+ insert into public.nudee_audit(assignment_id,actor_id,action) values(p_assignment_id,(select auth.uid()),'submitted');
+end; $$;
+revoke all on function public.nudee_mark_submitted(bigint) from public,anon;
+grant execute on function public.nudee_mark_submitted(bigint) to authenticated;
