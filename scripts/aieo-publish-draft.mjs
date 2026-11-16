@@ -10,7 +10,15 @@ import { verifyRemoteDraft } from '../aieo/lib/remote-draft.mjs';
 import { readBoundedModelReport } from './aieo-role-artifact-io.mjs';
 
 function command(binary, args) {
-  return execFileSync(binary, args, { encoding: 'utf8', stdio: 'pipe' });
+  // Repository-local Git config is not a trust boundary: core.fsmonitor and
+  // diff.external can run executable helpers during seemingly read-only
+  // ls-files/diff calls while the publisher holds its write-scoped GH_TOKEN.
+  // Disable these helpers for every publisher Git subprocess, not just commits.
+  const safeArgs = binary === 'git'
+    ? ['-c', 'core.fsmonitor=false',
+      ...(args[0] === 'diff' ? ['diff', '--no-ext-diff', ...args.slice(1)] : args)]
+    : args;
+  return execFileSync(binary, safeArgs, { encoding: 'utf8', stdio: 'pipe' });
 }
 function identical(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
