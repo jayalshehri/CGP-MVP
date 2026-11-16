@@ -27,7 +27,7 @@ export function hasUnsafeGitEnvironment(env) {
 // variable names as well as the known GitHub/OpenRouter keys. This is a
 // defense-in-depth scrub, not a substitute for the inherited Git/GH override
 // rejection or a claim that arbitrary environment variable names are safe.
-const GIT_CHILD_CREDENTIAL_ENV = /(?:^|_)(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|API_KEY|PRIVATE_KEY|ACCESS_KEY|AUTH)(?:_|$)|^(?:PGPASSWORD|PGPASSFILE|DATABASE_URL|REDIS_URL|MONGODB_URI|SSH_AUTH_SOCK)$/i;
+const GIT_CHILD_CREDENTIAL_ENV = /(?:^|_)(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|API_KEY|PRIVATE_KEY|ACCESS_KEY|SERVICE_ROLE_KEY|AUTH)(?:_|$)|^(?:PGPASSWORD|PGPASSFILE|DATABASE_URL|REDIS_URL|MONGODB_URI|SSH_AUTH_SOCK)$/i;
 
 export function readOnlyGitEnvironment(env = process.env) {
   const scoped = { ...env };
