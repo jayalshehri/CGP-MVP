@@ -8,7 +8,7 @@ const UNSAFE_GIT_ENV = /^(?:GIT_CONFIG(?:_[A-Z0-9_]+)?|GIT_DIR|GIT_COMMON_DIR|GI
 // config, debug, pager or editor overrides from a previous build step. GH_HOST
 // can redirect API calls; GH_REPO can retarget PR creation. Do NOT reject
 // GH_TOKEN itself, which is the intended scoped Actions credential.
-const UNSAFE_GH_ENV = /^(?:GH_HOST|GH_REPO|GH_CONFIG_DIR|GH_DEBUG|GH_PAGER|GH_EDITOR|GH_BROWSER|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN|GITHUB_API_URL|GITHUB_GRAPHQL_URL)$/;
+const UNSAFE_GH_ENV = /^(?:GH_HOST|GH_REPO|GH_CONFIG_DIR|GH_DEBUG|GH_PAGER|GH_EDITOR|GH_BROWSER|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)$/;
 
 export function hasUnsafeGitEnvironment(env) {
   return Object.keys(env ?? {}).some((name) =>
