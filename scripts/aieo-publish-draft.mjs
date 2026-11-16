@@ -23,7 +23,12 @@ function command(binary, args) {
         ? ['diff', '--no-ext-diff', '--no-textconv', ...args.slice(1)]
         : args)]
     : args;
-  return execFileSync(binary, safeArgs, { encoding: 'utf8', stdio: 'pipe' });
+  // Prevent local refs/replace from silently rewriting reviewed Git blobs
+  // while the privileged publisher retains a scoped GitHub write token.
+  return execFileSync(binary, safeArgs, {
+    encoding: 'utf8', stdio: 'pipe',
+    env: binary === 'git' ? { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' } : process.env
+  });
 }
 function identical(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);

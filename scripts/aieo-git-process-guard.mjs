@@ -47,6 +47,9 @@ export function readOnlyGitEnvironment(env = process.env) {
   // Public, read-only Git operations must fail rather than trying an
   // interactive credential prompt or a helper supplied by a later step.
   scoped.GIT_TERMINAL_PROMPT = '0';
+  // Local .git/refs/replace can substitute objects while preserving pinned
+  // SHA strings. Never let untrusted replacement refs rewrite reviewed blobs.
+  scoped.GIT_NO_REPLACE_OBJECTS = '1';
   return scoped;
 }
 
@@ -60,6 +63,7 @@ export function readOnlyGitEnvironment(env = process.env) {
 export function readOnlyGitArguments(args) {
   if (!Array.isArray(args) || args.length === 0) throw new Error('Expected Git arguments');
   return [
+    '--no-replace-objects',
     '-c', 'core.fsmonitor=false',
     '-c', 'core.hooksPath=/dev/null',
     '-c', 'credential.helper=',
