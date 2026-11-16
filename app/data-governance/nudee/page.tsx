@@ -28,6 +28,7 @@ export default function NudeePage(){
  const [bulkDue,setBulkDue]=useState("");
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
+ const [evidenceLink,setEvidenceLink]=useState<string|null>(null);
  const load=useCallback(async()=>{
   const {user,profile}=await requireProfile();
   const office=profile.role==="admin"||profile.role==="data_governance_team";
@@ -57,9 +58,14 @@ export default function NudeePage(){
  const current=requirements.find(r=>r.id===selected);
  const assignment=assignments.find(a=>a.requirement_id===selected);
  async function openEvidence(path:string){
+  // Open a blank tab synchronously from the user gesture: browsers block popups after await.
+  const preview=window.open("about:blank","_blank");
+  if(preview)preview.opener=null;
+  setEvidenceLink(null);setError("");
   const {data,error:e}=await supabase.storage.from("nudee-evidence").createSignedUrl(path,60);
-  if(e||!data?.signedUrl){setError(e?.message||"تعذر فتح الدليل");return;}
-  window.open(data.signedUrl,"_blank","noopener,noreferrer");
+  if(e||!data?.signedUrl){preview?.close();setError(e?.message||"تعذر فتح الدليل");return;}
+  if(preview)preview.location.replace(data.signedUrl);
+  else setEvidenceLink(data.signedUrl);
  }
  async function assign(){
   if(!current||!assignee)return;setBusy(true);setError("");setNotice("");
@@ -111,6 +117,7 @@ export default function NudeePage(){
   <nav aria-label="صفحات مؤشر نُضيء" style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:16}}><Link href="/data-governance/nudee" aria-current="page">التكليفات والأدلة</Link>{role==="office"&&<Link href="/data-governance/nudee-dashboard">لوحة مؤشر نُضيء</Link>}</nav>
   {error&&<p role="alert" style={{color:"#b91c1c"}}>{error}</p>}
   {notice&&<p role="status" style={{color:"#047857"}}>{notice}</p>}
+  {evidenceLink&&<p role="status"><a href={evidenceLink} target="_blank" rel="noopener noreferrer">فتح الدليل (رابط مؤقت)</a></p>}
   {!role&&!error&&<p>جاري تحميل المؤشر…</p>}
   {role&&<><section className="dg-metrics" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
    {[["المتطلبات",requirements.length],["التكليفات",assignments.filter(a=>a.status!=="unassigned").length],["بانتظار المراجعة",assignments.filter(a=>a.status==="submitted").length],["المعتمدة",assignments.filter(a=>a.status==="approved").length]].map(([name,value])=><div key={name} style={{background:"#f1f5f9",padding:16,borderRadius:12}}><small>{name}</small><h2>{value}</h2></div>)}
