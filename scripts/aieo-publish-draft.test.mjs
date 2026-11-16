@@ -150,7 +150,7 @@ for (const remoteSetting of ['fetch-url', 'pushurl']) {
       assert.equal(existsSync(marker), false, 'Git remote helper executed with GH_TOKEN');
       assert.equal(git(f.workspace, 'rev-parse', 'main'), trusted);
       assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
-        /refs\\/heads\\/aieo\\/model-proposal-99123-1/,
+        /refs\/heads\/aieo\/model-proposal-99123-1/,
         'no candidate remote branch may be pushed');
       if (existsSync(f.log)) {
         const actions = readFileSync(f.log, 'utf8');
