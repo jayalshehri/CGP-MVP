@@ -117,7 +117,7 @@ create or replace function public.nudee_validate_assignee()
 returns trigger language plpgsql security invoker set search_path = '' as $$
 begin
  if new.assignee_id is not null and not exists(
-  select 1 from public.profiles p where p.user_id=new.assignee_id and p.is_active and p.role='control_owner'
+  select 1 from public.profiles p where p.user_id=new.assignee_id and p.is_active and p.role in ('admin','cybersecurity_team','data_governance_team','control_owner','nca_external_auditor')
  ) then raise exception 'Assignee must be an active control owner'; end if;
  return new;
 end; $$;
