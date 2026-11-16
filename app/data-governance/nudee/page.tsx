@@ -7,11 +7,12 @@ import "../data-governance.css";
 
 type Requirement={id:number;source_row:number;domain_name:string;standard_code:string;requirement_title:string;maturity_level:string;evidence_name:string;evidence_description:string|null;source_compliance:string|null};
 type Assignment={id:number;requirement_id:number;assignee_id:string|null;status:string;due_date:string|null;review_notes:string|null};
-type User={user_id:string;display_name:string|null};
+type User={user_id:string;display_name:string|null;role:string};
 type Submission={id:number;assignment_id:number;file_name:string;storage_path:string;submitted_at:string};
 const statusLabels:Record<string,string>={unassigned:"لم يكلّف",assigned:"بانتظار الرفع",submitted:"بانتظار المراجعة",changes_requested:"أعيد للتعديل",approved:"معتمد"};
 export default function NudeePage(){
  const [role,setRole]=useState<"office"|"assignee"|null>(null);
+ const [currentUserId,setCurrentUserId]=useState<string|null>(null);
  const [requirements,setRequirements]=useState<Requirement[]>([]);
  const [assignments,setAssignments]=useState<Assignment[]>([]);
  const [users,setUsers]=useState<User[]>([]);
@@ -31,6 +32,7 @@ export default function NudeePage(){
  const [evidenceLink,setEvidenceLink]=useState<string|null>(null);
  const load=useCallback(async()=>{
   const {user,profile}=await requireProfile();
+  setCurrentUserId(user.id);
   const office=profile.role==="admin"||profile.role==="data_governance_team";
   const {data:a,error:ae}=await supabase.from("nudee_assignments").select("id,requirement_id,assignee_id,status,due_date,review_notes").order("id");
   if(ae)throw ae;
@@ -41,7 +43,7 @@ export default function NudeePage(){
   if(office){
    const [{data:r,error:re},{data:u,error:ue}]=await Promise.all([
     supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance").order("source_row").limit(1000),
-    supabase.from("profiles").select("user_id,display_name").eq("is_active",true).limit(200)
+    supabase.from("profiles").select("user_id,display_name,role").eq("is_active",true).neq("role","nca_external_auditor").limit(200)
    ]);
    if(re)throw re;if(ue)throw ue;
    setRequirements((r??[]) as Requirement[]);setUsers((u??[]) as User[]);setRole("office");
@@ -97,7 +99,7 @@ export default function NudeePage(){
   }catch(e){setError(e instanceof Error?e.message:"فشلت المراجعة");}finally{setBusy(false)}
  }
  async function upload(){
-  if(!assignment||!file)return;setBusy(true);setError("");setNotice("");
+  if(!assignment||!file||assignment.assignee_id!==currentUserId)return;setBusy(true);setError("");setNotice("");
   try{
    await requireProfile();
    if(!["assigned","changes_requested"].includes(assignment.status))throw new Error("التكليف ليس متاحًا للرفع");
@@ -128,9 +130,10 @@ export default function NudeePage(){
    <div style={{maxHeight:560,overflow:"auto",display:"grid",gap:8}}>{visible.map(r=>{const a=assignments.find(x=>x.requirement_id===r.id);const selectable=role==="office"&&(!a||a.status==="assigned")&&!submissions.some(x=>x.assignment_id===a?.id);return <div key={r.id} style={{display:"flex",alignItems:"center",gap:8}}>{role==="office"&&<input type="checkbox" aria-label={"تحديد الدليل "+r.evidence_name} checked={bulkIds.includes(r.id)} disabled={!selectable||busy||(!bulkIds.includes(r.id)&&bulkIds.length>=100)} onChange={e=>setBulkIds(ids=>e.target.checked?[...ids,r.id]:ids.filter(id=>id!==r.id))}/>}<button type="button" onClick={()=>{setSelected(r.id);setAssignee(a?.assignee_id||"");setDue(a?.due_date||"");setNote(a?.review_notes||"");}} style={{flex:1,textAlign:"right",padding:12,border:"1px solid #cbd5e1",borderRadius:9,background:selected===r.id?"#ccfbf1":"white",color:"#0f172a"}}><b>{r.standard_code||"تكليف #"+r.id}</b> — {r.evidence_name}<div><small>{r.maturity_level} · {statusLabels[a?.status||"unassigned"]}</small></div></button></div>})}</div></div>
    <div style={{border:"1px solid #cbd5e1",borderRadius:12,padding:20,alignSelf:"start"}}>{!current?<p>اختر دليلًا لعرض التفاصيل.</p>:<><h2>{current.evidence_name}</h2><p>{current.requirement_title}</p><p>{current.evidence_description}</p><p><b>المجال:</b> {current.domain_name} · <b>المستوى:</b> {current.maturity_level}</p><p><b>حالة التكليف:</b> {statusLabels[assignment?.status||"unassigned"]}</p>
    {role==="office"&&<><label htmlFor="nudee-assignee">المسؤول عن رفع الدليل</label><select id="nudee-assignee" value={assignee} onChange={e=>setAssignee(e.target.value)} style={{display:"block",width:"100%",padding:10,margin:"8px 0"}}><option value="">اختر المستخدم</option>{users.map(u=><option value={u.user_id} key={u.user_id}>{u.display_name||u.user_id}</option>)}</select><label htmlFor="nudee-due">تاريخ الاستحقاق</label><input id="nudee-due" type="date" value={due} onChange={e=>setDue(e.target.value)} style={{display:"block",padding:8,margin:"8px 0"}}/><button disabled={busy||!assignee||assignment?.status==="submitted"||assignment?.status==="approved"} onClick={assign}>حفظ التكليف</button></>}
-   {role==="assignee"&&assignment&&<><label htmlFor="nudee-file">ملف الدليل (PDF أو Word أو صورة)</label><input id="nudee-file" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" onChange={e=>setFile(e.target.files?.[0]||null)} disabled={busy||!["assigned","changes_requested"].includes(assignment.status)}/><button disabled={busy||!file||!["assigned","changes_requested"].includes(assignment.status)} onClick={upload}>رفع وإرسال للمراجعة</button></>}
+   {assignment?.assignee_id===currentUserId&&<><label htmlFor="nudee-file">ملف الدليل (PDF أو Word أو صورة)</label><input id="nudee-file" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" onChange={e=>setFile(e.target.files?.[0]||null)} disabled={busy||!["assigned","changes_requested"].includes(assignment.status)}/><button disabled={busy||!file||!["assigned","changes_requested"].includes(assignment.status)} onClick={upload}>رفع وإرسال للمراجعة</button></>}
    {assignment&&submissions.filter(x=>x.assignment_id===assignment.id).map(x=><div key={x.id} style={{margin:"8px 0"}}><button type="button" onClick={()=>openEvidence(x.storage_path)}>عرض الدليل: {x.file_name}</button></div>)}
-   {role==="office"&&assignment?.status==="submitted"&&<div style={{marginTop:20}}><h3>قرار مسؤول المكتب</h3><textarea aria-label="ملاحظات المراجعة" value={note} onChange={e=>setNote(e.target.value)} placeholder="ملاحظات المراجعة" style={{width:"100%",minHeight:90}}/><div style={{display:"flex",gap:10}}><button disabled={busy} onClick={()=>review("approved")}>اعتماد الدليل</button><button disabled={busy||!note.trim()} onClick={()=>review("changes_requested")}>إعادة للتعديل</button></div></div>}
+   {role==="office"&&assignment?.status==="submitted"&&assignment.assignee_id!==currentUserId&&<div style={{marginTop:20}}><h3>قرار مسؤول المكتب</h3><textarea aria-label="ملاحظات المراجعة" value={note} onChange={e=>setNote(e.target.value)} placeholder="ملاحظات المراجعة" style={{width:"100%",minHeight:90}}/><div style={{display:"flex",gap:10}}><button disabled={busy} onClick={()=>review("approved")}>اعتماد الدليل</button><button disabled={busy||!note.trim()} onClick={()=>review("changes_requested")}>إعادة للتعديل</button></div></div>}
+   {role==="office"&&assignment?.status==="submitted"&&assignment.assignee_id===currentUserId&&<p role="note">لا يمكن للمكلّف اعتماد الدليل الذي رفعه بنفسه؛ يتطلب مراجعًا آخر من مكتب البيانات.</p>}
    {assignment?.review_notes&&<p><b>ملاحظات المكتب:</b> {assignment.review_notes}</p>}</>}</div>
   </section></>}
   <p style={{marginTop:24,fontSize:12,color:"#64748b"}}>البيانات تُقرأ من قاعدة CGP؛ لن تظهر المتطلبات حتى تُستورد من ملف نُضيء وتُطبّق الهجرة المعتمدة.</p>
