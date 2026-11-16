@@ -36,16 +36,17 @@ export default function NudeePage(){
   if(office){
    const [{data:r,error:re},{data:u,error:ue}]=await Promise.all([
     supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance").order("source_row").limit(1000),
-    supabase.from("profiles").select("user_id,display_name").eq("is_active",true).eq("role","control_owner").limit(200)
+    supabase.from("profiles").select("user_id,display_name").eq("is_active",true).limit(200)
    ]);
    if(re)throw re;if(ue)throw ue;
    setRequirements((r??[]) as Requirement[]);setUsers((u??[]) as User[]);setRole("office");
-  }else if(profile.role==="control_owner"){
+  }else{
    const {data:r,error:re}=await supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance").order("source_row").limit(1000);
    if(re)throw re;
    setRequirements((r??[]) as Requirement[]);
+   if(!(a??[]).some(x=>x.assignee_id===user.id))throw new Error("لا توجد تكليفات نُضيء مسندة إلى حسابك.");
    setRole("assignee");
-  }else throw new Error("لا تملك صلاحية الدخول إلى مؤشر نُضيء.");
+  }
  },[]);
  useEffect(()=>{let active=true;void Promise.resolve().then(()=>load()).catch(e=>{if(active)setError(e.message||"تعذر تحميل المؤشر");});return()=>{active=false};},[load]);
  const visible=useMemo(()=>requirements.filter(r=>(r.standard_code+" "+r.evidence_name+" "+r.domain_name).includes(filter)),[requirements,filter]);
@@ -80,7 +81,7 @@ export default function NudeePage(){
  async function upload(){
   if(!assignment||!file)return;setBusy(true);setError("");setNotice("");
   try{
-   const {user}=await requireProfile(["control_owner"]);
+   const {user}=await requireProfile();
    if(!["assigned","changes_requested"].includes(assignment.status))throw new Error("التكليف ليس متاحًا للرفع");
    if(file.size>20*1024*1024)throw new Error("الحد الأقصى للملف 20 ميجابايت");
    const allowed=["application/pdf","image/png","image/jpeg","application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
