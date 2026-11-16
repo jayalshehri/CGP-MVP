@@ -1,22 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const dataGovernanceEnabled =
+/**
+ * Data Office is an active workspace; access is enforced by the pages
+ * and database RLS, not by a global feature flag redirect.
+ * The shared-controls workspace remains behind its rollout flag.
+ */
+const sharedControlsEnabled =
   process.env.NEXT_PUBLIC_CGP_DATA_GOVERNANCE_ENABLED === "true";
 
-/**
- * Keep the unfinished data-governance workspace out of the active production
- * experience. The pages and their data remain intact for the later rollout.
- */
 export function proxy(request: NextRequest) {
   if (request.nextUrl.pathname === "/workspace") {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  if (
-    !dataGovernanceEnabled &&
-    (request.nextUrl.pathname.startsWith("/data-governance") ||
-      request.nextUrl.pathname.startsWith("/shared-controls"))
-  ) {
+  if (!sharedControlsEnabled && request.nextUrl.pathname.startsWith("/shared-controls")) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
@@ -24,5 +21,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/workspace", "/data-governance/:path*", "/shared-controls/:path*"],
+  matcher: ["/workspace", "/shared-controls/:path*"],
 };
