@@ -37,6 +37,7 @@ export default function Home() {
         const { profile } = await requireProfile();
         if (!mounted) return;
 
+        if (profile.role === "nudee_owner") { router.replace("/data-governance/nudee"); return; }
         setUserRole(profile.role);
 
         setAuthReady(true);
