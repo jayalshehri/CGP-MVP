@@ -1440,3 +1440,47 @@ test('independent roles and post-build reject inherited Git execution and trace 
     rmSync(f.root, { recursive: true, force: true });
   }
 });
+
+test('read-only Developer, QA, Security, Reviewer and finalizer Git subprocesses receive no credentials', () => {
+  const f = setup();
+  try {
+    // Instrument ONLY child Git processes: each CLI still receives synthetic
+    // tokens for its mocked GitHub API call. A helper would see a token if
+    // the subprocess environment were inherited unchanged.
+    const systemGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+    const marker = join(f.root, 'git-credential-leak-marker');
+    const interceptedGit = join(f.root, 'bin/git');
+    writeFileSync(interceptedGit,
+      '#!/usr/bin/env node\n' +
+      'const {appendFileSync}=require("node:fs");\n' +
+      'const {spawnSync}=require("node:child_process");\n' +
+      'if(process.env.GH_TOKEN||process.env.GITHUB_TOKEN||process.env.OPENROUTER_API_KEY)' +
+      'appendFileSync(' + JSON.stringify(marker) + ', "credential seen\\n");\n' +
+      'const run=spawnSync(' + JSON.stringify(systemGit) +
+        ',process.argv.slice(2),{stdio:"inherit"});\n' +
+      'process.exit(run.status??1);\n');
+    chmodSync(interceptedGit, 0o755);
+    const env = { ...f.env, GITHUB_TOKEN: 'synthetic-actions-token',
+      OPENROUTER_API_KEY: 'synthetic-provider-token' };
+    for (const [role, status] of [
+      ['developer', 'proposed'], ['qa', 'passed'],
+      ['security', 'passed'], ['reviewer', 'draft-pr-eligible']
+    ]) {
+      const run = f.run(role, env);
+      assert.equal(run.status, 0, role + ': ' + run.stderr);
+      assert.equal(JSON.parse(run.stdout).status, status);
+    }
+    const reviewed = execFileSync(systemGit, ['show', f.head + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' });
+    writeFileSync(join(f.cwd, path), reviewed);
+    const verified = spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(verified.status, 0, verified.stderr);
+    assert.equal(JSON.parse(verified.stdout).status, 'post-build-draft-reverified');
+    assert.equal(existsSync(marker), false,
+      'none of the five independent steps may pass a token to Git');
+    assert.equal(f.git('rev-parse', 'main'), f.base,
+      'trusted main remains untouched');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
