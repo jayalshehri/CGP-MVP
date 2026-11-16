@@ -39,14 +39,26 @@ export default function NudeeDashboard(){
  const [filter,setFilter]=useState<Filter>({domain:ALL,level:ALL,compliance:ALL,review:ALL});
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
+ const [finalReviewProgress,setFinalReviewProgress]=useState(0);
+ const [finalReviewInput,setFinalReviewInput]=useState("0");
+ const [finalReviewNote,setFinalReviewNote]=useState("");
+ const [finalReviewSaving,setFinalReviewSaving]=useState(false);
+ const [finalReviewNotice,setFinalReviewNotice]=useState("");
  useEffect(()=>{let active=true;void Promise.resolve().then(async()=>{
   await requireProfile(["admin","data_governance_team"]);
-  const [r,a]=await Promise.all([
+  const [r,a,f]=await Promise.all([
    supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,maturity_level,source_compliance,source_review_status,source_progress,schedule_indicator,planned_start,planned_end,actual_end,evidence_name,review_phase").order("source_row").limit(1000),
-   supabase.from("nudee_assignments").select("requirement_id,status").limit(1000)
+   supabase.from("nudee_assignments").select("requirement_id,status").limit(1000),
+   supabase.from("nudee_final_review").select("progress").eq("id",1).single()
   ]);
-  if(r.error||a.error)throw r.error||a.error;
-  if(active){setRecords((r.data||[]) as Requirement[]);setAssignments((a.data||[]) as Assignment[]);}
+  if(r.error||a.error||f.error)throw r.error||a.error||f.error;
+  if(active){
+   setRecords((r.data||[]) as Requirement[]);
+   setAssignments((a.data||[]) as Assignment[]);
+   const currentProgress=Number(f.data?.progress??0);
+   setFinalReviewProgress(currentProgress);
+   setFinalReviewInput(String(Math.round(currentProgress*100)));
+  }
  }).catch(e=>{if(active)setError(e instanceof Error?e.message:"تعذر تحميل لوحة نُضيء");})
  .finally(()=>{if(active)setLoading(false);});return()=>{active=false};},[]);
  const mapped=useMemo(()=>new Map(assignments.map(a=>[a.requirement_id,a])),[assignments]);
@@ -105,9 +117,38 @@ export default function NudeeDashboard(){
      return sum+Number(r.source_progress||0);
     },0)/list.length;
    });
-   return {week:i+1,until,planned:(i+1)*12.5,actual:starts>today?0:25*stageRate.reduce((a,b)=>a+b,0)};
+   // Calc!E60:E67 weighs four independent phases at 25% each.
+   // Its fourth stage is the Data Office's manual comprehensive-review progress
+   // (Excel!K15), not another maturity level and not automatic evidence approval.
+   const daysAfterPhase4=(Date.parse(until+"T00:00:00Z")-Date.parse("2026-12-20T00:00:00Z"))/86400000;
+   const historicalPhase4=Math.min(finalReviewProgress,Math.max(0,Math.min(1,(daysAfterPhase4+3)/14)));
+   const phase4Rate=until<"2026-12-20"?0:until<today?historicalPhase4:finalReviewProgress;
+   return {week:i+1,until,planned:(i+1)*12.5,actual:starts>today?0:25*(stageRate.reduce((a,b)=>a+b,0)+phase4Rate)};
   });
- },[rows,mapped]);
+ },[rows,mapped,finalReviewProgress]);
+ async function saveFinalReview(){
+  setFinalReviewNotice("");
+  const percentValue=Number(finalReviewInput);
+  if(!finalReviewInput.trim()||!Number.isFinite(percentValue)||percentValue<0||percentValue>100){
+   setFinalReviewNotice("أدخل نسبة صحيحة من 0 إلى 100.");return;
+  }
+  if(!finalReviewNote.trim()){setFinalReviewNotice("أدخل ملاحظات تبرر تحديث المراجعة الشاملة.");return;}
+  setFinalReviewSaving(true);
+  try{
+   await requireProfile(["admin","data_governance_team"]);
+   const {data,error:e}=await supabase.rpc("nudee_set_final_review_progress",{
+    p_percent:percentValue,p_notes:finalReviewNote.trim()
+   });
+   if(e)throw e;
+   const saved=Number(data);
+   setFinalReviewProgress(saved);
+   setFinalReviewInput(String(Math.round(saved*100)));
+   setFinalReviewNote("");
+   setFinalReviewNotice("تم توثيق تقدم المراجعة الشاملة بنجاح.");
+  }catch(e){
+   setFinalReviewNotice(e instanceof Error?e.message:"تعذر تحديث المراجعة الشاملة.");
+  }finally{setFinalReviewSaving(false)}
+ }
  const stages=LEVELS.map((level,i)=>{const subset=rows.filter(r=>r.maturity_level===level);
   const completed=subset.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length;
   // Excel timetable uses SUM(source_progress)/COUNT, including partial work (50%, 25%).
@@ -176,17 +217,26 @@ export default function NudeeDashboard(){
    </section>
    <section className={styles.panel}><div className={styles.sectionHeader}><div><h2>الجدول الزمني ومراجعة الأدلة</h2><p>البرنامج الأساسي: 8 أسابيع من 8 نوفمبر إلى 31 ديسمبر 2026. المخطط تراكمي موزون حسب مدة المراحل الأربع (Calc)، والفعلي يقاس بتاريخ الرياض؛ الأسابيع السابقة تتطلب تاريخ إنجاز فعليًا.</p></div><span className={styles.meta}>8 أسابيع</span></div>
     <div className={styles.stages}>{stages.map(s=><article key={s.level}><b>المرحلة {s.phase}</b><h3>{s.level}</h3><p>{shortDate(s.start)} – {shortDate(s.end)}</p><div className={styles.track}><div style={{width:percent(s.completed,s.n)+"%"}}/></div><small>{s.completed} / {s.n} مكتمل</small></article>)}<article><b>المرحلة 4</b><h3>المراجعة النهائية الشاملة</h3><p>20 ديسمبر – 31 ديسمبر 2026</p><small>مراجعة شاملة لجميع المستويات</small></article></div>
+    <section className={styles.finalReviewPanel} aria-label="تحديث المراجعة الشاملة">
+     <div><h3>المراجعة النهائية الشاملة</h3><p>المرحلة الرابعة مستقلة عن مستويات النضج الثلاثة. أدخل التقدم المعتمد يدويًا كما في Excel (K15)، مع مبرر يوثق كل تغيير. لا يؤدي تحديثها إلى تعديل حالة امتثال أي دليل.</p><strong>{(finalReviewProgress*100).toLocaleString("ar-SA",{maximumFractionDigits:2})}%</strong></div>
+     <div className={styles.finalReviewForm}>
+      <label>نسبة التقدم المعتمدة (%)<input inputMode="decimal" type="number" min="0" max="100" step="0.01" value={finalReviewInput} onChange={e=>setFinalReviewInput(e.target.value)} disabled={finalReviewSaving}/></label>
+      <label>مبرر التحديث<textarea rows={2} maxLength={2000} value={finalReviewNote} onChange={e=>setFinalReviewNote(e.target.value)} disabled={finalReviewSaving} placeholder="ملاحظات مسؤول مكتب إدارة البيانات"/></label>
+      <button type="button" onClick={saveFinalReview} disabled={finalReviewSaving||!finalReviewNote.trim()||!finalReviewInput.trim()}>{finalReviewSaving?"جاري الحفظ...":"حفظ نسبة المراجعة الشاملة"}</button>
+      {finalReviewNotice&&<p role="status">{finalReviewNotice}</p>}
+     </div>
+    </section>
     <div className={styles.phaseHeader}><h3>مخطط المراحل الأربع — 8 أسابيع</h3><span>منجز / متبقٍ وفق حالة المراجعة</span></div>
     <div className={styles.phaseAxis}><span>المرحلة</span>{Array.from({length:8},(_,i)=><span key={i}>أ{i+1}</span>)}</div>
-    {[...stages,{level:"المراجعة النهائية",phase:4,n:stats.total,completed:0,progress:0,start:"2026-12-20",end:"2026-12-31"}].map((phase,i)=><div className={styles.phaseBarRow} key={phase.phase}><span>{phase.level}</span><div className={styles.phaseBar}>
+    {[...stages,{level:"المراجعة النهائية",phase:4,n:stats.total,completed:0,progress:finalReviewProgress,start:"2026-12-20",end:"2026-12-31"}].map((phase,i)=><div className={styles.phaseBarRow} key={phase.phase}><span>{phase.level}</span><div className={styles.phaseBar}>
       <div className={styles.phaseBlank} style={{width:i*25+"%"}}/>
       <div className={styles.phaseDone} style={{width:(25*phase.progress)+"%"}}/>
       <div className={styles.phaseRemain} style={{width:(25*(1-phase.progress))+"%"}}/>
       <div className={styles.phaseBlank} style={{width:(3-i)*25+"%"}}/>
      </div></div>)}
-    <p className={styles.footnote}>مقابل مخطط Excel للمرحلة الأولى والثانية والثالثة والمراجعة الشاملة، موزعة على أسبوعين لكل مرحلة. عرض التقدم هنا مبني على الإتمام الفعلي داخل CGP وحالة المصدر، وليس قبول الامتثال الرسمي.</p>
+    <p className={styles.footnote}>مقابل مخطط Excel للمرحلة الأولى والثانية والثالثة والمراجعة الشاملة، موزعة على أسبوعين لكل مرحلة. المراحل الثلاث الأولى مبنية على تقدم الأدلة، بينما المرحلة الرابعة تُحدّث يدويًا من مكتب البيانات وتُسجّل في سجل تدقيق مستقل، دون تغيير الامتثال الرسمي.</p>
     <div className={styles.weekly}>{weekly.map(w=><div key={w.week} className={styles.week}><span>الأسبوع {w.week}</span><small>{shortDate(w.until)}</small><div className={styles.track} title={"المخطط: "+w.planned+"%"}><div style={{width:w.planned+"%"}}/></div><div className={styles.track+" "+styles.actual} title={"الفعلي: "+w.actual.toFixed(2)+"%"}><div style={{width:w.actual+"%"}}/></div><small>المخطط {w.planned.toLocaleString("ar-SA")}% · الفعلي {w.actual.toLocaleString("ar-SA",{maximumFractionDigits:2})}%</small></div>)}</div>
-    <p className={styles.footnote}>معادلة المخطط مستمدة من Calc!D60:D67 (12.5% كل أسبوع). الفعلي يعكس أوزان مراحل Excel؛ في الأسابيع المكتملة لا تُحسب إلا الأدلة المؤرخة، وفي الأسبوع الجاري يظهر تقدم المراجعة الحالي. تاريخ القياس المحفوظ بالمصنف الأصلي هو 5 نوفمبر 2026، لذلك قد يختلف الاتجاه الحي عن قيمه المحفوظة.</p>
+    <p className={styles.footnote}>معادلة المخطط مستمدة من Calc!D60:D67 (12.5% كل أسبوع). الفعلي يضم المراحل الأربع بأوزان 25% لكل منها؛ في الأسابيع المكتملة لا تُحسب إلا الأدلة المؤرخة، وتظهر نسبة المراجعة الشاملة المدخلة يدويًا ضمن المرحلة الرابعة. تاريخ القياس المحفوظ بالمصنف الأصلي هو 5 نوفمبر 2026، لذلك قد يختلف الاتجاه الحي عن قيمه المحفوظة.</p>
    </section>
    <p className={styles.footnote}>المرجع: أوراق «متابعة الأدلة الداعمة» و«لوحة البيانات» و«الجدول الزمني» و«Calc» من ملف نُضيء الأصلي. معادلة امتثال الجهة في Calc!B10 تحتسب فقط النص «ممتثل للمعالي فقط»؛ نعرض التناقض مع بقية مسميات المصدر بوضوح دون تغيير أية بيانات. المراجعة تشمل حالة المصدر والأدلة المعتمدة في CGP، واعتماد الدليل لا يحوّله تلقائيًا إلى «ممتثل».</p>
   </>}
