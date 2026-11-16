@@ -14,9 +14,13 @@ function command(binary, args) {
   // diff.external can run executable helpers during seemingly read-only
   // ls-files/diff calls while the publisher holds its write-scoped GH_TOKEN.
   // Disable these helpers for every publisher Git subprocess, not just commits.
+  // An attribute-selected diff.<driver>.textconv runs executable code even
+  // under --no-ext-diff. Suppress textconv for EVERY diff (including --check).
   const safeArgs = binary === 'git'
     ? ['-c', 'core.fsmonitor=false',
-      ...(args[0] === 'diff' ? ['diff', '--no-ext-diff', ...args.slice(1)] : args)]
+      ...(args[0] === 'diff'
+        ? ['diff', '--no-ext-diff', '--no-textconv', ...args.slice(1)]
+        : args)]
     : args;
   return execFileSync(binary, safeArgs, { encoding: 'utf8', stdio: 'pipe' });
 }
