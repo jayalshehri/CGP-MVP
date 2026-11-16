@@ -220,6 +220,19 @@ export function publishDraft({ env = process.env } = {}) {
   }
   command('gh', ['auth', 'setup-git']);
   command('git', ['push', 'origin', 'HEAD:refs/heads/' + branch]);
+  // Pushing a verified commit is not enough if origin/main (or the candidate
+  // ref) moves during the push. Re-read both advertised refs BEFORE creating
+  // a GitHub PR. This closes the push-to-PR gap but is not an atomic lock;
+  // the later REST/GraphQL Draft attestation remains mandatory.
+  const advertisedRefs = command('git', ['ls-remote', '--exit-code', 'origin',
+    'refs/heads/main', 'refs/heads/' + branch]).trim().split('\n').sort();
+  const requiredRefs = [
+    baseSha + '\trefs/heads/main',
+    candidateSha + '\trefs/heads/' + branch
+  ].sort();
+  if (!identical(advertisedRefs, requiredRefs)) {
+    fail('remote refs changed after candidate push');
+  }
   const body = 'Candidate scope, independent checks and build were verified before publishing. ' +
     'DRAFT only. No automatic approval, merge or production deployment.';
   const pr = command('gh', ['pr', 'create', '--draft', '--base', 'main', '--head', branch,
