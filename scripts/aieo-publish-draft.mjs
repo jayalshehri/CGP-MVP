@@ -199,7 +199,9 @@ export function publishDraft({ env = process.env } = {}) {
   }
   command('git', ['config', 'user.name', 'github-actions[bot]']);
   command('git', ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com']);
-  command('git', ['switch', '-c', branch]);
+  // A repository-local post-checkout hook runs on git switch -c. A publisher
+  // carrying GH_TOKEN must never execute untrusted checkout hooks.
+  command('git', ['-c', 'core.hooksPath=/dev/null', 'switch', '-c', branch]);
   command('git', ['add', '--', path]);
   if (command('git', ['diff', '--cached', '--name-only']).trim() !== path) fail('unexpected staged scope');
   // Do not let runner-local or injected Git hooks execute with publisher
@@ -219,7 +221,10 @@ export function publishDraft({ env = process.env } = {}) {
     fail('committed proposal differs from independently reviewed candidate');
   }
   command('gh', ['auth', 'setup-git']);
-  command('git', ['push', 'origin', 'HEAD:refs/heads/' + branch]);
+  // Disable pre-push hooks as well: they otherwise execute with the
+  // write-scoped GitHub token even though pre-commit hooks are disabled.
+  command('git', ['-c', 'core.hooksPath=/dev/null', 'push',
+    'origin', 'HEAD:refs/heads/' + branch]);
   // Pushing a verified commit is not enough if origin/main (or the candidate
   // ref) moves during the push. Re-read both advertised refs BEFORE creating
   // a GitHub PR. This closes the push-to-PR gap but is not an atomic lock;
