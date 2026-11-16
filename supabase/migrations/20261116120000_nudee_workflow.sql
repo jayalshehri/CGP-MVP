@@ -57,7 +57,7 @@ alter table public.nudee_requirements enable row level security;
 alter table public.nudee_assignments enable row level security;
 alter table public.nudee_submissions enable row level security;
 alter table public.nudee_audit enable row level security;
-create policy nudee_requirements_office on public.nudee_requirements for select to authenticated using (public.nudee_is_office());
+create policy nudee_requirements_office on public.nudee_requirements for select to authenticated using (public.nudee_is_office() or exists(select 1 from public.nudee_assignments a where a.requirement_id=id and a.assignee_id=(select auth.uid())));
 create policy nudee_assignments_read on public.nudee_assignments for select to authenticated using (public.nudee_is_office() or assignee_id=(select auth.uid()));
 create policy nudee_assignments_office_insert on public.nudee_assignments for insert to authenticated with check (public.nudee_is_office() and assigned_by=(select auth.uid()));
 create policy nudee_assignments_office_update on public.nudee_assignments for update to authenticated using (public.nudee_is_office()) with check (public.nudee_is_office());
