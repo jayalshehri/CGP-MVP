@@ -47,3 +47,28 @@ export function readOnlyGitEnvironment(env = process.env) {
   scoped.GIT_TERMINAL_PROMPT = '0';
   return scoped;
 }
+
+/**
+ * Git reads must never honor repository/global settings that enable remote
+ * shell transports or executable credential helpers. A read-only fetch can
+ * still launch these helpers, even when its child environment has no token.
+ * File transport is retained for isolated local Git fixtures; production's
+ * public GitHub fetch uses HTTPS. Command-line -c overrides local Git config.
+ */
+export function readOnlyGitArguments(args) {
+  if (!Array.isArray(args) || args.length === 0) throw new Error('Expected Git arguments');
+  return [
+    '-c', 'core.fsmonitor=false',
+    '-c', 'core.hooksPath=/dev/null',
+    '-c', 'credential.helper=',
+    '-c', 'protocol.allow=never',
+    '-c', 'protocol.https.allow=always',
+    '-c', 'protocol.file.allow=always',
+    '-c', 'protocol.ext.allow=never',
+    ...(args[0] === 'diff'
+      ? ['diff', '--no-ext-diff', '--no-textconv',
+        ...args.slice(1).filter((flag) =>
+          flag !== '--no-ext-diff' && flag !== '--no-textconv')]
+      : args)
+  ];
+}

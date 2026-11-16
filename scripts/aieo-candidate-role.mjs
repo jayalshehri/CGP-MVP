@@ -8,7 +8,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
-import { hasUnsafeGitEnvironment, readOnlyGitEnvironment } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments } from './aieo-git-process-guard.mjs';
 
 const SHA = /^[a-f0-9]{40}$/;
 const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
@@ -24,11 +24,7 @@ function block() {
 // even during otherwise read-only role inspection. Do not execute checkout
 // helpers with the role's read-scoped GH_TOKEN.
 function git(args) {
-  const safeArgs = ['-c', 'core.fsmonitor=false',
-    ...(args[0] === 'diff'
-      ? ['diff', '--no-ext-diff', '--no-textconv',
-        ...args.slice(1).filter((flag) => flag !== '--no-ext-diff')]
-      : args)];
+  const safeArgs = readOnlyGitArguments(args);
   return execFileSync('git', safeArgs, {
     encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
     env: readOnlyGitEnvironment(process.env)
@@ -39,7 +35,7 @@ function git(args) {
 // UTF-8. Independent role attestations must bind to exactly the bytes published,
 // including when the previous trusted base or the candidate is malformed.
 function readStrictGitSource(revision) {
-  const bytes = execFileSync('git', ['-c', 'core.fsmonitor=false', 'show', revision + ':' + MODEL_ALLOWED_PATH],
+  const bytes = execFileSync('git', readOnlyGitArguments(['show', revision + ':' + MODEL_ALLOWED_PATH]),
     { stdio: 'pipe', maxBuffer: 256000, env: readOnlyGitEnvironment(process.env) });
   if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > 48000) block();
   const source = bytes.toString('utf8');
