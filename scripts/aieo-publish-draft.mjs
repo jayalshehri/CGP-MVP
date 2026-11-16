@@ -182,6 +182,15 @@ export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
   const path = MODEL_ALLOWED_PATH;
   assertTrustedCheckout(env, path);
+  // Git content filters are executable: even a read-only "git diff" can invoke
+  // filter.<driver>.clean on this modified source under our write-scoped token.
+  // Refuse effective attributes from tracked .gitattributes, info/attributes
+  // and core.attributesFile BEFORE any diff, add, branch or remote operation.
+  // Requiring an unspecified filter is deliberately fail-closed.
+  const filterAttribute = command('git', ['check-attr', '-z', 'filter', '--', path]);
+  if (filterAttribute !== path + '\0filter\0unspecified\0') {
+    fail('candidate path has a Git content filter; executable clean filters are forbidden');
+  }
   // Refuse pre-staged changes, untracked files and whitespace errors before any write.
   if (command('git', ['diff', '--cached', '--name-only']).trim()) fail('unexpected staged files');
   if (command('git', ['ls-files', '--others', '--exclude-standard'])
