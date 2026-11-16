@@ -1372,3 +1372,63 @@ test('independent roles and post-build verification suppress executable Git fsmo
     rmSync(f.root, { recursive: true, force: true });
   }
 });
+
+test('independent roles and post-build reject inherited Git execution and trace overrides before any subprocess', () => {
+  const f = setup();
+  const trace = join(f.root, 'untrusted-git-trace.json');
+  try {
+    // Positive control: Git normally writes a trace file from this inherited
+    // environment setting, even for a read-only command.
+    const control = spawnSync('git', ['status', '--porcelain=v1'], {
+      cwd: f.cwd, env: { ...f.env, GIT_TRACE2_EVENT: trace },
+      encoding: 'utf8', timeout: 20000
+    });
+    assert.equal(control.status, 0, control.stderr);
+    assert.equal(existsSync(trace), true, 'control must prove Git trace side effect');
+    rmSync(trace);
+
+    const attacks = [
+      { GIT_TRACE2_EVENT: trace },
+      { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.fsmonitor',
+        GIT_CONFIG_VALUE_0: 'synthetic-untrusted-helper' },
+      { GIT_CONFIG_GLOBAL: join(f.root, 'foreign-git-config') },
+      { GIT_WORK_TREE: f.root },
+      { GIT_SSH_COMMAND: 'synthetic-untrusted-transport' },
+      { GIT_CEILING_DIRECTORIES: f.root },
+      { GIT_DISCOVERY_ACROSS_FILESYSTEM: '1' },
+      { GIT_ALLOW_PROTOCOL: 'ext' }
+    ];
+    for (const attack of attacks) {
+      const rejected = f.run('developer', attack);
+      assert.notEqual(rejected.status, 0,
+        'Developer must refuse inherited Git environment: ' + Object.keys(attack)[0]);
+      assert.equal(existsSync(join(f.cwd, 'aieo-output/candidate-developer.json')), false,
+        'no Developer attestation may be produced under injected Git environment');
+      assert.equal(existsSync(trace), false, 'no Git subprocess may write a trace');
+    }
+
+    // The ordinary independent execution is not disabled by these protections.
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const result = f.run(role);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+    }
+    const reviewed = execFileSync('git', ['show', f.head + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' });
+    writeFileSync(join(f.cwd, path), reviewed);
+    const verify = (extra = {}) => spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: { ...f.env, ...extra }, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(verify().status, 0, 'trusted post-build baseline must succeed');
+    for (const attack of attacks) {
+      const rejected = verify(attack);
+      assert.notEqual(rejected.status, 0,
+        'post-build gate must reject inherited Git environment: ' + Object.keys(attack)[0]);
+      assert.equal(existsSync(trace), false,
+        'post-build gate cannot execute even a read-only traced Git subprocess');
+    }
+    assert.equal(verify().status, 0, 'clean execution recovers after rejected injections');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'fixture main must remain unchanged');
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});

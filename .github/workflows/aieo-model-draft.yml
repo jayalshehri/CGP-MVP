@@ -7,6 +7,7 @@ on:
       - 'scripts/aieo-model-*.mjs'
       - 'scripts/aieo-publish-draft*.mjs'
       - 'scripts/aieo-candidate-role*.mjs'
+      - 'scripts/aieo-git-process-guard.mjs'
       - 'scripts/aieo-candidate-finalize*.mjs'
       - 'scripts/aieo-role-artifact-io.mjs'
       - 'scripts/aieo-workflow-policy.test.mjs'

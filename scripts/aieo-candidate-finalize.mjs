@@ -8,6 +8,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
+import { hasUnsafeGitEnvironment } from './aieo-git-process-guard.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
 const SHA = /^[a-f0-9]{40}$/;
@@ -104,6 +105,9 @@ function report(role) {
 
 
 export function verifyPostBuild(env = process.env) {
+  // The build step precedes this check. Reject Git environment injection
+  // before reading evidence, running git or contacting GitHub with GH_TOKEN.
+  if (hasUnsafeGitEnvironment(process.env) || hasUnsafeGitEnvironment(env)) fail();
   const number = env.AIEO_PR_NUMBER;
   if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
       env.GITHUB_REF !== 'refs/heads/main' ||
