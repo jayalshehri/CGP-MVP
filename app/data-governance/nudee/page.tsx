@@ -64,10 +64,16 @@ export default function NudeePage(){
   const preview=window.open("about:blank","_blank");
   if(preview)preview.opener=null;
   setEvidenceLink(null);setError("");
-  const {data,error:e}=await supabase.storage.from("nudee-evidence").createSignedUrl(path,60);
-  if(e||!data?.signedUrl){preview?.close();setError(e?.message||"تعذر فتح الدليل");return;}
-  if(preview)preview.location.replace(data.signedUrl);
-  else setEvidenceLink(data.signedUrl);
+  try{
+   const {data,error:e}=await supabase.storage.from("nudee-evidence").createSignedUrl(path,60);
+   if(e||!data?.signedUrl)throw e||new Error("تعذر إنشاء رابط الدليل المؤقت");
+   if(preview)preview.location.replace(data.signedUrl);
+   else setEvidenceLink(data.signedUrl);
+  }catch(e){
+   // A network exception must not leave an empty tab open indefinitely.
+   preview?.close();
+   setError(e instanceof Error?e.message:"تعذر فتح الدليل. تحقق من الاتصال ثم حاول مرة أخرى.");
+  }
  }
  async function assign(){
   if(!current||!assignee)return;setBusy(true);setError("");setNotice("");
