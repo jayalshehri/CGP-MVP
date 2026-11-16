@@ -101,7 +101,7 @@ export default function NudeeDashboard(){
   <header className={styles.heading}><div><span className={styles.eyebrow}>مكتب إدارة البيانات · المؤشر الوطني للبيانات</span><h1>لوحة مؤشر نُضيء</h1><p>قياس الامتثال ومراجعة الأدلة ومتابعة الإنجاز، وفق بيانات Excel الأصلية وتكليفات CGP المباشرة.</p></div><Link className={styles.back} href="/data-governance/nudee">التكليفات والأدلة</Link></header>
   <nav className={styles.tabbar} aria-label="صفحات مؤشر نُضيء"><Link href="/data-governance/nudee">إدارة التكليفات</Link><Link aria-current="page" href="/data-governance/nudee-dashboard">لوحة البيانات</Link></nav>
   {error&&<div role="alert" className={styles.alert}>{error}</div>}
-  {loading?<p role="status">جاري تحميل بيانات المؤشر…</p>:!records.length?<div role="status" className={styles.alert}>لم تُستورد متطلبات المؤشر بعد. يرجى إكمال استيراد المصدر والتحقق منه.</div>:<>
+  {loading?<p role="status">جاري تحميل بيانات المؤشر…</p>:error?<div role="status" className={styles.alert}>تعذر عرض بيانات المؤشر. تحقق من الاتصال والصلاحيات ثم أعد تحميل الصفحة.</div>:!records.length?<div role="status" className={styles.alert}>لم تُستورد متطلبات المؤشر بعد. يرجى إكمال استيراد المصدر والتحقق منه.</div>:<>
    <section className={styles.filters} aria-label="تصفية بيانات المؤشر">
     <label>مستوى النضج<select value={filter.level} onChange={e=>field("level",e.target.value)}>{[ALL,...LEVELS].map(v=><option key={v}>{v}</option>)}</select></label>
     <label>المجال<select value={filter.domain} onChange={e=>field("domain",e.target.value)}>{[ALL,...domains].map(v=><option key={v}>{v}</option>)}</select></label>
