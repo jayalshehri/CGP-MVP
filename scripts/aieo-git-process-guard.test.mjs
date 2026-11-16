@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hasUnsafeGitEnvironment, readOnlyGitEnvironment } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments } from './aieo-git-process-guard.mjs';
 
 test('independent read-only Git children do not inherit common CI or cloud credentials', () => {
   const input = {
@@ -80,4 +80,21 @@ test('Git and GitHub CLI environment overrides are still rejected before credent
   assert.equal(hasUnsafeGitEnvironment({
     GH_TOKEN: 'synthetic-read-only-api-token', NPM_TOKEN: 'synthetic-npm'
   }), false, 'credential presence is not an override; credentials are scrubbed only in Git children');
+});
+
+test('independent read-only Git arguments disable executable hooks and transports', () => {
+  const args = readOnlyGitArguments(['fetch', '--no-tags', 'origin', 'refs/heads/main']);
+  assert.deepEqual(args.slice(-4), ['fetch', '--no-tags', 'origin', 'refs/heads/main']);
+  for (const setting of [
+    'core.fsmonitor=false', 'core.hooksPath=/dev/null', 'credential.helper=',
+    'protocol.allow=never', 'protocol.https.allow=always',
+    'protocol.file.allow=always', 'protocol.ext.allow=never'
+  ]) {
+    assert.equal(args.includes(setting), true, setting);
+    assert.equal(args[args.indexOf(setting) - 1], '-c', setting);
+  }
+  const diff = readOnlyGitArguments(['diff', '--no-ext-diff', '--no-textconv', '--name-only', 'main']);
+  assert.equal(diff.filter((v) => v === '--no-ext-diff').length, 1);
+  assert.equal(diff.filter((v) => v === '--no-textconv').length, 1);
+  assert.throws(() => readOnlyGitArguments([]));
 });
