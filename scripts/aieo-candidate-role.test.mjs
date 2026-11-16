@@ -1501,8 +1501,8 @@ test('independent Developer rejects repository-configured executable Git transpo
   try {
     const marker = join(f.root, 'untrusted-transport-executed');
     const helper = join(f.root, 'untrusted-remote.sh');
-    writeFileSync(helper, '#!/bin/sh\\n' +
-      'touch ' + JSON.stringify(marker) + '\\nexit 1\\n');
+    writeFileSync(helper, '#!/bin/sh\n' +
+      'touch ' + JSON.stringify(marker) + '\nexit 1\n');
     chmodSync(helper, 0o755);
     f.git('remote', 'set-url', 'origin', 'ext::' + helper);
     f.git('config', 'protocol.ext.allow', 'always');
