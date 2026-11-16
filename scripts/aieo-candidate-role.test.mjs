@@ -1576,3 +1576,33 @@ test('independent role and post-build gate refuse executable clean filters befor
     assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main must remain unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('replacement refs cannot rewrite immutable blobs observed by independent roles and finalizer', () => {
+  const f = setup();
+  try {
+    // A mutable local replacement ref reinterprets the already-pinned base
+    // commit as the candidate, without changing either real commit SHA.
+    f.git('replace', f.base, f.head);
+    assert.equal(f.git('show', f.base + ':' + path), candidate.trimEnd(),
+      'positive control: ordinary Git is fooled by a local replacement ref');
+    assert.equal(execFileSync('git', ['--no-replace-objects', 'show', f.base + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' }).trim(), original.trimEnd(),
+      'the protected Git view must recover original immutable bytes');
+    for (const [role, status] of [
+      ['developer', 'proposed'], ['qa', 'passed'],
+      ['security', 'passed'], ['reviewer', 'draft-pr-eligible']
+    ]) {
+      const result = f.run(role);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+      assert.equal(JSON.parse(result.stdout).status, status);
+    }
+    writeFileSync(join(f.cwd, path), candidate);
+    const final = spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(final.status, 0, final.stderr);
+    assert.equal(JSON.parse(final.stdout).status, 'post-build-draft-reverified');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main must not be changed');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
