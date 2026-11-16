@@ -1309,3 +1309,66 @@ test('post-build Git blobs preserve exact UTF-8 bytes, not lossy decoded strings
     assert.equal(f.git('rev-parse', 'main'), f.base, 'fixture main is untouched');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('independent roles and post-build verification suppress executable Git fsmonitor and textconv helpers', () => {
+  const f = setup();
+  const marker = join(f.root, 'git-helper-was-invoked');
+  try {
+    // Use a harmless synthetic executable and prove that the previous
+    // --no-ext-diff flag ALONE executes textconv in a Git-to-Git comparison.
+    const helper = join(f.root, 'synthetic-git-helper.sh');
+    writeFileSync(helper, [
+      '#!/bin/sh',
+      'if [ "$#" -eq 1 ]; then',
+      '  printf "textconv\\n" >> "$AIEO_HELPER_MARKER"',
+      '  cat "$1"',
+      'else',
+      '  printf "fsmonitor\\n" >> "$AIEO_HELPER_MARKER"',
+      '  printf "/\\n"',
+      'fi',
+      ''
+    ].join('\n'));
+    chmodSync(helper, 0o755);
+    f.git('config', 'diff.synthetic.textconv', helper);
+    f.git('config', 'core.fsmonitor', helper);
+    writeFileSync(join(f.cwd, '.git/info/attributes'), path + ' diff=synthetic\n');
+
+    const controlledEnv = { ...f.env, AIEO_HELPER_MARKER: marker };
+    const oldDiff = spawnSync('git',
+      ['diff', '--no-ext-diff', '--unified=0', f.base, f.head, '--', path],
+      { cwd: f.cwd, env: controlledEnv, encoding: 'utf8', timeout: 20000 });
+    assert.equal(oldDiff.status, 0, oldDiff.stderr);
+    assert.match(readFileSync(marker, 'utf8'), /textconv/,
+      'control: executable textconv still runs with --no-ext-diff alone');
+    rmSync(marker);
+
+    const oldStatus = spawnSync('git',
+      ['status', '--porcelain=v1', '--untracked-files=no'],
+      { cwd: f.cwd, env: controlledEnv, encoding: 'utf8', timeout: 20000 });
+    assert.equal(oldStatus.status, 0, oldStatus.stderr);
+    assert.match(readFileSync(marker, 'utf8'), /fsmonitor/,
+      'control: local fsmonitor executable runs during ordinary Git status');
+    rmSync(marker);
+
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const result = f.run(role, { AIEO_HELPER_MARKER: marker });
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+      assert.equal(existsSync(marker), false,
+        role + ' must not execute local Git helper with its read-scoped token');
+    }
+
+    const reviewed = execFileSync('git', ['show', f.head + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' });
+    writeFileSync(join(f.cwd, path), reviewed);
+    const final = spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: controlledEnv, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(final.status, 0, final.stderr);
+    assert.equal(JSON.parse(final.stdout).status, 'post-build-draft-reverified');
+    assert.equal(existsSync(marker), false,
+      'post-build re-attestation must not execute either Git helper');
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
