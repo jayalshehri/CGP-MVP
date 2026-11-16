@@ -72,6 +72,44 @@ function fixture() {
   return { root, workspace, remote, log, env, target, args, qa, security, reviewer };
 }
 
+// An untrusted clean filter can execute during *git diff*, before git add.
+// Reject it from every Git attribute source while the publisher holds GH_TOKEN.
+for (const attrOrigin of ['info', 'working-tree', 'global']) {
+  test('publisher blocks executable Git clean filter before any diff: ' + attrOrigin, () => {
+    const f = fixture();
+    try {
+      const trusted = git(f.workspace, 'rev-parse', 'main');
+      const marker = join(f.root, 'untrusted-clean-filter-executed');
+      const executable = join(f.root, 'untrusted-clean-filter');
+      writeFileSync(executable, '#!/bin/sh\\n' +
+        'printf invoked > ' + JSON.stringify(marker) + '\\ncat\\n');
+      chmodSync(executable, 0o755);
+      git(f.workspace, 'config', 'filter.untrusted.clean', executable);
+      const attributes = attrOrigin === 'info'
+        ? join(f.workspace, '.git', 'info', 'attributes')
+        : attrOrigin === 'working-tree'
+          ? join(f.workspace, '.gitattributes')
+          : join(f.root, 'external-git-attributes');
+      writeFileSync(attributes, 'components/FeedbackWidget.tsx filter=untrusted\\n');
+      if (attrOrigin === 'global') {
+        git(f.workspace, 'config', 'core.attributesFile', attributes);
+      }
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, 'executable attribute must be rejected');
+      assert.match(child.stderr, /Git content filter; executable clean filters are forbidden/);
+      assert.equal(existsSync(marker), false, 'clean filter ran with publisher credentials');
+      assert.equal(existsSync(f.log), false, 'must reject before any GitHub CLI call');
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), trusted);
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /refs\\/heads\\/aieo\\/model-proposal-99123-1/,
+        'no candidate branch was pushed');
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+}
+
 // Git config inside a disposable checkout is an executable-code surface too.
 // Neither inherited-environment checks nor suppressed hooks alone protect
 // read-only ls-files/diff operations against configured helper programs.
