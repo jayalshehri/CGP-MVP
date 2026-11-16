@@ -67,8 +67,7 @@ export default function NudeeDashboard(){
   const unknown=count(r=>complianceStatus(r.source_compliance)==="حالة غير معيارية");
   const unassessed=count(r=>complianceStatus(r.source_compliance)==="لم يُقيَّم");
   const reviewed=count(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل");
-  const now=new Date();const today=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
-  const overdue=count(r=>Boolean(r.planned_end&&r.planned_end<today&&effectiveReview(r,mapped.get(r.id))!=="مكتمل"));
+  const overdue=count(r=>r.schedule_indicator?.trim()==="متأخر");
   return {total:rows.length,full,authority,non,na,unknown,unassessed,reviewed,overdue,assessed:rows.length-unassessed,applicable:rows.length-na,
     assigned:count(r=>Boolean(mapped.get(r.id))),submitted:count(r=>mapped.get(r.id)?.status==="submitted"),approved:count(r=>mapped.get(r.id)?.status==="approved")};
  },[rows,mapped]);
@@ -119,7 +118,7 @@ export default function NudeeDashboard(){
      ["غير مقيّم",stats.unassessed,fmtPct(stats.assessed,stats.total)+" تم تقييمها"],
      ["امتثال NDMO",fmtPct(stats.full,stats.applicable),"ممتثل بالكامل ÷ الأدلة المنطبقة"],
      ["إنجاز مراجعة الأدلة",fmtPct(stats.reviewed,stats.total),stats.reviewed+" من "+stats.total+" مكتمل"],
-     ["متأخر عن الجدول",stats.overdue,"وفق تاريخ اليوم والاستحقاق المخطط"]
+     ["متأخر عن الجدول",stats.overdue,"وفق مؤشر الجدول الزمني في ملف Excel"]
     ].map(([label,value,detail])=><article className={styles.metric} key={label}><span>{label}</span><strong>{typeof value==="number"?value.toLocaleString("ar-SA"):value}</strong><small>{detail}</small></article>)}
    </section>
    <section className={styles.workflow}><div><span>دورة التكليف في CGP</span><p>تُعرض حالات الأدلة داخل المنصة بصورة منفصلة عن تصنيف الامتثال الرسمي في Excel.</p></div><div className={styles.flowNumbers}><span>المسندة <b>{stats.assigned}</b></span><span>بانتظار التحقق <b>{stats.submitted}</b></span><span>المعتمدة <b>{stats.approved}</b></span></div></section>
