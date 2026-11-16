@@ -151,6 +151,50 @@ for (const attrOrigin of ['info', 'working-tree', 'global']) {
   });
 }
 
+// Candidate-only attribute checks are insufficient: a different, tracked and
+// modified file can run its clean filter during the publisher's global diff
+// before changed-path scoping. Reject all tracked filters without invoking any.
+test('publisher refuses an executable clean filter on an unrelated tracked file', () => {
+  const f = fixture();
+  try {
+    const other = 'components/Unrelated.tsx';
+    writeFileSync(join(f.workspace, other), 'export const unrelated = 1;\\n');
+    git(f.workspace, 'add', '--', other);
+    git(f.workspace, 'commit', '-qm', 'additional trusted tracked file');
+    git(f.workspace, 'push', '-q', 'origin', 'main');
+    const trusted = git(f.workspace, 'rev-parse', 'HEAD');
+    f.env.GITHUB_SHA = trusted;
+    writeFileSync(join(f.workspace, other), 'export const unrelated = 2;\\n');
+
+    const marker = join(f.root, 'other-clean-filter-executed');
+    const executable = join(f.root, 'other-clean-filter');
+    writeFileSync(executable, '#!/bin/sh\\nprintf invoked > ' + JSON.stringify(marker) +
+      '\\ncat\\n');
+    chmodSync(executable, 0o755);
+    git(f.workspace, 'config', 'filter.untrusted.clean', executable);
+    writeFileSync(join(f.workspace, '.git', 'info', 'attributes'),
+      'components/Unrelated.tsx filter=untrusted\\n');
+
+    // Control proves this Git setup is actually capable of running the
+    // helper (outside the publisher, with no synthetic publisher GH_TOKEN).
+    git(f.workspace, 'diff', '--no-ext-diff', '--no-textconv', '--', other);
+    assert.equal(existsSync(marker), true, 'fixture did not activate the clean helper');
+    unlinkSync(marker);
+
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0, 'unrelated clean helper must fail closed');
+    assert.match(child.stderr, /Git content filter; executable clean filters are forbidden/);
+    assert.equal(existsSync(marker), false, 'unrelated helper ran under publisher credentials');
+    assert.equal(existsSync(f.log), false, 'must reject before any GitHub CLI action');
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), trusted);
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+      /refs\\/heads\\/aieo\\/model-proposal-99123-1/);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 // Git config inside a disposable checkout is an executable-code surface too.
 // Neither inherited-environment checks nor suppressed hooks alone protect
 // read-only ls-files/diff operations against configured helper programs.
