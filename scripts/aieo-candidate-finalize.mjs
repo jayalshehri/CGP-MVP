@@ -8,7 +8,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
-import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
 const SHA = /^[a-f0-9]{40}$/;
@@ -113,6 +113,9 @@ export function verifyPostBuild(env = process.env) {
       env.GITHUB_REPOSITORY !== REPO ||
       !SHA.test(env.GITHUB_SHA || '') ||
       !/^[1-9][0-9]*$/.test(number || '') || !env.GH_TOKEN) fail();
+  // Git worktree diffs can execute clean filters from info/attributes or
+  // global attributes even with no-textconv and a scrubbed Git environment.
+  try { assertNoTrackedGitFilters(process.env); } catch { fail(); }
 
   const path = MODEL_ALLOWED_PATH;
   const developer = report('developer');

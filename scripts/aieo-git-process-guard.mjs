@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+
 // AIEO Git commands run inside role and publisher processes that may hold
 // repository-scoped GitHub tokens. Never inherit Git environment overrides
 // capable of rerouting worktrees, executing helpers, disabling TLS, or logging
@@ -71,4 +73,47 @@ export function readOnlyGitArguments(args) {
           flag !== '--no-ext-diff' && flag !== '--no-textconv')]
       : args)
   ];
+}
+
+
+// A previously trusted checkout can gain executable clean filters from
+// .git/info/attributes, global attributes or repository .gitattributes. Unlike
+// object-to-object diffs, worktree 'git diff' invokes filter.<driver>.clean
+// even with --no-ext-diff/--no-textconv. Attest every tracked path BEFORE any
+// role/finalizer worktree diff; checking only the proposed file misses changes
+// to another tracked path. Neither ls-files nor check-attr runs clean filters.
+export function assertNoTrackedGitFilters(env = process.env) {
+  const options = {
+    env: readOnlyGitEnvironment(env), stdio: 'pipe', maxBuffer: 512000
+  };
+  const trackedBytes = execFileSync('git', readOnlyGitArguments(['ls-files', '-z']), options);
+  const tracked = trackedBytes.toString('utf8');
+  if (!Buffer.from(tracked, 'utf8').equals(trackedBytes) ||
+      !tracked.endsWith('\0') || trackedBytes.length > 250000) {
+    throw new Error('AIEO tracked paths cannot be attested');
+  }
+  const paths = tracked.slice(0, -1).split('\0');
+  if (!paths.length || paths.some((path) => !path) ||
+      new Set(paths).size !== paths.length) {
+    throw new Error('AIEO tracked index is not a normal checkout');
+  }
+  const responseBytes = execFileSync('git',
+    readOnlyGitArguments(['check-attr', '-z', '--stdin', 'filter']),
+    { ...options, input: trackedBytes });
+  const response = responseBytes.toString('utf8');
+  if (!Buffer.from(response, 'utf8').equals(responseBytes) ||
+      !response.endsWith('\0')) {
+    throw new Error('AIEO Git attribute attestation is invalid');
+  }
+  const fields = response.slice(0, -1).split('\0');
+  if (fields.length !== paths.length * 3) {
+    throw new Error('AIEO Git attribute attestation is incomplete');
+  }
+  for (let index = 0; index < paths.length; index++) {
+    if (fields[index * 3] !== paths[index] ||
+        fields[index * 3 + 1] !== 'filter' ||
+        fields[index * 3 + 2] !== 'unspecified') {
+      throw new Error('AIEO tracked source has an active or unverified Git content filter');
+    }
+  }
 }
