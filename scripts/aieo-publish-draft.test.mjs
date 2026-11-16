@@ -72,6 +72,35 @@ function fixture() {
   return { root, workspace, remote, log, env, target, args, qa, security, reviewer };
 }
 
+test('publisher blocks inherited Git executable/config overrides before any remote write', () => {
+  const f = fixture();
+  try {
+    const mainBefore = git(f.workspace, 'rev-parse', 'main');
+    // Synthetic process settings only. None is a live credential or script.
+    for (const injection of [
+      { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.fsmonitor',
+        GIT_CONFIG_VALUE_0: 'untrusted-helper' },
+      { GIT_CONFIG_KEY_0: 'core.hooksPath' },
+      { GIT_CONFIG_GLOBAL: join(f.root, 'untrusted-global-config') },
+      { GIT_INDEX_FILE: join(f.root, 'untrusted-index') },
+      { GIT_SSH_COMMAND: 'untrusted-transport-helper' },
+      { GIT_ASKPASS: 'untrusted-credential-helper' }
+    ]) {
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: { ...f.env, ...injection },
+        encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, 'Git environment injection must fail closed');
+      assert.match(child.stderr, /untrusted inherited Git environment override/);
+      assert.equal(existsSync(f.log), false, 'GitHub CLI must never be contacted');
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), mainBefore);
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /refs\/heads\/aieo\/model-proposal-99123-1/);
+    }
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test('publisher rejects unsafe dispatch contexts and missing source consent', () => {
   const env = { GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main',
     GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP', GITHUB_RUN_ID: '77',
