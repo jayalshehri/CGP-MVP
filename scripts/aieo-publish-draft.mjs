@@ -23,6 +23,10 @@ function command(binary, args) {
       // pushurl or url.*.insteadOf must never select an executable remote
       // helper (ext::), shell/SSH transport or git:// downgrade. Keep HTTPS
       // for GitHub and file:// solely for isolated local Git test remotes.
+      // git add (not only switch/commit/push) runs post-index-change hooks.
+      // The publisher carries GH_TOKEN, so turn off every hook for every
+      // Git invocation, before any index mutation or local code execution.
+      '-c', 'core.hooksPath=/dev/null',
       '-c', 'protocol.allow=never',
       '-c', 'protocol.https.allow=always',
       '-c', 'protocol.file.allow=always',
