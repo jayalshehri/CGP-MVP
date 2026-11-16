@@ -15,11 +15,12 @@ type Assignment = { requirement_id:number; status:string };
 type Filter = {domain:string;level:string;compliance:string;review:string};
 const ALL="الكل";
 const LEVELS=["المستوى 1: البناء","المستوى 2: التعريف","المستوى 3: التفعيل"];
-const SOURCE_COMPLIANCE=["ممتثل بالكامل","ممتثل لمتطلبات الهيئة","غير ممتثل","لا ينطبق","لم يُقيَّم","حالة غير معيارية"];
+const SOURCE_COMPLIANCE=["ممتثل بالكامل","ممتثل للمعالي فقط","غير ممتثل","لا ينطبق","لم يُقيَّم","حالة غير معيارية"];
 const dateFormat=new Intl.DateTimeFormat("ar-SA-u-ca-gregory",{year:"numeric",month:"short",day:"numeric"});
 function complianceStatus(value:string|null){
  if(!value?.trim())return "لم يُقيَّم";
- if(["ممتثل بالكامل","ممتثل لمتطلبات الهيئة","غير ممتثل","لا ينطبق"].includes(value.trim()))return value.trim();
+ // Mirror the actual Calc!B10 Excel COUNTIFS criterion, not the dashboard heading.
+ if(["ممتثل بالكامل","ممتثل للمعالي فقط","غير ممتثل","لا ينطبق"].includes(value.trim()))return value.trim();
  return "حالة غير معيارية";
 }
 function effectiveReview(r:Requirement,assign?:Assignment){
@@ -60,7 +61,7 @@ export default function NudeeDashboard(){
  const stats=useMemo(()=>{
   const count=(condition:(r:Requirement)=>boolean)=>rows.filter(condition).length;
   const full=count(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل");
-  const authority=count(r=>complianceStatus(r.source_compliance)==="ممتثل لمتطلبات الهيئة");
+  const authority=count(r=>complianceStatus(r.source_compliance)==="ممتثل للمعالي فقط");
   const non=count(r=>complianceStatus(r.source_compliance)==="غير ممتثل");
   const na=count(r=>complianceStatus(r.source_compliance)==="لا ينطبق");
   const unknown=count(r=>complianceStatus(r.source_compliance)==="حالة غير معيارية");
@@ -77,7 +78,7 @@ export default function NudeeDashboard(){
   return [...grouped.entries()].map(([name,list])=>{
    const n=list.length, na=list.filter(r=>complianceStatus(r.source_compliance)==="لا ينطبق").length;
    const full=list.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length;
-   const authority=list.filter(r=>complianceStatus(r.source_compliance)==="ممتثل لمتطلبات الهيئة").length;
+   const authority=list.filter(r=>complianceStatus(r.source_compliance)==="ممتثل للمعالي فقط").length;
    return {name,total:n,applicable:n-na,assessed:list.filter(r=>complianceStatus(r.source_compliance)!=="لم يُقيَّم").length,reviewed:list.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length,
     full,authority,levels:LEVELS.map(level=>{const subset=list.filter(r=>r.maturity_level===level);const denominator=subset.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق").length;return {n:subset.length,rate:denominator?percent(subset.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,denominator):null};})};
   }).sort((a,b)=>b.total-a.total);
@@ -112,7 +113,7 @@ export default function NudeeDashboard(){
     {[
      ["إجمالي الأدلة",stats.total,"يتضمن جميع الأدلة في التصفية"],
      ["ممتثل بالكامل",stats.full,fmtPct(stats.full,stats.applicable)+" من الأدلة المنطبقة"],
-     ["ممتثل لمتطلبات الهيئة",stats.authority,fmtPct(stats.authority,stats.applicable)+" من الأدلة المنطبقة"],
+     ["ممتثل لمتطلبات الهيئة حسب معادلة Excel",stats.authority,fmtPct(stats.authority,stats.applicable)+" من الأدلة المنطبقة"],
      ["غير ممتثل",stats.non,fmtPct(stats.non,stats.applicable)+" من الأدلة المنطبقة"],
      ["غير منطبق",stats.na,"مستبعد من مقام الامتثال"],
      ["غير مقيّم",stats.unassessed,fmtPct(stats.assessed,stats.total)+" تم تقييمها"],
@@ -122,10 +123,10 @@ export default function NudeeDashboard(){
     ].map(([label,value,detail])=><article className={styles.metric} key={label}><span>{label}</span><strong>{typeof value==="number"?value.toLocaleString("ar-SA"):value}</strong><small>{detail}</small></article>)}
    </section>
    <section className={styles.workflow}><div><span>دورة التكليف في CGP</span><p>تُعرض حالات الأدلة داخل المنصة بصورة منفصلة عن تصنيف الامتثال الرسمي في Excel.</p></div><div className={styles.flowNumbers}><span>المسندة <b>{stats.assigned}</b></span><span>بانتظار التحقق <b>{stats.submitted}</b></span><span>المعتمدة <b>{stats.approved}</b></span></div></section>
-   {stats.unknown>0&&<p role="note" className={styles.warning}>تنبيه جودة بيانات: توجد {stats.unknown} قيمة امتثال غير مطابقة للقائمة المعتمدة في ملف Excel (مثل «ممتثل للمعالي فقط»). أبقيناها دون تعديل أو احتسابها كممتثلة.</p>}
+   {stats.unknown>0&&<p role="note" className={styles.warning}>تنبيه جودة بيانات: توجد {stats.unknown} قيمة لا تدخل في نتائج معادلات Excel الأصلية (مثل «ممتثل لمتطلبات الهيئة»)، بينما تحسب المعادلة «ممتثل للمعالي فقط». احتفظنا بالقيم الأصلية ولم نعدلها أو نحتسبها كممتثلة.</p>}
    <div className={styles.twoCols}>
     <section className={styles.panel}><h2>حالة الامتثال للمؤشر</h2><p>إجمالي الامتثال لمتطلبات NDMO: {fmtPct(stats.full,stats.applicable)} · امتثال متطلبات الهيئة: {fmtPct(stats.full+stats.authority,stats.applicable)}</p>
-     {[["ممتثل بالكامل",stats.full],["ممتثل للهيئة",stats.authority],["غير ممتثل",stats.non],["غير منطبق",stats.na],["لم يُقيّم",stats.unassessed],["حالة غير معيارية",stats.unknown]].map(([label,n])=><div className={styles.barItem} key={label}><div><span>{label}</span><b>{n}</b></div><div className={styles.track}><div style={{width:(stats.total?100*Number(n)/stats.total:0)+"%"}}/></div></div>)}
+     {[["ممتثل بالكامل",stats.full],["ممتثل للمعالي فقط (صيغة Excel)",stats.authority],["غير ممتثل",stats.non],["غير منطبق",stats.na],["لم يُقيّم",stats.unassessed],["حالة غير معيارية",stats.unknown]].map(([label,n])=><div className={styles.barItem} key={label}><div><span>{label}</span><b>{n}</b></div><div className={styles.track}><div style={{width:(stats.total?100*Number(n)/stats.total:0)+"%"}}/></div></div>)}
     </section>
     <section className={styles.panel}><h2>الأدلة حسب مستوى النضج</h2><p>توزيع الأدلة ونتائج المراجعة للمستويات الثلاثة.</p>
     {LEVELS.map(level=>{const subset=rows.filter(r=>r.maturity_level===level),done=subset.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length;return <div className={styles.levelRow} key={level}><span>{level}</span><strong>{subset.length}</strong><div className={styles.track}><div style={{width:(rows.length?100*subset.length/rows.length:0)+"%"}}/></div><small>مكتمل {done} · {fmtPct(done,subset.length)}</small></div>})}
@@ -137,7 +138,7 @@ export default function NudeeDashboard(){
     <div className={styles.weekly}>{weekly.map(w=><div key={w.week} className={styles.week}><span>الأسبوع {w.week}</span><small>{shortDate(w.until)}</small><div className={styles.track}><div style={{width:percent(w.planned,stats.total)+"%"}}/></div><div className={styles.track+" "+styles.actual}><div style={{width:percent(w.actual,stats.total)+"%"}}/></div><small>المخطط {w.planned} · المؤرخ {w.actual}</small></div>)}</div>
     <p className={styles.footnote}>المخطط: الأدلة المستحقة حتى نهاية الأسبوع. الفعلي: الأدلة المكتملة التي لها تاريخ انتهاء فعلي. قد توجد أدلة مكتملة دون تاريخ، فلا تُنسب إلى أسبوع محدد.</p>
    </section>
-   <p className={styles.footnote}>المرجع: ورقة «متابعة الأدلة الداعمة» و«لوحة البيانات» و«الجدول الزمني» من ملف نُضيء الأصلي. الامتثال من تصنيف المصدر، والمراجعة تشمل حالة المصدر والأدلة المعتمدة في CGP؛ اعتماد الدليل لا يحوّله تلقائيًا إلى «ممتثل».</p>
+   <p className={styles.footnote}>المرجع: أوراق «متابعة الأدلة الداعمة» و«لوحة البيانات» و«الجدول الزمني» و«Calc» من ملف نُضيء الأصلي. معادلة امتثال الجهة في Calc!B10 تحتسب فقط النص «ممتثل للمعالي فقط»؛ نعرض التناقض مع بقية مسميات المصدر بوضوح دون تغيير أية بيانات. المراجعة تشمل حالة المصدر والأدلة المعتمدة في CGP، واعتماد الدليل لا يحوّله تلقائيًا إلى «ممتثل».</p>
   </>}
  </main>;
 }
