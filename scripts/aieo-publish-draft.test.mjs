@@ -175,6 +175,62 @@ test('publisher disables Git commit hooks even for a valid independently reviewe
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
+// A bare remote's post-receive hook simulates the advertised refs changing
+// during the push itself. The publisher must not open a PR for stale or
+// redirected refs, even though its earlier pre-push checks passed.
+for (const movedRef of ['main', 'candidate']) {
+  test('publisher refuses ' + movedRef + ' ref drift during push before creating a Draft PR', () => {
+    const f = fixture();
+    try {
+      const base = git(f.workspace, 'rev-parse', 'main');
+      let update;
+      if (movedRef === 'main') {
+        // Place a distinct single-parent commit in the disposable bare remote,
+        // without changing main before the publisher's initial preflight.
+        const tree = git(f.workspace, 'rev-parse', 'HEAD^{tree}');
+        const nextMain = git(f.workspace, 'commit-tree', tree, '-p', base, '-m',
+          'synthetic post-push drift');
+        git(f.workspace, 'push', '-q', 'origin',
+          nextMain + ':refs/heads/synthetic-drift-ready');
+        update = 'git update-ref refs/heads/main ' + nextMain;
+      } else {
+        // Overwrite the freshly pushed candidate ref in the disposable remote;
+        // this emulates a concurrent actor changing the branch behind the
+        // publisher. The pre-push branch-absence check cannot catch this.
+        update = 'git update-ref refs/heads/aieo/model-proposal-99123-1 ' + base;
+      }
+      const hook = join(f.remote, 'hooks', 'post-receive');
+      writeFileSync(hook, [
+        '#!/bin/sh',
+        'while read old new ref; do',
+        '  if [ "$ref" = "refs/heads/aieo/model-proposal-99123-1" ]; then',
+        '    ' + update,
+        '  fi',
+        'done', ''
+      ].join('\\n'));
+      chmodSync(hook, 0o755);
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, 'remote drift must fail closed');
+      assert.match(child.stderr, /remote refs changed after candidate push/);
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), base,
+        'the local trusted baseline is never modified');
+      assert.equal(existsSync(f.log), true, 'only initial gh auth was allowed');
+      assert.equal(readFileSync(f.log, 'utf8').trim(), 'auth setup-git',
+        'no PR, workflow dispatch, merge or other GitHub write');
+      if (movedRef === 'candidate') {
+        assert.equal(git(f.workspace, 'ls-remote', 'origin',
+          'refs/heads/aieo/model-proposal-99123-1'),
+          base + '\\trefs/heads/aieo/model-proposal-99123-1');
+      } else {
+        assert.notEqual(git(f.workspace, 'ls-remote', 'origin',
+          'refs/heads/main'), base + '\\trefs/heads/main');
+      }
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+}
+
 test('publisher rejects remote main drift before branch, push, or any GitHub CLI call', () => {
   const f = fixture();
   try {
