@@ -197,7 +197,15 @@ test('publisher blocks inherited Git executable/config overrides before any remo
       { GIT_EXEC_PATH: join(f.root, 'untrusted-git-helpers') },
       { GIT_EXTERNAL_DIFF: 'untrusted-diff-helper' },
       { GIT_SSL_NO_VERIFY: '1' },
-      { GIT_TRACE_CURL: join(f.root, 'untrusted-trace.log') }
+      { GIT_TRACE_CURL: join(f.root, 'untrusted-trace.log') },
+      // GitHub CLI dispatch and API metadata must also stay pinned to the
+      // checked repository and authenticated github.com host.
+      { GH_HOST: 'untrusted.example.invalid' },
+      { GH_REPO: 'other/foreign-repository' },
+      { GH_CONFIG_DIR: join(f.root, 'foreign-gh-config') },
+      { GH_DEBUG: 'api' },
+      { GH_PAGER: 'untrusted-helper' },
+      { GH_ENTERPRISE_TOKEN: 'synthetic-placeholder-only' }
     ]) {
       const child = spawnSync(process.execPath, [publisher], {
         cwd: f.workspace, env: { ...f.env, ...injection },
