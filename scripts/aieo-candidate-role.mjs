@@ -19,15 +19,23 @@ const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 function block() {
   throw new Error('AIEO candidate role blocked: unverified remote Draft PR or candidate evidence');
 }
+// Git attributes and local config can execute textconv and fsmonitor programs
+// even during otherwise read-only role inspection. Do not execute checkout
+// helpers with the role's read-scoped GH_TOKEN.
 function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
+  const safeArgs = ['-c', 'core.fsmonitor=false',
+    ...(args[0] === 'diff'
+      ? ['diff', '--no-ext-diff', '--no-textconv',
+        ...args.slice(1).filter((flag) => flag !== '--no-ext-diff')]
+      : args)];
+  return execFileSync('git', safeArgs, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
 }
 // A Unicode string from execFileSync(encoding: 'utf8') is not proof of the
 // immutable Git blob's actual bytes: Node silently inserts U+FFFD for malformed
 // UTF-8. Independent role attestations must bind to exactly the bytes published,
 // including when the previous trusted base or the candidate is malformed.
 function readStrictGitSource(revision) {
-  const bytes = execFileSync('git', ['show', revision + ':' + MODEL_ALLOWED_PATH],
+  const bytes = execFileSync('git', ['-c', 'core.fsmonitor=false', 'show', revision + ':' + MODEL_ALLOWED_PATH],
     { stdio: 'pipe', maxBuffer: 256000 });
   if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > 48000) block();
   const source = bytes.toString('utf8');
