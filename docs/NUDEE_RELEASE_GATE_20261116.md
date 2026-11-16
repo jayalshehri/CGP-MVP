@@ -31,16 +31,24 @@ This checklist describes evidence for PR #237. It is **not a production approval
 - Attempted to locate the original workbook in accessible conversation/library files; no relevant workbook was found. The **CSV-to-QA 18-column validation remains evidenced**, but chart/formula reconciliation against the original Excel workbook remains open.
 - Browser-authenticated mobile/desktop screenshot checks and actual signed-URL binary Storage E2E are still **NOT RUN**; this environment lacks a usable authenticated interactive browser session. Keep PR draft and production unchanged.
 
+## QA security and invitation routing — 2026-11-16 (next pass)
+- Discovered an orphan-file exposure path: after a successful Storage upload followed by a failed submission RPC, an unsent object could remain under the assignment folder and become readable by a replacement assignee. Added migration `20261116213000_nudee_orphan_evidence_cleanup.sql` to block reassignment while any evidence objects remain and to permit tightly scoped removal of unsent objects. Updated the Nudee upload page to verify ambiguous RPC responses and attempt orphan cleanup after a confirmed failed submission. **No live Storage API deletion/upload has been exercised.**
+- Applied the orphan-evidence SQL migration **to CGP-QA only**. A transaction-scoped test with a fake Storage metadata row confirmed that reassignment is rejected while orphan metadata exists. The transaction was rolled back; QA retains 364 requirements, zero assignments, submissions or Nudee Storage objects. A separate attempted direct SQL delete failed with Supabase Storage's intentional `storage.protect_delete()` guard; cleanup must be tested through the actual Storage API before release.
+- Inspected Vercel's public environment URLs: **Preview targets CGP-QA** (`lkozjnpfufdpzqtzdxhe`), while production targets CGP-DEV (`ahfindosbawqfvhbcplq`). Confirmed that the Vercel branch alias `cgp-mvp-git-feature-nudee-evidence-workflow-grc13.vercel.app` exists.
+- Fixed the QA-only invitation origin selection in `admin-invite-user`: the QA project now points activation links to the stable branch alias, not production, while CORS supports the approved CGP QA preview naming pattern. Deployed the revised function **to CGP-QA only**: ACTIVE v2, `verify_jwt=true`. Production function and redirects were not touched. Supabase Auth's redirect allow-list and an actual invitation/first login are **still unverified**.
+- GitHub required CI for the orphan upload UI fix commit `5fbab33f83d2b706d9dfb5f99fcfa6c00536d352` passed (run `43933044329`); its Preview was READY at `cgp-9v38tuh75-grc13.vercel.app`. CI for the later Edge Function fix must be verified separately.
+- Library and conversation file search found **no original Nudee Excel workbook**; unrelated cybersecurity KPI spreadsheets were excluded. The original 18-column CSV reconciliation remains valid but does not establish Excel chart/formula parity.
+
 ## Not yet verified — BLOCKING
 1. A **real binary** upload, signed-link download, and subsequent decision using separate authenticated QA owner/reviewer sessions. SQL `storage.objects` insertion does **not** test storage service file bytes, signed URLs, or browser permissions.
 2. **Visual** RTL layout on real mobile and desktop viewport sizes after authentication, plus interactive error/retry paths.
-3. Invitation and first login of dedicated `nudee_owner`: the Edge Function source is updated in the branch, but the QA Edge Function has not been deployed or exercised.
+3. Invitation and first login of dedicated `nudee_owner`: QA Edge Function v2 is deployed, but Auth redirect allow-list, real invitation and activation are **not tested**.
 4. Confirm all original Excel dashboard charts/series against the source workbook beyond the 18-field CSV import.
 5. Production migration and dataset import have **not** been applied. Before rollout, deploy/update `admin-invite-user` in production only after all QA gates are green.
 
 ## Release sequence
 1. Finish remaining E2E/visual tests in QA; fix defects on this branch and rerun required CI.
-2. Confirm production schema compatibility and backup; apply the five Nudee migrations in sequence.
+2. Confirm production schema compatibility and backup; apply the six Nudee migrations in sequence.
 3. Import **exactly 364** original CSV records through a controlled administrative data operation (never commit actual source CSV to the code repository). Verify counts, uniqueness, domains, and 18-column baseline consistency before any production edits to Nudee status.
 4. Deploy the updated `admin-invite-user` Edge Function to production and verify account creation for `nudee_owner`.
 5. Merge only after all gates pass; wait for Vercel production deployment **READY**, then verify `cgp-mvp-grc13.vercel.app` resolves to that exact production deployment and smoke-test both authenticated Nudee routes.
