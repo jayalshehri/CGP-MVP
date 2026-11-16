@@ -84,7 +84,11 @@ test('publisher blocks inherited Git executable/config overrides before any remo
       { GIT_CONFIG_GLOBAL: join(f.root, 'untrusted-global-config') },
       { GIT_INDEX_FILE: join(f.root, 'untrusted-index') },
       { GIT_SSH_COMMAND: 'untrusted-transport-helper' },
-      { GIT_ASKPASS: 'untrusted-credential-helper' }
+      { GIT_ASKPASS: 'untrusted-credential-helper' },
+      { GIT_EXEC_PATH: join(f.root, 'untrusted-git-helpers') },
+      { GIT_EXTERNAL_DIFF: 'untrusted-diff-helper' },
+      { GIT_SSL_NO_VERIFY: '1' },
+      { GIT_TRACE_CURL: join(f.root, 'untrusted-trace.log') }
     ]) {
       const child = spawnSync(process.execPath, [publisher], {
         cwd: f.workspace, env: { ...f.env, ...injection },
