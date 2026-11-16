@@ -1454,14 +1454,21 @@ test('read-only Developer, QA, Security, Reviewer and finalizer Git subprocesses
       '#!/usr/bin/env node\n' +
       'const {appendFileSync}=require("node:fs");\n' +
       'const {spawnSync}=require("node:child_process");\n' +
-      'if(process.env.GH_TOKEN||process.env.GITHUB_TOKEN||process.env.OPENROUTER_API_KEY)' +
+      'if(process.env.GH_TOKEN||process.env.GITHUB_TOKEN||process.env.OPENROUTER_API_KEY||' +
+      'process.env.NPM_TOKEN||process.env.AWS_SECRET_ACCESS_KEY||process.env.DATABASE_URL||' +
+      'process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SSH_AUTH_SOCK)' +
       'appendFileSync(' + JSON.stringify(marker) + ', "credential seen\\n");\n' +
       'const run=spawnSync(' + JSON.stringify(systemGit) +
         ',process.argv.slice(2),{stdio:"inherit"});\n' +
       'process.exit(run.status??1);\n');
     chmodSync(interceptedGit, 0o755);
     const env = { ...f.env, GITHUB_TOKEN: 'synthetic-actions-token',
-      OPENROUTER_API_KEY: 'synthetic-provider-token' };
+      OPENROUTER_API_KEY: 'synthetic-provider-token',
+      NPM_TOKEN: 'synthetic-npm-token',
+      AWS_SECRET_ACCESS_KEY: 'synthetic-cloud-key',
+      DATABASE_URL: 'postgres://synthetic:password@example.invalid/db',
+      SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-role-key',
+      SSH_AUTH_SOCK: '/tmp/synthetic-agent.sock' };
     for (const [role, status] of [
       ['developer', 'proposed'], ['qa', 'passed'],
       ['security', 'passed'], ['reviewer', 'draft-pr-eligible']
