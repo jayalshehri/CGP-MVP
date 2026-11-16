@@ -15,8 +15,10 @@ create table if not exists public.nudee_requirements (
  review_phase text,
  planned_start date,
  planned_end date,
+ actual_end date,
  source_review_status text,
  source_progress numeric(5,4),
+ schedule_indicator text,
  created_at timestamptz not null default now()
 );
 create table if not exists public.nudee_assignments (
