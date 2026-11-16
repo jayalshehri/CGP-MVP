@@ -39,6 +39,16 @@ This checklist describes evidence for PR #237. It is **not a production approval
 - GitHub required CI for the orphan upload UI fix commit `5fbab33f83d2b706d9dfb5f99fcfa6c00536d352` passed (run `43933044329`); its Preview was READY at `cgp-9v38tuh75-grc13.vercel.app`. CI for the later Edge Function fix must be verified separately.
 - Library and conversation file search found **no original Nudee Excel workbook**; unrelated cybersecurity KPI spreadsheets were excluded. The original 18-column CSV reconciliation remains valid but does not establish Excel chart/formula parity.
 
+
+## Original workbook reconciliation — 2026-11-16 (uploaded source)
+- The original uploaded XLSX was opened and its OOXML formulas, cached calculation values, chart series and sheet structure inspected. It contains five sheets: مقدمة, لوحة البيانات, متابعة الأدلة الداعمة, الجدول الزمني, and Calc, with **seven Excel chart definitions**.
+- The evidence rows are **2–365 (364 rows)**. Source Calc cached values with the dashboard's filters set to الكل: `B8=364` total, `B9=0` fully compliant, `B10=1` exact text «ممتثل للمعالي فقط», `B11=2` non-compliant, `B12=0` not applicable, `B13=360` blank/unassessed, `B17=1` complete, `B19=0` overdue. `B21=4/364≈1.10%` evaluated, `B15=0%` NDMO, `B16=1/364≈0.275%` combined NDMO+authority.
+- A fresh read-only CGP-QA SQL aggregation independently matches all eight counts above exactly: **364, 0, 1, 2, 0, 360, 1, 0**. The fourth evaluated source value is intentionally not treated as an exact recognized compliance category; the existing UI flags nonstandard values rather than silently recoding the original source.
+- The source Calc!B19 counts the schedule indicator column Q values equal to «متأخر». The web dashboard previously recalculated overdue from planned dates and current time, which diverges from the workbook metric. Corrected the source-parity KPI to read `schedule_indicator` while keeping underlying source data unchanged, in commit `3bc399f8cdf1d7655272347b5fa684d395b7f94b`.
+- The original timetable: start 2026-11-08, four consecutive phases of **two weeks each**, total **eight weeks**. Seven chart definitions reference data series on Calc (including 14-domain series and eight-week schedule series). Their **complete series-by-series visual and formula parity is NOT yet verified** against the app; avoid claiming the dashboard matches every original Excel chart.
+- The workbook contained complex formulas/illustrations. A direct `artifact_tool` import failed with a tool RPC transport error; formulas and cached values were therefore read without editing the uploaded workbook. No workbook changes or exports were made.
+- Following this KPI correction, CI, Vercel preview and authenticated UI checks on the new branch head **require fresh verification**. This workbook review alone does not clear the release gate.
+
 ## Not yet verified — BLOCKING
 1. A **real binary** upload, signed-link download, and subsequent decision using separate authenticated QA owner/reviewer sessions. SQL `storage.objects` insertion does **not** test storage service file bytes, signed URLs, or browser permissions.
 2. **Visual** RTL layout on real mobile and desktop viewport sizes after authentication, plus interactive error/retry paths.
