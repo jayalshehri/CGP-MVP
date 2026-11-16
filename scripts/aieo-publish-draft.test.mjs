@@ -113,6 +113,54 @@ for (const attrOrigin of ['info', 'global']) {
   });
 }
 
+// The publisher receives GH_TOKEN for PR creation and authenticated push.
+// Its Git subprocesses must not run executable remote helpers selected by
+// an injected origin URL or pushurl, even when the Git environment is clean.
+for (const remoteSetting of ['fetch-url', 'pushurl']) {
+  test('publisher blocks executable Git origin ' + remoteSetting + ' under GH_TOKEN', () => {
+    const f = fixture();
+    try {
+      const trusted = git(f.workspace, 'rev-parse', 'main');
+      const marker = join(f.root, 'executable-transport-ran');
+      const helper = join(f.root, 'untrusted-remote-helper');
+      writeFileSync(helper, '#!/bin/sh\\nprintf invoked > ' + JSON.stringify(marker) +
+        '\\nexit 93\\n');
+      chmodSync(helper, 0o755);
+      const url = 'ext::' + helper;
+      git(f.workspace, 'config',
+        remoteSetting === 'fetch-url' ? 'remote.origin.url' : 'remote.origin.pushurl', url);
+
+      // Control: this real Git fixture WOULD run the helper if ext:: were
+      // allowed. The control subprocess has no publisher credential.
+      const control = spawnSync('git', ['-c', 'protocol.ext.allow=always',
+        remoteSetting === 'fetch-url' ? 'ls-remote' : 'push', 'origin',
+        ...(remoteSetting === 'fetch-url' ? [] : ['main:refs/heads/main'])], {
+        cwd: f.workspace, encoding: 'utf8', timeout: 15000,
+        env: { PATH: process.env.PATH, HOME: process.env.HOME,
+          GIT_TERMINAL_PROMPT: '0' }
+      });
+      assert.notEqual(control.status, 0, 'unprotected transport must fail after invoking helper');
+      assert.equal(existsSync(marker), true, 'executable fixture did not run');
+      unlinkSync(marker);
+
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, 'untrusted remote transport must fail closed');
+      assert.equal(existsSync(marker), false, 'Git remote helper executed with GH_TOKEN');
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), trusted);
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /refs\\/heads\\/aieo\\/model-proposal-99123-1/,
+        'no candidate remote branch may be pushed');
+      if (existsSync(f.log)) {
+        const actions = readFileSync(f.log, 'utf8');
+        assert.doesNotMatch(actions, /pr create|workflow run|pr merge/,
+          'no PR or workflow writes after a forbidden Git transport');
+      }
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+}
+
 // An untrusted clean filter can execute during *git diff*, before git add.
 // Reject it from every Git attribute source while the publisher holds GH_TOKEN.
 for (const attrOrigin of ['info', 'working-tree', 'global']) {
