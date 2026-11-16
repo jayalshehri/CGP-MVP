@@ -38,9 +38,9 @@ export default function NudeePage(){
    if(re)throw re;if(ue)throw ue;
    setRequirements((r??[]) as Requirement[]);setUsers((u??[]) as User[]);setRole("office");
   }else if(profile.role==="control_owner"){
-   const ids=(a??[]).filter(x=>x.assignee_id===user.id).map(x=>x.requirement_id);
-   // Requirements remain office-only; uploader sees assignment identifiers, not the full catalog.
-   setRequirements(ids.map(id=>({id,source_row:id,domain_name:"",standard_code:"",requirement_title:"دليل مكلّف",maturity_level:"",evidence_name:"رفع الدليل المطلوب",evidence_description:null,source_compliance:null})));
+   const {data:r,error:re}=await supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance").order("source_row").limit(1000);
+   if(re)throw re;
+   setRequirements((r??[]) as Requirement[]);
    setRole("assignee");
   }else throw new Error("لا تملك صلاحية الدخول إلى مؤشر نُضيء.");
  },[]);
