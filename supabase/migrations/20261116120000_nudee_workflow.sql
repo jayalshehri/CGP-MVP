@@ -90,3 +90,33 @@ begin
 end; $$;
 revoke all on function public.nudee_mark_submitted(bigint) from public,anon;
 grant execute on function public.nudee_mark_submitted(bigint) to authenticated;
+
+-- Only office users can read the full requirements; assignees see their assigned requirements.
+-- Validate transitions in the database to avoid client-side approval bypass.
+create or replace function public.nudee_assignment_guard()
+returns trigger language plpgsql security invoker set search_path = '' as $$
+begin
+ if not public.nudee_is_office() and not (tg_op='UPDATE' and old.status in ('assigned','changes_requested') and new.status='submitted' and new.assignee_id=(select auth.uid()) and new.assignee_id=old.assignee_id and new.requirement_id=old.requirement_id) then raise exception 'Data Office authorization required'; end if;
+ if tg_op='UPDATE' then
+   if old.status='approved' then raise exception 'Approved assignments are immutable'; end if;
+   if new.status in ('approved','changes_requested') and old.status <> 'submitted' then
+     raise exception 'Only submitted assignments may be reviewed';
+   end if;
+   if new.status='changes_requested' and nullif(trim(new.review_notes),'') is null then
+     raise exception 'Review notes are required';
+   end if;
+   if new.status='submitted' and not (old.status in ('assigned','changes_requested') and new.assignee_id=(select auth.uid())) then raise exception 'Invalid submission'; end if;
+ end if;
+ return new;
+end; $$;
+create trigger nudee_assignment_guard_trigger before insert or update on public.nudee_assignments for each row execute function public.nudee_assignment_guard();
+-- Prevent reassignment after upload and reject inactive or unauthorized assignees.
+create or replace function public.nudee_validate_assignee()
+returns trigger language plpgsql security invoker set search_path = '' as $$
+begin
+ if new.assignee_id is not null and not exists(
+  select 1 from public.profiles p where p.user_id=new.assignee_id and p.is_active and p.role='control_owner'
+ ) then raise exception 'Assignee must be an active control owner'; end if;
+ return new;
+end; $$;
+create trigger nudee_validate_assignee_trigger before insert or update on public.nudee_assignments for each row execute function public.nudee_validate_assignee();
