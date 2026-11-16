@@ -21,11 +21,18 @@ export function hasUnsafeGitEnvironment(env) {
  * any Actions/model credential to repository-local Git helpers or transports.
  * This is defense-in-depth: the inherited Git override guard remains required.
  */
+// Unlike the explicit gh API call, public read-only Git operations have no
+// reason to inherit credentials from unrelated CI steps (npm, databases,
+// cloud SDKs, provider APIs or an SSH agent). Deny common credential-shaped
+// variable names as well as the known GitHub/OpenRouter keys. This is a
+// defense-in-depth scrub, not a substitute for the inherited Git/GH override
+// rejection or a claim that arbitrary environment variable names are safe.
+const GIT_CHILD_CREDENTIAL_ENV = /(?:^|_)(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|API_KEY|PRIVATE_KEY|ACCESS_KEY|AUTH)(?:_|$)|^(?:PGPASSWORD|PGPASSFILE|DATABASE_URL|REDIS_URL|MONGODB_URI|SSH_AUTH_SOCK)$/i;
+
 export function readOnlyGitEnvironment(env = process.env) {
   const scoped = { ...env };
-  for (const name of [
-    'GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN',
-    'GITHUB_ENTERPRISE_TOKEN', 'OPENROUTER_API_KEY'
-  ]) delete scoped[name];
+  for (const name of Object.keys(scoped)) {
+    if (GIT_CHILD_CREDENTIAL_ENV.test(name)) delete scoped[name];
+  }
   return scoped;
 }
