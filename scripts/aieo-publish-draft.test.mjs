@@ -81,8 +81,8 @@ for (const attrOrigin of ['info', 'working-tree', 'global']) {
       const trusted = git(f.workspace, 'rev-parse', 'main');
       const marker = join(f.root, 'untrusted-clean-filter-executed');
       const executable = join(f.root, 'untrusted-clean-filter');
-      writeFileSync(executable, '#!/bin/sh\\n' +
-        'printf invoked > ' + JSON.stringify(marker) + '\\ncat\\n');
+      writeFileSync(executable, '#!/bin/sh\n' +
+        'printf invoked > ' + JSON.stringify(marker) + '\ncat\n');
       chmodSync(executable, 0o755);
       git(f.workspace, 'config', 'filter.untrusted.clean', executable);
       const attributes = attrOrigin === 'info'
@@ -90,7 +90,7 @@ for (const attrOrigin of ['info', 'working-tree', 'global']) {
         : attrOrigin === 'working-tree'
           ? join(f.workspace, '.gitattributes')
           : join(f.root, 'external-git-attributes');
-      writeFileSync(attributes, 'components/FeedbackWidget.tsx filter=untrusted\\n');
+      writeFileSync(attributes, 'components/FeedbackWidget.tsx filter=untrusted\n');
       if (attrOrigin === 'global') {
         git(f.workspace, 'config', 'core.attributesFile', attributes);
       }
@@ -104,7 +104,7 @@ for (const attrOrigin of ['info', 'working-tree', 'global']) {
       assert.equal(git(f.workspace, 'rev-parse', 'main'), trusted);
       assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
       assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
-        /refs\\/heads\\/aieo\\/model-proposal-99123-1/,
+        /refs\/heads\/aieo\/model-proposal-99123-1/,
         'no candidate branch was pushed');
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   });
