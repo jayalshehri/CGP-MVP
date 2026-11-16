@@ -57,6 +57,14 @@ This checklist describes evidence for PR #237. It is **not a production approval
 - QA security advisors warn that 5 intended Nudee `SECURITY DEFINER` RPCs are callable by `authenticated`, but direct SQL inspection showed they are **not executable by `anon`**, have fixed empty search paths and authenticate/authorize their calls. Supabase's QA project additionally reports leaked-password protection disabled; review before rollout. Advisory: https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable .
 - Preserve all remaining release blockers below: CI and Vercel READY alone do not test authenticated browser UI, signed Storage binary operations, or first-login email redirects. Production was not changed.
 
+## QA follow-up — fourth Excel phase and access controls (2026-11-16)
+- Inspected the **original uploaded workbook's actual formulas** in `الجدول الزمني!K15`, `Calc!E60:E67`, `Calc!H60:K67` and `Calc!B72:F75`. Phase four (المراجعة الشاملة, weeks 7–8) is an **independent manual 0–100% progress value** contributing **25%** to the eight-week actual series, not a maturity level or automatic evidence approval. Previous CGP dashboard hard-coded it to zero, which would underreport progress and cap the trend at 75%.
+- Added migration `20261116233000_nudee_final_review_progress.sql` (the **seventh** Nudee migration): singleton review progress, office-only RLS, an office-authenticated `nudee_set_final_review_progress` RPC, mandatory justification, and immutable append-only progress audit. This migration was successfully applied to **CGP-QA only**. Initial progress is 0%, matching Excel's cached final phase, with no changes to production.
+- Corrected the source-weighted weekly progress calculation and four-stage visual timeline to include the audited phase-four fraction. Added a responsive Arabic RTL Data Office-only progress form, without converting review progress to regulatory compliance. The historical last-phase portion is bounded by the original schedule, while the current-phase value is the most recently saved office assessment; these are live projections rather than an Excel-frozen snapshot.
+- Transaction-level QA regression, with authenticated-role impersonation, **passed**: a `control_owner` was forbidden to read or update the office-only progress; an active `admin` could set **27.5%** with an audit record. The transaction was **rolled back**. Read-after-rollback confirmed **0.0000** persisted phase-four progress, **0** audit entries, and **364** original requirements.
+- Vercel branch Preview for CSS commit `6f1ae2ba1951cfe3ee20337b151b0f8c401d48a5` was **READY** (deployment `cgp-b6qa728uz-grc13.vercel.app`). Preview HTML fetches of both Nudee routes and `/activate` returned HTTP 200 and root `dir="rtl"`. These are HTTP/SSR checks only; **authenticated UI interaction, Storage bytes and viewport screenshots were NOT run**.
+- GitHub CI result for this latest branch commit must be checked independently before release. QA security advisor still lists intentional authenticated `SECURITY DEFINER` Nudee RPC warnings, and breached-password protection disabled; these are not automatically cleared by SQL authorization tests.
+
 ## Not yet verified — BLOCKING
 1. A **real binary** upload, signed-link download, and subsequent decision using separate authenticated QA owner/reviewer sessions. SQL `storage.objects` insertion does **not** test storage service file bytes, signed URLs, or browser permissions.
 2. **Visual** RTL layout on real mobile and desktop viewport sizes after authentication, plus interactive error/retry paths.
@@ -66,7 +74,7 @@ This checklist describes evidence for PR #237. It is **not a production approval
 
 ## Release sequence
 1. Finish remaining E2E/visual tests in QA; fix defects on this branch and rerun required CI.
-2. Confirm production schema compatibility and backup; apply the six Nudee migrations in sequence.
+2. Confirm production schema compatibility and backup; apply the seven Nudee migrations in sequence.
 3. Import **exactly 364** original CSV records through a controlled administrative data operation (never commit actual source CSV to the code repository). Verify counts, uniqueness, domains, and 18-column baseline consistency before any production edits to Nudee status.
 4. Deploy the updated `admin-invite-user` Edge Function to production and verify account creation for `nudee_owner`.
 5. Merge only after all gates pass; wait for Vercel production deployment **READY**, then verify `cgp-mvp-grc13.vercel.app` resolves to that exact production deployment and smoke-test both authenticated Nudee routes.
