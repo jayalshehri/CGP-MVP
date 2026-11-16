@@ -1,7 +1,7 @@
 // Independent review of a model-generated working tree against the prior HEAD.
 import { readVerifiedModelCandidate } from './aieo-model-candidate-read.mjs';
 import { readBoundedModelReport, writeExclusiveModelRoleReport } from './aieo-role-artifact-io.mjs';
-import { execFileSync } from 'node:child_process';
+import { modelGit, preflightModelGit } from './aieo-model-git.mjs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 
@@ -128,10 +128,11 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
 }
 
 if (process.argv[1]?.endsWith('/aieo-model-security.mjs')) {
-  const original = execFileSync('git', ['show', 'HEAD:' + MODEL_ALLOWED_PATH], { encoding: 'utf8' });
+  preflightModelGit();
+  const original = modelGit(['show', 'HEAD:' + MODEL_ALLOWED_PATH]);
   const actual = readVerifiedModelCandidate();
-  const changedPaths = execFileSync('git', ['diff', '--name-only'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-  const diff = execFileSync('git', ['diff', '--unified=0', '--', MODEL_ALLOWED_PATH], { encoding: 'utf8' });
+  const changedPaths = modelGit(['diff', '--name-only']).trim().split('\n').filter(Boolean);
+  const diff = modelGit(['diff', '--unified=0', '--', MODEL_ALLOWED_PATH]);
   const report = readBoundedModelReport('proposal');
   const result = inspectModelDiff({ original, actual, changedPaths, diff, report });
   writeExclusiveModelRoleReport('security', result);
