@@ -107,8 +107,8 @@ for (const attrOrigin of ['info', 'global']) {
       assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
       assert.equal(git(f.workspace, 'rev-parse', 'main'), trusted);
       assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
-      assert.match(git(f.workspace, 'ls-remote', '--heads', f.remote),
-        /refs\\/heads\\/aieo\\/model-proposal-99123-1/);
+      assert.ok(git(f.workspace, 'ls-remote', '--heads', f.remote)
+        .includes('refs/heads/aieo/model-proposal-99123-1'));
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   });
 }
