@@ -39,6 +39,21 @@ UPDATE public.profiles SET role='nudee_owner'
  WHERE user_id=current_setting('qa.nudee_owner_user')::uuid;
 
 SET LOCAL ROLE authenticated;
+-- Before any assignment, the restricted owner must see only their own profile.
+SELECT set_config('request.jwt.claim.sub',current_setting('qa.nudee_owner_user'),true);
+DO $$
+BEGIN
+ IF (SELECT count(*) FROM public.nudee_requirements) <> 0
+    OR (SELECT count(*) FROM public.nudee_assignments) <> 0
+    OR (SELECT count(*) FROM public.controls) <> 0
+    OR (SELECT count(*) FROM public.evidence) <> 0
+    OR (SELECT count(*) FROM public.cybersecurity_projects) <> 0
+    OR (SELECT count(*) FROM public.nudee_final_review) <> 0
+    OR (SELECT count(*) FROM public.profiles) <> 1
+ THEN
+   RAISE EXCEPTION 'Unassigned Nudee owner can read unauthorized data or profiles';
+ END IF;
+END $$;
 SELECT set_config('request.jwt.claim.sub',current_setting('qa.nudee_office_user'),true);
 
 DO $$
