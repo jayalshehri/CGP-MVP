@@ -21,18 +21,29 @@ export function hasUnsafeGitEnvironment(env) {
  * any Actions/model credential to repository-local Git helpers or transports.
  * This is defense-in-depth: the inherited Git override guard remains required.
  */
-// Unlike the explicit gh API call, public read-only Git operations have no
-// reason to inherit credentials from unrelated CI steps (npm, databases,
-// cloud SDKs, provider APIs or an SSH agent). Deny common credential-shaped
-// variable names as well as the known GitHub/OpenRouter keys. This is a
-// defense-in-depth scrub, not a substitute for the inherited Git/GH override
-// rejection or a claim that arbitrary environment variable names are safe.
-const GIT_CHILD_CREDENTIAL_ENV = /(?:^|_)(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|API_KEY|PRIVATE_KEY|ACCESS_KEY|SERVICE_ROLE_KEY|AUTH)(?:_|$)|^(?:PGPASSWORD|PGPASSFILE|DATABASE_URL|REDIS_URL|MONGODB_URI|SSH_AUTH_SOCK)$/i;
+// A negative-pattern scrub is not sufficient: a credential such as
+// ORG_SESSION_DATA, CUSTOM_PAT or an arbitrary newly named secret would
+// otherwise reach Git's subprocesses. Keep only the minimal OS/locale and
+// runner variables required by read-only Git inspection. In particular,
+// never forward NODE_OPTIONS, SSH_* sockets, proxy variables, model keys,
+// npm configuration or custom CI variables to Git or its helpers.
+//
+// This is for the four independent read-only roles and the post-build
+// finalizer only. The separate publisher authenticates a Git push, so its
+// privileged process must retain its own independent protections.
+const READ_ONLY_GIT_ENV_NAMES = new Set([
+  'PATH', 'HOME', 'LANG', 'LANGUAGE', 'LC_ALL', 'LC_CTYPE', 'LC_MESSAGES',
+  'TMPDIR', 'TMP', 'TEMP', 'CI', 'GITHUB_ACTIONS',
+  'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'USERPROFILE'
+]);
 
 export function readOnlyGitEnvironment(env = process.env) {
-  const scoped = { ...env };
-  for (const name of Object.keys(scoped)) {
-    if (GIT_CHILD_CREDENTIAL_ENV.test(name)) delete scoped[name];
+  const scoped = {};
+  for (const name of READ_ONLY_GIT_ENV_NAMES) {
+    if (Object.hasOwn(env, name)) scoped[name] = env[name];
   }
+  // Public, read-only Git operations must fail rather than trying an
+  // interactive credential prompt or a helper supplied by a later step.
+  scoped.GIT_TERMINAL_PROMPT = '0';
   return scoped;
 }
