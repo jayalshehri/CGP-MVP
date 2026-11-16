@@ -2,7 +2,7 @@
 // Recheck file mode at pathname as well as opened descriptor after reads;
 // a concurrent chmod on the SAME inode must invalidate source consent.
 // The publisher's later checkout check is too late to prevent source disclosure.
-import { execFileSync } from 'node:child_process';
+import { modelGit, preflightModelGit } from './aieo-model-git.mjs';
 import { lstatSync, openSync, fstatSync, readSync, writeSync, ftruncateSync, closeSync, constants } from 'node:fs';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 
@@ -12,8 +12,8 @@ const SHA = /^[a-f0-9]{40}$/;
 function block() {
   throw new Error('AIEO model source blocked: untrusted checkout or source provenance');
 }
-function git(...args) {
-  return execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 });
+function git(env, ...args) {
+  return modelGit(args, { env });
 }
 
 export function readApprovedModelSource(env = process.env) {
@@ -25,16 +25,17 @@ export function readApprovedModelSource(env = process.env) {
         env.GITHUB_REPOSITORY !== EXPECTED_REPOSITORY ||
         env.AIEO_MODEL_ENABLED !== 'true' ||
         env.AIEO_SOURCE_SHARING_APPROVED !== 'true' ||
-        !SHA.test(env.GITHUB_SHA || '') ||
-        git('rev-parse', '--verify', 'HEAD').trim() !== env.GITHUB_SHA) block();
+        !SHA.test(env.GITHUB_SHA || '')) block();
+    preflightModelGit(env);
+    if (git(env, 'rev-parse', '--verify', 'HEAD').trim() !== env.GITHUB_SHA) block();
 
-    const index = git('ls-files', '-v', '-z').split('\0').filter(Boolean);
+    const index = git(env, 'ls-files', '-v', '-z').split('\0').filter(Boolean);
     if (!index.length || index.some((entry) => !entry.startsWith('H '))) block();
-    const entry = git('ls-files', '-s', '--', MODEL_ALLOWED_PATH).trim();
+    const entry = git(env, 'ls-files', '-s', '--', MODEL_ALLOWED_PATH).trim();
     if (!/^100644 [a-f0-9]{40} 0\tcomponents\/FeedbackWidget\.tsx$/.test(entry)) block();
-    if (git('diff', '--cached', '--name-only').trim() ||
-        git('diff', '--name-only').trim()) block();
-    const extra = git('ls-files', '--others', '--exclude-standard', '-z')
+    if (git(env, 'diff', '--cached', '--name-only').trim() ||
+        git(env, 'diff', '--name-only').trim()) block();
+    const extra = git(env, 'ls-files', '--others', '--exclude-standard', '-z')
       .split('\0').filter(Boolean);
     if (extra.some((path) => !path.startsWith('aieo-output/'))) block();
 
@@ -81,8 +82,8 @@ export function readApprovedModelSource(env = process.env) {
     const raw = buffer.subarray(0, used);
     const source = raw.toString('utf8');
     if (!Buffer.from(source, 'utf8').equals(raw)) block();
-    const pinned = execFileSync('git', ['show', env.GITHUB_SHA + ':' + MODEL_ALLOWED_PATH],
-      { stdio: 'pipe', maxBuffer: 256000 });
+    const pinned = modelGit(['show', env.GITHUB_SHA + ':' + MODEL_ALLOWED_PATH],
+      { env, encoding: null });
     if (!Buffer.isBuffer(pinned) || pinned.length < 1 ||
         pinned.length > MAX_BYTES || !pinned.equals(raw)) block();
     return source;
