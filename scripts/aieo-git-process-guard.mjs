@@ -14,3 +14,18 @@ export function hasUnsafeGitEnvironment(env) {
   return Object.keys(env ?? {}).some((name) =>
     UNSAFE_GIT_ENV.test(name) || UNSAFE_GH_ENV.test(name));
 }
+
+/**
+ * Independent PR roles only require GitHub credentials for the explicit gh API
+ * calls. Their Git commands inspect public, pinned commits and must not pass
+ * any Actions/model credential to repository-local Git helpers or transports.
+ * This is defense-in-depth: the inherited Git override guard remains required.
+ */
+export function readOnlyGitEnvironment(env = process.env) {
+  const scoped = { ...env };
+  for (const name of [
+    'GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN',
+    'GITHUB_ENTERPRISE_TOKEN', 'OPENROUTER_API_KEY'
+  ]) delete scoped[name];
+  return scoped;
+}
