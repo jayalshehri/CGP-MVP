@@ -170,7 +170,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       <div className="cgp-topbar-context" aria-label="موقعك الحالي"><span>{workspaceLabel}</span><i aria-hidden="true">/</i><strong>{leaf}</strong></div>
       <nav aria-label="مساحات العمل" style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
         <Link href="/" aria-current={workspace === "cyber" ? "page" : undefined} style={{padding:"7px 12px",borderRadius:8,border:"1px solid currentColor",fontWeight:workspace === "cyber" ? 700 : 400}}>الأمن السيبراني</Link>
-        {(account?.role === "admin" || account?.role === "data_governance_team") && <Link href="/data-governance" aria-current={workspace === "data" ? "page" : undefined} style={{padding:"7px 12px",borderRadius:8,border:"1px solid currentColor",fontWeight:workspace === "data" ? 700 : 400}}>مكتب إدارة البيانات</Link>}
+        {(account?.role === "admin" || account?.role === "data_governance_team") && <a href="/data-governance" aria-current={workspace === "data" ? "page" : undefined} style={{padding:"7px 12px",borderRadius:8,border:"1px solid currentColor",fontWeight:workspace === "data" ? 700 : 400}}>مكتب إدارة البيانات</a>}
         {(account?.role === "admin" || account?.role === "data_governance_team" || account?.role === "cybersecurity_team") && <Link href="/shared-controls" aria-current={workspace === "shared" ? "page" : undefined} style={{padding:"7px 12px",borderRadius:8,border:"1px solid currentColor",fontWeight:workspace === "shared" ? 700 : 400}}>المواءمة المشتركة</Link>}
       </nav>
       <div className="cgp-topbar-tools">
