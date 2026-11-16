@@ -179,6 +179,16 @@ export function publishDraft({ env = process.env } = {}) {
   } : {};
   verifyCandidate({ mode, original, actual, changedPaths, diff, reports, env });
   const baseSha = command('git', ['rev-parse', 'HEAD']).trim();
+  // The provider, independent roles and build may take minutes. Refuse to
+  // publish a branch against a main tip that moved after the scoped proposal
+  // was approved. Do this before branch creation, push or GitHub API writes.
+  // The later remote Draft readback remains authoritative if main races again.
+  const remoteMain = command('git', [
+    'ls-remote', '--exit-code', 'origin', 'refs/heads/main'
+  ]).trim();
+  if (remoteMain !== baseSha + '\trefs/heads/main') {
+    fail('remote main changed since the trusted workflow checkout');
+  }
   const branch = 'aieo/' + (mode === 'model' ? 'model-proposal-' : 'repair-feedback-') +
     env.GITHUB_RUN_ID + '-' + env.GITHUB_RUN_ATTEMPT;
   command('git', ['config', 'user.name', 'github-actions[bot]']);

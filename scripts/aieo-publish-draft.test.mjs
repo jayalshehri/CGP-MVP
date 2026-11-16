@@ -129,6 +129,34 @@ test('publisher pushes a scoped candidate branch and invokes only Draft PR comma
 });
 
 
+
+test('publisher rejects remote main drift before branch, push, or any GitHub CLI call', () => {
+  const f = fixture();
+  try {
+    const trusted = f.env.GITHUB_SHA;
+    // Advance only bare remote main with an actual descendant commit. All
+    // local approved evidence and the checkout remain unchanged.
+    const changedMain = git(f.workspace, 'commit-tree', trusted + '^{tree}',
+      '-p', trusted, '-m', 'synthetic concurrent change on remote main');
+    git(f.workspace, 'push', 'origin', changedMain + ':refs/heads/main');
+    assert.equal(git(f.workspace, 'rev-parse', 'HEAD'), trusted);
+    assert.ok(git(f.workspace, 'ls-remote', 'origin', 'refs/heads/main')
+      .startsWith(changedMain + '\t'), 'fixture remote main actually advanced');
+
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0, 'stale reviewed base must fail closed');
+    assert.match(child.stderr, /remote main changed since the trusted workflow checkout/);
+    assert.equal(git(f.workspace, 'rev-parse', 'HEAD'), trusted);
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+    assert.equal(existsSync(f.log), false, 'GitHub CLI must not be reached');
+    assert.equal(git(f.workspace, 'ls-remote', '--heads', f.remote)
+      .includes('refs/heads/aieo/model-proposal-99123-1'), false,
+      'stale candidate branch must never be pushed');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 for (const [name, mutate] of [
   ['missing trusted GitHub SHA', (f) => { delete f.env.GITHUB_SHA; }],
   ['mismatched trusted GitHub SHA', (f) => { f.env.GITHUB_SHA = '0'.repeat(40); }],
