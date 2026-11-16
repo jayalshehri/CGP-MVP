@@ -130,6 +130,51 @@ test('publisher pushes a scoped candidate branch and invokes only Draft PR comma
 
 
 
+test('publisher refuses reuse of an existing run-attempt branch before any Git write', () => {
+  const f = fixture();
+  try {
+    const base = git(f.workspace, 'rev-parse', 'main');
+    const ref = 'refs/heads/aieo/model-proposal-99123-1';
+    // Existing branch is an ancestor of the candidate, so a normal push
+    // would silently fast-forward it without this preflight.
+    git(f.workspace, 'push', 'origin', base + ':' + ref);
+    assert.equal(git(f.workspace, 'ls-remote', 'origin', ref),
+      base + '\t' + ref);
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0, 'a repeated attempt must fail closed');
+    assert.match(child.stderr, /candidate branch already exists on origin/);
+    assert.equal(git(f.workspace, 'ls-remote', 'origin', ref),
+      base + '\t' + ref, 'occupied remote branch must remain unchanged');
+    assert.equal(git(f.workspace, 'rev-parse', 'HEAD'), base);
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+    assert.equal(existsSync(f.log), false, 'no gh command before refusal');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('publisher disables Git commit hooks even for a valid independently reviewed candidate', () => {
+  const f = fixture();
+  try {
+    const marker = join(f.root, 'untrusted-git-hook-executed');
+    const hook = join(f.workspace, '.git', 'hooks', 'pre-commit');
+    // A pre-commit hook can otherwise execute arbitrary code with GH_TOKEN
+    // in the trusted publisher step. The fixture aborts if the hook executes.
+    writeFileSync(hook,
+      '#!/bin/sh\nprintf invoked > ' + JSON.stringify(marker) + '\nexit 91\n');
+    chmodSync(hook, 0o755);
+    const base = git(f.workspace, 'rev-parse', 'main');
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.equal(child.status, 0, 'benign candidate still reaches Draft path: ' + child.stderr);
+    assert.equal(existsSync(marker), false, 'untrusted hook never executed');
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), base);
+    assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+    assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test('publisher rejects remote main drift before branch, push, or any GitHub CLI call', () => {
   const f = fixture();
   try {
