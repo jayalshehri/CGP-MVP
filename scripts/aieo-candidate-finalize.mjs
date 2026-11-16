@@ -8,7 +8,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
-import { hasUnsafeGitEnvironment, readOnlyGitEnvironment } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments } from './aieo-git-process-guard.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
 const SHA = /^[a-f0-9]{40}$/;
@@ -20,11 +20,7 @@ const fail = () => { throw new Error('AIEO post-build check blocked: candidate o
 // Post-build re-attestation must not execute Git config/attribute helpers
 // under the independent workflow's GH_TOKEN, including textconv on diffs.
 const git = (...args) => {
-  const safeArgs = ['-c', 'core.fsmonitor=false',
-    ...(args[0] === 'diff'
-      ? ['diff', '--no-ext-diff', '--no-textconv',
-        ...args.slice(1).filter((flag) => flag !== '--no-ext-diff')]
-      : args)];
+  const safeArgs = readOnlyGitArguments(args);
   return execFileSync('git', safeArgs, {
     encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
     env: readOnlyGitEnvironment(process.env)
@@ -38,7 +34,7 @@ const gitTrim = (...args) => git(...args).trim();
 export function readStrictReviewedGitSource(revision) {
   try {
     if (!SHA.test(revision || '')) fail();
-    const raw = execFileSync('git', ['-c', 'core.fsmonitor=false', 'show', revision + ':' + MODEL_ALLOWED_PATH],
+    const raw = execFileSync('git', readOnlyGitArguments(['show', revision + ':' + MODEL_ALLOWED_PATH]),
       { stdio: 'pipe', maxBuffer: 256000, env: readOnlyGitEnvironment(process.env) });
     if (!Buffer.isBuffer(raw) || raw.length < 1 ||
         raw.length > MAX_SOURCE_BYTES) fail();
