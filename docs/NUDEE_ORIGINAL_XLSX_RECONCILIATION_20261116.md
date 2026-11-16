@@ -64,6 +64,18 @@ There is an additional nonstandard value on source row 2: `ممتثل لمتطل
 
 Chart #5 planned series is **12.5%, 25%, 37.5%, 50%, 62.5%, 75%, 87.5%, 100%**; it is *not* the percentage of evidence records past their planned due date. The app was corrected on the feature branch to use weighted eight-week progression and make the dynamic date model explicit; authenticated visual check is still required. The original cached actual series is all 0%, because the workbook measures 2026-11-05 before the 2026-11-08 program start.
 
+## Cached chart-series parity versus QA (2026-11-16)
+
+Independent read of the uploaded XLSX's cached values verified the following against a fresh **read-only CGP-QA SQL aggregation**, ordered by original `source_row`:
+
+- Charts 1/2/3: all **14 × 3** per-domain NDMO maturity rates in `Calc!H30:H43`, `Q30:Q43`, `Z30:Z43` are **0%** at the source snapshot; QA has zero `ممتثل بالكامل` records, hence the current unfiltered chart series match the snapshot numerically. Source domain order is now preserved in the UI (previously sorted by total volume).
+- Chart 4: the cached five category counts in `Calc!B50:B54` are **0 / 1 / 2 / 0 / 360**, equal to QA's recognized source categories (fully compliant / authority-only / noncompliant / not-applicable / blank). The one unrecognized source compliance value remains explicitly flagged separately, as Excel itself does not count it as one of the five.
+- Chart 7: all **14 × 5 = 70** values of the stacked domain matrix `Calc!AD30:AH43` match QA's `full,authority,non,not-applicable,residual` counts, using the original category and domain order. Example: حوكمة البيانات = **0 / 1 / 2 / 0 / 33**; all other domains have only residual entries, totaling **361** residual across 14 domains.
+- Chart 5: source planned `Calc!D60:D67` = **12.5 / 25 / 37.5 / 50 / 62.5 / 75 / 87.5 / 100%** and frozen actual `Calc!E60:E67` is **0%** eight times at `AsOfDate=2026-11-05`. The live dashboard computes actual at the current Riyadh date, so it should **not** be expected to equal the historical snapshot after program start.
+- Chart 6: cached `Calc!B72:F75` has offsets **0 / 2 / 4 / 6 weeks**, 2-week phase lengths and phase completion fractions `1/52, 0, 0, 0`. Excel's independent fourth phase `الجدول الزمني!K15` is a **manually entered 0%**. The earlier application silently held this phase at zero forever. A seventh migration plus a Data Office-only audited input now models it explicitly, and four-stage progress contributes **25% per phase**. A QA transaction successfully exercised its access controls, then rolled back.
+
+These are numeric/static source-series and formula checks. **Authenticated browser plotting, full mobile/desktop viewport screenshots, and real Storage binary E2E remain unverified**, and deployment is prohibited until complete.
+
 ## Remaining release blockers
 
 - QA's actual authenticated invitation/first-login, binary Storage upload/download/signed URL, independent office-review E2E, and mobile/desktop RTL visual checks have **not** been executed.
