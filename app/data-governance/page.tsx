@@ -20,6 +20,7 @@ const policies = [
 export default function DataGovernancePage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [accessError, setAccessError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -27,12 +28,13 @@ export default function DataGovernancePage() {
       .then(() => active && setReady(true))
       .catch((error: Error) => {
         if (error.message.includes("تسجيل الدخول")) router.replace("/login");
-        else router.replace("/");
+        else if (active) setAccessError(error.message || "تعذر التحقق من صلاحيات الحساب.");
       });
     return () => { active = false; };
   }, [router]);
 
-  if (!ready) return <main className="dg-page"><p className="dg-loading">جاري فتح مساحة إدارة البيانات والحوكمة…</p></main>;
+  if (accessError) return <main className="dg-page"><div role="alert" className="dg-loading"><h1>تعذر فتح مكتب إدارة البيانات</h1><p>{accessError}</p><p>تأكد من أن دور حسابك في قاعدة البيانات هو مدير النظام أو فريق إدارة البيانات، ثم أعد تسجيل الدخول.</p></div></main>;
+  if (!ready) return <main className="dg-page"><p className="dg-loading">جاري فتح مساحة إدارة البيانات والحوكمة…</p></main;
 
   return <main className="dg-page">
     <div className="dg-eyebrow">مساحة عمل مستقلة</div>
