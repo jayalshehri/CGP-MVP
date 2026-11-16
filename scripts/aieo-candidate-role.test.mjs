@@ -1495,3 +1495,33 @@ test('read-only Developer, QA, Security, Reviewer and finalizer Git subprocesses
       'trusted main remains untouched');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test('independent Developer rejects repository-configured executable Git transport before evidence', () => {
+  const f = setup();
+  try {
+    const marker = join(f.root, 'untrusted-transport-executed');
+    const helper = join(f.root, 'untrusted-remote.sh');
+    writeFileSync(helper, '#!/bin/sh\\n' +
+      'touch ' + JSON.stringify(marker) + '\\nexit 1\\n');
+    chmodSync(helper, 0o755);
+    f.git('remote', 'set-url', 'origin', 'ext::' + helper);
+    f.git('config', 'protocol.ext.allow', 'always');
+    // Positive control: unguarded Git really executes the hostile transport.
+    const unguarded = spawnSync('git', ['fetch', '--no-tags', 'origin', 'refs/heads/' + branch], {
+      cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 10000
+    });
+    assert.notEqual(unguarded.status, 0, 'synthetic remote exits nonzero');
+    assert.equal(existsSync(marker), true, 'positive control must actually execute remote helper');
+    rmSync(marker);
+    const rejected = f.run('developer');
+    assert.notEqual(rejected.status, 0, 'independent role must reject executable transport');
+    assert.equal(existsSync(marker), false, 'role may not invoke executable Git transport');
+    assert.equal(existsSync(join(f.cwd, 'aieo-output/candidate-developer.json')), false,
+      'no evidence may be produced from an unsafe remote');
+    // Keep the read-only file transport used by our isolated local fixture.
+    f.git('remote', 'set-url', 'origin', join(f.root, 'remote.git'));
+    const safe = f.run('developer');
+    assert.equal(safe.status, 0, safe.stderr);
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'main remains unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
