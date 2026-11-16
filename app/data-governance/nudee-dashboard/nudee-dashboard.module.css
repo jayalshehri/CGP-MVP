@@ -68,6 +68,42 @@
 .week .actual>div{background:linear-gradient(90deg,#f8b14c,#c57e1d)}
 .week small:last-child{margin-top:9px;line-height:1.7}
 .footnote{font-size:.77rem!important;line-height:1.85!important;color:#64748b!important;margin:12px 4px 8px!important}
+
+/* The workbook's three maturity/domain charts, stacked categories and 4-stage timeline. */
+.domainVisuals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin-top:14px}
+.domainVisual{border:1px solid #dce9e7;background:#fbfdfc;border-radius:13px;padding:13px;min-width:0}
+.domainVisual h3{font-size:.9rem;color:#12675e;margin:0 0 12px;line-height:1.6}
+.domainLine{display:grid;grid-template-columns:minmax(0,1fr) 67px 44px;gap:7px;align-items:center;padding:6px 0;border-bottom:1px solid #e9f0f0}
+.domainLine:last-child{border-bottom:none}
+.domainLine>span{font-size:.74rem;color:#375663;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.domainLine>strong{font-size:.73rem;text-align:left;color:#0b7269;font-variant-numeric:tabular-nums}
+.domainLine .track{height:8px}
+.chartLegend{display:flex;flex-wrap:wrap;gap:8px 16px;margin:6px 0 15px}
+.chartLegend span{display:flex;align-items:center;gap:7px;font-size:.75rem;color:#405a67}
+.chartLegend i{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+.stackedList{display:grid;gap:9px}
+.stackedRow{display:grid;grid-template-columns:minmax(150px,1fr) minmax(100px,2fr) 40px;gap:14px;align-items:center;min-width:0}
+.stackedRow>span{font-size:.77rem;color:#385563;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stackedRow>strong{font-size:.75rem;text-align:left;color:#32525a}
+.stackedTrack{height:13px;background:#edf2f2;display:flex;overflow:hidden;border-radius:7px;direction:rtl}
+.stackedTrack>div{min-width:0;height:100%}
+.phaseHeader{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:12px 0 9px}
+.phaseHeader h3{font-size:.92rem;color:#1d4d54;margin:0}
+.phaseHeader>span{font-size:.73rem;color:#64748b}
+.phaseAxis,.phaseBarRow{display:grid;grid-template-columns:minmax(128px,1.6fr) repeat(8,minmax(0,1fr));align-items:center;gap:0}
+.phaseAxis{font-size:.68rem;color:#617680;text-align:center;background:#eef5f4;padding:9px 5px;border-radius:8px}
+.phaseAxis span:first-child{text-align:right}
+.phaseBarRow{min-height:43px;border-bottom:1px solid #e7eeed}
+.phaseBarRow>span{min-width:0;font-size:.76rem;color:#315964;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:10px}
+.phaseBar{grid-column:2/-1;display:flex;align-items:center;height:19px;background:repeating-linear-gradient(90deg,#f1f5f5 0,#f1f5f5 calc(12.5% - 1px),#dce8e6 calc(12.5% - 1px),#dce8e6 12.5%);border-radius:5px;overflow:hidden}
+.phaseBar>div{height:100%;flex:none;min-width:0}
+.phaseDone{background:#148f83}
+.phaseRemain{background:#abd5cd}
+.phaseBlank{background:transparent}
+@media(max-width:1120px){.domainVisuals{grid-template-columns:1fr}.domainLine{grid-template-columns:minmax(0,1fr) minmax(90px,1fr) 48px}}
+@media(max-width:700px){.stackedRow{grid-template-columns:minmax(0,1fr) minmax(95px,1fr) 28px;gap:6px}.phaseAxis,.phaseBarRow{grid-template-columns:minmax(90px,1.3fr) repeat(8,minmax(0,1fr))}.phaseHeader{flex-wrap:wrap}.phaseBarRow>span{font-size:.69rem}.domainLine>span{font-size:.72rem}}
+@media(max-width:390px){.domainLine{grid-template-columns:minmax(0,1fr) 82px 42px}.stackedRow>span{font-size:.7rem}.stackedTrack{height:10px}}
+
 @media(max-width:1120px){.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.weekly{grid-template-columns:repeat(4,minmax(0,1fr))}.stages{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.root{padding:12px}.heading{flex-direction:column;align-items:stretch}.back{text-align:center}.filters{grid-template-columns:1fr;padding:14px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.metric{padding:14px;min-height:128px}.metric strong{font-size:1.5rem}.workflow{align-items:stretch;flex-direction:column}.flowNumbers{gap:8px}.flowNumbers>span{flex:1;min-width:70px}.twoCols{grid-template-columns:1fr}.weekly{grid-template-columns:repeat(2,minmax(0,1fr))}.stages{grid-template-columns:1fr 1fr}.panel{padding:15px}}
 @media(max-width:390px){.metrics,.stages{grid-template-columns:1fr}.week{padding:9px}}
