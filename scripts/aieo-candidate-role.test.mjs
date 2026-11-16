@@ -1525,3 +1525,54 @@ test('independent Developer rejects repository-configured executable Git transpo
     assert.equal(f.git('rev-parse', 'main'), f.base, 'main remains unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('independent role and post-build gate refuse executable clean filters before worktree diff', () => {
+  const f = setup();
+  try {
+    const marker = join(f.root, 'clean-filter-was-executed');
+    const helper = join(f.root, 'untrusted-clean-filter.sh');
+    const attrs = join(f.cwd, '.git/info/attributes');
+    const attrsText = path + ' filter=unsafe\\n';
+    writeFileSync(helper, '#!/bin/sh\\n' +
+      'touch ' + JSON.stringify(marker) + '\\ncat\\n');
+    chmodSync(helper, 0o755);
+    f.git('config', 'filter.unsafe.clean', helper);
+    writeFileSync(attrs, attrsText);
+    // Positive control: Git executes a clean filter on the modified source
+    // EVEN when textconv and external diff helpers are disabled.
+    writeFileSync(join(f.cwd, path), candidate);
+    const unsafe = spawnSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--name-only'], {
+      cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 10000
+    });
+    assert.equal(unsafe.status, 0, unsafe.stderr);
+    assert.equal(existsSync(marker), true, 'positive control must execute the clean filter');
+    rmSync(marker);
+    writeFileSync(join(f.cwd, path), original);
+    const rejected = f.run('developer');
+    assert.notEqual(rejected.status, 0, 'Developer must refuse active clean filters');
+    assert.equal(existsSync(marker), false, 'Developer must never execute clean filter');
+    assert.equal(existsSync(join(f.cwd, 'aieo-output/candidate-developer.json')), false,
+      'a rejected role cannot create positive review evidence');
+
+    // Restore a clean local fixture; all four roles must still succeed.
+    rmSync(attrs);
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const result = f.run(role);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+    }
+    // Post-build examines the model candidate as a modified worktree file.
+    writeFileSync(join(f.cwd, path), candidate);
+    writeFileSync(attrs, attrsText);
+    const verify = () => spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    const blockedFinal = verify();
+    assert.notEqual(blockedFinal.status, 0, 'post-build must fail before worktree diff');
+    assert.equal(existsSync(marker), false, 'post-build must not invoke executable clean filter');
+    rmSync(attrs);
+    const cleanFinal = verify();
+    assert.equal(cleanFinal.status, 0, cleanFinal.stderr);
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main must remain unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
