@@ -72,6 +72,36 @@ function fixture() {
   return { root, workspace, remote, log, env, target, args, qa, security, reviewer };
 }
 
+// Git config inside a disposable checkout is an executable-code surface too.
+// Neither inherited-environment checks nor suppressed hooks alone protect
+// read-only ls-files/diff operations against configured helper programs.
+for (const key of ['core.fsmonitor', 'diff.external']) {
+  test('publisher disables repository-local executable Git helper: ' + key, () => {
+    const f = fixture();
+    try {
+      const marker = join(f.root, 'untrusted-helper-was-executed');
+      const executable = join(f.root, 'untrusted-local-git-helper');
+      writeFileSync(executable, '#!/bin/sh\nprintf invoked > ' +
+        JSON.stringify(marker) + '\nexit 91\n');
+      chmodSync(executable, 0o755);
+      git(f.workspace, 'config', key, executable);
+      const trusted = git(f.workspace, 'rev-parse', 'main');
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+      });
+      // No helper is invoked, so the bounded mocked Draft flow runs.
+      assert.equal(child.status, 0, child.stderr);
+      assert.equal(existsSync(marker), false, key + ' executable ran under publisher token');
+      assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+      git(f.workspace, 'config', '--unset', key);
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), trusted);
+      assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
+      assert.match(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /refs\/heads\/aieo\/model-proposal-99123-1/);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+}
+
 test('publisher blocks inherited Git executable/config overrides before any remote write', () => {
   const f = fixture();
   try {
