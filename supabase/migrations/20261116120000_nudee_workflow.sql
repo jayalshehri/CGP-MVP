@@ -71,7 +71,7 @@ revoke all on public.nudee_requirements,public.nudee_assignments,public.nudee_su
 grant select on public.nudee_requirements to authenticated;
 grant select,insert,update on public.nudee_assignments to authenticated;
 grant select,insert on public.nudee_submissions,public.nudee_audit to authenticated;
-grant usage,select on all sequences in schema public to authenticated;
+grant usage,select on sequence public.nudee_requirements_id_seq,public.nudee_assignments_id_seq,public.nudee_submissions_id_seq,public.nudee_audit_id_seq to authenticated;
 -- Storage bucket is private. Assignees can upload only into their own assignment folder.
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values ('nudee-evidence','nudee-evidence',false,20971520,array['application/pdf','image/png','image/jpeg','application/vnd.openxmlformats-officedocument.wordprocessingml.document']) on conflict(id) do nothing;
 create policy nudee_storage_read on storage.objects for select to authenticated using(bucket_id='nudee-evidence' and (public.nudee_is_office() or exists(select 1 from public.nudee_assignments a where a.id::text=(storage.foldername(name))[1] and a.assignee_id=(select auth.uid()))));
