@@ -36,7 +36,8 @@ test('independent read-only Git children do not inherit common CI or cloud crede
     HOME: '/home/runner',
     LANG: 'C.UTF-8',
     CI: 'true',
-    GIT_TERMINAL_PROMPT: '0'
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_NO_REPLACE_OBJECTS: '1'
   });
   assert.equal(input.GH_TOKEN, 'synthetic-gh-only', 'the parent process must remain unchanged for scoped gh API calls');
 });
@@ -64,7 +65,8 @@ test('unknown future secret names and execution/proxy overrides never reach read
     CI: 'true',
     GITHUB_ACTIONS: 'true',
     LC_ALL: 'C.UTF-8',
-    GIT_TERMINAL_PROMPT: '0'
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_NO_REPLACE_OBJECTS: '1'
   });
   assert.equal(input.ORG_SESSION_DATA, 'synthetic-undocumented-secret',
     'the parent environment is untouched for explicitly scoped API calls');
@@ -85,6 +87,7 @@ test('Git and GitHub CLI environment overrides are still rejected before credent
 test('independent read-only Git arguments disable executable hooks and transports', () => {
   const args = readOnlyGitArguments(['fetch', '--no-tags', 'origin', 'refs/heads/main']);
   assert.deepEqual(args.slice(-4), ['fetch', '--no-tags', 'origin', 'refs/heads/main']);
+  assert.equal(args[0], '--no-replace-objects', 'no local Git replacement refs may rewrite pinned objects');
   for (const setting of [
     'core.fsmonitor=false', 'core.hooksPath=/dev/null', 'credential.helper=',
     'protocol.allow=never', 'protocol.https.allow=always',
