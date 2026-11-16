@@ -18,6 +18,7 @@ const navigation = [
   { href: "/data-governance/assets", label: "سجل أصول البيانات", group: "مساحات العمل", data: true },
   { href: "/data-governance/controls", label: "ضوابط NDMO", group: "مساحات العمل", data: true },
   { href: "/data-governance/nudee", label: "مؤشر نُضيء", group: "مساحات العمل", data: true },
+  { href: "/data-governance/nudee-dashboard", label: "لوحة مؤشر نُضيء", group: "مساحات العمل", data: true },
   { href: "/shared-controls", label: "الكتالوج الموحد", group: "الامتثال", team: true, data: true },
   { href: "/data-governance/quality", label: "جودة البيانات", group: "مساحات العمل", data: true },
   { href: "/data-governance/privacy", label: "الخصوصية وسجل المعالجة", group: "مساحات العمل", data: true },
