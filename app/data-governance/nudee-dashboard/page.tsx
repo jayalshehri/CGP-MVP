@@ -78,8 +78,10 @@ export default function NudeeDashboard(){
    const n=list.length, na=list.filter(r=>complianceStatus(r.source_compliance)==="لا ينطبق").length;
    const full=list.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length;
    const authority=list.filter(r=>complianceStatus(r.source_compliance)==="ممتثل للمعالي فقط").length;
+   const non=list.filter(r=>complianceStatus(r.source_compliance)==="غير ممتثل").length;
+   const residual=n-full-authority-non-na; // Calc!AH30:AH43, includes blanks and nonstandard values.
    return {name,total:n,applicable:n-na,assessed:list.filter(r=>complianceStatus(r.source_compliance)!=="لم يُقيَّم").length,reviewed:list.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length,
-    full,authority,levels:LEVELS.map(level=>{const subset=list.filter(r=>r.maturity_level===level);const denominator=subset.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق").length;return {n:subset.length,rate:denominator?percent(subset.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,denominator):null};})};
+    full,authority,non,na,residual,levels:LEVELS.map(level=>{const subset=list.filter(r=>r.maturity_level===level);const denominator=subset.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق").length;return {n:subset.length,rate:denominator?percent(subset.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,denominator):null};})};
   }).sort((a,b)=>b.total-a.total);
  },[rows,mapped]);
  // Reproduce the eight-week *weighted* Calc!D60:E67 trend, not a count of due evidence.
@@ -149,8 +151,32 @@ export default function NudeeDashboard(){
     </section>
    </div>
    <section className={styles.panel}><div className={styles.sectionHeader}><div><h2>مصفوفة الامتثال حسب المجال</h2><p>المجالات الأربعة عشر، النضج، عدد الأدلة المنطبقة والمقيّمة والمكتملة.</p></div><span className={styles.meta}>{domainMatrix.length} مجال</span></div><div className={styles.tableScroll}><table><thead><tr><th>المجال</th>{LEVELS.map((level,i)=><th key={level}>المستوى {i+1}</th>)}<th>NDMO</th><th>متطلبات الهيئة</th><th>الأدلة</th><th>المنطبقة</th><th>المقيّمة</th><th>المراجعة المكتملة</th></tr></thead><tbody>{domainMatrix.map(d=><tr key={d.name}><th scope="row">{d.name}</th>{d.levels.map((l,i)=><td key={i} title={l.n+" دليل"}>{l.rate===null?"—":l.rate.toLocaleString("ar-SA")+"%"}</td>)}<td>{fmtPct(d.full,d.applicable)}</td><td>{fmtPct(d.full+d.authority,d.applicable)}</td><td>{d.total}</td><td>{d.applicable}</td><td>{d.assessed}</td><td>{d.reviewed}</td></tr>)}<tr className={styles.totalRow}><th scope="row">الإجمالي</th>{LEVELS.map(level=>{const a=rows.filter(r=>r.maturity_level===level);const valid=a.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق");return <td key={level}>{valid.length?fmtPct(valid.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,valid.length):"—"}</td>})}<td>{fmtPct(stats.full,stats.applicable)}</td><td>{fmtPct(stats.full+stats.authority,stats.applicable)}</td><td>{stats.total}</td><td>{stats.applicable}</td><td>{stats.assessed}</td><td>{stats.reviewed}</td></tr></tbody></table></div></section>
+   <section className={styles.panel} aria-label="رسوم الامتثال حسب مستوى النضج">
+    <div className={styles.sectionHeader}><div><h2>امتثال NDMO حسب المجالات ومستوى النضج</h2><p>المقابل المرئي لسلاسل Excel الثلاث: Calc!H30:H43 وQ30:Q43 وZ30:Z43. النسب من الأدلة المنطبقة.</p></div><span className={styles.meta}>3 مستويات</span></div>
+    <div className={styles.domainVisuals}>{LEVELS.map((level,index)=><div className={styles.domainVisual} key={level}><h3>{level}</h3>
+     {domainMatrix.map(d=><div key={d.name} className={styles.domainLine}><span title={d.name}>{d.name}</span><div className={styles.track} role="meter" aria-label={d.name+" - "+level} aria-valuemin={0} aria-valuemax={100} aria-valuenow={d.levels[index].rate??0}><div style={{width:(d.levels[index].rate??0)+"%"}}/></div><strong>{d.levels[index].rate===null?"—":d.levels[index].rate.toLocaleString("ar-SA")+"%"}</strong></div>)}
+    </div>)}</div>
+   </section>
+   <section className={styles.panel} aria-label="توزيع الامتثال حسب المجال">
+    <div className={styles.sectionHeader}><div><h2>توزيع حالة الامتثال في المجالات</h2><p>مقابل سلاسل Excel Calc!AD30:AH43. المتبقي يشمل غير المقيّم وأي قيمة غير معيارية.</p></div><span className={styles.meta}>5 فئات</span></div>
+    <div className={styles.chartLegend}>{[["ممتثل بالكامل","#159b88"],["ممتثل للمعالي فقط","#4f8ed7"],["غير ممتثل","#df786b"],["لا ينطبق","#9ca3af"],["غير مقيّم أو غير معياري","#ccd8da"]].map(([name,color])=><span key={name}><i style={{background:color}}/>{name}</span>)}</div>
+    <div className={styles.stackedList}>{domainMatrix.map(d=><div className={styles.stackedRow} key={d.name}>
+     <span title={d.name}>{d.name}</span>
+     <div className={styles.stackedTrack} role="img" aria-label={d.name+": "+d.full+" ممتثل بالكامل، "+d.authority+" ممتثل للمعالي، "+d.non+" غير ممتثل، "+d.na+" لا ينطبق، "+d.residual+" غير مقيّم أو غير معياري"}>
+      {[[d.full,"#159b88"],[d.authority,"#4f8ed7"],[d.non,"#df786b"],[d.na,"#9ca3af"],[d.residual,"#ccd8da"]].map(([count,color],i)=><div key={i} style={{width:(d.total?100*Number(count)/d.total:0)+"%",background:String(color)}}/>)}
+     </div><strong>{d.total.toLocaleString("ar-SA")}</strong></div>)}</div>
+   </section>
    <section className={styles.panel}><div className={styles.sectionHeader}><div><h2>الجدول الزمني ومراجعة الأدلة</h2><p>البرنامج الأساسي: 8 أسابيع من 8 نوفمبر إلى 31 ديسمبر 2026. المخطط تراكمي موزون حسب مدة المراحل الأربع (Calc)، والفعلي يقاس بتاريخ الرياض؛ الأسابيع السابقة تتطلب تاريخ إنجاز فعليًا.</p></div><span className={styles.meta}>8 أسابيع</span></div>
     <div className={styles.stages}>{stages.map(s=><article key={s.level}><b>المرحلة {s.phase}</b><h3>{s.level}</h3><p>{shortDate(s.start)} – {shortDate(s.end)}</p><div className={styles.track}><div style={{width:percent(s.completed,s.n)+"%"}}/></div><small>{s.completed} / {s.n} مكتمل</small></article>)}<article><b>المرحلة 4</b><h3>المراجعة النهائية الشاملة</h3><p>20 ديسمبر – 31 ديسمبر 2026</p><small>مراجعة شاملة لجميع المستويات</small></article></div>
+    <div className={styles.phaseHeader}><h3>مخطط المراحل الأربع — 8 أسابيع</h3><span>منجز / متبقٍ وفق حالة المراجعة</span></div>
+    <div className={styles.phaseAxis}><span>المرحلة</span>{Array.from({length:8},(_,i)=><span key={i}>أ{i+1}</span>)}</div>
+    {[...stages,{level:"المراجعة النهائية",phase:4,n:stats.total,completed:0,start:"2026-12-20",end:"2026-12-31"}].map((phase,i)=><div className={styles.phaseBarRow} key={phase.phase}><span>{phase.level}</span><div className={styles.phaseBar}>
+      <div className={styles.phaseBlank} style={{width:i*25+"%"}}/>
+      <div className={styles.phaseDone} style={{width:(phase.n?25*phase.completed/phase.n:0)+"%"}}/>
+      <div className={styles.phaseRemain} style={{width:(phase.n?25*(1-phase.completed/phase.n):25)+"%"}}/>
+      <div className={styles.phaseBlank} style={{width:(3-i)*25+"%"}}/>
+     </div></div>)}
+    <p className={styles.footnote}>مقابل مخطط Excel للمرحلة الأولى والثانية والثالثة والمراجعة الشاملة، موزعة على أسبوعين لكل مرحلة. عرض التقدم هنا مبني على الإتمام الفعلي داخل CGP وحالة المصدر، وليس قبول الامتثال الرسمي.</p>
     <div className={styles.weekly}>{weekly.map(w=><div key={w.week} className={styles.week}><span>الأسبوع {w.week}</span><small>{shortDate(w.until)}</small><div className={styles.track} title={"المخطط: "+w.planned+"%"}><div style={{width:w.planned+"%"}}/></div><div className={styles.track+" "+styles.actual} title={"الفعلي: "+w.actual.toFixed(2)+"%"}><div style={{width:w.actual+"%"}}/></div><small>المخطط {w.planned.toLocaleString("ar-SA")}% · الفعلي {w.actual.toLocaleString("ar-SA",{maximumFractionDigits:2})}%</small></div>)}</div>
     <p className={styles.footnote}>معادلة المخطط مستمدة من Calc!D60:D67 (12.5% كل أسبوع). الفعلي يعكس أوزان مراحل Excel؛ في الأسابيع المكتملة لا تُحسب إلا الأدلة المؤرخة، وفي الأسبوع الجاري يظهر تقدم المراجعة الحالي. تاريخ القياس المحفوظ بالمصنف الأصلي هو 5 نوفمبر 2026، لذلك قد يختلف الاتجاه الحي عن قيمه المحفوظة.</p>
    </section>
