@@ -20,6 +20,17 @@ This checklist describes evidence for PR #237. It is **not a production approval
 - QA's `admin-invite-user` Edge Function is **not deployed** (QA currently lists no Edge Functions). Invitation and first-login tests remain a release blocker.
 - Production schema, import, Edge Function, merge and alias are unchanged.
 
+
+## QA follow-up — 2026-11-16 (next verification pass)
+- Re-read PR #237 directly from GitHub: still **open, draft, unmerged** at head `74dad4f5347a0aade6b3d55b6a88d72c0753e7e1`.
+- Re-verified CGP-QA via Supabase: **364** requirements, **364** distinct source rows, **14** domains; **0** assignments, submissions and evidence objects.
+- Deployed the existing PR-branch `admin-invite-user` source **only to CGP-QA** (`lkozjnpfufdpzqtzdxhe`). Supabase confirms function `ACTIVE`, version **1**, `verify_jwt=true`. No invitations were issued and no end-user login was attempted. Production Edge Functions were not changed.
+- Rechecked QA RLS policy inventory: each Nudee public table has an authenticated SELECT policy; `nudee-evidence` Storage has authenticated SELECT and INSERT policies. This inventory does **not** replace real binary upload/download tests.
+- Confirmed required CI for previous PR head `74dad4f...` completed successfully (GitHub run `43916423274`). Vercel Preview for that head (`cgp-arf7jo6xv-grc13.vercel.app`) was **READY**.
+- **QA invitation configuration blocker:** the function currently defaults `CGP_APP_ORIGIN` to the production URL if the environment secret is absent. A safe QA Preview origin/redirect and corresponding Auth redirect allow-list must be explicitly verified before sending QA invitations. Deployment alone is not a successful invitation test.
+- Attempted to locate the original workbook in accessible conversation/library files; no relevant workbook was found. The **CSV-to-QA 18-column validation remains evidenced**, but chart/formula reconciliation against the original Excel workbook remains open.
+- Browser-authenticated mobile/desktop screenshot checks and actual signed-URL binary Storage E2E are still **NOT RUN**; this environment lacks a usable authenticated interactive browser session. Keep PR draft and production unchanged.
+
 ## Not yet verified — BLOCKING
 1. A **real binary** upload, signed-link download, and subsequent decision using separate authenticated QA owner/reviewer sessions. SQL `storage.objects` insertion does **not** test storage service file bytes, signed URLs, or browser permissions.
 2. **Visual** RTL layout on real mobile and desktop viewport sizes after authentication, plus interactive error/retry paths.
