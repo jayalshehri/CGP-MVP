@@ -353,3 +353,11 @@ body { font-feature-settings:"kern" 1,"liga" 1; }
 .audit-state{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:10px;font-weight:800}.audit-state.overdue{background:#fee2e2;color:#b42318}.audit-state.due_today{background:#fee2e2;color:#b42318}.audit-state.due_soon{background:#fef3c7;color:#a16207}.audit-state.upcoming{background:#e5f7ef;color:#067647}.audit-state.unscheduled{background:#eef2f6;color:#526577}
 .audit-stage{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:10px;font-weight:700;background:#eef2f6;color:#526577}.audit-stage.awaiting_evidence{background:#e6f0fb;color:#1d4ed8}.audit-stage.under_review{background:#fef3c7;color:#a16207}.audit-stage.changes_requested{background:#fee2e2;color:#b42318}.audit-stage.none{background:transparent;color:#94a3b8}.grc-cycle-history{margin-block:20px}.grc-cards{display:grid;gap:14px}.grc-cards article{padding:16px;border:1px solid #dbe5e8;border-radius:12px;background:white}
 @media print{.grc-form,button,.workflow-filter{display:none!important}.workflow-card,.detail-card{break-inside:avoid;box-shadow:none!important}}
+
+/* Workspace switcher belongs in the sidebar, never in the three-column header. */
+.cgp-workspace-switcher { display:grid; gap:6px; margin:0 4px 18px; padding:6px; border:1px solid var(--cgp-line); border-radius:12px; background:#f8fafc; }
+.cgp-workspace-switcher a { display:block; padding:10px 12px; border-radius:8px; color:#334155; font-size:13px; font-weight:650; text-decoration:none; overflow-wrap:anywhere; }
+.cgp-workspace-switcher a[aria-current="page"] { background:#0f766e; color:white; }
+.cgp-workspace-switcher a:focus-visible { outline:3px solid #14b8a6; outline-offset:2px; }
+.cgp-nav-collapsed .cgp-navigation .cgp-workspace-switcher { display:none; }
+@media(max-width:760px) { .cgp-mobile-navigation .cgp-workspace-switcher { margin:8px; } }
