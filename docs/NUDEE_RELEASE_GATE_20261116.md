@@ -80,3 +80,12 @@ This checklist describes evidence for PR #237. It is **not a production approval
 5. Merge only after all gates pass; wait for Vercel production deployment **READY**, then verify `cgp-mvp-grc13.vercel.app` resolves to that exact production deployment and smoke-test both authenticated Nudee routes.
 
 **Do not merge, alias, or announce completion while any blocking item remains.**
+
+## Role isolation and mocked visual smoke — 2026-11-17
+- Reproducible rollback-only QA SQL script `tests/nudee_role_isolation_qa.sql` committed at `f40934883310187fd2ce553955319e8aeaa08603`. Executed equivalent transactional SQL against isolated CGP-QA using two existing QA control-owner profiles temporarily impersonated as `data_governance_team` and `nudee_owner`. **PASS:** office can find/assign owner; owner sees exactly one requirement/assignment, cannot self-assign, enumerate assignees, read cybersecurity controls, or act as Data Office. `ROLLBACK` succeeded. Separate check: **364** requirements, **0** assignments/submissions/audit/evidence objects, **0** profiles retaining either temporary role. This is SQL/RLS impersonation, **not a real login**.
+- Unauthenticated PostgREST read of Nudee requirements returned **HTTP 401 permission denied** as expected.
+- Playwright against the branch Preview, using **synthetic mocked Data Office authentication and 28 mock records**, loaded both workflow and dashboard at **390px mobile** and **1440px desktop**. All four cases: `dir=rtl`, content loaded, no page-level horizontal overflow, no uncaught page errors. This is **mocked layout smoke only**, not real authenticated QA, source-data parity, or independently inspected screenshots.
+- QA self-signup attempts with reserved synthetic domains were refused as invalid, followed by **HTTP 429 email send rate limit**; no test accounts created. QA remains **7 Auth users**, with no actual `nudee_owner` or `data_governance_team` account. Invitation/activation and redirect allow-list remain unverified.
+- Required GitHub CI **PASS** on `f4093488` (run [43962038831](https://github.com/jayalshehri/CGP-MVP/actions/runs/43962038831)); matching Vercel Preview `cgp-llww2p4qp-grc13.vercel.app` was **READY**. No production changes.
+
+**Release gates still BLOCKING:** real invitation/activation/first login, actual Storage binary upload/signed download/cleanup, authenticated owner/reviewer end-to-end and mobile/desktop visual review, and production backup/migrations/controlled 364-row import/verification. Keep PR draft and do not merge/publish.
