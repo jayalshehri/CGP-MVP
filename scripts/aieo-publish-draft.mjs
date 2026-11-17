@@ -33,6 +33,10 @@ function command(binary, args) {
       '-c', 'protocol.file.allow=always',
       '-c', 'protocol.ext.allow=never',
       '-c', 'core.fsmonitor=false',
+      // A local/global commit.gpgsign=true with gpg.program or SSH signing can
+      // execute an untrusted signer during git commit while GH_TOKEN is live.
+      // Draft candidates are verified by their immutable SHA, not GPG signing.
+      '-c', 'commit.gpgsign=false',
       ...(args[0] === 'diff'
         ? ['diff', '--no-ext-diff', '--no-textconv', ...args.slice(1)]
         : args)]
