@@ -1,0 +1,13 @@
+/* Keep existing panel layouts; the native dialog supplies focus/inert behavior. */
+dialog.cgp-accessible-dialog {
+  margin: 0;
+  border: 0;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  box-sizing: border-box;
+  color: inherit;
+}
+dialog.cgp-accessible-dialog:not([open]) { display: none; }
+dialog.cgp-accessible-dialog::backdrop { background: transparent; }
