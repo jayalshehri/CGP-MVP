@@ -10,7 +10,8 @@ const { sourceHash, candidateHash } = report.developer;
 
 const make = (role, extra = {}) => buildHandoffArtifact({
   role, task: APPROVED_TASK, sourceHash, candidateHash,
-  verdict: { ...report[role], ...(role === 'reviewer' ? { handoffValidated: true } : {}), ...extra }
+  verdict: { ...report[role], ...(role === 'developer' ? { bounded: true } : {}),
+    ...(role === 'reviewer' ? { handoffValidated: true } : {}), ...extra }
 });
 const accept = (role, artifact = make(role)) => verifyHandoffArtifact({
   artifact, role, task: APPROVED_TASK, sourceHash, candidateHash, expected: report[role]
@@ -83,6 +84,7 @@ test('handoffs reject additional payload fields that could carry source, command
     ['reviewer', { secret: 'synthetic-placeholder-only' }]
   ]) {
     const verdict = { ...report[role],
+      ...(role === 'developer' ? { bounded: true } : {}),
       ...(role === 'reviewer' ? { handoffValidated: true } : {}),
       ...unexpected };
     assert.throws(() => buildHandoffArtifact({
@@ -97,7 +99,28 @@ test('conflicting identity inside a developer verdict cannot be silently overwri
   for (const bad of [{ sourceHash: '0'.repeat(64) }, { candidateHash: 'f'.repeat(64) }]) {
     assert.throws(() => buildHandoffArtifact({
       role: 'developer', task: APPROVED_TASK, sourceHash, candidateHash,
-      verdict: { ...report.developer, ...bad }
+      verdict: { ...report.developer, bounded: true, ...bad }
     }), /Developer handoff identity conflict/);
+  }
+});
+
+test('Developer requires a genuine boolean bounded attestation in both boundaries', () => {
+  const valid = make('developer');
+  assert.equal(valid.bounded, true);
+  assert.equal(accept('developer', valid), valid);
+
+  const { bounded: _removed, ...missing } = valid;
+  assert.throws(() => accept('developer', missing),
+    /Developer handoff requires bounded attestation/);
+  assert.throws(() => buildHandoffArtifact({
+    role: 'developer', task: APPROVED_TASK, sourceHash, candidateHash,
+    verdict: { ...report.developer }
+  }), /Developer handoff requires bounded attestation/);
+
+  for (const bounded of [false, 'true', null, { approved: true }]) {
+    assert.throws(() => make('developer', { bounded }),
+      /Developer handoff requires bounded attestation/);
+    assert.throws(() => accept('developer', { ...valid, bounded }),
+      /Developer handoff requires bounded attestation/);
   }
 });
