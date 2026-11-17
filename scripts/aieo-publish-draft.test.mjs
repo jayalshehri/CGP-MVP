@@ -114,6 +114,43 @@ for (const attrOrigin of ['info', 'global']) {
   });
 }
 
+// Repository/global Git signing settings can launch an arbitrary gpg.program
+// during the publisher's Git commit, with its write-scoped GH_TOKEN inherited.
+// Do not invoke any user-configured signer for bounded Draft candidates.
+test('publisher bypasses configured executable commit signer under GH_TOKEN', () => {
+  const f = fixture();
+  try {
+    const trusted = git(f.workspace, 'rev-parse', 'HEAD');
+    const marker = join(f.root, 'untrusted-signing-helper-executed');
+    const signer = join(f.root, 'untrusted-signing-helper');
+    writeFileSync(signer, '#!/bin/sh\\n' +
+      'printf invoked > ' + JSON.stringify(marker) + '\\nexit 91\\n');
+    chmodSync(signer, 0o755);
+    git(f.workspace, 'config', 'commit.gpgsign', 'true');
+    git(f.workspace, 'config', 'gpg.program', signer);
+    // The isolated control carries no publisher token. Git really would
+    // invoke the signer if commit.gpgsign were not overridden.
+    const control = spawnSync('git', ['commit', '--allow-empty', '-m',
+      'synthetic signing control'], {
+      cwd: f.workspace, encoding: 'utf8', timeout: 15000,
+      env: { PATH: process.env.PATH, HOME: process.env.HOME }
+    });
+    assert.notEqual(control.status, 0);
+    assert.equal(existsSync(marker), true, 'fixture did not invoke signer');
+    unlinkSync(marker);
+    assert.equal(git(f.workspace, 'rev-parse', 'HEAD'), trusted);
+
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(existsSync(marker), false, 'signer ran with publisher token');
+    assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), trusted);
+    assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 // The publisher receives GH_TOKEN for PR creation and authenticated push.
 // Its Git subprocesses must not run executable remote helpers selected by
 // an injected origin URL or pushurl, even when the Git environment is clean.
