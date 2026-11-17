@@ -95,7 +95,7 @@ This checklist describes evidence for PR #237. It is **not a production approval
 
 ## Release sequence
 1. Finish remaining E2E/visual tests in QA; fix defects on this branch and rerun required CI.
-2. Confirm production schema compatibility and backup; apply the eight Nudee migrations in sequence.
+2. Confirm production schema compatibility and backup; apply the nine Nudee migrations in sequence.
 3. Import **exactly 364** original CSV records through a controlled administrative data operation (never commit actual source CSV to the code repository). Verify counts, uniqueness, domains, and 18-column baseline consistency before any production edits to Nudee status.
 4. Deploy the updated `admin-invite-user` Edge Function to production and verify account creation for `nudee_owner`.
 5. Merge only after all gates pass; wait for Vercel production deployment **READY**, then verify `cgp-mvp-grc13.vercel.app` resolves to that exact production deployment and smoke-test both authenticated Nudee routes.
@@ -135,3 +135,12 @@ This checklist describes evidence for PR #237. It is **not a production approval
 - **PASS:** a batch containing two valid requirement IDs followed by a nonexistent third ID fails with **zero** partial assignments and **zero** audit events; duplicate IDs fail without writes; a valid two-ID batch creates exactly **two** assignments and **two** audit events; the dedicated `nudee_owner` cannot call the bulk assignment RPC even for its own assignment. All operations were rolled back.
 - Independent post-rollback check: **364** requirements, **0** assignments, **0** audit events, **0** Nudee Storage objects, and **0** persistent temporary Data Office/Nudee-owner role assignments.
 - This validates database transaction behavior and authorization only. It is **not** an HTTP-session, actual file-byte, invitation/activation, or authenticated-browser E2E test. CI and matching Preview must be rechecked for any later branch head. No production changes.
+
+## Cross-owner Storage confidentiality hardening — 2026-11-17
+
+- **Found and reproduced in isolated CGP-QA:** A synthetic late-upload/reassignment state can allow a newly assigned owner to **read the previous uploader's Storage metadata** when authorization checks only the assignment-folder ID. This is a database/RLS simulation of the concurrency risk, **not** a confirmed HTTP race exploit.
+- Added ninth migration [`20261117090000_nudee_storage_cross_owner_guard.sql`](../supabase/migrations/20261117090000_nudee_storage_cross_owner_guard.sql). The assigned owner's Storage **SELECT and orphan DELETE** access now also requires `owner_id = auth.uid()::text`. The Data Office retains its legitimate read/cleanup privileges. Applied successfully to **CGP-QA only**; no production changes.
+- Added [`tests/nudee_storage_cross_owner_qa.sql`](../tests/nudee_storage_cross_owner_qa.sql) and **executed the exact SQL** on QA. **PASS**: original uploader reads own evidence, synthetic new owner cannot read former owner's object but can read its own, former owner loses access after reassignment, office can inspect both. SQL policy inspection confirms the extra DELETE predicate. All test writes rolled back: **364 requirements, 0 assignments, 0 evidence objects, 0 temporary Nudee owners**.
+- **Limitation:** Supabase's `storage.protect_delete()` trigger refuses direct SQL DELETE, so the delete behavior was **not** exercised with real Storage API credentials. This remains an E2E blocker, not a PASS.
+- Re-ran existing QA tests on the new migration: Storage RLS, forged-owner upload prevention, workflow transitions/review, bulk-assignment atomicity and 18/18 source fingerprints — **all PASS** with clean rollback. Source remains 364 unique rows, 14 domains and 42 standard codes. Verify matching exact-head CI and Vercel Preview independently.
+- **Release blockers unchanged:** real user invitation/activation and separate authenticated QA sessions; HTTP binary upload/download/signed URL/cleanup; full owner/reviewer cycle; visual authenticated mobile/desktop RTL; production backup, **nine** migrations, controlled 364-row import, merge, READY deployment and alias verification. PR must remain DRAFT until these pass.
