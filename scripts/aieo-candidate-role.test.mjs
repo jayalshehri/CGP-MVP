@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodS
 import { tmpdir } from 'node:os';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyOfficialCandidateFetchOrigin } from './aieo-candidate-role.mjs';
+import { verifyOfficialCandidateFetchOrigin, verifyOfficialCandidateFetchConfig } from './aieo-candidate-role.mjs';
 
 const roleScript = join(dirname(fileURLToPath(import.meta.url)), 'aieo-candidate-role.mjs');
 const finalizerScript = join(dirname(fileURLToPath(import.meta.url)), 'aieo-candidate-finalize.mjs');
@@ -83,6 +83,67 @@ function setup() {
   });
   return { root, cwd, git, pr, savePr, run, base, head, env };
 }
+
+
+test('real Git config transport overrides fail despite an unchanged approved origin URL', () => {
+  const f = setup();
+  try {
+    // This fixture never fetches the public URL. A canonical URL check alone
+    // would pass even with an attacker-controlled proxy or TLS override.
+    f.git('remote', 'set-url', 'origin', 'https://github.com/jayalshehri/CGP-MVP.git');
+    const effectiveOrigin = () => f.git('remote', 'get-url', '--all', 'origin').split('\n');
+    const configNames = () => f.git('config', '--name-only', '--list').split('\n');
+    assert.equal(verifyOfficialCandidateFetchOrigin(effectiveOrigin()), true);
+    assert.equal(verifyOfficialCandidateFetchConfig(configNames()), true);
+
+    const hostile = [
+      ['http.proxy', 'http://proxy.invalid:8080'],
+      ['http.https://github.com/jayalshehri/CGP-MVP.git.proxy', 'http://scoped.invalid:8080'],
+      ['http.sslVerify', 'false'],
+      ['http.https://github.com/.extraHeader', 'Authorization: Bearer synthetic-only'],
+      ['http.followRedirects', 'true'],
+      ['http.curloptResolve', 'github.com:443:127.0.0.1'],
+      ['remote.origin.proxy', 'http://proxy.invalid:8080'],
+      ['remote.origin.vcs', 'custom-helper'],
+      ['remote.origin.uploadpack', 'untrusted-upload-pack'],
+      ['credential.https://github.com.helper', '!synthetic-helper'],
+      ['url.https://alternate.invalid/.insteadOf', 'https://github.com/']
+    ];
+    for (const [key, value] of hostile) {
+      f.git('config', '--local', key, value);
+      assert.throws(() => verifyOfficialCandidateFetchConfig(configNames()),
+        /unverified remote Draft PR/, key + ' must block before any fetch');
+      if (!key.startsWith('url.')) {
+        assert.equal(verifyOfficialCandidateFetchOrigin(effectiveOrigin()), true,
+          key + ' is invisible to canonical origin verification');
+      }
+      f.git('config', '--local', '--unset-all', key);
+      assert.equal(verifyOfficialCandidateFetchConfig(configNames()), true,
+        key + ' removal restores safe local transport configuration');
+    }
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'fixture main stays untouched');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('candidate origin configuration validator rejects missing, malformed and duplicated security inputs', () => {
+  const standard = ['core.repositoryformatversion', 'remote.origin.url', 'remote.origin.fetch'];
+  assert.equal(verifyOfficialCandidateFetchConfig(standard), true);
+  for (const names of [
+    [], ['remote.origin.url'], ['remote.origin.fetch'],
+    [...standard, 'http.proxy'], [...standard, 'credential.helper'],
+    [...standard, 'remote.origin.vcs'],
+    [...standard, 'http.sslverify'], [...standard, 'remote.origin.pushurl'],
+    [...standard, 'remote.origin.proxy'],
+    [...standard, 'http.https://github.com/.proxy'],
+    [...standard, 'url.https://example.invalid/.insteadof'],
+    [...standard, 'remote.origin.fetch\nhttp.proxy'],
+    [...standard, null], [...standard, 'x'.repeat(513)],
+    null, 'remote.origin.url'
+  ]) {
+    assert.throws(() => verifyOfficialCandidateFetchConfig(names),
+      /unverified remote Draft PR/);
+  }
+});
 
 test('developer, QA, Security and Reviewer pass independently using immutable real Git commits', () => {
   const f = setup();

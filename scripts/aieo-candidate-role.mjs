@@ -61,6 +61,22 @@ function readReport(role) {
 // Git remote get-url --all expands URL rewrites before this strict comparison.
 // Only real Actions runs require the official network origin; standalone local
 // Git fixtures exercise role logic without making external network calls.
+// A canonical origin URL is not enough: local/global Git configuration can
+// route HTTPS through an attacker-selected proxy, disable TLS validation,
+// inject HTTP headers or select custom remote helpers. Fail closed before
+// network contact. --name-only --list includes URL-specific http.* settings.
+export function verifyOfficialCandidateFetchConfig(keys) {
+  if (!Array.isArray(keys) || keys.length < 1 || keys.length > 4096 ||
+      keys.some((key) => typeof key !== 'string' || !key ||
+        key.length > 512 || /[\r\n\0]/.test(key) ||
+        /^(?:http|credential|url)\./i.test(key) ||
+        (/^remote\.origin\./i.test(key) &&
+          !/^remote\.origin\.(?:url|fetch|tagopt)$/.test(key)))) block();
+  if (!keys.includes('remote.origin.url') ||
+      !keys.includes('remote.origin.fetch')) block();
+  return true;
+}
+
 export function verifyOfficialCandidateFetchOrigin(urls) {
   if (!Array.isArray(urls) || urls.length !== 1 ||
       !/^https:\/\/github\.com\/jayalshehri\/CGP-MVP(?:\.git)?$/.test(urls[0])) block();
@@ -147,6 +163,11 @@ function verifiedRemoteContext(env) {
     // candidate from a different endpoint. Local fixtures are intentionally
     // isolated file:// remotes and must never be used as live Actions evidence.
     if (env.GITHUB_ACTIONS === 'true') {
+      // Origin URL checks do not inspect transport proxy/TLS/extraheader
+      // settings, including URL-scoped overrides and remote-helper config.
+      const configNames = git(['config', '--name-only', '--list'])
+        .trim().split('\n');
+      verifyOfficialCandidateFetchConfig(configNames);
       const originUrls = git(['remote', 'get-url', '--all', 'origin'])
         .trim().split('\n');
       verifyOfficialCandidateFetchOrigin(originUrls);
