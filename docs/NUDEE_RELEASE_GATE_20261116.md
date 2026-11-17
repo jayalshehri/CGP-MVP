@@ -81,6 +81,11 @@ This checklist describes evidence for PR #237. It is **not a production approval
 - Branch commits: security migration `9590a780`, regression test `4d3b1b30`. Required CI and Vercel Preview **must be verified on the resulting newest branch SHA**; prior green builds do not clear these checks.
 - **Still blocked:** real authenticated first login/invitation, binary upload/signed URL/download/removal, full reviewer cycle with separate sessions, and authenticated desktop/mobile RTL E2E. Keep this PR draft. Production schema and source data remain unchanged.
 
+## Upload failure race hardening — 2026-11-17
+- Code review identified a possible lost-response race: an upload can succeed, the submit RPC can remain in flight after a network timeout, and an immediate read can briefly return no submission. Deleting the binary on that single read could leave a subsequently committed submission pointing to a missing file.
+- Hardened the client error path in `app/data-governance/nudee/page.tsx` (commit `3d909f3a21fff353b59af3816512a369255fd2ca`): automatic orphan removal now requires an **explicit SQLSTATE rejection** and a readable absence of a submission. For a transport/timeout/unknown error it retains the uploaded object, warns of uncertainty, and avoids unsafe retries or deletion. Existing server-side reassignment guards remain in force.
+- This is a defensive **source change, not a real Storage API race-test PASS**. The user-session E2E, file bytes and signed URLs must still be exercised. GitHub CI and a Vercel Preview at the newest SHA must be confirmed independently. Production is unchanged.
+
 ## Not yet verified — BLOCKING
 1. A **real binary** upload, signed-link download, and subsequent decision using separate authenticated QA owner/reviewer sessions. SQL `storage.objects` insertion does **not** test storage service file bytes, signed URLs, or browser permissions.
 2. **Visual** RTL layout on real mobile and desktop viewport sizes after authentication, plus interactive error/retry paths.
