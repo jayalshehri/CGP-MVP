@@ -9,6 +9,7 @@ import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
 import { verifyRemoteDraft } from '../aieo/lib/remote-draft.mjs';
 import { readBoundedModelReport } from './aieo-role-artifact-io.mjs';
 import { hasUnsafeGitEnvironment, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
+import { verifyOfficialCandidateFetchConfig } from './aieo-candidate-role.mjs';
 
 function command(binary, args) {
   // Repository-local Git config is not a trust boundary: core.fsmonitor and
@@ -193,6 +194,15 @@ export function verifyOfficialPublisherOrigin(fetchUrls, pushUrls) {
 }
 function assertTrustedOrigin(env) {
   if (env.GITHUB_ACTIONS !== 'true') return; // isolated offline Git fixtures only
+  // An official origin URL is insufficient: Git may route push/fetch through
+  // a URL-scoped proxy, inject credentials/headers, disable TLS, or run a
+  // configured remote helper. Refuse these before any network operation while
+  // the publisher holds a write-scoped GH_TOKEN. The independent role uses
+  // the same fail-closed transport policy, but validates fetch alone.
+  const configNames = command('git', ['config', '--name-only', '--list'])
+    .trim().split('\n');
+  try { verifyOfficialCandidateFetchConfig(configNames); }
+  catch { fail('publisher Git transport configuration is unsafe'); }
   const urls = (options) => command('git', ['remote', 'get-url', ...options, 'origin'])
     .trim().split('\n');
   verifyOfficialPublisherOrigin(urls(['--all']), urls(['--push', '--all']));
