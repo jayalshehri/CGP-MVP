@@ -466,3 +466,34 @@ test('empty step-scoped LD_PRELOAD blocks native code before Node entrypoint', (
   assert.throws(() => readFileSync(marker), { code: 'ENOENT' },
     'an empty step-scoped loader override prevents inherited code execution');
 });
+
+test('independent role artifact JavaScript actions clear inherited startup hooks', () => {
+  // Unlike a shell run step, actions/upload-artifact boots its own Node
+  // process. A candidate build can append NODE_OPTIONS or LD_PRELOAD to
+  // GITHUB_ENV so the action is compromised BEFORE artifact handling starts.
+  // Protect each role handoff, particularly the post-build Reviewer upload.
+  const marker = '      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02';
+  const blocks = candidateRoles.split(marker).slice(1);
+  assert.equal(blocks.length, 4, 'every role must upload through the pinned action');
+  for (const [index, block] of blocks.entries()) {
+    const step = block.split('\n      - ')[0];
+    const withAt = step.indexOf('        with:\n');
+    assert.ok(withAt > 0, 'artifact action requires explicit with inputs');
+    const beforeWith = step.slice(0, withAt);
+    assert.ok(beforeWith.includes('        env:\n'), 'artifact action must have step-scoped environment');
+    for (const key of ['BASH_ENV', 'NODE_OPTIONS', 'LD_PRELOAD',
+      'LD_AUDIT', 'LD_LIBRARY_PATH', 'LD_DEBUG', 'LD_DEBUG_OUTPUT']) {
+      assert.ok(beforeWith.includes("          " + key + ": ''\n"),
+        'artifact JavaScript runtime must not inherit ' + key);
+    }
+    assert.ok(beforeWith.includes('          PATH: ${{ steps.trusted-path.outputs.path }}\n'),
+      'artifact JavaScript runtime must use PATH captured before untrusted candidate work');
+    assert.doesNotMatch(beforeWith, /GH_TOKEN|OPENROUTER_API_KEY/,
+      'artifact action must not receive CLI or model secrets');
+    assert.ok(step.includes('name: aieo-candidate-' +
+      ['developer', 'qa', 'security', 'reviewer'][index]),
+      'artifact output must retain the expected role identity');
+  }
+  assert.ok(candidateRoles.lastIndexOf(marker) > candidateRoles.indexOf('npm run build'),
+    'Reviewer artifact action must remain protected after running candidate build');
+});

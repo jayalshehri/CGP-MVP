@@ -62,7 +62,18 @@ jobs:
           PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-role.mjs developer
+      # JavaScript action: isolate the action runtime as well as shell run steps.
+      # A previous candidate/build step may append startup hooks to GITHUB_ENV.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
         with:
           name: aieo-candidate-developer
           path: aieo-output/candidate-developer.json
@@ -112,7 +123,18 @@ jobs:
           PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-role.mjs qa
+      # JavaScript action: isolate the action runtime as well as shell run steps.
+      # A previous candidate/build step may append startup hooks to GITHUB_ENV.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
         with:
           name: aieo-candidate-qa
           path: aieo-output/candidate-qa.json
@@ -162,7 +184,18 @@ jobs:
           PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-role.mjs security
+      # JavaScript action: isolate the action runtime as well as shell run steps.
+      # A previous candidate/build step may append startup hooks to GITHUB_ENV.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
         with:
           name: aieo-candidate-security
           path: aieo-output/candidate-security.json
@@ -247,7 +280,18 @@ jobs:
           PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-finalize.mjs
+      # JavaScript action: isolate the action runtime as well as shell run steps.
+      # A previous candidate/build step may append startup hooks to GITHUB_ENV.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
         with:
           name: aieo-candidate-reviewer
           path: aieo-output/candidate-reviewer.json
