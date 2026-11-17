@@ -123,8 +123,8 @@ test('publisher bypasses configured executable commit signer under GH_TOKEN', ()
     const trusted = git(f.workspace, 'rev-parse', 'HEAD');
     const marker = join(f.root, 'untrusted-signing-helper-executed');
     const signer = join(f.root, 'untrusted-signing-helper');
-    writeFileSync(signer, '#!/bin/sh\\n' +
-      'printf invoked > ' + JSON.stringify(marker) + '\\nexit 91\\n');
+    writeFileSync(signer, '#!/bin/sh\n' +
+      'printf invoked > ' + JSON.stringify(marker) + '\nexit 91\n');
     chmodSync(signer, 0o755);
     git(f.workspace, 'config', 'commit.gpgsign', 'true');
     git(f.workspace, 'config', 'gpg.program', signer);
