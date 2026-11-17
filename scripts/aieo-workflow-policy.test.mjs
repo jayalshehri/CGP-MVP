@@ -148,3 +148,42 @@ test('independent role and finalizer Git calls scrub credentials while gh retain
       'only explicit GitHub API subprocesses retain the scoped read token');
   }
 });
+
+
+test('external model credential is absent from independent QA, Security, Reviewer, build and publisher steps', () => {
+  const namedSteps = [
+    'Request one bounded model proposal (provider-only credentials)',
+    'Independently check candidate QA without model credentials',
+    'Independently check candidate Security without model credentials',
+    'Independently review QA and Security evidence without model credentials',
+    'Independently verify application build',
+    'Publish independently verified candidate as Draft PR only'
+  ];
+  const starts = namedSteps.map((name) => model.indexOf('      - name: ' + name));
+  assert.ok(starts.every((offset) => offset > 0), 'all role and publisher steps are explicit');
+  assert.ok(starts.every((offset, index) => index === 0 || starts[index - 1] < offset),
+    'model, independent roles, build and publication must execute in sequence');
+  const segments = starts.map((offset, index) =>
+    model.slice(offset, index + 1 < starts.length ? starts[index + 1] : undefined));
+
+  assert.match(segments[0], /OPENROUTER_API_KEY: \$\{\{ secrets\.OPENROUTER_API_KEY \}\}/);
+  assert.match(segments[0], /run: node scripts\/aieo-model-proposal\.mjs/);
+  for (const [index, cli] of [
+    [1, 'node scripts/aieo-model-gates.mjs qa'],
+    [2, 'node scripts/aieo-model-security.mjs'],
+    [3, 'node scripts/aieo-model-gates.mjs reviewer']
+  ]) {
+    assert.ok(segments[index].includes(cli), 'independent review step must execute ' + cli);
+  }
+  for (const [index, segment] of segments.entries()) {
+    if (index === 0) continue;
+    assert.doesNotMatch(segment, /OPENROUTER_API_KEY|OPENROUTER_MODEL_ID|AIEO_MODEL_APPLY/,
+      'the provider key and model execution configuration may exist only in proposal step');
+  }
+  assert.equal((model.match(/OPENROUTER_API_KEY/g) || []).length, 2,
+    'secret reference and its scoped environment name must occur in one step only');
+  assert.ok(segments[3].includes('git diff --check'),
+    'independent reviewer must preserve the diff preflight before the build');
+  assert.ok(segments[3].includes('git diff --name-only'),
+    'independent reviewer must verify one-file scope before the build');
+});

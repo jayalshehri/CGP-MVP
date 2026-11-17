@@ -72,7 +72,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-review-readiness.mjs
-      - name: Request one bounded model suggestion and audit its exact source diff
+      # The external provider credential is available only to this step.
+      # QA, Security, Reviewer and build run without provider secrets.
+      - name: Request one bounded model proposal (provider-only credentials)
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL_ID: ${{ vars.AIEO_MODEL_ID }}
@@ -80,11 +82,14 @@ jobs:
           AIEO_SOURCE_SHARING_APPROVED: 'true'
           AIEO_MODEL_TASK: ${{ inputs.task }}
           AIEO_MODEL_APPLY: '1'
+        run: node scripts/aieo-model-proposal.mjs
+      - name: Independently check candidate QA without model credentials
+        run: node scripts/aieo-model-gates.mjs qa
+      - name: Independently check candidate Security without model credentials
+        run: node scripts/aieo-model-security.mjs
+      - name: Independently review QA and Security evidence without model credentials
         run: |
           set -euo pipefail
-          node scripts/aieo-model-proposal.mjs
-          node scripts/aieo-model-gates.mjs qa
-          node scripts/aieo-model-security.mjs
           node scripts/aieo-model-gates.mjs reviewer
           git diff --check
           test "$(git diff --name-only)" = 'components/FeedbackWidget.tsx'
