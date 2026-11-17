@@ -41,6 +41,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
         run: |
           set -euo pipefail
           [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
@@ -49,6 +54,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-role.mjs developer
@@ -77,6 +87,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
         run: |
           set -euo pipefail
           [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
@@ -89,6 +104,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-role.mjs qa
@@ -117,6 +137,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
         run: |
           set -euo pipefail
           [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
@@ -129,6 +154,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-role.mjs security
@@ -157,6 +187,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
         run: |
           set -euo pipefail
           [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
@@ -170,6 +205,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-role.mjs reviewer
@@ -179,6 +219,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
@@ -194,6 +239,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-finalize.mjs
