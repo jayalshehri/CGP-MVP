@@ -13,7 +13,8 @@ const isHash = (s) => typeof s === 'string' && /^[a-f0-9]{64}$/.test(s);
 // candidate source, patches, commands, prompts, or arbitrary future fields.
 // Extra fields must fail closed (rather than being silently propagated).
 const ROLE_EVIDENCE_KEYS = {
-  developer: ['status', 'reason', 'path', 'bounded'],
+  // No optional 'bounded' assertion: the engine never emits or independently verifies it.
+  developer: ['status', 'reason', 'path'],
   qa: ['status', 'checks', 'casesPassed', 'casesTotal'],
   security: ['status', 'findings'],
   reviewer: ['status', 'reason', 'requiresHumanMerge', 'handoffValidated']
