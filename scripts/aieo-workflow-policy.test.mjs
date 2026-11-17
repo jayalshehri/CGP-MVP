@@ -2,7 +2,10 @@
 // These guardrails are not a substitute for GitHub branch protection.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { readOnlyGitEnvironment } from './aieo-git-process-guard.mjs';
 
 const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
@@ -285,4 +288,35 @@ test('trusted AIEO run steps clear inherited Bash and Node startup hooks before 
     ['Independently lint, typecheck and build approved candidate', 1],
     ['Re-attest independently reviewed candidate and remote Draft after build', 1]
   ]);
+});
+
+
+test('clearing startup hook environment prevents code execution before guarded entrypoints', (t) => {
+  // Synthetic, offline proof: bash sources BASH_ENV before its command and
+  // node executes a NODE_OPTIONS --require module before the entrypoint.
+  // The same explicit empty step env values prevent both preflight bypasses.
+  const directory = mkdtempSync(join(tmpdir(), 'aieo-startup-hooks-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const bashHook = join(directory, 'inherited-startup.bash');
+  const nodeHook = join(directory, 'inherited-preload.cjs');
+  writeFileSync(bashHook, "printf 'HOOK_EXECUTED\\n'\n", { mode: 0o600 });
+  writeFileSync(nodeHook, "process.stdout.write('HOOK_EXECUTED\\n');\n", { mode: 0o600 });
+
+  const runBash = (env) => execFileSync('bash', ['-c', 'printf RUN'], {
+    encoding: 'utf8', stdio: 'pipe', env: { ...process.env, ...env }
+  });
+  assert.equal(runBash({ BASH_ENV: bashHook }), 'HOOK_EXECUTED\nRUN',
+    'control proves inherited BASH_ENV can execute before a run command');
+  assert.equal(runBash({ BASH_ENV: '' }), 'RUN',
+    'step-scoped empty BASH_ENV blocks inherited shell startup execution');
+
+  const runNode = (env) => execFileSync(process.execPath,
+    ['-e', "process.stdout.write('RUN')"], {
+      encoding: 'utf8', stdio: 'pipe', env: { ...process.env, ...env }
+    });
+  assert.equal(runNode({ NODE_OPTIONS: '--require=' + nodeHook }),
+    'HOOK_EXECUTED\nRUN',
+    'control proves inherited NODE_OPTIONS can preload before runtime validation');
+  assert.equal(runNode({ NODE_OPTIONS: '' }), 'RUN',
+    'step-scoped empty NODE_OPTIONS blocks inherited JavaScript preloading');
 });
