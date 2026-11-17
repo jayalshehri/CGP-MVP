@@ -1,3 +1,4 @@
+import { APPROVED_PATH, APPROVED_TASK } from './engine.mjs';
 // Content-bound handoff between independent CI jobs.
 // These artifacts are evidence, not trusted executable instructions.
 const allowed = {
@@ -13,7 +14,7 @@ const isHash = (s) => typeof s === 'string' && /^[a-f0-9]{64}$/.test(s);
 // candidate source, patches, commands, prompts, or arbitrary future fields.
 // Extra fields must fail closed (rather than being silently propagated).
 const ROLE_EVIDENCE_KEYS = {
-    developer: ['status', 'reason', 'path', 'bounded'],
+  developer: ['status', 'reason', 'path', 'bounded'],
   qa: ['status', 'checks', 'casesPassed', 'casesTotal'],
   security: ['status', 'findings'],
   reviewer: ['status', 'reason', 'requiresHumanMerge', 'handoffValidated']
@@ -26,11 +27,46 @@ function assertEvidenceFields(value, role, keys) {
   }
 }
 
+
+// This foundation attests exactly one deterministic repair. Valid property
+// names alone are insufficient: a free-form reason, check, or finding could
+// smuggle source code, prompts or credentials into an uploaded artifact.
+// Keep each accepted success claim canonical at both trust boundaries.
+const APPROVED_QA_CHECKS = ['single-corrected-source-line', 'five-route-boundary-regressions'];
+const EXPECTED_REASONS = {
+  developer: {
+    proposed: 'One bounded route-boundary fix',
+    'no-change': 'Approved fix is already present'
+  },
+  reviewer: {
+    'draft-pr-eligible': 'Bounded change can be offered for human review',
+    'verified-no-change': 'Existing fix passed agent checks'
+  }
+};
+function assertCanonicalRoleEvidence(role, evidence) {
+  let valid = false;
+  if (role === 'developer') {
+    valid = evidence.path === APPROVED_PATH &&
+      evidence.reason === EXPECTED_REASONS.developer[evidence.status];
+  } else if (role === 'qa') {
+    valid = Array.isArray(evidence.checks) &&
+      evidence.checks.length === APPROVED_QA_CHECKS.length &&
+      evidence.checks.every((check, i) => check === APPROVED_QA_CHECKS[i]) &&
+      evidence.casesPassed === 5 && evidence.casesTotal === 5;
+  } else if (role === 'security') {
+    valid = Array.isArray(evidence.findings) && evidence.findings.length === 0;
+  } else if (role === 'reviewer') {
+    valid = evidence.reason === EXPECTED_REASONS.reviewer[evidence.status] &&
+      evidence.requiresHumanMerge === true && evidence.handoffValidated === true;
+  }
+  if (!valid) throw new Error('Noncanonical ' + role + ' handoff evidence');
+}
+
 export const HANDOFF_SCHEMA_VERSION = 2;
 
 export function buildHandoffArtifact({ role, task, sourceHash, candidateHash, verdict }) {
   if (!allowed[role] || !allowed[role].includes(verdict?.status) ||
-      !task || !isHash(sourceHash) || !isHash(candidateHash)) {
+      task !== APPROVED_TASK || !isHash(sourceHash) || !isHash(candidateHash)) {
     throw new Error('Cannot construct invalid AIEO handoff');
   }
   // The source-bound Developer report can already contain both hashes.
@@ -43,6 +79,7 @@ export function buildHandoffArtifact({ role, task, sourceHash, candidateHash, ve
   if (role === 'developer' && verdict.bounded !== true) {
     throw new Error('Developer handoff requires bounded attestation');
   }
+  assertCanonicalRoleEvidence(role, verdict);
   if ((Object.hasOwn(verdict, 'sourceHash') && verdict.sourceHash !== sourceHash) ||
       (Object.hasOwn(verdict, 'candidateHash') && verdict.candidateHash !== candidateHash)) {
     throw new Error('Developer handoff identity conflict');
@@ -56,7 +93,7 @@ export function buildHandoffArtifact({ role, task, sourceHash, candidateHash, ve
 export function verifyHandoffArtifact({ artifact, role, task, sourceHash, candidateHash, expected }) {
   if (!artifact || typeof artifact !== 'object' || Array.isArray(artifact) ||
       artifact.schemaVersion !== HANDOFF_SCHEMA_VERSION ||
-      artifact.role !== role || artifact.task !== task ||
+      artifact.role !== role || artifact.task !== task || task !== APPROVED_TASK ||
       !isHash(artifact.sourceHash) || !isHash(artifact.candidateHash) ||
       artifact.sourceHash !== sourceHash || artifact.candidateHash !== candidateHash ||
       !allowed[role]?.includes(artifact.status) ||
@@ -67,6 +104,7 @@ export function verifyHandoffArtifact({ artifact, role, task, sourceHash, candid
   if (role === 'developer' && artifact.bounded !== true) {
     throw new Error('Developer handoff requires bounded attestation');
   }
+  assertCanonicalRoleEvidence(role, artifact);
   // Recompute claims locally from the checked-out source, not from artifact-supplied code.
   // A successful verdict with missing or fabricated evidence must not advance.
   if (role === 'developer' && (!same(artifact.path, expected.path) ||
