@@ -834,11 +834,11 @@ test('post-build gate reattests the exact independently reviewed blob and curren
     // A generic Git exclude hides ignored files from --exclude-standard.
     // Only the four known Next/npm build outputs may be present after build.
     writeFileSync(join(f.cwd, '.git/info/exclude'),
-      '.env.local\\nruntime.pem\\n/backups/\\n/node_modules/\\n/.next/\\nnext-env.d.ts\\ntsconfig.tsbuildinfo\\n');
+      '.env.local\nruntime.pem\n/backups/\n/node_modules/\n/.next/\nnext-env.d.ts\ntsconfig.tsbuildinfo\n');
     for (const ignoredPath of ['.env.local', 'runtime.pem', 'backups/extra.json']) {
       const full = join(f.cwd, ignoredPath);
       mkdirSync(dirname(full), { recursive: true });
-      writeFileSync(full, 'synthetic unreviewed post-build input\\n');
+      writeFileSync(full, 'synthetic unreviewed post-build input\n');
       assert.equal(f.git('check-ignore', ignoredPath), ignoredPath,
         ignoredPath + ' must really be hidden by Git ignore rules');
       assert.equal(f.git('diff', '--name-only'), path);
@@ -851,7 +851,7 @@ test('post-build gate reattests the exact independently reviewed blob and curren
       'next-env.d.ts', 'tsconfig.tsbuildinfo']) {
       const full = join(f.cwd, built);
       mkdirSync(dirname(full), { recursive: true });
-      writeFileSync(full, 'synthetic generated build output\\n');
+      writeFileSync(full, 'synthetic generated build output\n');
     }
     assert.equal(verify().status, 0,
       'post-build gate must allow only the four known generated output paths');
