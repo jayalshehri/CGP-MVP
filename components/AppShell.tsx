@@ -139,7 +139,10 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const workspace = pathname === "/shared-controls" ? "shared" : pathname.startsWith("/data-governance") ? "data" : "cyber";
   const workspaceLabel = workspace === "data" ? "حوكمة البيانات" : workspace === "shared" ? "مركز المواءمة" : "الأمن السيبراني";
   const permittedItems = account ? navigation.filter(item => account.role === "nudee_owner" ? item.href === "/data-governance/nudee" : account.role === "data_governance_team" ? Boolean(item.data) : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin" || (hasNudeeWork && item.href === "/data-governance/nudee"))) : [];
-  const items = permittedItems.filter(item => workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls");
+  // Launch scope: show only the Nudee workflow and its dashboard in the Data Office workspace.
+  // Other routes and database objects remain unchanged. Visibility is not an authorization rule.
+  const dataOfficeLaunchPaths = new Set(["/data-governance", "/data-governance/nudee", "/data-governance/nudee-dashboard"]);
+  const items = permittedItems.filter(item => workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? dataOfficeLaunchPaths.has(item.href) : !item.data && item.href !== "/shared-controls");
   // Pick the most specific route, so a parent cannot hide the active child.
   const currentItem = navigation
     .filter(item => pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/")))
