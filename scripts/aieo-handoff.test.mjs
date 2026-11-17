@@ -51,8 +51,14 @@ test('security and reviewer claims cannot bypass evidence or human merge gate', 
   assert.throws(() => accept('reviewer', { ...make('reviewer'), handoffValidated: false }));
 });
 
-test('verdict metadata cannot overwrite protected artifact identity', () => {
-  const artifact = make('developer', { role: 'reviewer', task: 'spoofed', sourceHash: '0'.repeat(64) });
+test('verdict metadata cannot inject or overwrite protected artifact identity', () => {
+  for (const unexpected of [
+    { role: 'reviewer' }, { task: 'spoofed' }, { sourceHash: '0'.repeat(64) }
+  ]) {
+    assert.throws(() => make('developer', unexpected),
+      /Unexpected fields in developer handoff evidence|Developer handoff identity conflict/);
+  }
+  const artifact = make('developer');
   assert.equal(artifact.role, 'developer');
   assert.equal(artifact.task, APPROVED_TASK);
   assert.equal(artifact.sourceHash, sourceHash);
@@ -66,4 +72,32 @@ test('invalid verdict or candidate hashes cannot construct handoffs', () => {
   assert.throws(() => buildHandoffArtifact({
     role: 'security', task: APPROVED_TASK, sourceHash, candidateHash, verdict: { status: 'failed' }
   }));
+});
+
+
+test('handoffs reject additional payload fields that could carry source, commands or prompts', () => {
+  for (const [role, unexpected] of [
+    ['developer', { patchedSource: source }],
+    ['qa', { commands: ['gh pr merge'] }],
+    ['security', { modelPrompt: 'synthetic untrusted instruction' }],
+    ['reviewer', { secret: 'synthetic-placeholder-only' }]
+  ]) {
+    const verdict = { ...report[role],
+      ...(role === 'reviewer' ? { handoffValidated: true } : {}),
+      ...unexpected };
+    assert.throws(() => buildHandoffArtifact({
+      role, task: APPROVED_TASK, sourceHash, candidateHash, verdict
+    }), /Unexpected fields in .* handoff evidence/);
+    assert.throws(() => accept(role, { ...make(role), ...unexpected }),
+      /Unexpected fields in .* handoff evidence/);
+  }
+});
+
+test('conflicting identity inside a developer verdict cannot be silently overwritten', () => {
+  for (const bad of [{ sourceHash: '0'.repeat(64) }, { candidateHash: 'f'.repeat(64) }]) {
+    assert.throws(() => buildHandoffArtifact({
+      role: 'developer', task: APPROVED_TASK, sourceHash, candidateHash,
+      verdict: { ...report.developer, ...bad }
+    }), /Developer handoff identity conflict/);
+  }
 });
