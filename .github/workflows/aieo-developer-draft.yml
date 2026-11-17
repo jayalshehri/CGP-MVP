@@ -48,11 +48,21 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
         with:
           node-version: '24'
+      - name: Capture trusted PATH before candidate and build steps
+        id: trusted-path
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+        run: |
+          set -euo pipefail
+          [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
+          printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
       - name: Prepare trusted one-file patch
         id: proposal
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
           AIEO_APPLY: '1'
           AIEO_TRUSTED_WORKFLOW: '1'
           AIEO_TASK: ${{ inputs.task }}
@@ -72,6 +82,7 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
         run: |
@@ -86,6 +97,7 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
           AIEO_PUBLISH_MODE: deterministic
         run: node scripts/aieo-publish-draft.mjs
