@@ -1822,3 +1822,20 @@ test('Actions candidate fetch refuses local, foreign and rewritten Git origins b
     assert.equal(f.git('rev-parse', 'main'), f.base, 'no baseline mutation');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test('candidate role handoff reader refuses group-readable reports before QA runs', () => {
+  const f = setup();
+  try {
+    assert.equal(f.run('developer').status, 0);
+    const developerFile = join(f.cwd, 'aieo-output/candidate-developer.json');
+    for (const mode of [0o640, 0o604, 0o644]) {
+      chmodSync(developerFile, mode);
+      const result = f.run('qa');
+      assert.notEqual(result.status, 0, 'independent QA must reject mode ' + mode.toString(8));
+      assert.match(result.stderr, /AIEO role artifact rejected/);
+      chmodSync(developerFile, 0o600);
+    }
+    assert.equal(f.run('qa').status, 0, 'private role evidence remains valid');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
