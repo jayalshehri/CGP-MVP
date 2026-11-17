@@ -13,8 +13,7 @@ const isHash = (s) => typeof s === 'string' && /^[a-f0-9]{64}$/.test(s);
 // candidate source, patches, commands, prompts, or arbitrary future fields.
 // Extra fields must fail closed (rather than being silently propagated).
 const ROLE_EVIDENCE_KEYS = {
-  // No optional 'bounded' assertion: the engine never emits or independently verifies it.
-  developer: ['status', 'reason', 'path'],
+    developer: ['status', 'reason', 'path', 'bounded'],
   qa: ['status', 'checks', 'casesPassed', 'casesTotal'],
   security: ['status', 'findings'],
   reviewer: ['status', 'reason', 'requiresHumanMerge', 'handoffValidated']
@@ -39,6 +38,11 @@ export function buildHandoffArtifact({ role, task, sourceHash, candidateHash, ve
   const permitted = [...ROLE_EVIDENCE_KEYS[role],
     ...(role === 'developer' ? ['sourceHash', 'candidateHash'] : [])];
   assertEvidenceFields(verdict, role, permitted);
+  // The standalone Developer CLI attests this bound explicitly; false or
+  // omitted claims must not pass as safe evidence to independent roles.
+  if (role === 'developer' && verdict.bounded !== true) {
+    throw new Error('Developer handoff requires bounded attestation');
+  }
   if ((Object.hasOwn(verdict, 'sourceHash') && verdict.sourceHash !== sourceHash) ||
       (Object.hasOwn(verdict, 'candidateHash') && verdict.candidateHash !== candidateHash)) {
     throw new Error('Developer handoff identity conflict');
@@ -60,6 +64,9 @@ export function verifyHandoffArtifact({ artifact, role, task, sourceHash, candid
     throw new Error('Invalid, stale, or mismatched ' + role + ' handoff artifact');
   }
   assertEvidenceFields(artifact, role, [...IDENTITY_KEYS, ...ROLE_EVIDENCE_KEYS[role]]);
+  if (role === 'developer' && artifact.bounded !== true) {
+    throw new Error('Developer handoff requires bounded attestation');
+  }
   // Recompute claims locally from the checked-out source, not from artifact-supplied code.
   // A successful verdict with missing or fabricated evidence must not advance.
   if (role === 'developer' && (!same(artifact.path, expected.path) ||
