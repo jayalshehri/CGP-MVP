@@ -241,3 +241,48 @@ test('AIEO action dependencies are pinned to reviewed immutable commits, not mov
       path + ' must not use mutable major-version tags');
   }
 });
+
+
+test('trusted AIEO run steps clear inherited Bash and Node startup hooks before any sensitive execution', () => {
+  // A previous build/agent step can append BASH_ENV or NODE_OPTIONS to
+  // GITHUB_ENV. An injected BASH_ENV is sourced before "run:" starts;
+  // NODE_OPTIONS can preload JS before a runtime guard has any effect.
+  // Step-level overrides remain necessary even with guarded entrypoints.
+  const verifySteps = (workflow, names) => {
+    for (const [name, count] of names) {
+      const marker = '      - name: ' + name + '\n';
+      const segments = workflow.split(marker).slice(1);
+      assert.equal(segments.length, count, name + ' step count changed');
+      for (const segment of segments) {
+        const step = segment.split('\n      - ')[0];
+        const command = step.indexOf('        run:');
+        assert.ok(command >= 0, name + ' must have a run command');
+        const beforeRun = step.slice(0, command);
+        assert.ok(beforeRun.includes('        env:\n'), name + ' must have step-scoped env');
+        for (const key of ['BASH_ENV', 'NODE_OPTIONS']) {
+          assert.ok(beforeRun.includes("          " + key + ": ''\n"),
+            name + ' must clear inherited ' + key + ' before shell/Node startup');
+        }
+      }
+    }
+  };
+  verifySteps(model, [
+    ['Block absent or stale independent-review workflow before model disclosure', 1],
+    ['Request one bounded model proposal (provider-only credentials)', 1],
+    ['Independently check candidate QA without model credentials', 1],
+    ['Independently check candidate Security without model credentials', 1],
+    ['Independently review QA and Security evidence without model credentials', 1],
+    ['Independently verify application build', 1],
+    ['Publish independently verified candidate as Draft PR only', 1]
+  ]);
+  verifySteps(developer, [
+    ['Prepare trusted one-file patch', 1],
+    ['Run application gates on candidate', 1],
+    ['Publish verified bounded fix as Draft PR only', 1]
+  ]);
+  verifySteps(candidateRoles, [
+    ['Verify bounded candidate using trusted code', 4],
+    ['Independently lint, typecheck and build approved candidate', 1],
+    ['Re-attest independently reviewed candidate and remote Draft after build', 1]
+  ]);
+});
