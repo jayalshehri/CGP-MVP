@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, symlinkSync, linkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, symlinkSync, linkSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -146,6 +146,58 @@ test('foundation roles refuse symlinked and hardlinked downloaded evidence', () 
     linkSync(sourceFile, developerFile);
     assert.notEqual(run('qa').status, 0, 'downloaded hardlink must be rejected');
     assert.equal(readFileSync(sourceFile, 'utf8'), syntheticSource);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('foundation handoffs refuse group- or other-readable evidence before trusting a hash', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'aieo-private-foundation-'));
+  const sourceFile = join(workspace, 'components', 'FeedbackWidget.tsx');
+  const developerFile = join(workspace, 'aieo-output', 'developer.json');
+  const run = (role) => spawnSync(process.execPath, [runner, role], {
+    cwd: workspace, encoding: 'utf8', timeout: 15000,
+    env: { ...process.env, AIEO_TASK: 'feedback-control-route-boundary' }
+  });
+  try {
+    mkdirSync(dirname(sourceFile), { recursive: true });
+    writeFileSync(sourceFile, syntheticSource);
+    assert.equal(run('developer').status, 0);
+    for (const mode of [0o640, 0o604, 0o644]) {
+      chmodSync(developerFile, mode);
+      const result = run('qa');
+      assert.notEqual(result.status, 0, 'QA must refuse readable handoff mode ' + mode.toString(8));
+      assert.match(result.stderr, /AIEO role artifact rejected/);
+      chmodSync(developerFile, 0o600);
+    }
+    assert.equal(run('qa').status, 0, 'private canonical handoff is accepted');
+    assert.equal(readFileSync(sourceFile, 'utf8'), syntheticSource);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('model report reader refuses other-readable evidence independently of valid JSON', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'aieo-private-model-'));
+  const report = join(workspace, 'aieo-output', 'model-proposal.json');
+  const reader = new URL('./aieo-role-artifact-io.mjs', import.meta.url).href;
+  const code = 'import { readBoundedModelReport } from ' + JSON.stringify(reader) +
+    "; readBoundedModelReport('proposal');";
+  const run = () => spawnSync(process.execPath, ['--input-type=module', '--eval', code], {
+    cwd: workspace, encoding: 'utf8', timeout: 15000
+  });
+  try {
+    mkdirSync(dirname(report));
+    writeFileSync(report, '{"schemaVersion":1}\n', { mode: 0o600 });
+    assert.equal(run().status, 0);
+    for (const mode of [0o640, 0o604, 0o644]) {
+      chmodSync(report, mode);
+      const result = run();
+      assert.notEqual(result.status, 0, 'model report mode ' + mode.toString(8) + ' is not private');
+      assert.match(result.stderr, /AIEO role artifact rejected/);
+    }
+    chmodSync(report, 0o600);
+    assert.equal(run().status, 0);
   } finally {
     rmSync(workspace, { recursive: true, force: true });
   }

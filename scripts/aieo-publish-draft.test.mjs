@@ -53,7 +53,7 @@ function fixture() {
   const reviewer = inspectModelReviewer({ ...args, qa, security });
   for (const [kind, report] of Object.entries({ proposal, qa, security, reviewer })) {
     writeFileSync(join(workspace, 'aieo-output', 'model-' + kind + '.json'),
-      JSON.stringify(report) + '\n');
+      JSON.stringify(report) + '\n', { mode: 0o600 });
   }
   const log = join(root, 'fake-gh.log');
   const gh = join(bin, 'gh');
@@ -765,7 +765,7 @@ for (const linkType of ['symlink', 'hardlink']) {
         assert.equal(git(f.workspace, 'ls-remote', '--heads', f.remote)
           .includes('refs/heads/aieo/model-proposal-'), false);
         unlinkSync(reportPath);
-        writeFileSync(reportPath, original);
+        writeFileSync(reportPath, original, { mode: 0o600 });
       }
     } finally { rmSync(f.root, { force: true, recursive: true }); }
   });

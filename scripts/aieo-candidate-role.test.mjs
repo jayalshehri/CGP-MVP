@@ -859,7 +859,7 @@ test('post-build gate reattests the exact independently reviewed blob and curren
           'post-build gate must reject ' + alias + '-linked ' + role + ' evidence');
         rmSync(reportPath);
         rmSync(outside);
-        writeFileSync(reportPath, prior);
+        writeFileSync(reportPath, prior, { mode: 0o600 });
         assert.equal(verify().status, 0,
           'restoring ordinary ' + role + ' evidence must pass');
       }
@@ -1011,7 +1011,7 @@ test('independent QA, Security and Reviewer reject aliased inbound role artifact
         'Security must independently reject linked Developer evidence');
     }
     rmSync(developerPath);
-    writeFileSync(developerPath, originalDeveloper);
+    writeFileSync(developerPath, originalDeveloper, { mode: 0o600 });
     assert.equal(f.run('qa').status, 0, 'ordinary restored Developer evidence is valid');
     assert.equal(f.run('security').status, 0);
 
@@ -1026,7 +1026,7 @@ test('independent QA, Security and Reviewer reject aliased inbound role artifact
         'Reviewer must not consume aliased QA evidence');
     }
     rmSync(qaPath);
-    writeFileSync(qaPath, originalQa);
+    writeFileSync(qaPath, originalQa, { mode: 0o600 });
     assert.equal(f.run('reviewer').status, 0,
       'Reviewer can verify ordinary restored QA and Security evidence');
     assert.equal(f.git('rev-parse', 'main'), f.base);
@@ -1356,7 +1356,7 @@ test('candidate and model role readers reject malformed UTF-8 evidence before pa
     assert.notEqual(check('model').status, 0,
       'model handoff shares the same strict-byte provenance requirement');
     rmSync(modelPath);
-    writeFileSync(reportPath, original);
+    writeFileSync(reportPath, original, { mode: 0o600 });
     assert.equal(check('candidate').status, 0,
       'the restored byte-valid report remains independently readable');
     assert.equal(f.run('qa').status, 0, 'normal downstream QA can still consume restored evidence');
@@ -1820,5 +1820,22 @@ test('Actions candidate fetch refuses local, foreign and rewritten Git origins b
     assert.notEqual(rewriteBlocked.status, 0, 'Actions role must reject expanded rewrite');
     assert.equal(existsSync(join(f.cwd, 'aieo-output/candidate-developer.json')), false);
     assert.equal(f.git('rev-parse', 'main'), f.base, 'no baseline mutation');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('candidate role handoff reader refuses group-readable reports before QA runs', () => {
+  const f = setup();
+  try {
+    assert.equal(f.run('developer').status, 0);
+    const developerFile = join(f.cwd, 'aieo-output/candidate-developer.json');
+    for (const mode of [0o640, 0o604, 0o644]) {
+      chmodSync(developerFile, mode);
+      const result = f.run('qa');
+      assert.notEqual(result.status, 0, 'independent QA must reject mode ' + mode.toString(8));
+      assert.match(result.stderr, /AIEO role artifact rejected/);
+      chmodSync(developerFile, 0o600);
+    }
+    assert.equal(f.run('qa').status, 0, 'private role evidence remains valid');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
