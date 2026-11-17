@@ -12,9 +12,16 @@ const UNSAFE_GIT_ENV = /^(?:GIT_CONFIG(?:_[A-Z0-9_]+)?|GIT_DIR|GIT_COMMON_DIR|GI
 // GH_TOKEN itself, which is the intended scoped Actions credential.
 const UNSAFE_GH_ENV = /^(?:GH_HOST|GH_REPO|GH_CONFIG_DIR|GH_DEBUG|GH_PAGER|GH_EDITOR|GH_BROWSER|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)$/;
 
+// Transport environment variables can silently retarget HTTPS through a
+// proxy or replace CA trust even when origin and Git config are canonical.
+// These can be persisted by earlier build steps via GITHUB_ENV, so reject
+// them before any privileged Git or GitHub CLI subprocess.
+const UNSAFE_TRANSPORT_ENV = /^(?:(?:https?|all|no)_proxy|curl_ca_bundle|ssl_cert_file|ssl_cert_dir|requests_ca_bundle|node_extra_ca_certs|node_tls_reject_unauthorized|git_ssl_[a-z0-9_]+|git_proxy_ssl_[a-z0-9_]+|git_http_(?:extraheader|proxy_authmethod))$/i;
+
 export function hasUnsafeGitEnvironment(env) {
   return Object.keys(env ?? {}).some((name) =>
-    UNSAFE_GIT_ENV.test(name) || UNSAFE_GH_ENV.test(name));
+    UNSAFE_GIT_ENV.test(name) || UNSAFE_GH_ENV.test(name) ||
+    UNSAFE_TRANSPORT_ENV.test(name));
 }
 
 /**

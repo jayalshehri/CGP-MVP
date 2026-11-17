@@ -1561,6 +1561,10 @@ test('independent roles and post-build reject inherited Git execution and trace 
       { GIT_CEILING_DIRECTORIES: f.root },
       { GIT_DISCOVERY_ACROSS_FILESYSTEM: '1' },
       { GIT_ALLOW_PROTOCOL: 'ext' },
+      { GIT_SSL_CAINFO: join(f.root, 'untrusted-git-ca.pem') },
+      { SSL_CERT_FILE: join(f.root, 'untrusted-trust.pem') },
+      { HTTPS_PROXY: 'http://untrusted-proxy.invalid:8080' },
+      { ALL_PROXY: 'socks5://untrusted-proxy.invalid:1080' },
       // GH_TOKEN is legitimate, but GH_HOST / GH_REPO / CLI config overrides
       // must not redirect independent verification to another repository.
       { GH_HOST: 'untrusted.example.invalid' },
@@ -1635,8 +1639,7 @@ test('read-only Developer, QA, Security, Reviewer and finalizer Git subprocesses
       SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-role-key',
       SSH_AUTH_SOCK: '/tmp/synthetic-agent.sock',
       ORG_SESSION_DATA: 'synthetic-new-secret-name',
-      CUSTOM_PAT: 'synthetic-undocumented-pat',
-      HTTPS_PROXY: 'https://synthetic-proxy.invalid' };
+      CUSTOM_PAT: 'synthetic-undocumented-pat' };
     for (const [role, status] of [
       ['developer', 'proposed'], ['qa', 'passed'],
       ['security', 'passed'], ['reviewer', 'draft-pr-eligible']

@@ -75,7 +75,11 @@ test('unknown future secret names and execution/proxy overrides never reach read
 test('Git and GitHub CLI environment overrides are still rejected before credential scrubbing', () => {
   for (const key of [
     'GIT_CONFIG_COUNT', 'GIT_CONFIG_GLOBAL', 'GIT_SSH_COMMAND',
-    'GIT_TRACE2_EVENT', 'GH_HOST', 'GH_REPO', 'GH_DEBUG'
+    'GIT_TRACE2_EVENT', 'GH_HOST', 'GH_REPO', 'GH_DEBUG',
+    'HTTPS_PROXY', 'http_proxy', 'ALL_PROXY', 'NO_PROXY',
+    'GIT_SSL_CAINFO', 'GIT_SSL_CAPATH', 'GIT_PROXY_SSL_CAINFO',
+    'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CURL_CA_BUNDLE',
+    'NODE_EXTRA_CA_CERTS', 'NODE_TLS_REJECT_UNAUTHORIZED'
   ]) {
     assert.equal(hasUnsafeGitEnvironment({ [key]: 'synthetic-injection' }), true, key);
   }
