@@ -109,6 +109,9 @@ export default function NudeePage(){
   setBusy(true);setError("");setNotice("");
   let uploadedPath:string|null=null;
   let submissionConfirmed=false;
+  // Only an explicit database rejection proves the RPC did not commit.
+  // An HTTP timeout/network error can arrive before the server finishes writing.
+  let rpcDefinitelyRejected=false;
   try{
    await requireProfile();
    if(!["assigned","changes_requested"].includes(assignment.status))throw new Error("التكليف ليس متاحًا للرفع");
@@ -120,7 +123,12 @@ export default function NudeePage(){
    if(ue)throw ue;
    uploadedPath=path;
    const {error:se}=await supabase.rpc("nudee_submit_evidence",{p_assignment_id:assignment.id,p_storage_path:path,p_file_name:file.name});
-   if(se)throw se;
+   if(se){
+    // PostgreSQL errors below abort the transaction. Never infer rollback from
+    // a transport error or an ambiguous PostgREST/gateway failure.
+    rpcDefinitelyRejected=new Set(["P0001","23503","23505","23514","42501","22P02","22001"]).has(se.code);
+    throw se;
+   }
    submissionConfirmed=true;
    setFile(null);setNotice("تم رفع الدليل وإرساله للمراجعة");await load();
   }catch(e){
@@ -134,11 +142,16 @@ export default function NudeePage(){
      try{await load();}catch{setNotice("تم استلام الدليل. حدّث الصفحة لعرض الحالة.");}
      setBusy(false);return;
     }
-    if(!checkError){
+    if(!checkError&&rpcDefinitelyRejected){
+     // Clean up only when the database explicitly rejected the transaction.
      const {error:cleanupError}=await supabase.storage.from("nudee-evidence").remove([uploadedPath]);
      if(cleanupError)message+=". بقي ملف غير مُرسل في التخزين؛ تواصل مع مكتب البيانات لتنظيفه قبل إعادة الإسناد.";
+    }else if(!checkError){
+     // A read returning no row does not prove a timed-out RPC has finished.
+     // Keep the uploaded object rather than risk deleting committed evidence.
+     message+=". حالة الإرسال غير مؤكدة؛ احتفظنا بالملف لحماية الدليل. حدّث الصفحة وتواصل مع مكتب البيانات قبل إعادة المحاولة.";
     }else{
-     message+=". تعذر التحقق من حالة الإرسال. حدّث الصفحة قبل محاولة الرفع مجددًا.";
+     message+=". تعذر التحقق من حالة الإرسال. احتفظنا بالملف؛ حدّث الصفحة قبل محاولة الرفع مجددًا.";
     }
    }
    setError(message);
