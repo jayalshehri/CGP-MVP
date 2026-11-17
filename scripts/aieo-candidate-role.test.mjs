@@ -859,7 +859,7 @@ test('post-build gate reattests the exact independently reviewed blob and curren
           'post-build gate must reject ' + alias + '-linked ' + role + ' evidence');
         rmSync(reportPath);
         rmSync(outside);
-        writeFileSync(reportPath, prior);
+        writeFileSync(reportPath, prior, { mode: 0o600 });
         assert.equal(verify().status, 0,
           'restoring ordinary ' + role + ' evidence must pass');
       }
@@ -1011,7 +1011,7 @@ test('independent QA, Security and Reviewer reject aliased inbound role artifact
         'Security must independently reject linked Developer evidence');
     }
     rmSync(developerPath);
-    writeFileSync(developerPath, originalDeveloper);
+    writeFileSync(developerPath, originalDeveloper, { mode: 0o600 });
     assert.equal(f.run('qa').status, 0, 'ordinary restored Developer evidence is valid');
     assert.equal(f.run('security').status, 0);
 
@@ -1026,7 +1026,7 @@ test('independent QA, Security and Reviewer reject aliased inbound role artifact
         'Reviewer must not consume aliased QA evidence');
     }
     rmSync(qaPath);
-    writeFileSync(qaPath, originalQa);
+    writeFileSync(qaPath, originalQa, { mode: 0o600 });
     assert.equal(f.run('reviewer').status, 0,
       'Reviewer can verify ordinary restored QA and Security evidence');
     assert.equal(f.git('rev-parse', 'main'), f.base);
