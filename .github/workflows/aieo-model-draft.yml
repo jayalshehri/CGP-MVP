@@ -10,6 +10,7 @@ on:
       - 'scripts/aieo-git-process-guard.mjs'
       - 'scripts/aieo-git-process-guard.test.mjs'
       - 'scripts/aieo-candidate-finalize*.mjs'
+      - 'scripts/aieo-candidate-replay*.mjs'
       - 'scripts/aieo-role-artifact-io.mjs'
       - 'scripts/aieo-workflow-policy.test.mjs'
       - '.github/workflows/aieo-model-candidate-roles.yml'

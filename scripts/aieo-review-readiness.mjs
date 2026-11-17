@@ -10,6 +10,7 @@ const REQUIRED = [
   WORKFLOW,
   'scripts/aieo-candidate-role.mjs',
   'scripts/aieo-candidate-finalize.mjs',
+  'scripts/aieo-candidate-replay.mjs',
   'scripts/aieo-role-artifact-io.mjs',
   'scripts/aieo-model-security.mjs',
   'aieo/lib/model-gates.mjs',

@@ -674,6 +674,44 @@ test('independent roles reject a real feedback network-error handler fix outside
 });
 
 
+test('pre-build replay accepts only four verified role handoffs and a credential-free Git blob', () => {
+  const f = setup();
+  const replayScript = join(dirname(fileURLToPath(import.meta.url)), 'aieo-candidate-replay.mjs');
+  const runReplay = (overrides = {}) => spawnSync(process.execPath, [replayScript], {
+    cwd: f.cwd, encoding: 'utf8', timeout: 25000,
+    env: {
+      ...f.env, GH_TOKEN: '', GITHUB_TOKEN: '', OPENROUTER_API_KEY: '',
+      ...overrides
+    }
+  });
+  try {
+    assert.notEqual(runReplay().status, 0, 'no unverified role reports can be built');
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const r = f.run(role);
+      assert.equal(r.status, 0, role + ': ' + r.stderr);
+    }
+    assert.notEqual(runReplay({ GH_TOKEN: 'synthetic-should-be-absent' }).status, 0,
+      'the build replay must not receive GitHub credentials');
+    assert.notEqual(runReplay({ GIT_CONFIG_COUNT: '1' }).status, 0,
+      'inherited Git configuration injection must be rejected before reading blobs');
+    assert.equal(readFileSync(join(f.cwd, path), 'utf8'), original,
+      'failed replay must not change the trusted source');
+
+    const accepted = runReplay();
+    assert.equal(accepted.status, 0, accepted.stderr);
+    assert.equal(JSON.parse(accepted.stdout).status, 'verified-candidate-replayed-for-build');
+    assert.equal(readFileSync(join(f.cwd, path), 'utf8'), candidate);
+    assert.equal(f.git('rev-parse', 'HEAD'), f.base, 'candidate replay does not create a commit');
+
+    f.git('restore', '--', path);
+    const qaPath = join(f.cwd, 'aieo-output/candidate-qa.json');
+    const qa = JSON.parse(readFileSync(qaPath, 'utf8'));
+    writeFileSync(qaPath, JSON.stringify({ ...qa, status: 'passed', routeCasesPassed: 0 }));
+    assert.notEqual(runReplay().status, 0, 'forged QA evidence must block compilation');
+    assert.equal(readFileSync(join(f.cwd, path), 'utf8'), original);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test('post-build gate reattests the exact independently reviewed blob and current remote Draft', () => {
   const f = setup();
   try {
