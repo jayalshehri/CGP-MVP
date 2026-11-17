@@ -1639,8 +1639,7 @@ test('read-only Developer, QA, Security, Reviewer and finalizer Git subprocesses
       SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-role-key',
       SSH_AUTH_SOCK: '/tmp/synthetic-agent.sock',
       ORG_SESSION_DATA: 'synthetic-new-secret-name',
-      CUSTOM_PAT: 'synthetic-undocumented-pat',
-      HTTPS_PROXY: 'https://synthetic-proxy.invalid' };
+      CUSTOM_PAT: 'synthetic-undocumented-pat' };
     for (const [role, status] of [
       ['developer', 'proposed'], ['qa', 'passed'],
       ['security', 'passed'], ['reviewer', 'draft-pr-eligible']
