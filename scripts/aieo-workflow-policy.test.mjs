@@ -320,3 +320,72 @@ test('clearing startup hook environment prevents code execution before guarded e
   assert.equal(runNode({ NODE_OPTIONS: '' }), 'RUN',
     'step-scoped empty NODE_OPTIONS blocks inherited JavaScript preloading');
 });
+
+test('credentialed AIEO steps use a pre-candidate captured tool PATH, not GITHUB_PATH injections', () => {
+  const scenarios = [
+    [model, 1, [
+      ['Block absent or stale independent-review workflow before model disclosure', 1],
+      ['Request one bounded model proposal (provider-only credentials)', 1],
+      ['Independently check candidate QA without model credentials', 1],
+      ['Independently check candidate Security without model credentials', 1],
+      ['Independently review QA and Security evidence without model credentials', 1],
+      ['Independently verify application build', 1],
+      ['Publish independently verified candidate as Draft PR only', 1]
+    ]],
+    [developer, 1, [
+      ['Prepare trusted one-file patch', 1],
+      ['Run application gates on candidate', 1],
+      ['Publish verified bounded fix as Draft PR only', 1]
+    ]],
+    [candidateRoles, 4, [
+      ['Verify bounded candidate using trusted code', 4],
+      ['Independently lint, typecheck and build approved candidate', 1],
+      ['Re-attest independently reviewed candidate and remote Draft after build', 1]
+    ]]
+  ];
+  for (const [workflow, captureCount, steps] of scenarios) {
+    const capture = '      - name: Capture trusted PATH before candidate and build steps\n';
+    assert.equal(workflow.split(capture).length - 1, captureCount,
+      'every credentialed job must capture PATH after trusted Node setup');
+    const jobs = workflow.split(capture).slice(1);
+    for (const segment of jobs) {
+      assert.match(segment, /^        id: trusted-path\n        env:\n          BASH_ENV: ''\n          NODE_OPTIONS: ''\n        run: \|\n/m,
+        'PATH capture must not inherit executable startup hooks');
+      assert.ok(segment.includes('printf \'path=%s\\n\' "$PATH" >> "$GITHUB_OUTPUT"'),
+        'captured PATH must be published without executing runner-injected commands');
+    }
+    for (const [name, count] of steps) {
+      const marker = '      - name: ' + name + '\n';
+      const sections = workflow.split(marker).slice(1);
+      assert.equal(sections.length, count, name + ' step count changed');
+      for (const section of sections) {
+        const beforeRun = section.split('        run:')[0].split('\n      - ')[0];
+        assert.ok(beforeRun.includes('          PATH: ${{ steps.trusted-path.outputs.path }}\n'),
+          name + ' must ignore PATH entries appended by prior candidate/build steps');
+      }
+    }
+    assert.ok(workflow.lastIndexOf('        with:\n          node-version: \'24\'\n') <
+      workflow.lastIndexOf(capture), 'PATH capture must follow setup-node');
+  }
+});
+
+test('trusted PATH override defeats a synthetic GITHUB_PATH executable hijack', (t) => {
+  // A build hook can append a directory to GITHUB_PATH so its binaries get
+  // precedence in the next Actions step. The publisher must use the snapshot
+  // made before that hook, even when it starts with scoped GH_TOKEN.
+  const directory = mkdtempSync(join(tmpdir(), 'aieo-path-hijack-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const fakeNode = join(directory, 'node');
+  writeFileSync(fakeNode, "#!/bin/sh\nprintf 'PATH_HIJACKED\\n'\n", { mode: 0o755 });
+  const trustedPath = process.env.PATH;
+  assert.ok(trustedPath, 'Node test runner needs a trusted PATH');
+  const run = (path) => execFileSync('node',
+    ['-e', "process.stdout.write('TRUSTED_NODE\\n')"], {
+      env: { ...process.env, PATH: path, NODE_OPTIONS: '', BASH_ENV: '' },
+      encoding: 'utf8', stdio: 'pipe'
+    });
+  assert.equal(run(directory + ':' + trustedPath), 'PATH_HIJACKED\n',
+    'control proves the next step would execute an injected node binary');
+  assert.equal(run(trustedPath), 'TRUSTED_NODE\n',
+    'restoring the pre-build PATH runs the trusted Node binary');
+});
