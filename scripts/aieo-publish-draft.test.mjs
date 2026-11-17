@@ -810,6 +810,43 @@ test('publisher suppresses post-index-change on git add with scoped GH_TOKEN', (
 });
 
 
+// A trusted repo URL by itself does not attest Git transport. A local or
+// URL-specific proxy/TLS/header setting can silently alter ls-remote and push.
+// Pretend to run on Actions but abort before contacting the canonical HTTPS URL.
+test('real Actions publisher refuses hostile Git transport config before any network or GitHub write', () => {
+  for (const [key, value] of [
+    ['http.proxy', 'http://proxy.invalid:8080'],
+    ['http.https://github.com/.proxy', 'http://scoped.invalid:8080'],
+    ['http.sslVerify', 'false'],
+    ['http.https://github.com/.extraHeader', 'Authorization: Bearer fixture-only'],
+    ['http.followRedirects', 'true'],
+    ['credential.https://github.com.helper', '!synthetic-helper'],
+    ['remote.origin.proxy', 'http://proxy.invalid:8080'],
+    ['remote.origin.uploadpack', 'custom-helper'],
+    ['url.https://alternate.invalid/.insteadOf', 'https://github.com/']
+  ]) {
+    const f = fixture();
+    try {
+      const originalMain = git(f.workspace, 'rev-parse', 'main');
+      git(f.workspace, 'remote', 'set-url', 'origin',
+        'https://github.com/jayalshehri/CGP-MVP.git');
+      git(f.workspace, 'config', '--local', key, value);
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace,
+        env: { ...f.env, GITHUB_ACTIONS: 'true' },
+        encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, key + ' must refuse publication');
+      assert.match(child.stderr, /publisher Git transport configuration is unsafe/, key);
+      assert.equal(existsSync(f.log), false, 'no gh access: ' + key);
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main', key);
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), originalMain, key);
+      // No ls-remote/push is safe to try against the newly configured HTTPS
+      // origin here. The specific config-block error precedes both in code.
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  }
+});
+
 test('official publisher origin policy accepts only one exact HTTPS repo fetch/push target', () => {
   assert.equal(verifyOfficialPublisherOrigin(
     ['https://github.com/jayalshehri/CGP-MVP'],
