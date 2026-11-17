@@ -101,3 +101,14 @@ test('conflicting identity inside a developer verdict cannot be silently overwri
     }), /Developer handoff identity conflict/);
   }
 });
+
+test('Developer artifacts refuse unsupported bounded claims at creation and verification', () => {
+  // The Developer report computes status/path/reason, not an independent bounded
+  // boolean. Never allow a forged claim to travel as approved handoff evidence.
+  for (const bounded of [true, false, 'true', { approved: true }]) {
+    assert.throws(() => make('developer', { bounded }),
+      /Unexpected fields in developer handoff evidence/);
+    assert.throws(() => accept('developer', { ...make('developer'), bounded }),
+      /Unexpected fields in developer handoff evidence/);
+  }
+});
