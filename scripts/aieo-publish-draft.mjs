@@ -252,6 +252,22 @@ export function publishDraft({ env = process.env } = {}) {
       .split('\n').filter(Boolean).some((p) => p !== 'aieo-output' && !p.startsWith('aieo-output/'))) {
     fail('unexpected untracked repository files');
   }
+  // The normal untracked check deliberately excludes .gitignore and
+  // .git/info/exclude matches. But an ignored .env.local, npm config or
+  // private key can change build behavior without appearing in the reviewed
+  // Git diff. Independently attest the ignored worktree before the publisher
+  // creates a branch or invokes GitHub. Only known Next/npm build outputs
+  // may remain after the independent build step. --directory avoids walking
+  // every file inside the generated dependency and build trees.
+  const allowedGenerated = new Set([
+    'node_modules/', '.next/', 'next-env.d.ts', 'tsconfig.tsbuildinfo'
+  ]);
+  const ignored = command('git', ['ls-files', '--others', '--ignored',
+    '--exclude-standard', '--directory', '-z']).split('\0').filter(Boolean);
+  if (ignored.length !== new Set(ignored).size ||
+      ignored.some((entry) => !allowedGenerated.has(entry))) {
+    fail('unexpected ignored repository inputs');
+  }
   command('git', ['diff', '--check']);
   const original = command('git', ['show', 'HEAD:' + path]);
   const actual = readTrustedCandidate(path);
