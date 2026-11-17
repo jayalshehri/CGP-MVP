@@ -401,6 +401,12 @@ test('publisher blocks inherited Git executable/config overrides before any remo
       { GIT_EXEC_PATH: join(f.root, 'untrusted-git-helpers') },
       { GIT_EXTERNAL_DIFF: 'untrusted-diff-helper' },
       { GIT_SSL_NO_VERIFY: '1' },
+      { GIT_SSL_CAINFO: join(f.root, 'untrusted-git-ca.pem') },
+      { SSL_CERT_FILE: join(f.root, 'untrusted-trust.pem') },
+      { CURL_CA_BUNDLE: join(f.root, 'untrusted-curl.pem') },
+      { HTTPS_PROXY: 'http://untrusted-proxy.invalid:8080' },
+      { https_proxy: 'http://untrusted-proxy.invalid:8080' },
+      { ALL_PROXY: 'socks5://untrusted-proxy.invalid:1080' },
       { GIT_TRACE_CURL: join(f.root, 'untrusted-trace.log') },
       // GitHub CLI dispatch and API metadata must also stay pinned to the
       // checked repository and authenticated github.com host.
