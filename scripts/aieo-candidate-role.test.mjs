@@ -697,6 +697,25 @@ test('pre-build replay accepts only four verified role handoffs and a credential
     assert.equal(readFileSync(join(f.cwd, path), 'utf8'), original,
       'failed replay must not change the trusted source');
 
+    // A Git diff looks clean even when an untracked config, an ignored env
+    // file or an additional downloaded handoff may change the npm build.
+    // Pre-build rejection must preserve original application source bytes.
+    for (const extra of ['unreviewed.config.mjs', 'aieo-output/unreviewed.cjs']) {
+      const name = join(f.cwd, extra);
+      writeFileSync(name, 'synthetic, unapproved build input\\n');
+      assert.notEqual(runReplay().status, 0, extra + ' must block before npm');
+      assert.equal(readFileSync(join(f.cwd, path), 'utf8'), original);
+      rmSync(name);
+    }
+    // Unlike --exclude-standard, ls-files --others must also reject ignored
+    // files such as a hidden .env.local consumed by the Next.js build.
+    writeFileSync(join(f.cwd, '.git/info/exclude'), '.env.local\\n');
+    writeFileSync(join(f.cwd, '.env.local'), 'SYNTHETIC_ONLY=yes\\n');
+    assert.equal(f.git('check-ignore', '.env.local'), '.env.local');
+    assert.notEqual(runReplay().status, 0, 'ignored env override must fail closed');
+    assert.equal(readFileSync(join(f.cwd, path), 'utf8'), original);
+    rmSync(join(f.cwd, '.env.local'));
+
     const accepted = runReplay();
     assert.equal(accepted.status, 0, accepted.stderr);
     assert.equal(JSON.parse(accepted.stdout).status, 'verified-candidate-replayed-for-build');
