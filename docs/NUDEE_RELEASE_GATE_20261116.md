@@ -74,6 +74,13 @@ This checklist describes evidence for PR #237. It is **not a production approval
 - The security advisor still identifies the six intentional authenticated `SECURITY DEFINER` Nudee RPCs (which enforce their own role checks), an unrelated governance RPC, and leaked-password protection disabled; those advisories are tracked, not silently dismissed.
 - CI for regression test commit `563d67e751455933e8580f95beb7c42f61050fd8` passed in [run 43992043763](https://github.com/jayalshehri/CGP-MVP/actions/runs/43992043763). This is **not production approval**.
 
+
+## QA Storage owner binding hardening — 2026-11-17
+- Added eighth Nudee migration `20261117060000_nudee_storage_upload_owner_guard.sql`. Its `nudee_storage_upload` policy requires that the uploaded `storage.objects.owner_id` match the authenticated assignee's `auth.uid()`, in addition to the existing assignment, status, profile and bucket restrictions. This prevents direct authenticated metadata inserts from assigning a different `owner_id`.
+- Applied **this migration to CGP-QA only**, successfully. Ran `tests/nudee_storage_owner_guard_qa.sql` on QA with two impersonated authenticated SQL roles: deliberately forged `owner_id` rejected, correct `owner_id` accepted. This was a **metadata-only** regression, NOT an HTTP Storage binary operation. The transaction was rolled back, and a subsequent independent query confirmed 364 requirements, zero assignments, zero submissions, zero Nudee Storage objects, and zero persisted Nudee-owner profiles.
+- Branch commits: security migration `9590a780`, regression test `4d3b1b30`. Required CI and Vercel Preview **must be verified on the resulting newest branch SHA**; prior green builds do not clear these checks.
+- **Still blocked:** real authenticated first login/invitation, binary upload/signed URL/download/removal, full reviewer cycle with separate sessions, and authenticated desktop/mobile RTL E2E. Keep this PR draft. Production schema and source data remain unchanged.
+
 ## Not yet verified — BLOCKING
 1. A **real binary** upload, signed-link download, and subsequent decision using separate authenticated QA owner/reviewer sessions. SQL `storage.objects` insertion does **not** test storage service file bytes, signed URLs, or browser permissions.
 2. **Visual** RTL layout on real mobile and desktop viewport sizes after authentication, plus interactive error/retry paths.
@@ -83,7 +90,7 @@ This checklist describes evidence for PR #237. It is **not a production approval
 
 ## Release sequence
 1. Finish remaining E2E/visual tests in QA; fix defects on this branch and rerun required CI.
-2. Confirm production schema compatibility and backup; apply the seven Nudee migrations in sequence.
+2. Confirm production schema compatibility and backup; apply the eight Nudee migrations in sequence.
 3. Import **exactly 364** original CSV records through a controlled administrative data operation (never commit actual source CSV to the code repository). Verify counts, uniqueness, domains, and 18-column baseline consistency before any production edits to Nudee status.
 4. Deploy the updated `admin-invite-user` Edge Function to production and verify account creation for `nudee_owner`.
 5. Merge only after all gates pass; wait for Vercel production deployment **READY**, then verify `cgp-mvp-grc13.vercel.app` resolves to that exact production deployment and smoke-test both authenticated Nudee routes.
