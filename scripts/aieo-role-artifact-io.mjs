@@ -1,7 +1,7 @@
 // Fail-closed input reader for independently produced AIEO role handoffs.
 // Inspect and read ONE opened inode with a strict byte cap. Do not trust a
 // path-only lstat followed by readFileSync(path), which can follow a swapped link.
-// Group/world-writable handoffs or directories are unsafe regardless of hashes.
+// Group/other-accessible handoffs or directories are unsafe regardless of hashes.
 import { mkdirSync, lstatSync, openSync, fstatSync, readSync, writeSync, closeSync, constants } from 'node:fs';
 
 const MAX_BYTES = 65536;
@@ -66,7 +66,7 @@ function writeExclusiveReport(path, report) {
     const file = fstatSync(fd);
     const current = lstatSync(path);
     const directoryNow = lstatSync('aieo-output');
-    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o133) ||
+    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o177) ||
         file.size !== data.length ||
         !current.isFile() || current.isSymbolicLink() ||
         current.dev !== file.dev || current.ino !== file.ino ||
@@ -88,13 +88,13 @@ function readTrustedJsonReport(path, canonical = false) {
         (directory.mode & 0o022)) block();
     const before = lstatSync(path);
     if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 ||
-        (before.mode & 0o133) || before.size < 2 || before.size > MAX_BYTES) block();
+        (before.mode & 0o177) || before.size < 2 || before.size > MAX_BYTES) block();
 
     // O_NOFOLLOW refuses a symlink swapped into the final path after lstat.
     // O_NONBLOCK prevents an adversarial FIFO swap from hanging before fstat.
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const file = fstatSync(fd);
-    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o133) ||
+    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o177) ||
         file.dev !== before.dev || file.ino !== before.ino ||
         file.size !== before.size || file.size < 2 || file.size > MAX_BYTES) block();
     const bytes = Buffer.alloc(file.size + 1);
@@ -112,10 +112,10 @@ function readTrustedJsonReport(path, canonical = false) {
     const currentPath = lstatSync(path);
     const currentDirectory = lstatSync('aieo-output');
     if (used !== file.size || after.size !== file.size ||
-        after.nlink !== 1 || (after.mode & 0o133) ||
+        after.nlink !== 1 || (after.mode & 0o177) ||
         after.mtimeMs !== file.mtimeMs || after.ctimeMs !== file.ctimeMs ||
         !currentPath.isFile() || currentPath.isSymbolicLink() ||
-        currentPath.nlink !== 1 || (currentPath.mode & 0o133) ||
+        currentPath.nlink !== 1 || (currentPath.mode & 0o177) ||
         currentPath.dev !== file.dev || currentPath.ino !== file.ino ||
         currentPath.size !== file.size ||
         !currentDirectory.isDirectory() || currentDirectory.isSymbolicLink() ||
