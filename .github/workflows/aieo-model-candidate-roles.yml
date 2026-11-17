@@ -133,8 +133,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
         run: |
           set -euo pipefail
-          HEAD_SHA="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('aieo-output/candidate-developer.json','utf8')).headSha)")"
-          git show "$HEAD_SHA:components/FeedbackWidget.tsx" > components/FeedbackWidget.tsx
+          node scripts/aieo-candidate-replay.mjs
           npm ci
           npm run lint
           npx next typegen
