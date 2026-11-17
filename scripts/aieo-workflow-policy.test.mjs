@@ -497,3 +497,54 @@ test('independent role artifact JavaScript actions clear inherited startup hooks
   assert.ok(candidateRoles.lastIndexOf(marker) > candidateRoles.indexOf('npm run build'),
     'Reviewer artifact action must remain protected after running candidate build');
 });
+
+
+test('independent role downloads use exact artifact identities and isolated JavaScript runtimes', () => {
+  // A wildcard merge could silently accept an unexpected artifact or
+  // overwrite a named handoff. Each job must fetch only the reports it
+  // actually needs, before executing any role verification code.
+  const marker = '      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093';
+  const getJob = (role) => {
+    const parts = candidateRoles.split('\n  ' + role + ':\n');
+    assert.equal(parts.length, 2, role + ' must have one independent job');
+    return parts[1].split(/\n  (?:developer|qa|security|reviewer):\n/)[0];
+  };
+  const expected = new Map([
+    ['developer', []],
+    ['qa', ['developer']],
+    ['security', ['developer']],
+    ['reviewer', ['developer', 'qa', 'security']]
+  ]);
+  let total = 0;
+  for (const [role, names] of expected) {
+    const job = getJob(role);
+    const blocks = job.split(marker).slice(1);
+    assert.equal(blocks.length, names.length, role + ' artifact count must be exact');
+    total += blocks.length;
+    for (const [index, block] of blocks.entries()) {
+      const step = block.split('\n      - ')[0];
+      assert.ok(step.includes('        env:\n'), 'download JavaScript action needs scoped env');
+      for (const key of ['BASH_ENV', 'NODE_OPTIONS', 'LD_PRELOAD',
+        'LD_AUDIT', 'LD_LIBRARY_PATH', 'LD_DEBUG', 'LD_DEBUG_OUTPUT']) {
+        assert.ok(step.includes("          " + key + ": ''\n"),
+          role + ' download must clear inherited ' + key);
+      }
+      assert.ok(step.includes('          PATH: ${{ steps.trusted-path.outputs.path }}\n'),
+        role + ' download must retain the captured trusted PATH');
+      assert.ok(step.includes('        with:\n          name: aieo-candidate-' +
+        names[index] + '\n          path: aieo-output\n'),
+        role + ' must fetch the exact ' + names[index] + ' handoff');
+      assert.doesNotMatch(step, /pattern:|merge-multiple:|GH_TOKEN:|OPENROUTER_API_KEY:/,
+        'no wildcard merges or model/CLI secrets in artifact downloads');
+    }
+    if (names.length) {
+      const verify = job.indexOf('      - name: Verify bounded candidate using trusted code');
+      assert.ok(verify > 0, role + ' verification must be explicit');
+      assert.ok(job.lastIndexOf(marker) < verify,
+        role + ' must download all handoffs before evaluating them');
+    }
+  }
+  assert.equal(total, 5, 'only the five expected handoffs may be downloaded');
+  assert.doesNotMatch(candidateRoles, /pattern: aieo-candidate-\*|merge-multiple: true/,
+    'the independent reviewer must not merge wildcard artifact namespaces');
+});
