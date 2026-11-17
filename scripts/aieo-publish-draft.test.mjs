@@ -894,7 +894,12 @@ for (const variant of ['fetch', 'push', 'insteadOf']) {
         encoding: 'utf8', timeout: 20000
       });
       assert.notEqual(child.status, 0, 'unapproved origin must fail closed');
-      assert.match(child.stderr, /origin fetch and push URLs must target/);
+      // The stronger configuration gate now rejects pushurl and insteadOf
+      // earlier than the URL gate; a direct rogue fetch URL still fails at
+      // the exact-origin check. Do not weaken either control.
+      assert.match(child.stderr, variant === 'fetch'
+        ? /origin fetch and push URLs must target/
+        : /publisher Git transport configuration is unsafe/);
       assert.equal(git(f.workspace, 'rev-parse', 'main'), base);
       assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
       assert.equal(existsSync(f.log), false, 'must never call GitHub CLI');
