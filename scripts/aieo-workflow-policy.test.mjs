@@ -200,6 +200,8 @@ test('independent candidate build replays an immutable, reviewed blob before npm
   assert.ok(replay.includes('readOnlyGitArguments'));
   assert.ok(replay.includes('expectedReviewer.requiresHumanMerge !== true'));
   assert.ok(replay.includes('replaceTrustedSource(original, candidate)'));
+  assert.ok(replay.includes("git('ls-files', '--others', '-z')"),
+    'pre-build replay must reject even ignored untracked inputs');
   assert.ok(candidateRoles.indexOf('node scripts/aieo-candidate-replay.mjs') <
     candidateRoles.indexOf('npm ci'), 'verification must run before dependencies/build');
 });
