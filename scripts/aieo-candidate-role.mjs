@@ -70,6 +70,11 @@ export function verifyOfficialCandidateFetchConfig(keys) {
       keys.some((key) => typeof key !== 'string' || !key ||
         key.length > 512 || /[\r\n\0]/.test(key) ||
         /^(?:http|credential|url)\./i.test(key) ||
+        // Git transport/client-side authentication can execute configured
+        // commands even with a canonical HTTPS origin and no env override.
+        // core.askPass in particular runs a shell helper on a credential
+        // challenge while the publisher holds a write-scoped GH_TOKEN.
+        /^(?:core\.(?:askpass|sshcommand|gitproxy|alternaterefscommand)|uploadpack\.packobjectshook)$/i.test(key) ||
         (/^remote\.origin\./i.test(key) &&
           !/^remote\.origin\.(?:url|fetch|tagopt)$/.test(key)))) block();
   if (!keys.includes('remote.origin.url') ||
