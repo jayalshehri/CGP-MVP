@@ -53,7 +53,7 @@ function fixture() {
   const reviewer = inspectModelReviewer({ ...args, qa, security });
   for (const [kind, report] of Object.entries({ proposal, qa, security, reviewer })) {
     writeFileSync(join(workspace, 'aieo-output', 'model-' + kind + '.json'),
-      JSON.stringify(report) + '\n');
+      JSON.stringify(report) + '\n', { mode: 0o600 });
   }
   const log = join(root, 'fake-gh.log');
   const gh = join(bin, 'gh');
