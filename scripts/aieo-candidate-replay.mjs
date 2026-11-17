@@ -119,6 +119,21 @@ export function replayReviewedCandidate(env = process.env) {
         git('rev-list', '--parents', '-n', '1', head) !== head + ' ' + base) block();
     const entries = git('ls-files', '-v', '-z').split('\0').filter(Boolean);
     if (!entries.length || entries.some((entry) => !entry.startsWith('H '))) block();
+    // Tracked diffs cannot detect untracked build inputs. Check BEFORE npm ci,
+    // including ignored .env*, npm configuration and any new source files:
+    // the post-build gate is too late to protect the compiler from these.
+    // Git reports paths NUL-delimited so unusual filenames cannot masquerade
+    // as multiple entries. Only independently approved handoffs may exist.
+    const expectedHandoffs = new Set([
+      'aieo-output/candidate-developer.json',
+      'aieo-output/candidate-qa.json',
+      'aieo-output/candidate-security.json',
+      'aieo-output/candidate-reviewer.json'
+    ]);
+    const untracked = git('ls-files', '--others', '-z').split('\0').filter(Boolean);
+    if (untracked.length !== expectedHandoffs.size ||
+        new Set(untracked).size !== untracked.length ||
+        untracked.some((entry) => !expectedHandoffs.has(entry))) block();
     for (const revision of [base, head]) {
       if (!/^100644 blob [a-f0-9]{40}\tcomponents\/FeedbackWidget\.tsx$/.test(
         git('ls-tree', revision, '--', MODEL_ALLOWED_PATH))) block();
