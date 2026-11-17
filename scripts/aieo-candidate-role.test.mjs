@@ -1561,6 +1561,10 @@ test('independent roles and post-build reject inherited Git execution and trace 
       { GIT_CEILING_DIRECTORIES: f.root },
       { GIT_DISCOVERY_ACROSS_FILESYSTEM: '1' },
       { GIT_ALLOW_PROTOCOL: 'ext' },
+      { GIT_SSL_CAINFO: join(f.root, 'untrusted-git-ca.pem') },
+      { SSL_CERT_FILE: join(f.root, 'untrusted-trust.pem') },
+      { HTTPS_PROXY: 'http://untrusted-proxy.invalid:8080' },
+      { ALL_PROXY: 'socks5://untrusted-proxy.invalid:1080' },
       // GH_TOKEN is legitimate, but GH_HOST / GH_REPO / CLI config overrides
       // must not redirect independent verification to another repository.
       { GH_HOST: 'untrusted.example.invalid' },
