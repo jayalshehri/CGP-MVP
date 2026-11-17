@@ -73,6 +73,80 @@ function fixture() {
   return { root, workspace, remote, log, env, target, args, qa, security, reviewer };
 }
 
+// A build can leave Git-ignored inputs that the ordinary untracked check
+// misses. Independent review of the candidate must not rely solely on
+// --exclude-standard and a clean tracked-file diff before Draft publishing.
+for (const [label, excludedPath, pattern] of [
+  ['ignored environment file', '.env.local', '.env.local'],
+  ['ignored nested private key', 'secrets/sample.pem', '*.pem'],
+  ['ignored extra build directory', 'coverage/report.txt', 'coverage/']
+]) {
+  test('publisher blocks ' + label + ' before any Draft write', () => {
+    const f = fixture();
+    try {
+      const base = git(f.workspace, 'rev-parse', 'main');
+      const exclusion = join(f.workspace, '.git', 'info', 'exclude');
+      writeFileSync(exclusion, readFileSync(exclusion, 'utf8') + '\n' + pattern + '\n');
+      const pathname = join(f.workspace, excludedPath);
+      mkdirSync(dirname(pathname), { recursive: true });
+      writeFileSync(pathname, 'synthetic ignored input\n');
+      assert.doesNotMatch(git(f.workspace, 'ls-files', '--others', '--exclude-standard'),
+        /(?:\.env\.local|sample\.pem|coverage\/report)/,
+        'control: ordinary untracked check must miss the ignored file');
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0);
+      assert.match(child.stderr, /unexpected ignored repository inputs/);
+      assert.equal(existsSync(f.log), false, 'publisher must not call GitHub CLI');
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), base);
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /refs\/heads\/aieo\//);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+}
+
+// A report directory may carry its own .gitignore; that file is tolerated
+// as an untracked handoff by the old check, but must not hide an extra payload.
+test('publisher rejects ignored payload hidden by a nested handoff .gitignore', () => {
+  const f = fixture();
+  try {
+    writeFileSync(join(f.workspace, 'aieo-output', '.gitignore'), 'hidden.payload\n');
+    writeFileSync(join(f.workspace, 'aieo-output', 'hidden.payload'), 'fixture only\n');
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0);
+    assert.match(child.stderr, /unexpected ignored repository inputs/);
+    assert.equal(existsSync(f.log), false);
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+// The strict guard must still accept the exact generated outputs of the
+// legitimate Next/npm build, without opening a general ignored-path bypass.
+test('publisher permits only the known ignored npm and Next build artifacts', () => {
+  const f = fixture();
+  try {
+    const exclusion = join(f.workspace, '.git', 'info', 'exclude');
+    writeFileSync(exclusion, readFileSync(exclusion, 'utf8') +
+      '\nnode_modules/\n.next/\nnext-env.d.ts\ntsconfig.tsbuildinfo\n');
+    mkdirSync(join(f.workspace, 'node_modules', 'synthetic'), { recursive: true });
+    mkdirSync(join(f.workspace, '.next', 'synthetic'), { recursive: true });
+    writeFileSync(join(f.workspace, 'node_modules', 'synthetic', 'a.txt'), 'fixture\n');
+    writeFileSync(join(f.workspace, '.next', 'synthetic', 'b.txt'), 'fixture\n');
+    writeFileSync(join(f.workspace, 'next-env.d.ts'), '// fixture\n');
+    writeFileSync(join(f.workspace, 'tsconfig.tsbuildinfo'), '{}\n');
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+    assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 // An attribute-selected diff.textconv helper executes even with --no-ext-diff.
 // Demonstrate the fixture is executable outside the publisher, then ensure
 // every publisher diff uses raw bytes and never invokes the helper with GH_TOKEN.
