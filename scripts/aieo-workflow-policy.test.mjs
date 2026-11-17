@@ -90,6 +90,10 @@ test('dispatched independent model candidate roles are read-only and run trusted
     'only the four role CLI steps and post-build re-attestation receive a read-only token');
   assert.ok(candidateRoles.includes('node scripts/aieo-candidate-finalize.mjs'));
   assert.ok(finalizer.includes("pr.draft !== true"));
+  assert.ok(finalizer.includes("git('ls-files', '--others', '--ignored'"),
+    'post-build must inspect ignored files instead of treating all excludes as safe');
+  assert.ok(finalizer.includes("'node_modules/', '.next/', 'next-env.d.ts', 'tsconfig.tsbuildinfo'"),
+    'only explicit generated outputs may be excluded from post-build inspection');
   assert.ok(finalizer.includes("pr.head?.sha !== head"));
   assert.doesNotMatch(finalizer, /(?:['"]pr merge['"]|--auto-merge|--force-with-lease)/);
   assert.ok(publisher.includes("'aieo-model-candidate-roles.yml'"));

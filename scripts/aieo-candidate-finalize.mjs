@@ -150,6 +150,17 @@ export function verifyPostBuild(env = process.env) {
   const untracked = git('ls-files', '--others', '--exclude-standard', '-z')
     .split('\0').filter(Boolean);
   if (untracked.some((entry) => !allowedHandoffs.has(entry))) fail();
+  // --exclude-standard above hides ALL ignored files, not just Next/npm outputs.
+  // A build can create .env.local, PEM credentials or another ignored override
+  // without changing the Git diff. Only the known build-generated paths below
+  // are permitted; --directory bounds inspection of large dependency trees.
+  const allowedIgnoredOutputs = new Set([
+    'node_modules/', '.next/', 'next-env.d.ts', 'tsconfig.tsbuildinfo'
+  ]);
+  const ignored = git('ls-files', '--others', '--ignored',
+    '--exclude-standard', '--directory', '-z').split('\0').filter(Boolean);
+  if (ignored.length !== new Set(ignored).size ||
+      ignored.some((entry) => !allowedIgnoredOutputs.has(entry))) fail();
   // The build must compile exactly the previously reviewed immutable blob.
   const original = readStrictReviewedGitSource(base);
   const actual = readStrictReviewedGitSource(head);

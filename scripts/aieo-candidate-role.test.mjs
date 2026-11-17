@@ -831,6 +831,43 @@ test('post-build gate reattests the exact independently reviewed blob and curren
         'removing the unexpected file restores the valid candidate proof');
     }
 
+    // A generic Git exclude hides ignored files from --exclude-standard.
+    // Only the four known Next/npm build outputs may be present after build.
+    writeFileSync(join(f.cwd, '.git/info/exclude'),
+      '.env.local\nruntime.pem\n/backups/\n/node_modules/\n/.next/\nnext-env.d.ts\ntsconfig.tsbuildinfo\n');
+    for (const ignoredPath of ['.env.local', 'runtime.pem', 'backups/extra.json']) {
+      const full = join(f.cwd, ignoredPath);
+      mkdirSync(dirname(full), { recursive: true });
+      writeFileSync(full, 'synthetic unreviewed post-build input\n');
+      assert.equal(f.git('check-ignore', ignoredPath), ignoredPath,
+        ignoredPath + ' must really be hidden by Git ignore rules');
+      assert.equal(f.git('diff', '--name-only'), path);
+      assert.notEqual(verify().status, 0,
+        'post-build gate must reject ignored config/credential/backup: ' + ignoredPath);
+      rmSync(full);
+      // Git --directory still reports even an empty ignored directory.
+      // Its removal is required before any post-build attestation can pass.
+      if (ignoredPath === 'backups/extra.json') {
+        assert.notEqual(verify().status, 0,
+          'empty ignored backup directory also remains out of scope');
+        rmSync(join(f.cwd, 'backups'), { recursive: true, force: true });
+      }
+      assert.equal(verify().status, 0, 'removing ignored input recovers attestation');
+    }
+    for (const built of ['node_modules/example/index.js', '.next/cache/item',
+      'next-env.d.ts', 'tsconfig.tsbuildinfo']) {
+      const full = join(f.cwd, built);
+      mkdirSync(dirname(full), { recursive: true });
+      writeFileSync(full, 'synthetic generated build output\n');
+    }
+    assert.equal(verify().status, 0,
+      'post-build gate must allow only the four known generated output paths');
+    rmSync(join(f.cwd, 'node_modules'), { recursive: true, force: true });
+    rmSync(join(f.cwd, '.next'), { recursive: true, force: true });
+    rmSync(join(f.cwd, 'next-env.d.ts'));
+    rmSync(join(f.cwd, 'tsconfig.tsbuildinfo'));
+    assert.equal(verify().status, 0, 'clean baseline remains valid');
+
     // Simulate a build tool modifying another tracked source while setting an
     // index flag that hides the change from the previous diff-only finalizer.
     // The approved candidate itself remains byte-identical.
