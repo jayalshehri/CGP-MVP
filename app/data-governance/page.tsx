@@ -21,18 +21,22 @@ export default function DataGovernancePage() {
     async function load() {
       try {
         await requireProfile(["admin", "data_governance_team"]);
-        const [requirements, assignments] = await Promise.all([
+        // Independent exact HEAD counts avoid the default row limit and
+        // do not download potentially thousands of assignments to the browser.
+        const [requirements, assigned, submitted, approved] = await Promise.all([
           supabase.from("nudee_requirements").select("id", { count: "exact", head: true }),
-          supabase.from("nudee_assignments").select("status"),
+          supabase.from("nudee_assignments").select("id", { count: "exact", head: true }),
+          supabase.from("nudee_assignments").select("id", { count: "exact", head: true }).eq("status", "submitted"),
+          supabase.from("nudee_assignments").select("id", { count: "exact", head: true }).eq("status", "approved"),
         ]);
-        if (requirements.error || assignments.error) throw requirements.error || assignments.error;
+        const queryError = [requirements, assigned, submitted, approved].find(result => result.error)?.error;
+        if (queryError) throw queryError;
         if (active) {
-          const assigned = assignments.data ?? [];
           setSummary({
             requirements: requirements.count,
-            assigned: assigned.length,
-            submitted: assigned.filter(item => item.status === "submitted").length,
-            approved: assigned.filter(item => item.status === "approved").length,
+            assigned: assigned.count,
+            submitted: submitted.count,
+            approved: approved.count,
           });
         }
       } catch (e) {
