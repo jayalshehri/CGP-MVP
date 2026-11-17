@@ -53,7 +53,7 @@ test('model provenance, QA, Security and Reviewer Git reads never inherit provid
       ...process.env, PATH: bin + delimiter + process.env.PATH,
       OPENROUTER_API_KEY: 'synthetic-model-key', GH_TOKEN: 'synthetic-gh-token',
       ORG_SESSION_DATA: 'synthetic-future-secret',
-      NODE_OPTIONS: '--no-warnings', HTTPS_PROXY: 'https://synthetic.invalid'
+      NODE_OPTIONS: '--no-warnings'
     };
     const head = git(f.work, 'rev-parse', 'HEAD');
     // Git commands run from the temporary worktree. The test never touches main.
@@ -96,6 +96,8 @@ test('model preflight rejects any tracked executable clean filter and hostile Gi
         env: { ...env, GIT_CONFIG_COUNT: '1' }
       }), /untrusted Git or GitHub CLI environment/);
       assert.throws(() => preflightModelGit({ ...env, GH_HOST: 'rogue.invalid' }),
+        /untrusted Git or GitHub CLI environment/);
+      assert.throws(() => preflightModelGit({ ...env, HTTPS_PROXY: 'https://synthetic.invalid' }),
         /untrusted Git or GitHub CLI environment/);
       writeFileSync('.gitattributes', 'components/FeedbackWidget.tsx filter=untrusted\n');
       git(f.work, 'add', '--', '.gitattributes');
