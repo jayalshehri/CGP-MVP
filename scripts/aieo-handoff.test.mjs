@@ -51,8 +51,14 @@ test('security and reviewer claims cannot bypass evidence or human merge gate', 
   assert.throws(() => accept('reviewer', { ...make('reviewer'), handoffValidated: false }));
 });
 
-test('verdict metadata cannot overwrite protected artifact identity', () => {
-  const artifact = make('developer', { role: 'reviewer', task: 'spoofed', sourceHash: '0'.repeat(64) });
+test('verdict metadata cannot inject or overwrite protected artifact identity', () => {
+  for (const unexpected of [
+    { role: 'reviewer' }, { task: 'spoofed' }, { sourceHash: '0'.repeat(64) }
+  ]) {
+    assert.throws(() => make('developer', unexpected),
+      /Unexpected fields in developer handoff evidence|Developer handoff identity conflict/);
+  }
+  const artifact = make('developer');
   assert.equal(artifact.role, 'developer');
   assert.equal(artifact.task, APPROVED_TASK);
   assert.equal(artifact.sourceHash, sourceHash);
