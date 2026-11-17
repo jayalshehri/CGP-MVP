@@ -69,10 +69,20 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
         with:
           node-version: '24'
+      - name: Capture trusted PATH before candidate and build steps
+        id: trusted-path
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+        run: |
+          set -euo pipefail
+          [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
+          printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
       - name: Block absent or stale independent-review workflow before model disclosure
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-review-readiness.mjs
       # The external provider credential is available only to this step.
@@ -81,6 +91,7 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL_ID: ${{ vars.AIEO_MODEL_ID }}
           AIEO_MODEL_ENABLED: 'true'
@@ -92,16 +103,19 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
         run: node scripts/aieo-model-gates.mjs qa
       - name: Independently check candidate Security without model credentials
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
         run: node scripts/aieo-model-security.mjs
       - name: Independently review QA and Security evidence without model credentials
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
         run: |
           set -euo pipefail
           node scripts/aieo-model-gates.mjs reviewer
@@ -111,6 +125,7 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
         run: |
@@ -124,6 +139,7 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
           AIEO_PUBLISH_MODE: model
           AIEO_MODEL_ENABLED: 'true'
