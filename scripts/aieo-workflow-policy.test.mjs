@@ -349,7 +349,7 @@ test('credentialed AIEO steps use a pre-candidate captured tool PATH, not GITHUB
       'every credentialed job must capture PATH after trusted Node setup');
     const jobs = workflow.split(capture).slice(1);
     for (const segment of jobs) {
-      assert.match(segment, /^        id: trusted-path\n        env:\n          BASH_ENV: ''\n          NODE_OPTIONS: ''\n        run: \|\n/m,
+      assert.match(segment, /^        id: trusted-path\n        env:\n          BASH_ENV: ''\n          NODE_OPTIONS: ''\n          LD_PRELOAD: ''\n          LD_AUDIT: ''\n          LD_LIBRARY_PATH: ''\n          LD_DEBUG: ''\n          LD_DEBUG_OUTPUT: ''\n        run: \|\n/m,
         'PATH capture must not inherit executable startup hooks');
       assert.ok(segment.includes('printf \'path=%s\\n\' "$PATH" >> "$GITHUB_OUTPUT"'),
         'captured PATH must be published without executing runner-injected commands');
