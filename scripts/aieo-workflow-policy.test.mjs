@@ -189,6 +189,21 @@ test('external model credential is absent from independent QA, Security, Reviewe
 });
 
 
+test('independent candidate build replays an immutable, reviewed blob before npm executes', () => {
+  const replay = read('scripts/aieo-candidate-replay.mjs');
+  assert.ok(candidateRoles.includes('node scripts/aieo-candidate-replay.mjs'));
+  assert.doesNotMatch(candidateRoles, /git show "\$HEAD_SHA:/);
+  assert.ok(model.includes("      - 'scripts/aieo-candidate-replay*.mjs'"));
+  assert.ok(replay.includes('readStrictReviewedGitSource(head)'));
+  assert.ok(replay.includes("readBoundedRoleReport('reviewer')"));
+  assert.ok(replay.includes('hasUnsafeGitEnvironment'));
+  assert.ok(replay.includes('readOnlyGitArguments'));
+  assert.ok(replay.includes('expectedReviewer.requiresHumanMerge !== true'));
+  assert.ok(replay.includes('replaceTrustedSource(original, candidate)'));
+  assert.ok(candidateRoles.indexOf('node scripts/aieo-candidate-replay.mjs') <
+    candidateRoles.indexOf('npm ci'), 'verification must run before dependencies/build');
+});
+
 test('AIEO action dependencies are pinned to reviewed immutable commits, not movable tags', () => {
   // Pin hashes were resolved from the official actions/* v4 GitHub tag refs
   // on 2026-11-17. Upgrades must deliberately update both workflow and allowlist.
