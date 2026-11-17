@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: '24'
       - name: Run negative, safety and handoff tests
-        run: node --test scripts/aieo-agent.test.mjs scripts/aieo-handoff.test.mjs scripts/aieo-e2e.test.mjs scripts/aieo-model-provider.test.mjs scripts/aieo-remote-draft.test.mjs scripts/aieo-candidate-role.test.mjs scripts/aieo-git-process-guard.test.mjs scripts/aieo-workflow-policy.test.mjs
+        run: node --test scripts/aieo-agent.test.mjs scripts/aieo-handoff.test.mjs scripts/aieo-e2e.test.mjs scripts/aieo-model-provider.test.mjs scripts/aieo-remote-draft.test.mjs scripts/aieo-candidate-role.test.mjs scripts/aieo-git-process-guard.test.mjs scripts/aieo-workflow-policy.test.mjs scripts/aieo-import-handoffs.test.mjs
       - name: Verify real source in read-only mode
         run: node scripts/aieo-runner.mjs
       - name: Ensure source unchanged
@@ -76,6 +76,8 @@ jobs:
         with:
           name: aieo-developer
           path: aieo-output
+      - name: Re-private downloaded, strictly named evidence before qa review
+        run: node scripts/aieo-import-handoffs.mjs foundation developer
       - run: node scripts/aieo-role.mjs qa
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
         with:
@@ -99,6 +101,8 @@ jobs:
         with:
           name: aieo-developer
           path: aieo-output
+      - name: Re-private downloaded, strictly named evidence before security review
+        run: node scripts/aieo-import-handoffs.mjs foundation developer
       - run: node scripts/aieo-role.mjs security
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
         with:
@@ -132,6 +136,8 @@ jobs:
         with:
           name: aieo-security
           path: aieo-output
+      - name: Re-private downloaded, strictly named evidence before reviewer review
+        run: node scripts/aieo-import-handoffs.mjs foundation developer qa security
       - run: node scripts/aieo-role.mjs reviewer
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
         with:

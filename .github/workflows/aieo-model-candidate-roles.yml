@@ -120,6 +120,17 @@ jobs:
         with:
           name: aieo-candidate-developer
           path: aieo-output
+      - name: Re-private exact downloaded role artifacts without trusting their claims
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: node scripts/aieo-import-handoffs.mjs candidate developer
       - name: Verify bounded candidate using trusted code
         env:
           BASH_ENV: ''
@@ -190,6 +201,17 @@ jobs:
         with:
           name: aieo-candidate-developer
           path: aieo-output
+      - name: Re-private exact downloaded role artifacts without trusting their claims
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: node scripts/aieo-import-handoffs.mjs candidate developer
       - name: Verify bounded candidate using trusted code
         env:
           BASH_ENV: ''
@@ -288,6 +310,17 @@ jobs:
         with:
           name: aieo-candidate-security
           path: aieo-output
+      - name: Re-private exact downloaded role artifacts without trusting their claims
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: node scripts/aieo-import-handoffs.mjs candidate developer qa security
       - name: Verify bounded candidate using trusted code
         env:
           BASH_ENV: ''
