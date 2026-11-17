@@ -66,6 +66,9 @@ function setup() {
   chmodSync(gh, 0o755);
   const env = {
     ...process.env,
+    // Even when node:test runs in Actions, this disposable local bare remote
+    // is a fixture rather than a trusted production candidate endpoint.
+    GITHUB_ACTIONS: 'false',
     PATH: bin + delimiter + process.env.PATH,
     GH_TOKEN: 'fixture-never-live',
     GITHUB_EVENT_NAME: 'workflow_dispatch',
