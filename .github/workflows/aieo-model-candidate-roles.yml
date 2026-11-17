@@ -38,6 +38,8 @@ jobs:
           node-version: '24'
       - name: Verify bounded candidate using trusted code
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-role.mjs developer
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
@@ -66,6 +68,8 @@ jobs:
           path: aieo-output
       - name: Verify bounded candidate using trusted code
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-role.mjs qa
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
@@ -94,6 +98,8 @@ jobs:
           path: aieo-output
       - name: Verify bounded candidate using trusted code
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-role.mjs security
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
@@ -123,12 +129,16 @@ jobs:
           merge-multiple: true
       - name: Verify bounded candidate using trusted code
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-role.mjs reviewer
       # Only after independent QA+Security+Reviewer approve the one-file diff,
       # compile candidate source with trusted main-branch build tools.
       - name: Independently lint, typecheck and build approved candidate
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
         run: |
@@ -141,6 +151,8 @@ jobs:
           npm run build
       - name: Re-attest independently reviewed candidate and remote Draft after build
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-candidate-finalize.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin

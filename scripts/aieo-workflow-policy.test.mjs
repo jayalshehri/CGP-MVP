@@ -2,7 +2,10 @@
 // These guardrails are not a substitute for GitHub branch protection.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { readOnlyGitEnvironment } from './aieo-git-process-guard.mjs';
 
 const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
@@ -240,4 +243,80 @@ test('AIEO action dependencies are pinned to reviewed immutable commits, not mov
     assert.doesNotMatch(workflow, /(?:^|\n)\s*-\s+uses:\s+[^@\s]+@v\d+/,
       path + ' must not use mutable major-version tags');
   }
+});
+
+
+test('trusted AIEO run steps clear inherited Bash and Node startup hooks before any sensitive execution', () => {
+  // A previous build/agent step can append BASH_ENV or NODE_OPTIONS to
+  // GITHUB_ENV. An injected BASH_ENV is sourced before "run:" starts;
+  // NODE_OPTIONS can preload JS before a runtime guard has any effect.
+  // Step-level overrides remain necessary even with guarded entrypoints.
+  const verifySteps = (workflow, names) => {
+    for (const [name, count] of names) {
+      const marker = '      - name: ' + name + '\n';
+      const segments = workflow.split(marker).slice(1);
+      assert.equal(segments.length, count, name + ' step count changed');
+      for (const segment of segments) {
+        const step = segment.split('\n      - ')[0];
+        const command = step.indexOf('        run:');
+        assert.ok(command >= 0, name + ' must have a run command');
+        const beforeRun = step.slice(0, command);
+        assert.ok(beforeRun.includes('        env:\n'), name + ' must have step-scoped env');
+        for (const key of ['BASH_ENV', 'NODE_OPTIONS']) {
+          assert.ok(beforeRun.includes("          " + key + ": ''\n"),
+            name + ' must clear inherited ' + key + ' before shell/Node startup');
+        }
+      }
+    }
+  };
+  verifySteps(model, [
+    ['Block absent or stale independent-review workflow before model disclosure', 1],
+    ['Request one bounded model proposal (provider-only credentials)', 1],
+    ['Independently check candidate QA without model credentials', 1],
+    ['Independently check candidate Security without model credentials', 1],
+    ['Independently review QA and Security evidence without model credentials', 1],
+    ['Independently verify application build', 1],
+    ['Publish independently verified candidate as Draft PR only', 1]
+  ]);
+  verifySteps(developer, [
+    ['Prepare trusted one-file patch', 1],
+    ['Run application gates on candidate', 1],
+    ['Publish verified bounded fix as Draft PR only', 1]
+  ]);
+  verifySteps(candidateRoles, [
+    ['Verify bounded candidate using trusted code', 4],
+    ['Independently lint, typecheck and build approved candidate', 1],
+    ['Re-attest independently reviewed candidate and remote Draft after build', 1]
+  ]);
+});
+
+
+test('clearing startup hook environment prevents code execution before guarded entrypoints', (t) => {
+  // Synthetic, offline proof: bash sources BASH_ENV before its command and
+  // node executes a NODE_OPTIONS --require module before the entrypoint.
+  // The same explicit empty step env values prevent both preflight bypasses.
+  const directory = mkdtempSync(join(tmpdir(), 'aieo-startup-hooks-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const bashHook = join(directory, 'inherited-startup.bash');
+  const nodeHook = join(directory, 'inherited-preload.cjs');
+  writeFileSync(bashHook, "printf 'HOOK_EXECUTED\\n'\n", { mode: 0o600 });
+  writeFileSync(nodeHook, "process.stdout.write('HOOK_EXECUTED\\n');\n", { mode: 0o600 });
+
+  const runBash = (env) => execFileSync('bash', ['-c', 'printf RUN'], {
+    encoding: 'utf8', stdio: 'pipe', env: { ...process.env, ...env }
+  });
+  assert.equal(runBash({ BASH_ENV: bashHook }), 'HOOK_EXECUTED\nRUN',
+    'control proves inherited BASH_ENV can execute before a run command');
+  assert.equal(runBash({ BASH_ENV: '' }), 'RUN',
+    'step-scoped empty BASH_ENV blocks inherited shell startup execution');
+
+  const runNode = (env) => execFileSync(process.execPath,
+    ['-e', "process.stdout.write('RUN')"], {
+      encoding: 'utf8', stdio: 'pipe', env: { ...process.env, ...env }
+    });
+  assert.equal(runNode({ NODE_OPTIONS: '--require=' + nodeHook }),
+    'HOOK_EXECUTED\nRUN',
+    'control proves inherited NODE_OPTIONS can preload before runtime validation');
+  assert.equal(runNode({ NODE_OPTIONS: '' }), 'RUN',
+    'step-scoped empty NODE_OPTIONS blocks inherited JavaScript preloading');
 });

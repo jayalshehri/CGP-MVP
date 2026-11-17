@@ -71,12 +71,16 @@ jobs:
           node-version: '24'
       - name: Block absent or stale independent-review workflow before model disclosure
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-review-readiness.mjs
       # The external provider credential is available only to this step.
       # QA, Security, Reviewer and build run without provider secrets.
       - name: Request one bounded model proposal (provider-only credentials)
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL_ID: ${{ vars.AIEO_MODEL_ID }}
           AIEO_MODEL_ENABLED: 'true'
@@ -85,10 +89,19 @@ jobs:
           AIEO_MODEL_APPLY: '1'
         run: node scripts/aieo-model-proposal.mjs
       - name: Independently check candidate QA without model credentials
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
         run: node scripts/aieo-model-gates.mjs qa
       - name: Independently check candidate Security without model credentials
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
         run: node scripts/aieo-model-security.mjs
       - name: Independently review QA and Security evidence without model credentials
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
         run: |
           set -euo pipefail
           node scripts/aieo-model-gates.mjs reviewer
@@ -96,6 +109,8 @@ jobs:
           test "$(git diff --name-only)" = 'components/FeedbackWidget.tsx'
       - name: Independently verify application build
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
         run: |
@@ -107,6 +122,8 @@ jobs:
           npm run build
       - name: Publish independently verified candidate as Draft PR only
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           GH_TOKEN: ${{ github.token }}
           AIEO_PUBLISH_MODE: model
           AIEO_MODEL_ENABLED: 'true'
