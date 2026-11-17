@@ -187,3 +187,36 @@ test('external model credential is absent from independent QA, Security, Reviewe
   assert.ok(segments[3].includes('git diff --name-only'),
     'independent reviewer must verify one-file scope before the build');
 });
+
+
+test('AIEO action dependencies are pinned to reviewed immutable commits, not movable tags', () => {
+  // Pin hashes were resolved from the official actions/* v4 GitHub tag refs
+  // on 2026-11-17. Upgrades must deliberately update both workflow and allowlist.
+  const pinned = new Map([
+    ['actions/checkout', '11d5960a326750d5838078e36cf38b85af677262'],
+    ['actions/setup-node', '49933ea5288caeca8642d1e84afbd3f7d6820020'],
+    ['actions/upload-artifact', 'ea165f8d65b6e75b540449e92b4886f43607fa02'],
+    ['actions/download-artifact', 'd3f86a106a0bac45b974a628896c90dbdf5c8093'],
+  ]);
+  const files = [
+    '.github/workflows/aieo-model-draft.yml',
+    '.github/workflows/aieo-model-candidate-roles.yml',
+    '.github/workflows/aieo-developer-draft.yml',
+    '.github/workflows/aieo-multi-agent.yml'
+  ];
+  for (const path of files) {
+    const workflow = read(path);
+    const used = [...workflow.matchAll(/^\s*-\s+uses:\s+([^\s#]+)/gm)].map((match) => match[1]);
+    assert.ok(used.length > 0, path + ' must have action steps');
+    for (const ref of used) {
+      const at = ref.lastIndexOf('@');
+      const ownerAction = ref.slice(0, at);
+      const revision = ref.slice(at + 1);
+      assert.ok(pinned.has(ownerAction), path + ' uses unreviewed action ' + ownerAction);
+      assert.equal(revision, pinned.get(ownerAction),
+        path + ' must pin ' + ownerAction + ' to reviewed full SHA');
+    }
+    assert.doesNotMatch(workflow, /(?:^|\n)\s*-\s+uses:\s+[^@\s]+@v\d+/,
+      path + ' must not use mutable major-version tags');
+  }
+});
