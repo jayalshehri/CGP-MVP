@@ -389,3 +389,80 @@ test('trusted PATH override defeats a synthetic GITHUB_PATH executable hijack', 
   assert.equal(run(trustedPath), 'TRUSTED_NODE\n',
     'restoring the pre-build PATH runs the trusted Node binary');
 });
+
+
+test('credentialed AIEO steps clear inherited native-loader hooks before any execution', () => {
+  // An npm lifecycle step can persist an LD_PRELOAD or LD_AUDIT setting via
+  // GITHUB_ENV. Those libraries execute inside bash/node/git/gh BEFORE any
+  // JavaScript Git environment guard, even if PATH and NODE_OPTIONS are pinned.
+  const scenarios = [
+    [model, [
+      ['Capture trusted PATH before candidate and build steps', 1],
+      ['Block absent or stale independent-review workflow before model disclosure', 1],
+      ['Request one bounded model proposal (provider-only credentials)', 1],
+      ['Independently check candidate QA without model credentials', 1],
+      ['Independently check candidate Security without model credentials', 1],
+      ['Independently review QA and Security evidence without model credentials', 1],
+      ['Independently verify application build', 1],
+      ['Publish independently verified candidate as Draft PR only', 1]
+    ]],
+    [developer, [
+      ['Capture trusted PATH before candidate and build steps', 1],
+      ['Prepare trusted one-file patch', 1],
+      ['Run application gates on candidate', 1],
+      ['Publish verified bounded fix as Draft PR only', 1]
+    ]],
+    [candidateRoles, [
+      ['Capture trusted PATH before candidate and build steps', 4],
+      ['Verify bounded candidate using trusted code', 4],
+      ['Independently lint, typecheck and build approved candidate', 1],
+      ['Re-attest independently reviewed candidate and remote Draft after build', 1]
+    ]]
+  ];
+  for (const [workflow, steps] of scenarios) {
+    for (const [name, count] of steps) {
+      const chunks = workflow.split('      - name: ' + name + '\n').slice(1);
+      assert.equal(chunks.length, count, name + ' changed without updating the native-loader policy');
+      for (const chunk of chunks) {
+        const step = chunk.split('\n      - ')[0];
+        const beforeRun = step.slice(0, step.indexOf('        run:'));
+        assert.ok(step.includes('        run:'), name + ' must be a protected shell invocation');
+        for (const key of ['LD_PRELOAD', 'LD_AUDIT', 'LD_LIBRARY_PATH', 'LD_DEBUG', 'LD_DEBUG_OUTPUT']) {
+          assert.ok(beforeRun.includes("          " + key + ": ''\n"),
+            name + ' must clear inherited ' + key + ' before shell or process startup');
+        }
+      }
+    }
+  }
+});
+
+test('empty step-scoped LD_PRELOAD blocks native code before Node entrypoint', (t) => {
+  if (process.platform !== 'linux') return t.skip('Linux dynamic-loader regression');
+  const directory = mkdtempSync(join(tmpdir(), 'aieo-native-loader-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const source = join(directory, 'payload.c');
+  const library = join(directory, 'preload.so');
+  const marker = join(directory, 'marker.txt');
+  // No network or real credentials: one synthetic constructor just writes a marker.
+  writeFileSync(source,
+    '#include <stdio.h>\n#include <stdlib.h>\n' +
+    '__attribute__((constructor)) static void before_main(void) {' +
+    ' const char *name = getenv("AIEO_TEST_LOADER_MARKER");' +
+    ' if(name) { FILE *f = fopen(name, "w");' +
+    ' if(f) { fputs("LOADED", f); fclose(f); } } }\n');
+  execFileSync('cc', ['-shared', '-fPIC', '-o', library, source], { stdio: 'pipe' });
+  const baseEnv = { ...process.env, BASH_ENV: '', NODE_OPTIONS: '',
+    AIEO_TEST_LOADER_MARKER: marker };
+  const run = (injected) => execFileSync(process.execPath,
+    ['-e', "process.stdout.write('NODE_STARTED')"], {
+      encoding: 'utf8', stdio: 'pipe',
+      env: { ...baseEnv, LD_PRELOAD: injected }
+    });
+  assert.equal(run(library), 'NODE_STARTED');
+  assert.equal(readFileSync(marker, 'utf8'), 'LOADED',
+    'control proves a preloaded library runs before Node security checks');
+  rmSync(marker);
+  assert.equal(run(''), 'NODE_STARTED');
+  assert.throws(() => readFileSync(marker), { code: 'ENOENT' },
+    'an empty step-scoped loader override prevents inherited code execution');
+});
