@@ -68,6 +68,26 @@ function replaceTrustedSource(original, candidate) {
       written += n;
     }
     ftruncateSync(fd, bytes.length);
+    // Never proceed to npm after a partial write, inode swap, or permission
+    // change. The post-build attestation is intentionally a second boundary.
+    const after = fstatSync(fd);
+    const live = lstatSync(MODEL_ALLOWED_PATH);
+    const parent = lstatSync('components');
+    const reread = Buffer.alloc(bytes.length);
+    let count = 0;
+    while (count < reread.length) {
+      const n = readSync(fd, reread, count, reread.length - count, count);
+      if (n === 0) break;
+      count += n;
+    }
+    if (count !== bytes.length || !reread.equals(bytes) ||
+        after.size !== bytes.length || after.nlink !== 1 ||
+        (after.mode & 0o133) || !live.isFile() || live.isSymbolicLink() ||
+        live.dev !== after.dev || live.ino !== after.ino ||
+        live.nlink !== 1 || (live.mode & 0o133) ||
+        !parent.isDirectory() || parent.isSymbolicLink() ||
+        parent.dev !== directory.dev || parent.ino !== directory.ino ||
+        (parent.mode & 0o022)) block();
   } catch { block(); }
   finally { if (fd !== undefined) closeSync(fd); }
 }
