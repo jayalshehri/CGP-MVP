@@ -8,113 +8,80 @@ import { supabase } from "@/lib/supabase";
 import { WorkflowHeading } from "@/components/WorkflowUI";
 import "./data-governance.css";
 
-const policies = [
-  "سياسة تصنيف البيانات",
-  "سياسة حماية البيانات الشخصية",
-  "سياسة مشاركة البيانات",
-  "سياسة حرية المعلومات",
-  "سياسة البيانات المفتوحة",
-  "سياسة حماية بيانات الأطفال ومن في حكمهم",
-  "قواعد نقل البيانات الشخصية خارج المملكة",
-];
+type NudeeSummary = { requirements:number|null; assigned:number|null; submitted:number|null; approved:number|null };
 
 export default function DataGovernancePage() {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
-  const [accessError, setAccessError] = useState("");
-  const [metrics, setMetrics] = useState<{ requests: number | null; assets: number | null } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [summary, setSummary] = useState<NudeeSummary | null>(null);
 
   useEffect(() => {
     let active = true;
-    requireProfile(["admin", "data_governance_team"])
-      .then(async () => {
-        if (!active) return;
-        setReady(true);
-        try {
-          const [requests, assets] = await Promise.all([
-            supabase.from("data_governance_requests").select("id", { count: "exact", head: true }).in("status", ["submitted", "steward_review", "governance_review", "returned"]),
-            supabase.from("data_assets").select("id", { count: "exact", head: true }),
-          ]);
-          if (active) setMetrics({
-            requests: requests.error ? null : requests.count,
-            assets: assets.error ? null : assets.count,
+    async function load() {
+      try {
+        await requireProfile(["admin", "data_governance_team"]);
+        // Independent exact HEAD counts avoid the default row limit and
+        // do not download potentially thousands of assignments to the browser.
+        const [requirements, assigned, submitted, approved] = await Promise.all([
+          supabase.from("nudee_requirements").select("id", { count: "exact", head: true }),
+          supabase.from("nudee_assignments").select("id", { count: "exact", head: true }),
+          supabase.from("nudee_assignments").select("id", { count: "exact", head: true }).eq("status", "submitted"),
+          supabase.from("nudee_assignments").select("id", { count: "exact", head: true }).eq("status", "approved"),
+        ]);
+        const queryError = [requirements, assigned, submitted, approved].find(result => result.error)?.error;
+        if (queryError) throw queryError;
+        if (active) {
+          setSummary({
+            requirements: requirements.count,
+            assigned: assigned.count,
+            submitted: submitted.count,
+            approved: approved.count,
           });
-        } catch {
-          if (active) setMetrics({ requests: null, assets: null });
         }
-      })
-      .catch((error: Error) => {
-        if (error.message.includes("تسجيل الدخول")) router.replace("/login");
-        else if (active) setAccessError(error.message || "تعذر التحقق من صلاحيات الحساب.");
-      });
+      } catch (e) {
+        if (!active) return;
+        const message = e instanceof Error ? e.message : "تعذر تحميل بيانات نُضيء";
+        if (message.includes("تسجيل الدخول")) router.replace("/login");
+        else setError(message);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void load();
     return () => { active = false; };
   }, [router]);
 
-  if (accessError) return <main className="dg-page"><div role="alert" className="dg-loading"><h1>تعذر فتح مكتب إدارة البيانات</h1><p>{accessError}</p><p>تأكد من أن دور حسابك في قاعدة البيانات هو مدير النظام أو فريق إدارة البيانات، ثم أعد تسجيل الدخول.</p></div></main>;
-  if (!ready) return <main className="dg-page"><p className="dg-loading" role="status">جاري فتح مساحة إدارة البيانات والحوكمة…</p></main>;
+  const display = (value:number|null|undefined) => value == null ? "—" : new Intl.NumberFormat("ar-SA").format(value);
 
-  const metricText = (value: number | null | undefined) => !metrics ? "…" : value == null ? "غير متاح" : new Intl.NumberFormat("ar-SA").format(value);
-
-  return <main className="dg-page">
-    <div className="dg-eyebrow">مساحة عمل مستقلة</div>
-    <WorkflowHeading
-      title="إدارة البيانات والحوكمة"
-      description="متابعة المتطلبات والأدلة والطلبات وسجلات إدارة البيانات الوطنية ضمن صلاحيات مكتب إدارة البيانات."
-    />
-
-    <section className="dg-hero" aria-label="متابعة برنامج حوكمة البيانات">
+  return <main className="dg-page" dir="rtl">
+    <div className="dg-eyebrow">مكتب إدارة البيانات · المرحلة الحالية</div>
+    <WorkflowHeading title="مؤشر نُضيء" description="إدارة متطلبات المؤشر وتكليف مالكي الأدلة ومراجعتها وقياس التقدم من مساحة عمل واحدة." />
+    <section className="dg-hero" aria-label="بدء العمل على مؤشر نُضيء">
       <div>
-        <span>برنامج حوكمة البيانات الوطنية</span>
-        <h2>تابع متطلبات نُضيء وأدلتها من مساحة عمل واحدة.</h2>
-        <p>أسند المتطلبات، راجع الأدلة، وتابع نتائج المؤشر وسجلات إدارة البيانات.</p>
+        <span>المؤشر الوطني للبيانات</span>
+        <h2>متطلبات المؤشر والأدلة والداشبورد في مكان واحد</h2>
+        <p>اختر إدارة المتطلبات لتنفيذ التكليفات والمراجعات، أو افتح لوحة المؤشر لمتابعة النتائج.</p>
       </div>
       <div className="dg-hero-actions">
-        <Link href="/data-governance/nudee">فتح متطلبات نُضيء</Link>
-        <Link href="/data-governance/nudee-dashboard">لوحة المؤشر</Link>
-        <a href="#framework">استعراض الإطار</a>
+        <Link href="/data-governance/nudee">إدارة المتطلبات والأدلة</Link>
+        <Link href="/data-governance/nudee-dashboard">فتح داشبورد نُضيء</Link>
       </div>
     </section>
-
-    <section className="dg-metrics" aria-label="ملخص حوكمة البيانات">
-      <article><span>الإطار التنظيمي</span><strong>NDMO</strong><small><Link href="/data-governance/controls">فتح سجل الضوابط</Link></small></article>
-      <article><span>سياسات الحوكمة</span><strong>7</strong><small>وثائق مرجعية</small></article>
-      <article><span>طلبات قيد الإجراء</span><strong role="status">{metricText(metrics?.requests)}</strong><small>{!metrics ? "جاري قراءة السجل…" : metrics.requests == null ? "تعذرت قراءة العدد. " : "تشمل الطلبات المعادة للاستكمال. "}<Link href="/data-governance/requests">فتح الطلبات</Link></small></article>
-      <article><span>أصول بيانات مسجلة</span><strong role="status">{metricText(metrics?.assets)}</strong><small>{!metrics ? "جاري قراءة السجل…" : metrics.assets == null ? "تعذرت قراءة العدد. " : "وفق السجلات المتاحة لحسابك. "}<Link href="/data-governance/assets">فتح الأصول</Link></small></article>
-    </section>
-
-    <section id="framework" className="dg-section">
-      <header>
-        <div><span>الإطار</span><h2>ضوابط إدارة البيانات الوطنية</h2><p>نظرة تعريفية على مجالات إدارة البيانات. تتوفر السجلات والتقييمات من القوائم المختصة.</p></div>
-        <span className="dg-status">نظرة تعريفية</span>
-      </header>
+    {error && <div role="alert" className="dg-loading">{error}</div>}
+    {loading && <p role="status" className="dg-loading">جاري تحميل بيانات المؤشر…</p>}
+    {!loading && !error && summary && <section className="dg-metrics" aria-label="ملخص حالة نُضيء">
+      <article><span>إجمالي المتطلبات</span><strong>{display(summary.requirements)}</strong><small>المتطلبات المستوردة</small></article>
+      <article><span>التكليفات</span><strong>{display(summary.assigned)}</strong><small>التكليفات المسجلة</small></article>
+      <article><span>بانتظار المراجعة</span><strong>{display(summary.submitted)}</strong><small>أدلة مقدمة تنتظر قرار المكتب</small></article>
+      <article><span>معتمد</span><strong>{display(summary.approved)}</strong><small>التكليفات التي اعتمد دليلها</small></article>
+    </section>}
+    <section className="dg-section" aria-label="مسارات العمل الحالية">
+      <header><div><span>ابدأ هنا</span><h2>وظيفتان واضحتان</h2><p>بقية وحدات إدارة البيانات محفوظة للتوسع اللاحق، وغير معروضة في هذه المرحلة.</p></div></header>
       <div className="dg-framework-grid">
-        <article><b>01</b><h3>حوكمة البيانات</h3><p>الأدوار، اللجنة، السياسات، وقياس الالتزام.</p></article>
-        <article><b>02</b><h3>إدارة البيانات</h3><p>الجودة، الفهرس، التخزين، النمذجة والبيانات الرئيسية.</p></article>
-        <article><b>03</b><h3>إتاحة البيانات</h3><p>المشاركة، البيانات المفتوحة، وحرية المعلومات.</p></article>
-        <article><b>04</b><h3>الحماية والخصوصية</h3><p>التصنيف، حماية البيانات الشخصية، والربط مع ECC.</p></article>
+        <article><h3>التكليفات والأدلة</h3><p>إسناد المتطلب، رفع الدليل، المراجعة، إعادة التعديل والاعتماد.</p><Link href="/data-governance/nudee">فتح التكليفات</Link></article>
+        <article><h3>داشبورد نُضيء</h3><p>مؤشرات الامتثال ومستويات النضج والمجالات والجدول الزمني.</p><Link href="/data-governance/nudee-dashboard">فتح الداشبورد</Link></article>
       </div>
-    </section>
-
-    <section id="workflow" className="dg-section dg-workflow">
-      <header>
-        <div><span>سير العمل</span><h2>دورة عمل مستقلة لإدارة البيانات</h2><p>المسؤولية تنتقل بوضوح بين ملاك البيانات وفريق الحوكمة.</p></div>
-      </header>
-      <ol>
-        <li><b>1</b><div><strong>مالك البيانات</strong><span>يسجل الأصل أو الطلب ويحدد الغرض والتصنيف.</span></div></li>
-        <li><b>2</b><div><strong>أمين البيانات</strong><span>يراجع الجودة والوصف ومصدر البيانات.</span></div></li>
-        <li><b>3</b><div><strong>فريق الحوكمة</strong><span>يتحقق من السياسة والمتطلبات التنظيمية.</span></div></li>
-        <li><b>4</b><div><strong>مدير إدارة البيانات</strong><span>يعتمد الطلب أو يعيده مع الملاحظات.</span></div></li>
-      </ol>
-    </section>
-
-    <section className="dg-section">
-      <header><div><span>مكتبة السياسات</span><h2>السياسات الوطنية المرجعية</h2><p>قائمة تعريفية بالسياسات المرجعية، ولا تعبّر عن حالة اعتماد سياسات الجهة.</p></div></header>
-      <div className="dg-policy-list">{policies.map((policy, index) => <article key={policy}><b>{String(index + 1).padStart(2, "0")}</b><span>{policy}</span><small>مرجع تنظيمي</small></article>)}</div>
-    </section>
-
-    <section className="dg-next">
-      <div><span>الطلبات والسجلات</span><h2>تابع طلبات إدارة البيانات والإجراءات المطلوبة.</h2><p>تتوفر سجلات الأصول والجودة والخصوصية ومشاركة البيانات من قائمة مساحة العمل.</p></div>
-      <Link href="/data-governance/requests">فتح طلبات إدارة البيانات</Link>
     </section>
   </main>;
 }
