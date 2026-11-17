@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, symlinkSync, linkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +17,7 @@ test('four independent CLI processes verify a proposed fix and reject tampered h
   const sourceFile = join(workspace, 'components', 'FeedbackWidget.tsx');
   const artifact = (role) => join(workspace, 'aieo-output', role + '.json');
   const read = (role) => JSON.parse(readFileSync(artifact(role), 'utf8'));
-  const write = (role, data) => writeFileSync(artifact(role), JSON.stringify(data) + '\n');
+  const write = (role, data) => writeFileSync(artifact(role), JSON.stringify(data, null, 2) + '\n');
   const run = (role) => spawnSync(process.execPath, [runner, role], {
     cwd: workspace, encoding: 'utf8', timeout: 15000,
     env: { ...process.env, AIEO_TASK: 'feedback-control-route-boundary' }
@@ -58,6 +58,94 @@ test('four independent CLI processes verify a proposed fix and reject tampered h
     for (const role of ['developer', 'qa', 'security', 'reviewer']) {
       assert.equal(readFileSync(artifact(role), 'utf8').includes(originalLine), false);
     }
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+
+test('downloaded foundation handoffs reject duplicate JSON keys and oversized files', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'aieo-bounded-foundation-'));
+  const sourceFile = join(workspace, 'components', 'FeedbackWidget.tsx');
+  const developerFile = join(workspace, 'aieo-output', 'developer.json');
+  const run = (role) => spawnSync(process.execPath, [runner, role], {
+    cwd: workspace, encoding: 'utf8', timeout: 15000,
+    env: { ...process.env, AIEO_TASK: 'feedback-control-route-boundary' }
+  });
+  try {
+    mkdirSync(dirname(sourceFile), { recursive: true });
+    writeFileSync(sourceFile, syntheticSource);
+    assert.equal(run('developer').status, 0);
+    const original = readFileSync(developerFile, 'utf8');
+    const duplicate = original.replace(
+      '  "status": "proposed",',
+      '  "status": "hidden untrusted payload",\n  "status": "proposed",'
+    );
+    assert.notEqual(duplicate, original, 'test must insert a duplicate key');
+    // The last value wins in JSON.parse, so semantic checks alone miss this.
+    assert.equal(JSON.parse(duplicate).status, 'proposed');
+    writeFileSync(developerFile, duplicate);
+    assert.notEqual(run('qa').status, 0, 'duplicate-key evidence must fail closed');
+    writeFileSync(developerFile, Buffer.alloc(65537, 0x20));
+    assert.notEqual(run('qa').status, 0, 'oversized evidence must fail before parsing');
+    writeFileSync(developerFile, original);
+    assert.equal(run('qa').status, 0, 'canonical evidence remains accepted');
+    assert.equal(readFileSync(sourceFile, 'utf8'), syntheticSource);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('foundation handoff writers never truncate existing files, symlinks or hardlinks', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'aieo-exclusive-foundation-'));
+  const sourceFile = join(workspace, 'components', 'FeedbackWidget.tsx');
+  const developerFile = join(workspace, 'aieo-output', 'developer.json');
+  const run = (role) => spawnSync(process.execPath, [runner, role], {
+    cwd: workspace, encoding: 'utf8', timeout: 15000,
+    env: { ...process.env, AIEO_TASK: 'feedback-control-route-boundary' }
+  });
+  try {
+    mkdirSync(dirname(sourceFile), { recursive: true });
+    mkdirSync(dirname(developerFile), { recursive: true });
+    writeFileSync(sourceFile, syntheticSource);
+    writeFileSync(developerFile, 'preexisting report must not be overwritten');
+    assert.notEqual(run('developer').status, 0, 'preexisting report must fail');
+    assert.equal(readFileSync(developerFile, 'utf8'), 'preexisting report must not be overwritten');
+    rmSync(developerFile);
+    symlinkSync(sourceFile, developerFile);
+    assert.notEqual(run('developer').status, 0, 'symlink target must be protected');
+    assert.equal(readFileSync(sourceFile, 'utf8'), syntheticSource);
+    rmSync(developerFile);
+    linkSync(sourceFile, developerFile);
+    assert.notEqual(run('developer').status, 0, 'hardlinked target must be protected');
+    assert.equal(readFileSync(sourceFile, 'utf8'), syntheticSource);
+    rmSync(developerFile);
+    assert.equal(run('developer').status, 0, 'safe new report is accepted');
+    assert.notEqual(run('developer').status, 0, 'second run cannot overwrite report');
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('foundation roles refuse symlinked and hardlinked downloaded evidence', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'aieo-linked-foundation-'));
+  const sourceFile = join(workspace, 'components', 'FeedbackWidget.tsx');
+  const developerFile = join(workspace, 'aieo-output', 'developer.json');
+  const run = (role) => spawnSync(process.execPath, [runner, role], {
+    cwd: workspace, encoding: 'utf8', timeout: 15000,
+    env: { ...process.env, AIEO_TASK: 'feedback-control-route-boundary' }
+  });
+  try {
+    mkdirSync(dirname(sourceFile), { recursive: true });
+    writeFileSync(sourceFile, syntheticSource);
+    assert.equal(run('developer').status, 0);
+    rmSync(developerFile);
+    symlinkSync(sourceFile, developerFile);
+    assert.notEqual(run('qa').status, 0, 'downloaded symlink must not be followed');
+    rmSync(developerFile);
+    linkSync(sourceFile, developerFile);
+    assert.notEqual(run('qa').status, 0, 'downloaded hardlink must be rejected');
+    assert.equal(readFileSync(sourceFile, 'utf8'), syntheticSource);
   } finally {
     rmSync(workspace, { recursive: true, force: true });
   }
