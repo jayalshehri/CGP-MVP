@@ -532,7 +532,7 @@ test('independent role downloads use exact artifact identities and isolated Java
       assert.ok(step.includes('          PATH: ${{ steps.trusted-path.outputs.path }}\n'),
         role + ' download must retain the captured trusted PATH');
       assert.ok(step.includes('        with:\n          name: aieo-candidate-' +
-        names[index] + '\n          path: aieo-output\n'),
+        names[index] + '\n          path: aieo-output'),
         role + ' must fetch the exact ' + names[index] + ' handoff');
       assert.doesNotMatch(step, /pattern:|merge-multiple:|GH_TOKEN:|OPENROUTER_API_KEY:/,
         'no wildcard merges or model/CLI secrets in artifact downloads');
