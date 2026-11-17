@@ -51,6 +51,8 @@ jobs:
       - name: Prepare trusted one-file patch
         id: proposal
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           AIEO_APPLY: '1'
           AIEO_TRUSTED_WORKFLOW: '1'
           AIEO_TASK: ${{ inputs.task }}
@@ -68,6 +70,8 @@ jobs:
       - name: Run application gates on candidate
         if: steps.proposal.outputs.changed == 'true'
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
         run: |
@@ -80,6 +84,8 @@ jobs:
       - name: Publish verified bounded fix as Draft PR only
         if: steps.proposal.outputs.changed == 'true'
         env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
           GH_TOKEN: ${{ github.token }}
           AIEO_PUBLISH_MODE: deterministic
         run: node scripts/aieo-publish-draft.mjs
