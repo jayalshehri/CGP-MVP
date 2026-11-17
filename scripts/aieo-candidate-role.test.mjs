@@ -845,6 +845,13 @@ test('post-build gate reattests the exact independently reviewed blob and curren
       assert.notEqual(verify().status, 0,
         'post-build gate must reject ignored config/credential/backup: ' + ignoredPath);
       rmSync(full);
+      // Git --directory still reports even an empty ignored directory.
+      // Its removal is required before any post-build attestation can pass.
+      if (ignoredPath === 'backups/extra.json') {
+        assert.notEqual(verify().status, 0,
+          'empty ignored backup directory also remains out of scope');
+        rmSync(join(f.cwd, 'backups'), { recursive: true, force: true });
+      }
       assert.equal(verify().status, 0, 'removing ignored input recovers attestation');
     }
     for (const built of ['node_modules/example/index.js', '.next/cache/item',
