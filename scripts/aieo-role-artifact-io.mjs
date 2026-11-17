@@ -23,11 +23,28 @@ export function readBoundedModelReport(kind) {
   return readTrustedJsonReport('aieo-output/model-' + kind + '.json');
 }
 
+// The foundation's downloadable CI artifacts are read-only evidence. Apply the
+// same inode/size/UTF-8 checks as the candidate pipeline, and additionally
+// reject noncanonical JSON (including duplicate-key shadowing).
+export function readBoundedFoundationRoleReport(role) {
+  if (!ROLES.has(role)) block();
+  return readTrustedJsonReport('aieo-output/' + role + '.json', true);
+}
+
+export function writeExclusiveFoundationRoleReport(role, report) {
+  if (!ROLES.has(role)) block();
+  return writeExclusiveReport('aieo-output/' + role + '.json', report);
+}
+
 // QA, Security and Reviewer reports are handoffs just as sensitive as their
 // inputs. Never let an existing path (symlink, hardlink, or ordinary file) be
 // truncated by a later role. Each role produces one exclusive report per run.
 export function writeExclusiveModelRoleReport(role, report) {
   if (!new Set(['qa', 'security', 'reviewer']).has(role)) block();
+  return writeExclusiveReport('aieo-output/model-' + role + '.json', report);
+}
+
+function writeExclusiveReport(path, report) {
   let fd;
   try {
     const data = Buffer.from(JSON.stringify(report, null, 2) + '\n', 'utf8');
@@ -36,7 +53,6 @@ export function writeExclusiveModelRoleReport(role, report) {
     const directory = lstatSync('aieo-output');
     if (!directory.isDirectory() || directory.isSymbolicLink() ||
         (directory.mode & 0o022)) block();
-    const path = 'aieo-output/model-' + role + '.json';
     // Exclusivity must be enforced by the open syscall, not an earlier
     // existence check. O_NOFOLLOW adds another barrier to alias swaps.
     fd = openSync(path, constants.O_WRONLY | constants.O_CREAT |
@@ -64,7 +80,7 @@ export function writeExclusiveModelRoleReport(role, report) {
   }
 }
 
-function readTrustedJsonReport(path) {
+function readTrustedJsonReport(path, canonical = false) {
   let fd;
   try {
     const directory = lstatSync('aieo-output');
@@ -111,7 +127,12 @@ function readTrustedJsonReport(path) {
     const raw = bytes.subarray(0, used);
     const json = raw.toString('utf8');
     if (!Buffer.from(json, 'utf8').equals(raw)) block();
-    return JSON.parse(json);
+    const parsed = JSON.parse(json);
+    // Foundation handoffs are emitted by our own canonical JSON writer.
+    // JSON.parse alone accepts shadowed keys, leaving unreviewed raw content
+    // inside an artifact even when the last duplicate value is valid.
+    if (canonical && json !== JSON.stringify(parsed, null, 2) + '\n') block();
+    return parsed;
   } catch { block(); }
   finally { if (fd !== undefined) closeSync(fd); }
 }
