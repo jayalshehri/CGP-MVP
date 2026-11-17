@@ -548,3 +548,38 @@ test('independent role downloads use exact artifact identities and isolated Java
   assert.doesNotMatch(candidateRoles, /pattern: aieo-candidate-\*|merge-multiple: true/,
     'the independent reviewer must not merge wildcard artifact namespaces');
 });
+
+test('synthetic multi-agent jobs consume only their exact role artifacts', () => {
+  // Reviewer must not merge the orchestrator report or unrelated artifact
+  // namespaces into the three independently attested role JSON handoffs.
+  const download = '      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093';
+  const required = new Map([
+    ['developer', []],
+    ['qa', ['developer']],
+    ['security', ['developer']],
+    ['reviewer', ['developer', 'qa', 'security']]
+  ]);
+  let total = 0;
+  for (const [role, names] of required) {
+    const sections = foundation.split('\n  ' + role + ':\n');
+    assert.equal(sections.length, 2, role + ' must have exactly one job');
+    const job = sections[1].split(/\n  (?:developer|qa|security|reviewer):\n/)[0];
+    const downloads = job.split(download).slice(1);
+    assert.equal(downloads.length, names.length, role + ' must consume only approved handoffs');
+    total += downloads.length;
+    for (const [index, value] of downloads.entries()) {
+      const step = value.split('\n      - ')[0];
+      assert.ok(step.includes('        with:\n          name: aieo-' + names[index] +
+        '\n          path: aieo-output'), 'download must pin exact role and evidence directory');
+      assert.doesNotMatch(step, /pattern:|merge-multiple:/,
+        'wildcard or merged artifact downloads are not approved handoffs');
+    }
+    if (names.length) {
+      assert.ok(job.lastIndexOf(download) < job.indexOf('      - run: node scripts/aieo-role.mjs ' + role),
+        role + ' must verify downloaded evidence before writing its own report');
+    }
+  }
+  assert.equal(total, 5, 'only five explicit inter-job downloads are expected');
+  assert.doesNotMatch(foundation, /pattern:\s*aieo-\*|merge-multiple:\s*true/,
+    'do not admit untrusted artifact namespaces into synthetic Reviewer');
+});
