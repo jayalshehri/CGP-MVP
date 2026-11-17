@@ -1,5 +1,6 @@
 "use client";
 import AssessmentFindingLinks from "@/components/AssessmentFindingLinks";
+import AccessibleDialog from "@/components/AccessibleDialog";
 
 import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -190,6 +191,7 @@ function ProjectRegisterContent() {
 
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (saving) return;
     setSaving(true);
     setError("");
     setMessage("");
@@ -327,9 +329,9 @@ function ProjectRegisterContent() {
       </section>
 
       {open && (
-        <div className="roadmap-dialog-backdrop" role="presentation" onMouseDown={() => setOpen(false)}>
-          <section className="roadmap-dialog project-register-dialog compact-form-dialog" role="dialog" aria-modal="true" aria-labelledby="roadmap-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
-            <header><div><span>{selected ? "بيانات المشروع" : "إضافة مشروع"}</span><h2 id="roadmap-dialog-title">{selected?.name_ar || "مشروع سيبراني جديد"}</h2></div><button aria-label="إغلاق" onClick={() => setOpen(false)}>×</button></header>
+        <AccessibleDialog backdropClassName="roadmap-dialog-backdrop" className="roadmap-dialog project-register-dialog compact-form-dialog" labelledBy="roadmap-dialog-title" busy={saving} onClose={() => setOpen(false)}>
+            <header><div><span>{selected ? "بيانات المشروع" : "إضافة مشروع"}</span><h2 id="roadmap-dialog-title">{selected?.name_ar || "مشروع سيبراني جديد"}</h2></div><button type="button" disabled={saving} aria-label="إغلاق" onClick={() => setOpen(false)}>×</button></header>
+            {error && <p role="alert" className="roadmap-alert">{error}</p>}
 
             <form onSubmit={save} className="roadmap-form compact-form">
               <PortfolioProjectFields form={form} onChange={(next) => setForm({ ...next, target_outcome: form.target_outcome })} creating={!selected} />
@@ -337,12 +339,11 @@ function ProjectRegisterContent() {
               {selected?.archived_at && <p className="wide detail-hint">المشروع ضمن المحفظة المؤرشفة{selected.archive_reason ? ` — ${selected.archive_reason}` : ""}. الأرشفة مستقلة عن حالة التنفيذ ولا تُدار من هذا النموذج.</p>}
 
               <footer>
-                <button type="button" onClick={() => setOpen(false)}>إلغاء</button>
+                <button type="button" disabled={saving} onClick={() => setOpen(false)}>إلغاء</button>
                 {canManage && <button className="roadmap-primary" disabled={saving}>{saving ? "جاري الحفظ…" : selected ? "حفظ التعديلات" : "حفظ وإنشاء المشروع"}</button>}
               </footer>
             </form>
-          </section>
-        </div>
+        </AccessibleDialog>
       )}
     <AssessmentFindingLinks/></main>
   );

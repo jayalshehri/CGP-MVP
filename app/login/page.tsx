@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { requireProfile } from "@/lib/auth";
+import { roleHomePath } from "@/lib/workspaces";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,13 +18,20 @@ export default function LoginPage() {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data, error: sessionError }) => {
       if (!mounted) return;
+      if (sessionError) throw sessionError;
       if (data.session) {
-        router.replace("/");
+        const { profile } = await requireProfile();
+        if (mounted) router.replace(roleHomePath(profile.role));
         return;
       }
       setCheckingSession(false);
+    }).catch(() => {
+      if (mounted) {
+        setError("تعذر التحقق من صلاحيات الحساب. أعد تسجيل الدخول أو تواصل مع مدير النظام.");
+        setCheckingSession(false);
+      }
     });
     return () => { mounted = false; };
   }, [router]);
@@ -32,14 +41,20 @@ export default function LoginPage() {
     setError("");
     setSuccess("");
     setLoading(true);
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (signInError) {
-      setError("تعذر تسجيل الدخول. تأكد من البريد الإلكتروني وكلمة المرور.");
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (signInError) {
+        setError("تعذر تسجيل الدخول. تأكد من البريد الإلكتروني وكلمة المرور.");
+        return;
+      }
+      const { profile } = await requireProfile();
+      router.replace(roleHomePath(profile.role));
+      router.refresh();
+    } catch {
+      setError("تعذر التحقق من صلاحيات الحساب. أعد المحاولة أو تواصل مع مدير النظام.");
+    } finally {
       setLoading(false);
-      return;
     }
-    router.replace("/");
-    router.refresh();
   }
 
   async function handleForgotPassword() {
@@ -91,7 +106,7 @@ export default function LoginPage() {
               <button type="submit" disabled={loading} style={{width:"100%",border:0,borderRadius:"10px",background:loading?"#789c98":"var(--cgp-teal)",color:"white",padding:"14px 18px",marginTop:"24px",fontSize:"15px",fontWeight:800,cursor:loading?"not-allowed":"pointer"}}>{loading?"جاري تسجيل الدخول...":"دخول إلى CGP"}</button>
             </form>
           </div>
-          <p style={{textAlign:"center",color:"#8a98a4",fontSize:"12px",marginTop:"18px"}}>الدخول متاح للمستخدمين المصرح لهم فقط.</p>
+          <p style={{textAlign:"center",color:"#475569",fontSize:"12px",marginTop:"18px"}}>الدخول متاح للمستخدمين المصرح لهم فقط.</p>
         </div>
       </section>
     </main>

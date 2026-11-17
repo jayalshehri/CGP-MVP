@@ -22,6 +22,10 @@ jobs:
       - run: npm run lint
       - run: npx next typegen
       - run: npx tsc --noEmit
+      - name: Data Office failure and role routing regressions
+        run: |
+          node scripts/test-role-home.mjs
+          node --test scripts/test-data-office-mutations.mjs scripts/test-nudee-mutations.mjs
       - name: Build with synthetic values
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
