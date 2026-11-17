@@ -1356,7 +1356,7 @@ test('candidate and model role readers reject malformed UTF-8 evidence before pa
     assert.notEqual(check('model').status, 0,
       'model handoff shares the same strict-byte provenance requirement');
     rmSync(modelPath);
-    writeFileSync(reportPath, original);
+    writeFileSync(reportPath, original, { mode: 0o600 });
     assert.equal(check('candidate').status, 0,
       'the restored byte-valid report remains independently readable');
     assert.equal(f.run('qa').status, 0, 'normal downstream QA can still consume restored evidence');
