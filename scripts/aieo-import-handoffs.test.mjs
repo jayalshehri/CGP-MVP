@@ -42,10 +42,19 @@ for (const kind of ['foundation', 'candidate']) {
     const developer = f.path('developer');
     const external = join(f.root, 'outside.json');
     try {
-      for (const mode of [0o666, 0o755]) {
+      for (const mode of [0o666, 0o755, 0o004, 0o000, 0o1644]) {
         chmodSync(developer, mode);
-        assert.notEqual(f.run().status, 0, 'unsafe permissions must be refused');
+        assert.notEqual(f.run().status, 0,
+          'untrusted, owner-unreadable or special file mode must be refused: ' + mode.toString(8));
+        assert.equal(statSync(developer).mode & 0o7777, mode,
+          'rejected importer must not first re-permission the inode');
       }
+      chmodSync(developer, 0o644);
+      chmodSync(f.dir, 0o777);
+      assert.notEqual(f.run().status, 0, 'untrusted evidence directory must be refused');
+      assert.equal(statSync(developer).mode & 0o777, 0o644,
+        'rejected directory must not normalize evidence files');
+      chmodSync(f.dir, 0o755);
       chmodSync(developer, 0o644);
       writeFileSync(join(f.dir, 'unexpected.json'), report);
       assert.notEqual(f.run().status, 0, 'extra evidence is not an expected role');
