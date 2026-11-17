@@ -40,9 +40,9 @@ function fixture({ badRef, workflowState, missingPath, malformed, throwing } = {
 test('registered ACTIVE reviewer and all pinned role files pass without a provider call', () => {
   const f = fixture();
   assert.deepEqual(verifyTrustedReviewReadiness({ env, gh: f.gh }), {
-    status: 'ready', verifiedMainCommit: sha, roleFiles: 7
+    status: 'ready', verifiedMainCommit: sha, roleFiles: 8
   });
-  assert.equal(f.calls.length, 9, 'one SHA ref, one workflow registration and seven file checks');
+  assert.equal(f.calls.length, 10, 'one SHA ref, one workflow registration and eight file checks');
   assert.ok(f.calls.every((args) => !args.join(' ').includes('openrouter')));
 });
 
