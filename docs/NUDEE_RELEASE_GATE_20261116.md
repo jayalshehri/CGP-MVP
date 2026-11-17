@@ -65,6 +65,15 @@ This checklist describes evidence for PR #237. It is **not a production approval
 - Vercel branch Preview for CSS commit `6f1ae2ba1951cfe3ee20337b151b0f8c401d48a5` was **READY** (deployment `cgp-b6qa728uz-grc13.vercel.app`). Preview HTML fetches of both Nudee routes and `/activate` returned HTTP 200 and root `dir="rtl"`. These are HTTP/SSR checks only; **authenticated UI interaction, Storage bytes and viewport screenshots were NOT run**.
 - GitHub CI result for this latest branch commit must be checked independently before release. QA security advisor still lists intentional authenticated `SECURITY DEFINER` Nudee RPC warnings, and breached-password protection disabled; these are not automatically cleared by SQL authorization tests.
 
+
+## QA database workflow regression — 2026-11-17
+
+- Added reproducible `tests/nudee_workflow_transitions_qa.sql` after executing the same transaction against the isolated CGP-QA database. **PASS**: an office principal assigned one requirement to a dedicated `nudee_owner`; a second unassigned `nudee_owner` saw no requirements or assignments; the first owner submitted simulated evidence metadata; self-review was rejected; the office returned the submission for changes; the owner resubmitted simulated revised metadata; the office approved it.
+- Verified the final transaction state was **approved**, with **two submissions** and **five audit events** (assigned 1, submitted 2, changes requested 1, approved 1). All test changes ended in `ROLLBACK`; the independent post-rollback query reported **364 requirements, 0 assignments, 0 submissions, 0 audit events, and 0 Nudee Storage objects**.
+- Storage test rows represented **metadata without file bytes**. This confirms RPC transitions/RLS using transaction-scoped authenticated-role impersonation only. **No binary Storage API upload/download, real signed URL, email invite/activation, or independent browser-session E2E has been completed**.
+- The security advisor still identifies the six intentional authenticated `SECURITY DEFINER` Nudee RPCs (which enforce their own role checks), an unrelated governance RPC, and leaked-password protection disabled; those advisories are tracked, not silently dismissed.
+- CI for regression test commit `563d67e751455933e8580f95beb7c42f61050fd8` passed in [run 43992043763](https://github.com/jayalshehri/CGP-MVP/actions/runs/43992043763). This is **not production approval**.
+
 ## Not yet verified — BLOCKING
 1. A **real binary** upload, signed-link download, and subsequent decision using separate authenticated QA owner/reviewer sessions. SQL `storage.objects` insertion does **not** test storage service file bytes, signed URLs, or browser permissions.
 2. **Visual** RTL layout on real mobile and desktop viewport sizes after authentication, plus interactive error/retry paths.
