@@ -23,10 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
         with:
           node-version: '24'
       - run: node --test scripts/aieo-agent.test.mjs scripts/aieo-handoff.test.mjs scripts/aieo-e2e.test.mjs scripts/aieo-model-provider.test.mjs scripts/aieo-publish-draft.test.mjs scripts/aieo-git-process-guard.test.mjs scripts/aieo-workflow-policy.test.mjs
@@ -42,10 +42,10 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
         with:
           node-version: '24'
       - name: Prepare trusted one-file patch
