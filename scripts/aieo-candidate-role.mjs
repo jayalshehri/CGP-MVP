@@ -56,6 +56,17 @@ function readReport(role) {
   return readBoundedRoleReport(role);
 }
 
+// A verified PR SHA is insufficient reason to contact an arbitrary transport:
+// a changed .git/config or url.*.insteadOf can silently redirect "origin".
+// Git remote get-url --all expands URL rewrites before this strict comparison.
+// Only real Actions runs require the official network origin; standalone local
+// Git fixtures exercise role logic without making external network calls.
+export function verifyOfficialCandidateFetchOrigin(urls) {
+  if (!Array.isArray(urls) || urls.length !== 1 ||
+      !/^https:\/\/github\.com\/jayalshehri\/CGP-MVP(?:\.git)?$/.test(urls[0])) block();
+  return true;
+}
+
 // Candidate role handoffs may be rerun in a local test fixture. Never truncate
 // a pre-existing file with group/other read access, nor publish a partial,
 // oversized, aliased or directory-swapped report as trusted evidence.
@@ -132,6 +143,14 @@ function verifiedRemoteContext(env) {
     const indexEntries = git(['ls-files', '-v', '-z']).split('\0').filter(Boolean);
     if (!indexEntries.length ||
         indexEntries.some((entry) => entry.slice(0, 2) !== 'H ')) block();
+    // Prevent an Actions checkout with a rerouted origin from fetching the
+    // candidate from a different endpoint. Local fixtures are intentionally
+    // isolated file:// remotes and must never be used as live Actions evidence.
+    if (env.GITHUB_ACTIONS === 'true') {
+      const originUrls = git(['remote', 'get-url', '--all', 'origin'])
+        .trim().split('\n');
+      verifyOfficialCandidateFetchOrigin(originUrls);
+    }
     git(['fetch', '--no-tags', 'origin', 'refs/heads/' + headRef]);
     if (git(['rev-parse', 'FETCH_HEAD']).trim() !== head) block();
     // The guarded publisher creates exactly ONE commit on the approved main

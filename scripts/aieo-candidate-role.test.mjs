@@ -7,6 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodS
 import { tmpdir } from 'node:os';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyOfficialCandidateFetchOrigin } from './aieo-candidate-role.mjs';
 
 const roleScript = join(dirname(fileURLToPath(import.meta.url)), 'aieo-candidate-role.mjs');
 const finalizerScript = join(dirname(fileURLToPath(import.meta.url)), 'aieo-candidate-finalize.mjs');
@@ -65,6 +66,9 @@ function setup() {
   chmodSync(gh, 0o755);
   const env = {
     ...process.env,
+    // Even when node:test runs in Actions, this disposable local bare remote
+    // is a fixture rather than a trusted production candidate endpoint.
+    GITHUB_ACTIONS: 'false',
     PATH: bin + delimiter + process.env.PATH,
     GH_TOKEN: 'fixture-never-live',
     GITHUB_EVENT_NAME: 'workflow_dispatch',
@@ -1698,5 +1702,54 @@ test('replacement refs cannot rewrite immutable blobs observed by independent ro
     assert.equal(final.status, 0, final.stderr);
     assert.equal(JSON.parse(final.stdout).status, 'post-build-draft-reverified');
     assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main must not be changed');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('Actions candidate fetch refuses local, foreign and rewritten Git origins before fetch', () => {
+  const official = 'https://github.com/jayalshehri/CGP-MVP';
+  for (const url of [official, official + '.git']) {
+    assert.equal(verifyOfficialCandidateFetchOrigin([url]), true,
+      'official HTTPS repository is allowed');
+  }
+  for (const urls of [
+    [], [official, official], ['http://github.com/jayalshehri/CGP-MVP'],
+    ['https://github.com/jayalshehri/CGP-MVP/'],
+    ['https://github.com/other/CGP-MVP'],
+    ['file:///tmp/synthetic-candidate.git'],
+    ['ext::synthetic-transport'],
+    ['https://github.com/jayalshehri/CGP-MVP.git#foreign']
+  ]) {
+    assert.throws(() => verifyOfficialCandidateFetchOrigin(urls),
+      /AIEO candidate role blocked/, 'unofficial/multiple fetch targets cannot be trusted');
+  }
+
+  const f = setup();
+  try {
+    // Offline fixture still runs all four independent roles against a local,
+    // synthetic bare Git repo and never contacts GitHub.
+    const offline = f.run('developer', { GITHUB_ACTIONS: 'false' });
+    assert.equal(offline.status, 0, offline.stderr);
+    rmSync(join(f.cwd, 'aieo-output'), { recursive: true, force: true });
+
+    // In an Actions context, even a content-identical local mirror must not
+    // be contacted as the trusted candidate fetch origin.
+    const blocked = f.run('developer', { GITHUB_ACTIONS: 'true' });
+    assert.notEqual(blocked.status, 0, 'local candidate remote is forbidden in Actions');
+    assert.equal(existsSync(join(f.cwd, 'aieo-output/candidate-developer.json')), false,
+      'no positive evidence on rejected remote');
+
+    // Git rewrites a seemingly official origin with url.*.insteadOf. Assert
+    // the resolved URL is checked, not merely the literal remote config.
+    f.git('remote', 'set-url', 'origin', official + '.git');
+    f.git('config', 'url.https://foreign.example.invalid/mirror/.insteadOf',
+      'https://github.com/');
+    const effective = f.git('remote', 'get-url', '--all', 'origin');
+    assert.match(effective, /^https:\/\/foreign\.example\.invalid\//);
+    assert.throws(() => verifyOfficialCandidateFetchOrigin([effective]),
+      /AIEO candidate role blocked/);
+    const rewriteBlocked = f.run('developer', { GITHUB_ACTIONS: 'true' });
+    assert.notEqual(rewriteBlocked.status, 0, 'Actions role must reject expanded rewrite');
+    assert.equal(existsSync(join(f.cwd, 'aieo-output/candidate-developer.json')), false);
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'no baseline mutation');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
