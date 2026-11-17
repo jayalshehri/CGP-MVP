@@ -108,6 +108,15 @@ jobs:
           [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
           printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
         with:
           name: aieo-candidate-developer
           path: aieo-output
@@ -169,6 +178,15 @@ jobs:
           [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
           printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
         with:
           name: aieo-candidate-developer
           path: aieo-output
@@ -229,11 +247,47 @@ jobs:
           set -euo pipefail
           [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
           printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
+      # Pin every handoff to its exact role artifact. Wildcard merge-multiple
+      # could admit unexpected artifacts or overwrite independently verified evidence.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
         with:
-          pattern: aieo-candidate-*
+          name: aieo-candidate-developer
           path: aieo-output
-          merge-multiple: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-candidate-qa
+          path: aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-candidate-security
+          path: aieo-output
       - name: Verify bounded candidate using trusted code
         env:
           BASH_ENV: ''
