@@ -765,7 +765,7 @@ for (const linkType of ['symlink', 'hardlink']) {
         assert.equal(git(f.workspace, 'ls-remote', '--heads', f.remote)
           .includes('refs/heads/aieo/model-proposal-'), false);
         unlinkSync(reportPath);
-        writeFileSync(reportPath, original);
+        writeFileSync(reportPath, original, { mode: 0o600 });
       }
     } finally { rmSync(f.root, { force: true, recursive: true }); }
   });
