@@ -74,6 +74,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
         run: |
           set -euo pipefail
           [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
@@ -82,6 +87,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/aieo-review-readiness.mjs
@@ -91,6 +101,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL_ID: ${{ vars.AIEO_MODEL_ID }}
@@ -103,18 +118,33 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
         run: node scripts/aieo-model-gates.mjs qa
       - name: Independently check candidate Security without model credentials
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
         run: node scripts/aieo-model-security.mjs
       - name: Independently review QA and Security evidence without model credentials
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
         run: |
           set -euo pipefail
@@ -125,6 +155,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
@@ -139,6 +174,11 @@ jobs:
         env:
           BASH_ENV: ''
           NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
           PATH: ${{ steps.trusted-path.outputs.path }}
           GH_TOKEN: ${{ github.token }}
           AIEO_PUBLISH_MODE: model
