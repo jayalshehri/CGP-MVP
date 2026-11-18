@@ -77,9 +77,18 @@ test('publisher rejects GitHub CLI host, repository and config redirects before 
   const f = fixture();
   try {
     const main = git(f.workspace, 'rev-parse', 'main');
-    // The exact official endpoint/repository are valid explicit settings.
-    assert.equal(validateDispatch({ ...f.env, GH_HOST: 'github.com',
-      GH_REPO: 'jayalshehri/CGP-MVP', GH_CONFIG_DIR: '' }), 'model');
+    // Unset GH_* is the only acceptable inherited CLI context. Even
+    // canonical-looking explicit overrides remain prohibited by the
+    // existing strict Git/GitHub environment denylist.
+    assert.equal(validateDispatch(f.env), 'model');
+    for (const canonical of [
+      { GH_HOST: 'github.com' },
+      { GH_REPO: 'jayalshehri/CGP-MVP' },
+      { GH_CONFIG_DIR: '' }
+    ]) {
+      assert.throws(() => validateDispatch({ ...f.env, ...canonical }),
+        /untrusted inherited Git environment override/);
+    }
     for (const overrides of [
       { GH_HOST: 'attacker.example.invalid' },
       { GH_HOST: 'github.com.attacker.invalid' },
@@ -91,7 +100,7 @@ test('publisher rejects GitHub CLI host, repository and config redirects before 
         encoding: 'utf8', timeout: 20000
       });
       assert.notEqual(child.status, 0, 'redirected CLI context must fail closed');
-      assert.match(child.stderr, /untrusted GitHub CLI endpoint or configuration override/);
+      assert.match(child.stderr, /untrusted inherited Git environment override/);
       assert.equal(existsSync(f.log), false, 'gh must not have been invoked');
       assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
       assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
@@ -99,6 +108,35 @@ test('publisher rejects GitHub CLI host, repository and config redirects before 
         /refs\/heads\/aieo\//, 'publisher must not create candidate refs');
     }
   } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('publisher checks live process overrides even with a clean injected dispatch', () => {
+  // Direct API callers must not evade the real process environment check by
+  // passing a sanitized env argument. No real GH token or network is used.
+  const safe = {
+    GITHUB_EVENT_NAME: 'workflow_dispatch',
+    GITHUB_REF: 'refs/heads/main',
+    GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
+    GITHUB_RUN_ID: '99123',
+    GITHUB_RUN_ATTEMPT: '1',
+    GH_TOKEN: 'synthetic-not-an-auth-token',
+    AIEO_PUBLISH_MODE: 'deterministic'
+  };
+  const script = 'import { validateDispatch } from ' +
+    JSON.stringify(new URL('./aieo-publish-draft.mjs', import.meta.url).href) +
+    '; validateDispatch(' + JSON.stringify(safe) + ');';
+  for (const injection of [
+    { GH_HOST: 'attacker.example.invalid' },
+    { GH_REPO: 'other/repository' },
+    { GH_CONFIG_DIR: '/tmp/untrusted-gh-config' },
+    { GIT_CONFIG_GLOBAL: '/tmp/untrusted-git-config' }
+  ]) {
+    const child = spawnSync(process.execPath,
+      ['--input-type=module', '-e', script],
+      { env: { ...process.env, ...injection }, encoding: 'utf8', timeout: 10000 });
+    assert.notEqual(child.status, 0);
+    assert.match(child.stderr, /untrusted inherited Git environment override/);
+  }
 });
 
 // A build can leave Git-ignored inputs that the ordinary untracked check
