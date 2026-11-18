@@ -111,7 +111,7 @@ test('pre-share source reader refuses foreign runner ownership without source ou
     assert.match(result.stderr, /model source blocked/);
     assert.equal(result.stdout, '');
     assert.doesNotMatch(result.stderr, /syntheticFixture/);
-    assert.equal(readFileSync(f.target, 'utf8'), 'function syntheticFixture() { return 1; }\\n');
+    assert.equal(readFileSync(f.target, 'utf8'), 'function syntheticFixture() { return 1; }\n');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
@@ -126,7 +126,7 @@ test('model proposal rejects special-bit source before external transport', () =
       "globalThis.fetch = async () => { writeFileSync(" + JSON.stringify(log) +
         ", 'called'); throw new Error('unexpected provider call'); };",
       ''
-    ].join('\\n'));
+    ].join('\n'));
     const result = spawnSync(process.execPath, ['--import', shim, proposal], {
       cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 15000
     });
