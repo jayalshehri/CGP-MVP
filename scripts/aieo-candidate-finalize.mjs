@@ -48,7 +48,7 @@ export function readStrictReviewedGitSource(revision) {
 // bounded, opened inode, not a path that could become a symlink between lstat
 // and readFileSync. Group/world-writable source or parent directories allow a
 // local actor to alter build inputs after the immutable Git review.
-function readVerifiedBuildSource(path) {
+export function readVerifiedBuildSource(path) {
   let fd;
   try {
     // The independent build may leave an untrusted candidate file even if
