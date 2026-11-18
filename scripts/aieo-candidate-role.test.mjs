@@ -376,6 +376,33 @@ test('each candidate role reattests remote Draft state before writing evidence',
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
+test('Developer, QA, Security and Reviewer pin the exact Draft head branch across REST reads', () => {
+  const f = setup();
+  try {
+    const second = join(f.root, 'same-commit-other-head-ref.json');
+    const counter = join(f.root, 'same-commit-head-ref-reads');
+    const shifted = JSON.parse(JSON.stringify(f.pr));
+    // Both branch names satisfy the official model-proposal pattern and both
+    // point to the identical immutable commit. The first REST record is valid;
+    // only the branch identity changes by the second REST observation.
+    shifted.head.ref = 'aieo/model-proposal-77331-2';
+    assert.equal(shifted.head.sha, f.pr.head.sha);
+    writeFileSync(second, JSON.stringify(shifted));
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const valid = f.run(role);
+      assert.equal(valid.status, 0, role + ': stable Draft must be accepted: ' + valid.stderr);
+      rmSync(counter, { force: true });
+      const drifted = f.run(role, {
+        AIEO_FAKE_PR_SECOND: second, AIEO_FAKE_PR_COUNTER: counter
+      });
+      assert.notEqual(drifted.status, 0, role + ': same-SHA branch retarget must block');
+      assert.match(drifted.stderr, /candidate role blocked/, role);
+      assert.equal(readFileSync(counter, 'utf8'), '2', role + ': both REST reads must occur');
+    }
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'fixture main remains unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test('tampered reports fail Reviewer; an unrelated extra file fails Developer', () => {
   const f = setup();
   try {
