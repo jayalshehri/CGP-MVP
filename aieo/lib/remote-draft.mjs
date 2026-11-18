@@ -39,11 +39,18 @@ export function verifyRemoteDraft({ url, branch, baseSha, candidateSha, path, gh
       view.files[0]?.path !== path) reject();
 
   // A GraphQL PR result alone does not prove who opened the remote PR.
+  // Re-attest the mutable PR state in the SECOND, independent REST response.
+  // A GraphQL view can become stale if the PR is undrafted, closed, merged,
+  // retargeted or force-pushed before the creator identity is verified.
   const actor = parseRemote(gh('gh', ['api', 'repos/' + REPO + '/pulls/' + expected,
-    '--jq', '{number: .number, url: .html_url, login: .user.login, id: .user.id, type: .user.type}']));
+    '--jq', '{number: .number, url: .html_url, login: .user.login, id: .user.id, type: .user.type, state: .state, draft: .draft, mergedAt: .merged_at, baseRef: .base.ref, baseSha: .base.sha, baseRepo: .base.repo.full_name, headRef: .head.ref, headSha: .head.sha, headRepo: .head.repo.full_name}']));
   if (actor.number !== expected || actor.url !== url ||
       actor.login !== 'github-actions[bot]' || actor.id !== 41898282 ||
-      actor.type !== 'Bot') reject();
+      actor.type !== 'Bot' || actor.state !== 'open' ||
+      actor.draft !== true || actor.mergedAt !== null ||
+      actor.baseRef !== 'main' || actor.baseSha !== baseSha ||
+      actor.baseRepo !== REPO || actor.headRef !== branch ||
+      actor.headSha !== candidateSha || actor.headRepo !== REPO) reject();
 
   return { url, number: expected, isDraft: true };
 }
