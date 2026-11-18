@@ -1330,6 +1330,65 @@ test('bounded role reader rejects a same-byte inode replacement during a report 
 });
 
 
+test('report reader rejects same-inode metadata changes before open and after descriptor read', () => {
+  // These regressions deliberately preserve the bytes, inode and file size.
+  // A reader that checks only inode/size (or only fd timestamps after open)
+  // previously trusted both changed handoffs.
+  for (const boundary of ['before-open', 'after-read']) {
+    const f = setup();
+    try {
+      assert.equal(f.run('developer').status, 0, 'fixture Developer must create evidence');
+      const report = join(f.cwd, 'aieo-output/candidate-developer.json');
+      const before = statSync(report);
+      const bytes = readFileSync(report, 'utf8');
+      const timestamp = boundary === 'before-open' ? 946684800000 : 978307200000;
+      const shim = join(f.root, 'report-timestamp-' + boundary + '.mjs');
+      const inject = boundary === 'before-open' ? [
+        'const originalOpen = fs.openSync;',
+        'fs.openSync = (path, ...args) => {',
+        '  if (path === name) touch();',
+        '  return originalOpen(path, ...args);',
+        '};'
+      ] : [
+        'const originalLstat = fs.lstatSync;',
+        'let seen = 0;',
+        'fs.lstatSync = (path, ...args) => {',
+        '  if (path === name && ++seen === 2) touch();',
+        '  return originalLstat(path, ...args);',
+        '};'
+      ];
+      writeFileSync(shim, [
+        "import fs from 'node:fs';",
+        "import { syncBuiltinESMExports } from 'node:module';",
+        "const name = 'aieo-output/candidate-developer.json';",
+        'const touch = () => fs.utimesSync(name, new Date(' + timestamp +
+          '), new Date(' + timestamp + '));',
+        ...inject,
+        'syncBuiltinESMExports();',
+        ''
+      ].join('\n'));
+      const readerUrl = new URL('./aieo-role-artifact-io.mjs', import.meta.url).href;
+      const script = 'import { readBoundedRoleReport } from ' +
+        JSON.stringify(readerUrl) + ";\nreadBoundedRoleReport('developer');";
+      const result = spawnSync(process.execPath,
+        ['--import', shim, '--input-type=module', '--eval', script], {
+          cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
+        });
+      const after = statSync(report);
+      assert.equal(after.ino, before.ino, boundary + ': file inode unchanged');
+      assert.equal(after.size, before.size, boundary + ': file size unchanged');
+      assert.equal(readFileSync(report, 'utf8'), bytes, boundary + ': bytes unchanged');
+      assert.equal(after.mtimeMs, timestamp, boundary + ': test must change metadata');
+      assert.notEqual(result.status, 0, boundary + ': reject stale metadata');
+      assert.match(result.stderr, /AIEO role artifact rejected/,
+        boundary + ': failure must come from strict evidence reader');
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  }
+});
+
+
 test('independent Developer rejects malformed candidate Git blob before emitting provenance evidence', () => {
   const f = setup();
   try {
