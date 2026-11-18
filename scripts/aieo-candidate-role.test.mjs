@@ -236,9 +236,9 @@ test('independent candidate roles and post-build finalizer reject redirected gh 
     const markerFile = join(f.root, 'redirected-gh-subprocess');
     for (const binary of ['git', 'gh']) {
       const executable = join(f.root, 'bin', binary);
-      writeFileSync(executable, '#!/usr/bin/env node\\n' +
+      writeFileSync(executable, '#!/usr/bin/env node\n' +
         'require("node:fs").appendFileSync(' + JSON.stringify(markerFile) +
-        ', ' + JSON.stringify(binary + '\\n') + ');\\nprocess.exit(51);\\n');
+        ', ' + JSON.stringify(binary + '\n') + ');\nprocess.exit(51);\n');
       chmodSync(executable, 0o755);
     }
     for (const overrides of [
