@@ -13,7 +13,9 @@ function block() {
 
 export function readBoundedRoleReport(role) {
   if (!ROLES.has(role)) block();
-  return readTrustedJsonReport('aieo-output/candidate-' + role + '.json');
+  // Candidate reports use the same canonical JSON writer as the foundation.
+  // Reject duplicate-key shadowing and noncanonical trailing bytes.
+  return readTrustedJsonReport('aieo-output/candidate-' + role + '.json', true);
 }
 
 // Model handoffs also contain untrusted provider-derived data. Never read them
