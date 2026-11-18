@@ -45,6 +45,7 @@ const rejectionCases = [
   ['empty candidate', (f) => writeFileSync(f.source, '')],
   ['malformed UTF-8 candidate', (f) => writeFileSync(f.source, Buffer.from([0xff, 0xfe]))],
   ['world-writable candidate', (f) => chmodSync(f.source, 0o666)],
+  ['owner-unreadable candidate', (f) => chmodSync(f.source, 0o244)],
   ['setuid candidate', (f) => chmodSync(f.source, 0o4644)],
   ['setgid candidate', (f) => chmodSync(f.source, 0o2644)],
   ['sticky-bit candidate', (f) => chmodSync(f.source, 0o1644)],
