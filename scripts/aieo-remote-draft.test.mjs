@@ -17,7 +17,11 @@ function fixture({ changeView, changeActor, urlOverride, branchOverride, malform
     headRepositoryOwner: { login: 'jayalshehri' },
     files: [{ path }]
   };
-  const actor = { number: 987, url, login: 'github-actions[bot]', id: 41898282, type: 'Bot' };
+  const actor = {
+    number: 987, url, login: 'github-actions[bot]', id: 41898282, type: 'Bot',
+    state: 'open', draft: true, mergedAt: null, baseRef: 'main',
+    baseSha, baseRepo: repo, headRef: branch, headSha: candidateSha, headRepo: repo
+  };
   changeView?.(view);
   changeActor?.(actor);
   const calls = [];
@@ -76,7 +80,17 @@ const actorFailures = [
   ['non-bot-type', (a) => { a.type = 'User'; }],
   ['wrong-number', (a) => { a.number = 986; }],
   ['wrong-url', (a) => { a.url = 'https://github.com/' + repo + '/pull/986'; }],
-  ['missing-login', (a) => { a.login = null; }]
+  ['missing-login', (a) => { a.login = null; }],
+  ['undrafted-after-graphql-view', (a) => { a.draft = false; }],
+  ['closed-after-graphql-view', (a) => { a.state = 'closed'; }],
+  ['merged-after-graphql-view', (a) => { a.mergedAt = '2026-11-19T00:00:00Z'; }],
+  ['retargeted-after-graphql-view', (a) => { a.baseRef = 'release'; }],
+  ['base-force-pushed-after-graphql-view', (a) => { a.baseSha = '0'.repeat(40); }],
+  ['head-force-pushed-after-graphql-view', (a) => { a.headSha = '0'.repeat(40); }],
+  ['head-ref-renamed-after-graphql-view', (a) => { a.headRef = 'aieo/foreign'; }],
+  ['base-moved-repository', (a) => { a.baseRepo = 'foreign/CGP-MVP'; }],
+  ['head-moved-repository', (a) => { a.headRepo = 'foreign/CGP-MVP'; }],
+  ['missing-rest-state', (a) => { delete a.draft; }]
 ];
 for (const [name, changeActor] of actorFailures) {
   test('reject independent REST bot identity: ' + name, () => {
