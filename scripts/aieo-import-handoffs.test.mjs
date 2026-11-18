@@ -341,7 +341,7 @@ test('download importer rejects same-inode ctime-only race after final fstat', (
         '};',
         'syncBuiltinESMExports();',
         ''
-      ].join('\\n'));
+      ].join('\n'));
       const run = spawnSync(process.execPath,
         ['--import', shim, script, kind, 'developer'],
         { cwd: f.root, encoding: 'utf8', timeout: 15000 });
