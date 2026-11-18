@@ -809,7 +809,14 @@ test('model publisher rejects writable and oversized reports or a writable hando
 for (const [name, alter] of [
   ['group-writable candidate', (f) => chmodSync(f.target, 0o664)],
   ['world-writable candidate', (f) => chmodSync(f.target, 0o666)],
-  ['group-writable source directory', (f) => chmodSync(join(f.workspace, 'components'), 0o775)]
+  ['candidate unreadable by its owner', (f) => chmodSync(f.target, 0o200)],
+  ['setuid candidate', (f) => chmodSync(f.target, 0o4600)],
+  ['setgid candidate', (f) => chmodSync(f.target, 0o2600)],
+  ['sticky candidate', (f) => chmodSync(f.target, 0o1600)],
+  ['group-writable source directory', (f) => chmodSync(join(f.workspace, 'components'), 0o775)],
+  ['setuid source directory', (f) => chmodSync(join(f.workspace, 'components'), 0o4755)],
+  ['setgid source directory', (f) => chmodSync(join(f.workspace, 'components'), 0o2755)],
+  ['sticky source directory', (f) => chmodSync(join(f.workspace, 'components'), 0o1755)]
 ]) {
   test('publisher refuses an unsafe pre-push source inode: ' + name, () => {
     const f = fixture();
