@@ -58,6 +58,30 @@ for (const kind of ['foundation', 'candidate']) {
         assert.equal(statSync(f.path(role)).mode & 0o777, 0o600);
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   });
+  test(kind + ' rejects inherited setgid and sticky import directories before chmod', () => {
+    const roles = ['developer', 'qa', 'security'];
+    const f = fixture(kind, roles);
+    try {
+      for (const mode of [0o2755, 0o1755]) {
+        chmodSync(f.dir, mode);
+        assert.equal(statSync(f.dir).mode & 0o7000, mode & 0o7000,
+          'fixture must set untrusted special directory bits');
+        assert.notEqual(f.run().status, 0,
+          'special-bit evidence directory must not be normalized');
+        for (const role of roles) {
+          assert.equal(statSync(f.path(role)).mode & 0o777, 0o644,
+            'failed import must preserve every member permission');
+          assert.equal(readFileSync(f.path(role), 'utf8'), report,
+            'failed import must preserve every member payload');
+        }
+      }
+      chmodSync(f.dir, 0o755);
+      assert.equal(f.run().status, 0, 'safe import directory should recover');
+      for (const role of roles)
+        assert.equal(statSync(f.path(role)).mode & 0o777, 0o600);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+
   test(kind + ' import rejects aliases, unexpected files, unsafe modes and oversized data', () => {
     const f = fixture(kind, ['developer']);
     const developer = f.path('developer');
