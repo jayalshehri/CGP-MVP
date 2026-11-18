@@ -504,6 +504,10 @@ test('independent real-Git roles accept copy but reject JSX state bypass on a bo
     }
 
     publishFixture(baseline.replace('open &&', 'false &&'), 'unsafe JSX visibility bypass');
+    // A different immutable candidate requires fresh Developer/Security output.
+    // Keep the old QA report to verify Reviewer refuses stale role evidence.
+    rmSync(join(f.cwd, 'aieo-output/candidate-developer.json'));
+    rmSync(join(f.cwd, 'aieo-output/candidate-security.json'));
     assert.equal(f.run('developer', overrides).status, 0, 'Git provenance still passes');
     assert.notEqual(f.run('qa', overrides).status, 0, 'independent QA blocks JSX control flow');
     assert.equal(f.run('security', overrides).status, 0,
@@ -560,6 +564,8 @@ test('independent real-Git roles reject markup-shaped JS string edits while allo
     }
 
     publish(baseline.replace('Old endpoint', 'Changed endpoint'), 'JS string disguised as JSX text');
+    // Rehearse a new candidate, not an overwrite of the previous report.
+    rmSync(join(f.cwd, 'aieo-output/candidate-developer.json'));
     assert.equal(f.run('developer', overrides).status, 0, 'source provenance alone is valid');
     assert.notEqual(f.run('qa', overrides).status, 0,
       'independent QA must reject edits inside a JS string');
@@ -613,6 +619,7 @@ test('independent real-Git roles allow display copy but block CSS text changes i
 
     publish(baseline.replace('visibility: visible;', 'visibility: hidden;'),
       'unsafe style body mutation');
+    rmSync(join(f.cwd, 'aieo-output/candidate-developer.json'));
     assert.equal(f.run('developer', overrides).status, 0, 'candidate Git provenance is valid');
     assert.notEqual(f.run('qa', overrides).status, 0,
       'QA must reject style content as executable presentation behavior');
@@ -665,6 +672,9 @@ test('four independent real-Git roles accept actual widget copy and reject refac
     const unsafe = drifted.replace('{state === "success" ?', '{true ?');
     assert.notEqual(unsafe, drifted);
     const badEnv = publish(drifted, unsafe, 'real-source-render-drift');
+    // Keep stale QA/Security proofs as adversarial inputs; only the
+    // regenerated Developer report belongs to this separate candidate.
+    rmSync(join(f.cwd, 'aieo-output/candidate-developer.json'));
     assert.equal(f.run('developer', badEnv).status, 0,
       'valid Git provenance alone cannot detect unsafe JSX changes');
     assert.notEqual(f.run('qa', badEnv).status, 0,
