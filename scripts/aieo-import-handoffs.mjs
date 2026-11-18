@@ -18,6 +18,8 @@ export function privatizeDownloadedHandoffs(kind, roles) {
   const prefix = kind === 'candidate' ? 'candidate-' : '';
   const expected = roles.map(role => prefix + role + '.json');
   const root = 'aieo-output';
+  // Directory special bits can imply inherited group ownership or unexpected
+  // mutation semantics. Refuse them both before and after normalizing files.
   // Artifact extraction must not launder another user's or owner-unreadable
   // inode into trusted 0600 evidence. Hosted Linux runners expose a uid.
   const owner = process.getuid?.();
@@ -25,7 +27,7 @@ export function privatizeDownloadedHandoffs(kind, roles) {
   try {
     const directory = lstatSync(root);
     if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        directory.uid !== owner || (directory.mode & 0o022)) fail();
+        directory.uid !== owner || (directory.mode & 0o7022)) fail();
     const names = readdirSync(root).sort();
     if (JSON.stringify(names) !== JSON.stringify([...expected].sort())) fail();
     // Phase 1: validate the COMPLETE downloaded bundle before chmod on any
@@ -85,7 +87,7 @@ export function privatizeDownloadedHandoffs(kind, roles) {
             current.dev !== after.dev || current.ino !== after.ino ||
             current.size !== after.size ||
             !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
-            directoryNow.uid !== owner || (directoryNow.mode & 0o022) ||
+            directoryNow.uid !== owner || (directoryNow.mode & 0o7022) ||
             directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) fail();
       } finally {
         if (fd !== undefined) closeSync(fd);
