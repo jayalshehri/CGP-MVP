@@ -2031,7 +2031,7 @@ test('independent Developer refuses evidence directory with a different runner U
       'const uid = process.getuid();',
       'process.getuid = () => uid + 1;',
       ''
-    ].join('\\n'));
+    ].join('\n'));
     const blocked = spawnSync(process.execPath,
       ['--import', shim, roleScript, 'developer'],
       { cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000 });
