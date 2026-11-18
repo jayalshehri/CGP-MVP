@@ -130,6 +130,39 @@ test('real Git config transport overrides fail despite an unchanged approved ori
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
+test('spoofing offline Actions mode cannot bypass official-origin check with an actual-token-shaped value', () => {
+  const f = setup();
+  try {
+    // A genuine credential-free local rehearsal remains supported.
+    const validFixture = f.run('developer');
+    assert.equal(validFixture.status, 0, validFixture.stderr);
+    rmSync(join(f.cwd, 'aieo-output'), { recursive: true, force: true });
+
+    // Record any attempted gh invocation. The refusal must happen before
+    // the GitHub API, not merely before the eventual git fetch.
+    const marker = join(f.root, 'unexpected-gh-call');
+    const gh = join(f.root, 'bin', 'gh');
+    writeFileSync(gh, '#!/usr/bin/env node\\n' +
+      'require("node:fs").writeFileSync(' + JSON.stringify(marker) + ', "called");\\n' +
+      'process.exit(4);\\n');
+    chmodSync(gh, 0o755);
+
+    for (const unsafe of [
+      { GH_TOKEN: 'synthetic-actions-token-not-a-real-credential' },
+      { GH_TOKEN: 'synthetic-actions-token-not-a-real-credential', CI: 'true' },
+      { GITHUB_ACTIONS: '0' },
+      { GITHUB_ACTIONS: '' }
+    ]) {
+      const rejected = f.run('developer', unsafe);
+      assert.notEqual(rejected.status, 0, 'untrusted runner context must be blocked');
+      assert.match(rejected.stderr, /candidate role blocked/);
+      assert.equal(existsSync(marker), false, 'no gh API may receive a token');
+      assert.equal(existsSync(join(f.cwd, 'aieo-output/candidate-developer.json')), false);
+    }
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted fixture main stays unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test('candidate origin configuration validator rejects missing, malformed and duplicated security inputs', () => {
   const standard = ['core.repositoryformatversion', 'remote.origin.url', 'remote.origin.fetch'];
   assert.equal(verifyOfficialCandidateFetchConfig(standard), true);
