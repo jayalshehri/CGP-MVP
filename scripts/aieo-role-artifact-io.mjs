@@ -11,6 +11,24 @@ function block() {
   throw new Error('AIEO role artifact rejected: untrusted file or changed evidence');
 }
 
+// Reports must belong to the runner itself. A private mode on a foreign-owned
+// inode (or setuid/setgid/sticky metadata) is not valid handoff provenance.
+// GitHub's downloaded artifacts are owner-normalized before reaching this reader.
+function trustedOwner() {
+  const uid = process.getuid?.();
+  if (!Number.isSafeInteger(uid)) block();
+  return uid;
+}
+function safeDirectory(entry, uid) {
+  return entry.isDirectory() && !entry.isSymbolicLink() &&
+    entry.uid === uid && !(entry.mode & 0o7022);
+}
+function safeReportFile(entry, uid) {
+  return entry.isFile() && !entry.isSymbolicLink() &&
+    entry.nlink === 1 && entry.uid === uid &&
+    Boolean(entry.mode & 0o400) && !(entry.mode & 0o7177);
+}
+
 export function readBoundedRoleReport(role) {
   if (!ROLES.has(role)) block();
   // Candidate reports use the same canonical JSON writer as the foundation.
@@ -52,9 +70,9 @@ function writeExclusiveReport(path, report) {
     const data = Buffer.from(JSON.stringify(report, null, 2) + '\n', 'utf8');
     if (data.length < 2 || data.length > MAX_BYTES) block();
     mkdirSync('aieo-output', { recursive: true, mode: 0o700 });
+    const uid = trustedOwner();
     const directory = lstatSync('aieo-output');
-    if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        (directory.mode & 0o022)) block();
+    if (!safeDirectory(directory, uid)) block();
     // Exclusivity must be enforced by the open syscall, not an earlier
     // existence check. O_NOFOLLOW adds another barrier to alias swaps.
     fd = openSync(path, constants.O_WRONLY | constants.O_CREAT |
@@ -68,12 +86,11 @@ function writeExclusiveReport(path, report) {
     const file = fstatSync(fd);
     const current = lstatSync(path);
     const directoryNow = lstatSync('aieo-output');
-    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o177) ||
-        file.size !== data.length ||
-        !current.isFile() || current.isSymbolicLink() ||
+    if (!safeReportFile(file, uid) || file.size !== data.length ||
+        !safeReportFile(current, uid) ||
         current.dev !== file.dev || current.ino !== file.ino ||
-        !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
-        (directoryNow.mode & 0o022) ||
+        current.size !== file.size ||
+        !safeDirectory(directoryNow, uid) ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) block();
   } catch {
     block();
@@ -85,18 +102,18 @@ function writeExclusiveReport(path, report) {
 function readTrustedJsonReport(path, canonical = false) {
   let fd;
   try {
+    const uid = trustedOwner();
     const directory = lstatSync('aieo-output');
-    if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        (directory.mode & 0o022)) block();
+    if (!safeDirectory(directory, uid)) block();
     const before = lstatSync(path);
-    if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 ||
-        (before.mode & 0o177) || before.size < 2 || before.size > MAX_BYTES) block();
+    if (!safeReportFile(before, uid) ||
+        before.size < 2 || before.size > MAX_BYTES) block();
 
     // O_NOFOLLOW refuses a symlink swapped into the final path after lstat.
     // O_NONBLOCK prevents an adversarial FIFO swap from hanging before fstat.
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const file = fstatSync(fd);
-    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o177) ||
+    if (!safeReportFile(file, uid) ||
         file.dev !== before.dev || file.ino !== before.ino ||
         file.size !== before.size || file.size < 2 || file.size > MAX_BYTES) block();
     const bytes = Buffer.alloc(file.size + 1);
@@ -114,14 +131,12 @@ function readTrustedJsonReport(path, canonical = false) {
     const currentPath = lstatSync(path);
     const currentDirectory = lstatSync('aieo-output');
     if (used !== file.size || after.size !== file.size ||
-        after.nlink !== 1 || (after.mode & 0o177) ||
+        !safeReportFile(after, uid) ||
         after.mtimeMs !== file.mtimeMs || after.ctimeMs !== file.ctimeMs ||
-        !currentPath.isFile() || currentPath.isSymbolicLink() ||
-        currentPath.nlink !== 1 || (currentPath.mode & 0o177) ||
+        !safeReportFile(currentPath, uid) ||
         currentPath.dev !== file.dev || currentPath.ino !== file.ino ||
         currentPath.size !== file.size ||
-        !currentDirectory.isDirectory() || currentDirectory.isSymbolicLink() ||
-        (currentDirectory.mode & 0o022) ||
+        !safeDirectory(currentDirectory, uid) ||
         currentDirectory.dev !== directory.dev || currentDirectory.ino !== directory.ino) block();
     // Buffer.toString('utf8') silently replaces malformed byte sequences with
     // U+FFFD. Handoff evidence must not be interpreted as text different from
