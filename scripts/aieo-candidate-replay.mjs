@@ -25,22 +25,32 @@ const git = (...args) => execFileSync('git', readOnlyGitArguments(args), {
   env: readOnlyGitEnvironment(process.env)
 }).trimEnd();
 
+// Refuse foreign-owned, unreadable or special-mode workspace inputs before
+// writing approved candidate bytes for npm. Re-attest the opened inode,
+// pathname and parent, independently of the later post-build verifier.
 function replaceTrustedSource(original, candidate) {
   let fd;
   try {
+    const uid = process.getuid?.();
+    if (!Number.isSafeInteger(uid)) block();
     const directory = lstatSync('components');
     const before = lstatSync(MODEL_ALLOWED_PATH);
     if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        (directory.mode & 0o022) ||
+        directory.uid !== uid || (directory.mode & 0o7022) ||
         !before.isFile() || before.isSymbolicLink() ||
-        before.nlink !== 1 || (before.mode & 0o133) ||
+        before.nlink !== 1 || before.uid !== uid ||
+        !(before.mode & 0o400) || (before.mode & 0o7133) ||
         before.size !== Buffer.byteLength(original, 'utf8')) block();
     fd = openSync(MODEL_ALLOWED_PATH,
       constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const opened = fstatSync(fd);
-    if (!opened.isFile() || opened.nlink !== 1 || (opened.mode & 0o133) ||
+    if (!opened.isFile() || opened.nlink !== 1 ||
+        opened.uid !== uid || !(opened.mode & 0o400) ||
+        (opened.mode & 0o7133) ||
         opened.dev !== before.dev || opened.ino !== before.ino ||
-        opened.size !== before.size) block();
+        opened.size !== before.size ||
+        opened.mtimeMs !== before.mtimeMs ||
+        opened.ctimeMs !== before.ctimeMs) block();
     const initial = Buffer.alloc(opened.size);
     let used = 0;
     while (used < initial.length) {
@@ -54,12 +64,18 @@ function replaceTrustedSource(original, candidate) {
     if (used !== opened.size || !initial.equals(Buffer.from(original, 'utf8')) ||
         now.size !== opened.size || now.mtimeMs !== opened.mtimeMs ||
         now.ctimeMs !== opened.ctimeMs ||
+        now.uid !== uid || !(now.mode & 0o400) ||
+        (now.mode & 0o7133) ||
         !nameNow.isFile() || nameNow.isSymbolicLink() ||
         nameNow.dev !== opened.dev || nameNow.ino !== opened.ino ||
-        nameNow.nlink !== 1 || (nameNow.mode & 0o133) ||
+        nameNow.nlink !== 1 || nameNow.uid !== uid ||
+        !(nameNow.mode & 0o400) || (nameNow.mode & 0o7133) ||
+        nameNow.size !== opened.size ||
+        nameNow.mtimeMs !== opened.mtimeMs ||
+        nameNow.ctimeMs !== opened.ctimeMs ||
         !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
-        directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino ||
-        (directoryNow.mode & 0o022)) block();
+        directoryNow.uid !== uid || (directoryNow.mode & 0o7022) ||
+        directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) block();
     const bytes = Buffer.from(candidate, 'utf8');
     let written = 0;
     while (written < bytes.length) {
@@ -82,12 +98,16 @@ function replaceTrustedSource(original, candidate) {
     }
     if (count !== bytes.length || !reread.equals(bytes) ||
         after.size !== bytes.length || after.nlink !== 1 ||
-        (after.mode & 0o133) || !live.isFile() || live.isSymbolicLink() ||
+        after.uid !== uid || !(after.mode & 0o400) ||
+        (after.mode & 0o7133) || !live.isFile() || live.isSymbolicLink() ||
         live.dev !== after.dev || live.ino !== after.ino ||
-        live.nlink !== 1 || (live.mode & 0o133) ||
+        live.nlink !== 1 || live.uid !== uid ||
+        !(live.mode & 0o400) || (live.mode & 0o7133) ||
+        live.size !== bytes.length ||
+        live.mtimeMs !== after.mtimeMs || live.ctimeMs !== after.ctimeMs ||
         !parent.isDirectory() || parent.isSymbolicLink() ||
-        parent.dev !== directory.dev || parent.ino !== directory.ino ||
-        (parent.mode & 0o022)) block();
+        parent.uid !== uid || (parent.mode & 0o7022) ||
+        parent.dev !== directory.dev || parent.ino !== directory.ino) block();
   } catch { block(); }
   finally { if (fd !== undefined) closeSync(fd); }
 }
