@@ -9,7 +9,7 @@ import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
 import { verifyRemoteDraft } from '../aieo/lib/remote-draft.mjs';
 import { readBoundedModelReport } from './aieo-role-artifact-io.mjs';
 import { hasUnsafeGitEnvironment, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
-import { verifyOfficialCandidateFetchConfig } from './aieo-candidate-role.mjs';
+import { verifyOfficialCandidateFetchConfig, verifyOfficialGitHubCliContext } from './aieo-candidate-role.mjs';
 
 function command(binary, args) {
   // Repository-local Git config is not a trust boundary: core.fsmonitor and
@@ -143,6 +143,13 @@ export function validateDispatch(env) {
       (env.AIEO_MODEL_ENABLED !== 'true' || env.AIEO_SOURCE_SHARING_APPROVED !== 'true')) {
     fail('model source sharing was not approved');
   }
+  // A prior provider/build step may set GH_HOST, GH_REPO or GH_CONFIG_DIR.
+  // Refuse their attempt to redirect the write-scoped gh process before
+  // any local Git, provider handoff, branch push or Draft PR operation.
+  try {
+    verifyOfficialGitHubCliContext(process.env);
+    verifyOfficialGitHubCliContext(env);
+  } catch { fail('untrusted GitHub CLI endpoint or configuration override'); }
   rejectGitEnvironmentOverrides(env);
   return env.AIEO_PUBLISH_MODE;
 }

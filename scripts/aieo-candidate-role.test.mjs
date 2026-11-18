@@ -211,6 +211,54 @@ test('post-build finalizer refuses privileged offline-mode spoof before Git or G
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
+test('independent candidate roles and post-build finalizer reject redirected gh context before subprocesses', () => {
+  const f = setup();
+  try {
+    // Independent real-Git rehearsal with the normal fake, credential-free
+    // GitHub API, before replacing executables with invocation detectors.
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const result = f.run(role);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+    }
+    const reviewed = execFileSync('git', ['show', f.head + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' });
+    writeFileSync(join(f.cwd, path), reviewed);
+    const finalizer = (overrides = {}) => spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: { ...f.env, ...overrides }, encoding: 'utf8', timeout: 25000
+    });
+    const good = finalizer();
+    assert.equal(good.status, 0, good.stderr);
+    assert.equal(JSON.parse(good.stdout).status, 'post-build-draft-reverified');
+
+    // Compromised build steps may use GITHUB_ENV to redirect GH_HOST or
+    // GH_REPO; GH_CONFIG_DIR can additionally select unreviewed CLI config.
+    // Both credential-bearing checkpoints must fail before Git/gh invocation.
+    const markerFile = join(f.root, 'redirected-gh-subprocess');
+    for (const binary of ['git', 'gh']) {
+      const executable = join(f.root, 'bin', binary);
+      writeFileSync(executable, '#!/usr/bin/env node\n' +
+        'require("node:fs").appendFileSync(' + JSON.stringify(markerFile) +
+        ', ' + JSON.stringify(binary + '\n') + ');\nprocess.exit(51);\n');
+      chmodSync(executable, 0o755);
+    }
+    for (const overrides of [
+      { GH_HOST: 'attacker.example.invalid' },
+      { GH_HOST: 'github.com.attacker.invalid' },
+      { GH_REPO: 'other/repository' },
+      { GH_CONFIG_DIR: f.root }
+    ]) {
+      const role = f.run('reviewer', overrides);
+      assert.notEqual(role.status, 0, 'independent role must refuse gh override');
+      assert.match(role.stderr, /candidate role blocked/);
+      const finalized = finalizer(overrides);
+      assert.notEqual(finalized.status, 0, 'post-build check must refuse gh override');
+      assert.match(finalized.stderr, /post-build check blocked/);
+      assert.equal(existsSync(markerFile), false, 'neither git nor gh may start');
+    }
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'fixture main remains unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test('candidate origin configuration validator rejects missing, malformed and duplicated security inputs', () => {
   const standard = ['core.repositoryformatversion', 'remote.origin.url', 'remote.origin.fetch'];
   assert.equal(verifyOfficialCandidateFetchConfig(standard), true);

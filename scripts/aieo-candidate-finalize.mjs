@@ -8,6 +8,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
+import { verifyOfficialGitHubCliContext } from './aieo-candidate-role.mjs';
 import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
@@ -121,6 +122,10 @@ export function verifyPostBuild(env = process.env) {
   // The build step precedes this check. Reject Git environment injection
   // before reading evidence, running git or contacting GitHub with GH_TOKEN.
   if (hasUnsafeGitEnvironment(process.env) || hasUnsafeGitEnvironment(env)) fail();
+  try {
+    verifyOfficialGitHubCliContext(process.env);
+    verifyOfficialGitHubCliContext(env);
+  } catch { fail(); }
   const number = env.AIEO_PR_NUMBER;
   if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
       env.GITHUB_REF !== 'refs/heads/main' ||

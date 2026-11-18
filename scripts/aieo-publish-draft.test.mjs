@@ -73,6 +73,34 @@ function fixture() {
   return { root, workspace, remote, log, env, target, args, qa, security, reviewer };
 }
 
+test('publisher rejects GitHub CLI host, repository and config redirects before Git or gh', () => {
+  const f = fixture();
+  try {
+    const main = git(f.workspace, 'rev-parse', 'main');
+    // The exact official endpoint/repository are valid explicit settings.
+    assert.equal(validateDispatch({ ...f.env, GH_HOST: 'github.com',
+      GH_REPO: 'jayalshehri/CGP-MVP', GH_CONFIG_DIR: '' }), 'model');
+    for (const overrides of [
+      { GH_HOST: 'attacker.example.invalid' },
+      { GH_HOST: 'github.com.attacker.invalid' },
+      { GH_REPO: 'other/repository' },
+      { GH_CONFIG_DIR: f.root }
+    ]) {
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace, env: { ...f.env, ...overrides },
+        encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, 'redirected CLI context must fail closed');
+      assert.match(child.stderr, /untrusted GitHub CLI endpoint or configuration override/);
+      assert.equal(existsSync(f.log), false, 'gh must not have been invoked');
+      assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
+      assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+        /refs\/heads\/aieo\//, 'publisher must not create candidate refs');
+    }
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 // A build can leave Git-ignored inputs that the ordinary untracked check
 // misses. Independent review of the candidate must not rely solely on
 // --exclude-standard and a clean tracked-file diff before Draft publishing.
