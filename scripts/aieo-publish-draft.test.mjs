@@ -93,7 +93,7 @@ test('publisher rejects GitHub CLI host, repository and config redirects before 
       assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
       assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
       assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
-        /refs\\/heads\\/aieo\\//, 'publisher must not create candidate refs');
+        /refs\/heads\/aieo\//, 'publisher must not create candidate refs');
     }
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
