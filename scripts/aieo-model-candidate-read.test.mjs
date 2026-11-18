@@ -19,10 +19,14 @@ function fixture() {
   writeFileSync(source, original);
   return { root, source };
 }
-function run(f) {
-  return spawnSync(process.execPath, ['--input-type=module', '-e',
-    'import { readVerifiedModelCandidate } from ' + JSON.stringify(script) +
-    '; process.stdout.write(readVerifiedModelCandidate())'], {
+function run(f, { foreignUid = false } = {}) {
+  const source = 'import { readVerifiedModelCandidate } from ' +
+    JSON.stringify(script) + ';\n' +
+    (foreignUid
+      ? 'const uid = process.getuid(); process.getuid = () => uid + 1;\n'
+      : '') +
+    'process.stdout.write(readVerifiedModelCandidate());';
+  return spawnSync(process.execPath, ['--input-type=module', '-e', source], {
     cwd: f.root, encoding: 'utf8', timeout: 15000
   });
 }
@@ -41,7 +45,13 @@ const rejectionCases = [
   ['empty candidate', (f) => writeFileSync(f.source, '')],
   ['malformed UTF-8 candidate', (f) => writeFileSync(f.source, Buffer.from([0xff, 0xfe]))],
   ['world-writable candidate', (f) => chmodSync(f.source, 0o666)],
+  ['owner-unreadable candidate', (f) => chmodSync(f.source, 0o244)],
+  ['setuid candidate', (f) => chmodSync(f.source, 0o4644)],
+  ['setgid candidate', (f) => chmodSync(f.source, 0o2644)],
+  ['sticky-bit candidate', (f) => chmodSync(f.source, 0o1644)],
   ['group-writable parent directory', (f) => chmodSync(dirname(f.source), 0o777)],
+  ['setgid parent directory', (f) => chmodSync(dirname(f.source), 0o2755)],
+  ['sticky-bit parent directory', (f) => chmodSync(dirname(f.source), 0o1755)],
   ['symlinked source inode', (f) => {
     const outside = join(f.root, 'external-source.tsx');
     writeFileSync(outside, original);
@@ -73,6 +83,18 @@ for (const [name, mutate] of rejectionCases) {
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   });
 }
+
+test('independent candidate reader rejects a foreign uid before emitting source', () => {
+  const f = fixture();
+  try {
+    const result = run(f, { foreignUid: true });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /AIEO independent model review blocked/);
+    assert.equal(result.stdout, '');
+    assert.equal(readFileSync(f.source, 'utf8'), original,
+      'foreign ownership denial must not modify candidate bytes');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
 
 test('rejecting a hardlinked candidate never changes the external inode', () => {
   const f = fixture();
