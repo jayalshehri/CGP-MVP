@@ -42,13 +42,16 @@ function readStrictGitSource(revision) {
   if (!Buffer.from(source, 'utf8').equals(bytes)) block();
   return source;
 }
-// An artifact handoff is untrusted input. Do not follow a link to an external
-// file, accept aliased inodes, or read unbounded data even if its JSON matches.
+// The Developer's first evidence is not yet protected by a downstream
+// reader. Require an owned, non-special output directory before writing any
+// provenance; later roles also use this boundary for their own reports.
 function trustedReportDirectory() {
   try {
+    const uid = process.getuid?.();
+    if (!Number.isSafeInteger(uid)) block();
     const directory = lstatSync('aieo-output');
     if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        (directory.mode & 0o022)) block();
+        directory.uid !== uid || (directory.mode & 0o7022)) block();
     return directory;
   } catch { block(); }
 }
@@ -115,7 +118,9 @@ function writeReport(role, report) {
   try {
     const before = fstatSync(fd);
     // Newly created output must be empty, private, regular and unaliased.
-    if (!before.isFile() || before.nlink !== 1 || (before.mode & 0o177) ||
+    if (!before.isFile() || before.nlink !== 1 ||
+        before.uid !== directory.uid ||
+        !(before.mode & 0o400) || (before.mode & 0o7177) ||
         before.size !== 0) block();
     let written = 0;
     while (written < data.length) {
@@ -126,10 +131,16 @@ function writeReport(role, report) {
     const file = fstatSync(fd);
     const current = lstatSync(name);
     const directoryNow = trustedReportDirectory();
-    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o177) ||
+    if (!file.isFile() || file.nlink !== 1 ||
+        file.uid !== directory.uid ||
+        !(file.mode & 0o400) || (file.mode & 0o7177) ||
         file.size !== data.length ||
         !current.isFile() || current.isSymbolicLink() ||
+        current.nlink !== 1 || current.uid !== directory.uid ||
+        !(current.mode & 0o400) || (current.mode & 0o7177) ||
+        current.size !== data.length ||
         current.dev !== file.dev || current.ino !== file.ino ||
+        directoryNow.uid !== directory.uid || (directoryNow.mode & 0o7022) ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) block();
   } catch { block(); }
   finally { if (fd !== undefined) closeSync(fd); }
