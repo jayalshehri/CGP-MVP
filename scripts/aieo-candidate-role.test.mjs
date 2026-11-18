@@ -1190,7 +1190,7 @@ test('candidate role output is idempotent but immutable once created', () => {
 
     const tampered = JSON.parse(originalBytes);
     tampered.status = 'approved';
-    const forgedBytes = JSON.stringify(tampered, null, 2) + '\\n';
+    const forgedBytes = JSON.stringify(tampered, null, 2) + '\n';
     writeFileSync(output, forgedBytes, { mode: 0o600 });
     assert.notEqual(f.run('developer').status, 0,
       'a private but different handoff cannot be rewritten into approval');
@@ -1198,7 +1198,7 @@ test('candidate role output is idempotent but immutable once created', () => {
       'rejected output cannot be truncated or overwritten');
 
     const duplicateKeys = originalBytes.replace(
-      '"role": "developer",', '"role": "qa",\\n  "role": "developer",');
+      '"role": "developer",', '"role": "qa",\n  "role": "developer",');
     assert.notEqual(duplicateKeys, originalBytes);
     writeFileSync(output, duplicateKeys, { mode: 0o600 });
     assert.notEqual(f.run('developer').status, 0,
