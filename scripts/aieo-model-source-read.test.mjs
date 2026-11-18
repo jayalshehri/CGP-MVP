@@ -429,3 +429,55 @@ test('pre-share still accepts a clean, valid UTF-8 replacement character in comm
     assert.equal(outcome.stdout, valid, 'raw bytes round-trip without accidental rejection');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+for (const [stage, targetStatCalls] of [
+  ['source sharing', 2],
+  ['model edit', 4]
+]) {
+  test(stage + ' rejects a same-inode timestamp change before final pathname stat', () => {
+    const f = fixture();
+    try {
+      const marker = join(f.root, 'metadata-mutated');
+      const shim = join(f.root, 'mutate-final-source-path.mjs');
+      writeFileSync(shim, [
+        "import fs from 'node:fs';",
+        "import { syncBuiltinESMExports } from 'node:module';",
+        "const originalLstat = fs.lstatSync;",
+        "let targetStats = 0;",
+        "fs.lstatSync = (path, ...args) => {",
+        "  if (path === 'components/FeedbackWidget.tsx' && ++targetStats === " +
+          targetStatCalls + ") {",
+        "    fs.utimesSync(path, new Date('2020-01-01'), new Date('2020-01-01'));",
+        "    fs.writeFileSync(" + JSON.stringify(marker) + ", 'changed');",
+        "  }",
+        "  return originalLstat(path, ...args);",
+        "};",
+        "syncBuiltinESMExports();",
+        ''
+      ].join('\n'));
+      const invocation = stage === 'source sharing'
+        ? 'process.stdout.write(readApprovedModelSource());'
+        : 'applyApprovedModelPatch({ original: ' +
+          JSON.stringify('function syntheticFixture() { return 1; }\n') +
+          ', candidate: ' +
+          JSON.stringify('function syntheticFixture() { return 2; }\n') +
+          ' });';
+      const result = spawnSync(process.execPath, ['--import', shim,
+        '--input-type=module', '-e',
+        'import { readApprovedModelSource, applyApprovedModelPatch } from ' +
+          JSON.stringify(reader) + '; ' + invocation], {
+        cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 15000
+      });
+      assert.equal(readFileSync(marker, 'utf8'), 'changed',
+        'a deterministic metadata mutation must happen at the final pathname check');
+      assert.notEqual(result.status, 0, stage + ' must fail closed on a changed inode');
+      assert.match(result.stderr, /model source blocked/);
+      assert.equal(result.stdout, '', 'no source may leave the failed gate');
+      assert.equal(readFileSync(f.target, 'utf8'),
+        'function syntheticFixture() { return 1; }\n',
+        'the failed operation must preserve the original Git-tracked source bytes');
+      assert.equal(cmd(f.workspace, 'rev-parse', 'HEAD'), f.env.GITHUB_SHA);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+}

@@ -59,6 +59,10 @@ export function readVerifiedModelCandidate() {
         (pathname.mode & 0o7133) ||
         pathname.dev !== opened.dev || pathname.ino !== opened.ino ||
         pathname.size !== opened.size ||
+        // Reject a same-inode metadata rewrite after final fstat but before
+        // the pathname is reattested, even if the bytes and size are unchanged.
+        pathname.mtimeMs !== after.mtimeMs ||
+        pathname.ctimeMs !== after.ctimeMs ||
         !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
         directoryNow.uid !== uid || (directoryNow.mode & 0o7022) ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) block();
