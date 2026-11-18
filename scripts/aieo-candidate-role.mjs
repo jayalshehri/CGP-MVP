@@ -158,6 +158,12 @@ function verifiedRemoteContext(env) {
       env.GITHUB_REPOSITORY !== REPO ||
       !/^[1-9][0-9]*$/.test(number || '') ||
       !env.GH_TOKEN) block();
+  // Fail before gh, Git or network contact if a privileged run spoofs local
+  // fixture mode. These literal sentinels are not valid GitHub credentials.
+  const offlineFixture = env.GITHUB_ACTIONS === 'false' &&
+    (env.GH_TOKEN === 'fixture-never-live' ||
+     env.GH_TOKEN === 'synthetic-fixture-not-a-secret');
+  if (!offlineFixture && env.GITHUB_ACTIONS !== 'true') block();
   let pr;
   try {
     pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
@@ -193,14 +199,8 @@ function verifiedRemoteContext(env) {
     const indexEntries = git(['ls-files', '-v', '-z']).split('\0').filter(Boolean);
     if (!indexEntries.length ||
         indexEntries.some((entry) => entry.slice(0, 2) !== 'H ')) block();
-    // Never allow a privileged Actions runner to disable the official
-    // transport checks merely by overwriting GITHUB_ACTIONS=false via
-    // GITHUB_ENV. Only exact, credential-free local test sentinels may fetch
-    // an isolated file:// remote; a real GH_TOKEN must use official HTTPS.
-    const offlineFixture = env.GITHUB_ACTIONS === 'false' &&
-      (env.GH_TOKEN === 'fixture-never-live' ||
-       env.GH_TOKEN === 'synthetic-fixture-not-a-secret');
-    if (!offlineFixture && env.GITHUB_ACTIONS !== 'true') block();
+    // A credential-bearing Actions fetch always needs the official remote,
+    // even if a prior step tried to downgrade the Actions context.
     if (!offlineFixture) {
       // Origin URL checks do not inspect transport proxy/TLS/extraheader
       // settings, including URL-scoped overrides and remote-helper config.
