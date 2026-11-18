@@ -140,6 +140,12 @@ function writeReport(role, report) {
         !(current.mode & 0o400) || (current.mode & 0o7177) ||
         current.size !== data.length ||
         current.dev !== file.dev || current.ino !== file.ino ||
+        // The final pathname may still resolve to the same inode after a
+        // same-inode metadata rewrite between fstat and lstat. Bind the
+        // first Developer handoff (and all later role writes) to the opened
+        // descriptor's final timestamps, not just its size and inode.
+        current.mtimeMs !== file.mtimeMs ||
+        current.ctimeMs !== file.ctimeMs ||
         directoryNow.uid !== directory.uid || (directoryNow.mode & 0o7022) ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) block();
   } catch { block(); }
