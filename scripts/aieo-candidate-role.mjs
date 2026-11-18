@@ -2,7 +2,7 @@
 // All role processes run trusted main-branch code and inspect immutable Git commits.
 // This is post-creation QA, not authorization to merge, publish or disclose source.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, lstatSync, openSync, fstatSync, ftruncateSync, writeSync, closeSync, constants } from 'node:fs';
+import { mkdirSync, lstatSync, openSync, fstatSync, writeSync, closeSync, constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
@@ -88,9 +88,9 @@ export function verifyOfficialCandidateFetchOrigin(urls) {
   return true;
 }
 
-// Candidate role handoffs may be rerun in a local test fixture. Never truncate
-// a pre-existing file with group/other read access, nor publish a partial,
-// oversized, aliased or directory-swapped report as trusted evidence.
+// Candidate role handoffs must be write-once. Replaying an identical report
+// is idempotent for local fixtures, but cannot replace any existing bytes.
+// A fresh write is exclusive and both paths reject aliases and unsafe modes.
 function writeReport(role, report) {
   mkdirSync('aieo-output', { recursive: true, mode: 0o700 });
   const directory = trustedReportDirectory();
@@ -99,12 +99,24 @@ function writeReport(role, report) {
   if (data.length < 2 || data.length > 65536) block();
   let fd;
   try {
-    fd = openSync(name, constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
+    // O_EXCL atomically refuses an existing output, even if it is an ordinary
+    // private file. Do not reopen old reports writable and truncate them.
+    fd = openSync(name, constants.O_WRONLY | constants.O_CREAT |
+      constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+  } catch (error) {
+    if (error?.code !== 'EEXIST') block();
+    // Preserve local rehearsal retries that produce exactly the same report.
+    // The bounded reader rejects aliases and noncanonical JSON before compare.
+    let previous;
+    try { previous = readBoundedRoleReport(role); } catch { block(); }
+    if (JSON.stringify(previous, null, 2) + '\n' !== data.toString('utf8')) block();
+    return;
+  }
+  try {
     const before = fstatSync(fd);
-    // 0o177 excludes owner execute plus every group/other permission.
+    // Newly created output must be empty, private, regular and unaliased.
     if (!before.isFile() || before.nlink !== 1 || (before.mode & 0o177) ||
-        before.size > 65536) block();
-    ftruncateSync(fd, 0);
+        before.size !== 0) block();
     let written = 0;
     while (written < data.length) {
       const count = writeSync(fd, data, written, data.length - written);
