@@ -1,7 +1,7 @@
 // Exercise the same artifact extraction (0644) and hostile-file cases as Actions.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, statSync, symlinkSync, linkSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, statSync, symlinkSync, linkSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -169,5 +169,56 @@ test('role report writers reject unsafe output-directory metadata before creatin
       assert.notEqual(write().status, 0, 'existing report remains immutable');
       assert.equal(readFileSync(output, 'utf8'), original);
     } finally { rmSync(f.root, { recursive: true, force: true }); }
+  }
+});
+
+const proposalOutputUrl = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)),
+  'aieo-model-proposal-output.mjs')).href;
+
+// Probe the exact pre-provider destination assertion without sending source or
+// making any external request. A marker stands for the first post-preflight
+// operation: forbidden directories must fail before that operation executes.
+test('model proposal preflight denies unowned and special-bit evidence directories before disclosure', () => {
+  const root = mkdtempSync(join(tmpdir(), 'aieo-model-preprovider-'));
+  const dir = join(root, 'aieo-output');
+  const marker = join(root, 'provider-would-run.flag');
+  const output = join(dir, 'model-proposal.json');
+  mkdirSync(dir, { mode: 0o755 });
+  chmodSync(dir, 0o755);
+  const run = (foreignUid = false) => {
+    const source = [
+      'import { writeFileSync } from "node:fs";',
+      'import { assertModelProposalDestination, writeExclusiveModelProposalReport } from ' +
+        JSON.stringify(proposalOutputUrl) + ';',
+      foreignUid ? 'const uid = process.getuid(); process.getuid = () => uid + 1;' : '',
+      'const approved = assertModelProposalDestination();',
+      'writeFileSync(' + JSON.stringify(marker) + ', "after-preflight");',
+      'writeExclusiveModelProposalReport({schemaVersion:1,status:"fixture-only"}, approved);'
+    ].join('\\n');
+    return spawnSync(process.execPath, ['--input-type=module', '--eval', source],
+      { cwd: root, encoding: 'utf8', timeout: 15000 });
+  };
+  try {
+    for (const mode of [0o2755, 0o1755]) {
+      chmodSync(dir, mode);
+      assert.equal(statSync(dir).mode & 0o7000, mode & 0o7000,
+        'fixture must set the untrusted directory metadata');
+      assert.notEqual(run().status, 0, 'special directory bits must block before the provider step');
+      assert.equal(existsSync(marker), false, 'provider simulation must not run');
+      assert.equal(existsSync(output), false, 'no report may be written');
+    }
+    chmodSync(dir, 0o755);
+    assert.notEqual(run(true).status, 0, 'a foreign runner uid must block');
+    assert.equal(existsSync(marker), false);
+    assert.equal(existsSync(output), false);
+    const accepted = run();
+    assert.equal(accepted.status, 0, accepted.stderr);
+    assert.equal(readFileSync(marker, 'utf8'), 'after-preflight');
+    assert.equal(statSync(output).mode & 0o7777, 0o600,
+      'verified output must be a private, ordinary inode');
+    assert.equal(JSON.parse(readFileSync(output, 'utf8')).status, 'fixture-only');
+    assert.notEqual(run().status, 0, 'pre-existing proposal must remain exclusive');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
