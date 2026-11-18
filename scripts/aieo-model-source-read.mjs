@@ -82,6 +82,10 @@ export function readApprovedModelSource(env = process.env) {
         (pathNow.mode & 0o7133) || pathNow.nlink !== 1 ||
         pathNow.size !== opened.size ||
         pathNow.dev !== opened.dev || pathNow.ino !== opened.ino ||
+        // An in-place metadata rewrite between fstat and final pathname
+        // attestation must not inherit source-sharing or edit authorization.
+        pathNow.mtimeMs !== after.mtimeMs ||
+        pathNow.ctimeMs !== after.ctimeMs ||
         dirNow.dev !== directory.dev || dirNow.ino !== directory.ino ||
         !dirNow.isDirectory() || dirNow.isSymbolicLink() ||
         dirNow.uid !== uid || (dirNow.mode & 0o7022)) block();
@@ -154,6 +158,10 @@ export function applyApprovedModelPatch({ original, candidate, env = process.env
         !(pathNow.mode & 0o400) || (pathNow.mode & 0o7133) ||
         pathNow.nlink !== 1 || pathNow.size !== opened.size ||
         pathNow.dev !== opened.dev || pathNow.ino !== opened.ino ||
+        // An in-place metadata rewrite between fstat and final pathname
+        // attestation must not inherit source-sharing or edit authorization.
+        pathNow.mtimeMs !== after.mtimeMs ||
+        pathNow.ctimeMs !== after.ctimeMs ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino ||
         !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
         directoryNow.uid !== uid || (directoryNow.mode & 0o7022)) block();

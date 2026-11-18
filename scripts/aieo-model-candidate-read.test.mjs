@@ -107,3 +107,40 @@ test('rejecting a hardlinked candidate never changes the external inode', () => 
     assert.equal(readFileSync(outside, 'utf8'), original);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('independent candidate reader rejects a final-path same-inode timestamp race', () => {
+  const f = fixture();
+  try {
+    const marker = join(f.root, 'metadata-mutated');
+    const shim = join(f.root, 'mutate-final-path.mjs');
+    writeFileSync(shim, [
+      "import fs from 'node:fs';",
+      "import { syncBuiltinESMExports } from 'node:module';",
+      "const originalLstat = fs.lstatSync;",
+      "let targetStats = 0;",
+      "fs.lstatSync = (path, ...args) => {",
+      "  if (path === 'components/FeedbackWidget.tsx' && ++targetStats === 2) {",
+      "    fs.utimesSync(path, new Date('2020-01-01'), new Date('2020-01-01'));",
+      "    fs.writeFileSync(" + JSON.stringify(marker) + ", 'changed');",
+      "  }",
+      "  return originalLstat(path, ...args);",
+      "};",
+      "syncBuiltinESMExports();",
+      ''
+    ].join('\n'));
+    const result = spawnSync(process.execPath, ['--import', shim,
+      '--input-type=module', '-e',
+      'import { readVerifiedModelCandidate } from ' + JSON.stringify(script) +
+      '; process.stdout.write(readVerifiedModelCandidate());'], {
+      cwd: f.root, encoding: 'utf8', timeout: 15000
+    });
+    assert.equal(readFileSync(marker, 'utf8'), 'changed',
+      'the race must occur between the last fd stat and pathname stat');
+    assert.notEqual(result.status, 0, 'a same-inode timestamp race must fail closed');
+    assert.match(result.stderr, /AIEO independent model review blocked/);
+    assert.equal(result.stdout, '', 'no candidate source may be returned');
+    assert.equal(readFileSync(f.source, 'utf8'), original,
+      'the mutation changes metadata only, not source bytes');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
