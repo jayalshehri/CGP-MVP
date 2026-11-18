@@ -2,14 +2,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import Link from "next/link";
-import "../data-governance.css";
+import { formatCount, NudeeHeading, NudeeMetric, NudeeNavigation } from "../nudee-workspace";
+import ui from "../nudee-workspace.module.css";
+import styles from "./nudee.module.css";
 
 type Requirement={id:number;source_row:number;domain_name:string;standard_code:string;requirement_title:string;maturity_level:string;evidence_name:string;evidence_description:string|null;source_compliance:string|null};
 type Assignment={id:number;requirement_id:number;assignee_id:string|null;status:string;due_date:string|null;review_notes:string|null};
 type User={user_id:string;display_name:string|null;role:string};
 type Submission={id:number;assignment_id:number;file_name:string;storage_path:string;submitted_at:string};
 const statusLabels:Record<string,string>={unassigned:"لم يكلّف",assigned:"بانتظار الرفع",submitted:"بانتظار المراجعة",changes_requested:"أعيد للتعديل",approved:"معتمد"};
+const dueDateFormat=new Intl.DateTimeFormat("ar-SA-u-ca-gregory",{dateStyle:"medium",timeZone:"UTC"});
 export default function NudeePage(){
  const [role,setRole]=useState<"office"|"assignee"|null>(null);
  const [currentUserId,setCurrentUserId]=useState<string|null>(null);
@@ -25,7 +27,8 @@ export default function NudeePage(){
  const [file,setFile]=useState<File|null>(null);
  const [busy,setBusy]=useState(false);
  const pending=useRef(false);
- const detailRef=useRef<HTMLDivElement>(null);
+ const detailRef=useRef<HTMLElement>(null);
+ const selectedButton=useRef<HTMLButtonElement>(null);
  const [needsRefresh,setNeedsRefresh]=useState(false);
  const [loading,setLoading]=useState(true);
  const [bulkIds,setBulkIds]=useState<number[]>([]);
@@ -173,30 +176,165 @@ export default function NudeePage(){
    setError(message);
   }finally{pending.current=false;setBusy(false)}
  }
- return <main className="dg-page nudee-workflow" dir="rtl" style={{maxWidth:1200,margin:"auto"}}>
-  <div className="workflow-heading"><div><span>مكتب إدارة البيانات</span><h1>مؤشر نُضيء — التكليفات والأدلة</h1><p>إدارة المتطلبات، إسناد الأدلة، الرفع والتحقق قبل الاعتماد</p></div></div>
-  <nav aria-label="صفحات مؤشر نُضيء" style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:16}}><Link href="/data-governance/nudee" aria-current="page">التكليفات والأدلة</Link>{role==="office"&&<Link href="/data-governance/nudee-dashboard">لوحة مؤشر نُضيء</Link>}</nav>
-  {error&&<p role="alert" style={{color:"#b91c1c"}}>{error}</p>}
-  {notice&&<p role="status" style={{color:"#047857"}}>{notice}</p>}
-  {evidenceLink&&<p role="status"><a href={evidenceLink} target="_blank" rel="noopener noreferrer">فتح الدليل (رابط مؤقت)</a></p>}
-  {(error||needsRefresh)&&<button type="button" className="workflow-button workflow-secondary" disabled={busy} onClick={retryLoad}>إعادة تحميل البيانات</button>}
-  {loading&&<p role="status">جاري تحميل المؤشر…</p>}
-  {role&&<><section className="dg-metrics" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
-   {[["المتطلبات",requirements.length],["التكليفات",assignments.filter(a=>a.status!=="unassigned").length],["بانتظار المراجعة",assignments.filter(a=>a.status==="submitted").length],["المعتمدة",assignments.filter(a=>a.status==="approved").length]].map(([name,value])=><div key={name} style={{background:"#f1f5f9",padding:16,borderRadius:12}}><small>{name}</small><h2>{value}</h2></div>)}
-  </section>
-  {role==="office"&&<section aria-label="الإسناد الجماعي" style={{marginTop:18,padding:18,border:"1px solid #ccdad9",borderRadius:13,background:"#f0fdfa"}}><h2 style={{margin:"0 0 8px"}}>إسناد جماعي للمتطلبات</h2><p style={{fontSize:13,color:"#475569"}}>حدد الأدلة المتاحة من القائمة أدناه، ثم اختر المسؤول وتاريخ الاستحقاق. يُطبّق الإسناد لجميع المحددات في عملية واحدة، أو يُلغى كامل الإجراء عند وجود خطأ.</p><div style={{display:"flex",alignItems:"end",flexWrap:"wrap",gap:10}}><label style={{flex:"2 1 220px"}}>المكلّف برفع الأدلة<select value={bulkAssignee} onChange={e=>setBulkAssignee(e.target.value)} style={{display:"block",width:"100%",padding:9,marginTop:6}}><option value="">اختر المستخدم</option>{users.map(u=><option key={u.user_id} value={u.user_id}>{u.display_name||u.user_id}</option>)}</select></label><label style={{flex:"1 1 140px"}}>تاريخ الاستحقاق<input type="date" value={bulkDue} onChange={e=>setBulkDue(e.target.value)} style={{display:"block",padding:9,marginTop:6,width:"100%"}}/></label><button disabled={busy||needsRefresh||!bulkAssignee||bulkIds.length===0} onClick={bulkAssign}>إسناد المحدد ({bulkIds.length})</button><button disabled={busy||needsRefresh||bulkIds.length===0} onClick={()=>setBulkIds([])}>إلغاء التحديد</button></div></section>}
-  <section style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,280px),1fr))",gap:20,marginTop:24}}>
-   <div><label htmlFor="nudee-filter">البحث عن دليل أو معيار</label><input id="nudee-filter" value={filter} onChange={e=>setFilter(e.target.value)} placeholder="بحث..." style={{display:"block",width:"100%",padding:10,margin:"8px 0"}}/>
-   <p role="status" className="nudee-results">{visible.length} من {requirements.length} متطلب</p>{!visible.length&&<p>{requirements.length?"لا توجد نتائج مطابقة. عدّل كلمات البحث.":"لا توجد متطلبات مسندة إلى حسابك حاليًا."}</p>}
-   <div style={{maxHeight:560,overflow:"auto",display:"grid",gap:8}}>{visible.map(r=>{const a=assignments.find(x=>x.requirement_id===r.id);const selectable=role==="office"&&(!a||a.status==="assigned")&&!submissions.some(x=>x.assignment_id===a?.id);return <div key={r.id} style={{display:"flex",alignItems:"center",gap:8}}>{role==="office"&&<input type="checkbox" aria-label={"تحديد الدليل "+r.evidence_name} checked={bulkIds.includes(r.id)} disabled={!selectable||busy||(!bulkIds.includes(r.id)&&bulkIds.length>=100)} onChange={e=>setBulkIds(ids=>e.target.checked?[...ids,r.id]:ids.filter(id=>id!==r.id))}/>}<button type="button" aria-pressed={selected===r.id} aria-controls="nudee-detail" disabled={busy} onClick={()=>{setSelected(r.id);setFile(null);setAssignee(a?.assignee_id||"");setDue(a?.due_date||"");setNote(a?.review_notes||"");}} style={{flex:1,textAlign:"right",padding:12,border:"1px solid #cbd5e1",borderRadius:9,background:selected===r.id?"#ccfbf1":"white",color:"#0f172a"}}><b>{r.standard_code||"تكليف #"+r.id}</b> — {r.evidence_name}<div><small>{r.maturity_level} · {statusLabels[a?.status||"unassigned"]}</small></div></button></div>})}</div></div>
-   <div ref={detailRef} id="nudee-detail" role="region" aria-label="تفاصيل المتطلب" tabIndex={-1} style={{border:"1px solid #cbd5e1",borderRadius:12,padding:20,alignSelf:"start"}}>{!current?<p>اختر دليلًا لعرض التفاصيل.</p>:<><h2>{current.evidence_name}</h2><p>{current.requirement_title}</p><p>{current.evidence_description}</p><p><b>المجال:</b> {current.domain_name} · <b>المستوى:</b> {current.maturity_level}</p><p><b>حالة التكليف:</b> {statusLabels[assignment?.status||"unassigned"]}</p>
-   {role==="office"&&<><label htmlFor="nudee-assignee">المسؤول عن رفع الدليل</label><select id="nudee-assignee" value={assignee} onChange={e=>setAssignee(e.target.value)} style={{display:"block",width:"100%",padding:10,margin:"8px 0"}}><option value="">اختر المستخدم</option>{users.map(u=><option value={u.user_id} key={u.user_id}>{u.display_name||u.user_id}</option>)}</select><label htmlFor="nudee-due">تاريخ الاستحقاق</label><input id="nudee-due" type="date" value={due} onChange={e=>setDue(e.target.value)} style={{display:"block",padding:8,margin:"8px 0"}}/><button disabled={busy||needsRefresh||!assignee||assignment?.status==="submitted"||assignment?.status==="approved"} onClick={assign}>حفظ التكليف</button></>}
-   {assignment?.assignee_id===currentUserId&&<><label htmlFor="nudee-file">ملف الدليل (PDF أو Word أو صورة)</label><input key={selected??"none"} id="nudee-file" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" onChange={e=>setFile(e.target.files?.[0]||null)} disabled={busy||needsRefresh||!["assigned","changes_requested"].includes(assignment.status)}/><button disabled={busy||needsRefresh||!file||!["assigned","changes_requested"].includes(assignment.status)} onClick={upload}>رفع وإرسال للمراجعة</button></>}
-   {assignment&&submissions.filter(x=>x.assignment_id===assignment.id).map(x=><div key={x.id} style={{margin:"8px 0"}}><button type="button" onClick={()=>openEvidence(x.storage_path)}>عرض الدليل: {x.file_name}</button></div>)}
-   {role==="office"&&assignment?.status==="submitted"&&assignment.assignee_id!==currentUserId&&<div style={{marginTop:20}}><h3>قرار مسؤول المكتب</h3><textarea aria-label="ملاحظات المراجعة" value={note} onChange={e=>setNote(e.target.value)} placeholder="ملاحظات المراجعة" style={{width:"100%",minHeight:90}}/><div style={{display:"flex",gap:10}}><button disabled={busy||needsRefresh} onClick={()=>review("approved")}>اعتماد الدليل</button><button disabled={busy||needsRefresh||!note.trim()} onClick={()=>review("changes_requested")}>إعادة للتعديل</button></div></div>}
-   {role==="office"&&assignment?.status==="submitted"&&assignment.assignee_id===currentUserId&&<p role="note">لا يمكن للمكلّف اعتماد الدليل الذي رفعه بنفسه؛ يتطلب مراجعًا آخر من مكتب البيانات.</p>}
-   {assignment?.review_notes&&<p><b>ملاحظات المكتب:</b> {assignment.review_notes}</p>}</>}</div>
-  </section></>}
-  <p style={{marginTop:24,fontSize:12,color:"#64748b"}}>يعرض كل حساب المتطلبات والأدلة المصرح له بها. يحتفظ النظام بسجل قرارات المراجعة والإسناد.</p>
- </main>;
+ const status=assignment?.status||"unassigned";
+ const currentSubmissions=assignment ? submissions.filter(item=>item.assignment_id===assignment.id) : [];
+ const canUpload=["assigned","changes_requested"].includes(status);
+ const assignmentLocked=status==="submitted"||status==="approved";
+ const assignedUser=users.find(user=>user.user_id===assignment?.assignee_id);
+ const blocked=busy||needsRefresh;
+ const primary=`${ui.button} ${ui.primary}`;
+ const feedback=<>
+  {error && <div className={`${ui.message} ${ui.error}`}><p role="alert">{error}</p>
+    <button type="button" className={ui.button} disabled={busy} onClick={retryLoad}>إعادة تحميل البيانات</button>
+  </div>}
+  {notice && <div className={`${ui.message} ${needsRefresh?ui.warning:ui.success}`}><p role="status">{notice}</p>
+    {needsRefresh&&!error && <button type="button" className={ui.button} disabled={busy} onClick={retryLoad}>إعادة تحميل البيانات</button>}
+  </div>}
+  {evidenceLink && <p role="status" className={ui.message}><a href={evidenceLink} target="_blank" rel="noopener noreferrer">فتح الدليل (رابط مؤقت)</a></p>}
+ </>;
+
+ return (
+  <main className={ui.workspace} dir="rtl">
+   <NudeeHeading title="التكليفات والأدلة" description="إدارة متطلبات نُضيء وإسناد الأدلة ورفعها ومراجعتها.">
+    {role==="office" && <NudeeNavigation current="evidence" />}
+   </NudeeHeading>
+   {!current && feedback}
+   {loading && <p role="status" className={ui.message}>جاري تحميل المؤشر…</p>}
+   {role && <>
+    <section className={ui.metrics} aria-label="ملخص التكليفات">
+     <NudeeMetric label="المتطلبات" value={requirements.length} />
+     <NudeeMetric label="التكليفات" value={assignments.filter(a=>a.status!=="unassigned").length} />
+     <NudeeMetric label="بانتظار المراجعة" value={assignments.filter(a=>a.status==="submitted").length} />
+     <NudeeMetric label="الأدلة المعتمدة" value={assignments.filter(a=>a.status==="approved").length} />
+    </section>
+    <div className={styles.workArea} data-detail-open={Boolean(current)}>
+     {role==="office" && <section className={`${ui.panel} ${styles.bulk}`} aria-labelledby="nudee-bulk">
+      <h2 id="nudee-bulk">إسناد جماعي للمتطلبات</h2>
+      <p className={ui.description}>حدد المتطلبات من القائمة ثم اختر المكلّف. تُحفظ جميع التكليفات في عملية واحدة.</p>
+      <div className={styles.bulkForm}>
+       <label className={ui.field}>المكلّف برفع الأدلة
+        <select value={bulkAssignee} onChange={e=>setBulkAssignee(e.target.value)}>
+         <option value="">اختر المستخدم</option>
+         {users.map(u=><option key={u.user_id} value={u.user_id}>{u.display_name||u.user_id}</option>)}
+        </select>
+       </label>
+       <label className={ui.field}>تاريخ الاستحقاق<input type="date" value={bulkDue} onChange={e=>setBulkDue(e.target.value)} /></label>
+       <div className={styles.actions}>
+        <button type="button" className={primary} disabled={blocked||!bulkAssignee||bulkIds.length===0} onClick={bulkAssign}>إسناد المحدد ({formatCount.format(bulkIds.length)})</button>
+        <button type="button" className={ui.button} disabled={blocked||bulkIds.length===0} onClick={()=>setBulkIds([])}>إلغاء التحديد</button>
+       </div>
+      </div>
+     </section>}
+     <section className={`${ui.panel} ${styles.list}`} aria-labelledby="nudee-list">
+      <div className={styles.listHeader}>
+       <h2 id="nudee-list">قائمة المتطلبات</h2>
+       <label className={ui.field}>البحث عن دليل أو معيار
+        <input type="search" value={filter} onChange={e=>setFilter(e.target.value)} placeholder="رمز المعيار أو اسم الدليل" />
+       </label>
+       <p role="status" className={ui.description}>{formatCount.format(visible.length)} من {formatCount.format(requirements.length)} متطلب</p>
+      </div>
+      {!visible.length && <p className={ui.message}>{requirements.length?"لا توجد نتائج مطابقة. عدّل كلمات البحث.":role==="office"?"لا توجد متطلبات متاحة حاليًا.":"لا توجد متطلبات مسندة إلى حسابك حاليًا."}</p>}
+      {visible.length>0 && <ul className={styles.queue}>
+       {visible.map(r=>{
+        const a=assignments.find(x=>x.requirement_id===r.id);
+        const selectable=role==="office"&&(!a||a.status==="assigned")&&!submissions.some(x=>x.assignment_id===a?.id);
+        const rowStatus=a?.status||"unassigned";
+        const checked=bulkIds.includes(r.id);
+        return (
+         <li key={r.id} className={styles.task} data-current={selected===r.id}>
+          {role==="office" && <label className={styles.check}>
+           <input type="checkbox" aria-label={"تحديد الدليل "+r.evidence_name} checked={checked} disabled={!selectable||busy||(!checked&&bulkIds.length>=100)} onChange={e=>setBulkIds(ids=>e.target.checked?[...ids,r.id]:ids.filter(id=>id!==r.id))} />
+          </label>}
+          <button type="button" className={styles.taskButton} aria-pressed={selected===r.id} aria-controls="nudee-detail" disabled={busy}
+           onClick={event=>{
+            selectedButton.current=event.currentTarget;
+            setSelected(r.id);setFile(null);setAssignee(a?.assignee_id||"");setDue(a?.due_date||"");setNote(a?.review_notes||"");
+           }}>
+           <span className={styles.taskCode}><bdi>{r.standard_code||"تكليف #"+r.id}</bdi></span>
+           <span className={styles.taskName}>{r.evidence_name}</span>
+           <span className={styles.taskMeta}><span>{r.maturity_level}</span><span className={styles.badge} data-status={rowStatus}>{statusLabels[rowStatus]}</span></span>
+          </button>
+         </li>
+        );
+       })}
+      </ul>}
+     </section>
+     <section ref={detailRef} id="nudee-detail" role="region" aria-label="تفاصيل المتطلب" tabIndex={-1} className={`${ui.panel} ${styles.detail}`}>
+      {current ? <>
+       <button type="button" className={`${ui.button} ${styles.backToList}`} disabled={busy} onClick={()=>{
+        setSelected(null);
+        requestAnimationFrame(()=>selectedButton.current?.focus());
+       }}>العودة إلى قائمة المتطلبات</button>
+       <header className={styles.detailHeader}>
+        <div className={styles.detailMeta}>
+         {current.standard_code && <bdi className={styles.taskCode}>{current.standard_code}</bdi>}
+         <span className={styles.badge} data-status={status}>{statusLabels[status]}</span>
+        </div>
+        <h2>{current.evidence_name}</h2>
+        <p className={styles.requirement}>{current.requirement_title}</p>
+        {current.evidence_description && <p className={ui.description}>{current.evidence_description}</p>}
+        <dl className={styles.facts}>
+         <div><dt>المجال</dt><dd>{current.domain_name}</dd></div>
+         <div><dt>مستوى النضج</dt><dd>{current.maturity_level}</dd></div>
+         {role==="office"&&assignmentLocked && <>
+          <div><dt>المكلّف برفع الدليل</dt><dd>{assignedUser?.display_name||assignedUser?.user_id||"—"}</dd></div>
+          <div><dt>تاريخ الاستحقاق</dt><dd>{assignment?.due_date ? <time dateTime={assignment.due_date}>{dueDateFormat.format(new Date(assignment.due_date))}</time> : "—"}</dd></div>
+         </>}
+        </dl>
+       </header>
+       {feedback}
+       {role==="office"&&!assignmentLocked && <section className={styles.detailSection}>
+        <h3>إسناد المتطلب</h3>
+        <div className={styles.assignmentFields}>
+         <label className={ui.field}>المسؤول عن رفع الدليل
+          <select id="nudee-assignee" value={assignee} onChange={e=>setAssignee(e.target.value)}>
+           <option value="">اختر المستخدم</option>
+           {users.map(u=><option value={u.user_id} key={u.user_id}>{u.display_name||u.user_id}</option>)}
+          </select>
+         </label>
+         <label className={ui.field}>تاريخ الاستحقاق<input type="date" value={due} onChange={e=>setDue(e.target.value)} /></label>
+        </div>
+        <button type="button" className={primary} disabled={blocked||!assignee} onClick={assign}>حفظ التكليف</button>
+       </section>}
+       {assignment?.assignee_id===currentUserId&&canUpload && <section className={styles.detailSection}>
+        <h3>رفع الدليل</h3>
+        <div className={ui.field}>
+         <label className={`cgp-file-choice ${styles.fileChoice}`} data-disabled={blocked}>
+          <span>اختيار ملف الدليل</span>
+          <bdi>{file?.name||"لم يُحدد ملف"}</bdi>
+          <input id="nudee-file" className="cgp-file-input" aria-label="اختيار ملف الدليل" aria-describedby="nudee-file-help"
+           key={selected??"none"} type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" onChange={e=>setFile(e.target.files?.[0]||null)} disabled={blocked} />
+         </label>
+         <small id="nudee-file-help">PDF أو Word أو صورة. الحد الأقصى للملف ٢٠ ميجابايت.</small>
+        </div>
+        <button type="button" className={primary} disabled={blocked||!file} onClick={upload}>رفع وإرسال للمراجعة</button>
+       </section>}
+       {currentSubmissions.length>0 && <section className={styles.detailSection}>
+        <h3>الأدلة المرفوعة</h3>
+        <ul className={styles.files}>
+         {currentSubmissions.map(x=><li key={x.id}><button className={ui.button} type="button" onClick={()=>openEvidence(x.storage_path)}>عرض الدليل: <bdi>{x.file_name}</bdi></button></li>)}
+        </ul>
+       </section>}
+       {role==="office"&&status==="submitted"&&assignment?.assignee_id!==currentUserId && <section className={styles.detailSection}>
+        <h3>قرار مسؤول المكتب</h3>
+        <label className={ui.field}>ملاحظات المراجعة
+         <textarea rows={2} value={note} onChange={e=>setNote(e.target.value)} placeholder="أدخل ملاحظاتك" />
+         <small>أدخل سببًا لإعادة الدليل للتعديل.</small>
+        </label>
+        <div className={styles.actions}>
+         <button type="button" className={primary} disabled={blocked} onClick={()=>review("approved")}>اعتماد الدليل</button>
+         <button type="button" className={`${ui.button} ${styles.returnAction}`} disabled={blocked||!note.trim()} onClick={()=>review("changes_requested")}>إعادة للتعديل</button>
+        </div>
+       </section>}
+       {role==="office"&&status==="submitted"&&assignment?.assignee_id===currentUserId && <p role="note" className={`${ui.message} ${ui.warning}`}>لا يمكن للمكلّف اعتماد الدليل الذي رفعه بنفسه؛ يتطلب مراجعًا آخر من مكتب البيانات.</p>}
+       {assignment?.review_notes && <div className={ui.message}><p><strong>ملاحظات المكتب:</strong> {assignment.review_notes}</p></div>}
+      </> : <>
+       <h2>تفاصيل المتطلب</h2>
+       <p className={ui.description}>اختر دليلًا من القائمة لعرض تفاصيله والإجراءات المتاحة.</p>
+      </>}
+     </section>
+    </div>
+   </>}
+  </main>
+ );
 }

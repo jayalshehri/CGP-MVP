@@ -94,10 +94,13 @@ function createPage({ role = 'data_governance_team', initialStatus, empty = fals
     require(name) {
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'fragment' };
-      if (name === 'next/link') return { default: 'a' };
+      if (name === '../nudee-workspace') return {
+        NudeeHeading: 'header', NudeeMetric: 'article', NudeeNavigation: 'nav',
+        formatCount: new Intl.NumberFormat('ar-SA'),
+      };
       if (name === '@/lib/auth') return { requireProfile: async () => ({ user: { id: role === 'nudee_owner' ? 'qa-owner' : 'qa-office' }, profile: { role } }) };
       if (name === '@/lib/supabase') return { supabase };
-      if (name.endsWith('.css')) return {};
+      if (name.endsWith('.css')) return { default: {} };
       throw new Error(`Unexpected dependency: ${name}`);
     }, crypto: { randomUUID }, console, Date, Intl,
   });
@@ -108,7 +111,7 @@ function createPage({ role = 'data_governance_team', initialStatus, empty = fals
     const matches = nodes(node => node.type === 'button' && text(node).includes(label));
     assert.equal(matches.length, 1, `one button: ${label}`); return matches[0];
   };
-  const click = label => { const node = button(label); assert.ok(!node.props.disabled, `${label} enabled`); return node.props.onClick(); };
+  const click = label => { const node = button(label); assert.ok(!node.props.disabled, `${label} enabled`); return node.props.onClick({ currentTarget: null }); };
   const byRole = expected => nodes(node => node.props?.role === expected).map(text).join(' ');
   const selectRequirement = id => { click(`دليل اختبار ${id}`); render(); };
   const change = (predicate, value) => { const [node] = nodes(predicate); assert.ok(node); node.props.onChange({ target: { value } }); render(); };
@@ -187,9 +190,9 @@ test('dedicated owner with no assignments receives normal empty state and no off
   const page = createPage({ role: 'nudee_owner', empty: true }); await page.init();
   assert.equal(page.byRole('alert'), '');
   assert.match(text(page.tree), /لا توجد متطلبات مسندة إلى حسابك حاليًا/);
-  assert.match(page.byRole('status'), /0 من 0 متطلب/);
+  assert.match(page.byRole('status'), /٠ من ٠ متطلب/);
   assert.equal(page.nodes(n => n.type === 'button' && /إسناد|اعتماد/.test(text(n))).length, 0);
-  assert.equal(page.nodes(n => n.props?.href === '/data-governance/nudee-dashboard').length, 0);
+  assert.equal(page.nodes(n => n.type === 'nav' && n.props.current === 'evidence').length, 0);
   assert.equal(page.calls.rpc.length, 0);
 });
 

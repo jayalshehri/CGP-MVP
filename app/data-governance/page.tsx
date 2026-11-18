@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { WorkflowHeading } from "@/components/WorkflowUI";
-import "./data-governance.css";
+import { NudeeHeading, NudeeMetric } from "./nudee-workspace";
+import styles from "./nudee-workspace.module.css";
 
 type NudeeSummary = { requirements:number|null; assigned:number|null; submitted:number|null; approved:number|null };
 
@@ -52,36 +52,34 @@ export default function DataGovernancePage() {
     return () => { active = false; };
   }, [router]);
 
-  const display = (value:number|null|undefined) => value == null ? "—" : new Intl.NumberFormat("ar-SA").format(value);
-
-  return <main className="dg-page" dir="rtl">
-    <div className="dg-eyebrow">مكتب إدارة البيانات · المرحلة الحالية</div>
-    <WorkflowHeading title="مؤشر نُضيء" description="إدارة متطلبات المؤشر وتكليف مالكي الأدلة ومراجعتها وقياس التقدم من مساحة عمل واحدة." />
-    <section className="dg-hero" aria-label="بدء العمل على مؤشر نُضيء">
-      <div>
-        <span>المؤشر الوطني للبيانات</span>
-        <h2>متطلبات المؤشر والأدلة والداشبورد في مكان واحد</h2>
-        <p>اختر إدارة المتطلبات لتنفيذ التكليفات والمراجعات، أو افتح لوحة المؤشر لمتابعة النتائج.</p>
-      </div>
-      <div className="dg-hero-actions">
-        <Link href="/data-governance/nudee">إدارة المتطلبات والأدلة</Link>
-        <Link href="/data-governance/nudee-dashboard">فتح داشبورد نُضيء</Link>
-      </div>
-    </section>
-    {error && <div role="alert" className="dg-loading">{error}</div>}
-    {loading && <p role="status" className="dg-loading">جاري تحميل بيانات المؤشر…</p>}
-    {!loading && !error && summary && <section className="dg-metrics" aria-label="ملخص حالة نُضيء">
-      <article><span>إجمالي المتطلبات</span><strong>{display(summary.requirements)}</strong><small>المتطلبات المستوردة</small></article>
-      <article><span>التكليفات</span><strong>{display(summary.assigned)}</strong><small>التكليفات المسجلة</small></article>
-      <article><span>بانتظار المراجعة</span><strong>{display(summary.submitted)}</strong><small>أدلة مقدمة تنتظر قرار المكتب</small></article>
-      <article><span>معتمد</span><strong>{display(summary.approved)}</strong><small>التكليفات التي اعتمد دليلها</small></article>
-    </section>}
-    <section className="dg-section" aria-label="مسارات العمل الحالية">
-      <header><div><span>ابدأ هنا</span><h2>وظيفتان واضحتان</h2><p>بقية وحدات إدارة البيانات محفوظة للتوسع اللاحق، وغير معروضة في هذه المرحلة.</p></div></header>
-      <div className="dg-framework-grid">
-        <article><h3>التكليفات والأدلة</h3><p>إسناد المتطلب، رفع الدليل، المراجعة، إعادة التعديل والاعتماد.</p><Link href="/data-governance/nudee">فتح التكليفات</Link></article>
-        <article><h3>داشبورد نُضيء</h3><p>مؤشرات الامتثال ومستويات النضج والمجالات والجدول الزمني.</p><Link href="/data-governance/nudee-dashboard">فتح الداشبورد</Link></article>
-      </div>
-    </section>
-  </main>;
+  return (
+    <main className={styles.workspace} dir="rtl">
+      <NudeeHeading title="مؤشر نُضيء" description="إدارة متطلبات المؤشر الوطني للبيانات ومتابعة الامتثال والإنجاز." />
+      <section className={styles.homeOptions} aria-label="مسارات العمل">
+        <article className={`${styles.panel} ${styles.homeCard}`}>
+          <h2>التكليفات والأدلة</h2>
+          <p className={styles.description}>أسند المتطلبات إلى مالكي الأدلة، وتابع الرفع والمراجعة والاعتماد.</p>
+          <Link className={`${styles.button} ${styles.primary}`} href="/data-governance/nudee">إدارة المتطلبات والأدلة</Link>
+        </article>
+        <article className={`${styles.panel} ${styles.homeCard}`}>
+          <h2>لوحة مؤشر نُضيء</h2>
+          <p className={styles.description}>راجع الامتثال حسب المجال ومستوى النضج، وتابع المراحل والإنجاز الأسبوعي.</p>
+          <Link className={styles.button} href="/data-governance/nudee-dashboard">فتح لوحة المؤشر</Link>
+        </article>
+      </section>
+      {error && <p role="alert" className={`${styles.message} ${styles.error}`}>{error}</p>}
+      {loading && <p role="status" className={styles.message}>جاري تحميل بيانات المؤشر…</p>}
+      {!loading && !error && summary && (
+        <section className={styles.summary} aria-labelledby="nudee-summary">
+          <h2 id="nudee-summary">ملخص التكليفات والأدلة</h2>
+          <div className={styles.metrics}>
+            <NudeeMetric label="إجمالي المتطلبات" value={summary.requirements ?? "—"} />
+            <NudeeMetric label="التكليفات المسجلة" value={summary.assigned ?? "—"} />
+            <NudeeMetric label="بانتظار المراجعة" value={summary.submitted ?? "—"} />
+            <NudeeMetric label="الأدلة المعتمدة" value={summary.approved ?? "—"} />
+          </div>
+        </section>
+      )}
+    </main>
+  );
 }
