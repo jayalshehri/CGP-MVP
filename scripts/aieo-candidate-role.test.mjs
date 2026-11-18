@@ -504,6 +504,10 @@ test('independent real-Git roles accept copy but reject JSX state bypass on a bo
     }
 
     publishFixture(baseline.replace('open &&', 'false &&'), 'unsafe JSX visibility bypass');
+    // A different immutable candidate requires fresh Developer/Security output.
+    // Keep the old QA report to verify Reviewer refuses stale role evidence.
+    rmSync(join(f.cwd, 'aieo-output/candidate-developer.json'));
+    rmSync(join(f.cwd, 'aieo-output/candidate-security.json'));
     assert.equal(f.run('developer', overrides).status, 0, 'Git provenance still passes');
     assert.notEqual(f.run('qa', overrides).status, 0, 'independent QA blocks JSX control flow');
     assert.equal(f.run('security', overrides).status, 0,
@@ -560,6 +564,8 @@ test('independent real-Git roles reject markup-shaped JS string edits while allo
     }
 
     publish(baseline.replace('Old endpoint', 'Changed endpoint'), 'JS string disguised as JSX text');
+    // Rehearse a new candidate, not an overwrite of the previous report.
+    rmSync(join(f.cwd, 'aieo-output/candidate-developer.json'));
     assert.equal(f.run('developer', overrides).status, 0, 'source provenance alone is valid');
     assert.notEqual(f.run('qa', overrides).status, 0,
       'independent QA must reject edits inside a JS string');
@@ -613,6 +619,7 @@ test('independent real-Git roles allow display copy but block CSS text changes i
 
     publish(baseline.replace('visibility: visible;', 'visibility: hidden;'),
       'unsafe style body mutation');
+    rmSync(join(f.cwd, 'aieo-output/candidate-developer.json'));
     assert.equal(f.run('developer', overrides).status, 0, 'candidate Git provenance is valid');
     assert.notEqual(f.run('qa', overrides).status, 0,
       'QA must reject style content as executable presentation behavior');
@@ -665,6 +672,9 @@ test('four independent real-Git roles accept actual widget copy and reject refac
     const unsafe = drifted.replace('{state === "success" ?', '{true ?');
     assert.notEqual(unsafe, drifted);
     const badEnv = publish(drifted, unsafe, 'real-source-render-drift');
+    // Keep stale QA/Security proofs as adversarial inputs; only the
+    // regenerated Developer report belongs to this separate candidate.
+    rmSync(join(f.cwd, 'aieo-output/candidate-developer.json'));
     assert.equal(f.run('developer', badEnv).status, 0,
       'valid Git provenance alone cannot detect unsafe JSX changes');
     assert.notEqual(f.run('qa', badEnv).status, 0,
@@ -1165,9 +1175,49 @@ test('Developer refuses a writable preexisting output before truncating its cont
     assert.notEqual(f.run('developer').status, 0, 'untrusted writable output must fail');
     assert.equal(readFileSync(output, 'utf8'), sentinel, 'reject before truncation');
     chmodSync(output, 0o600);
-    assert.equal(f.run('developer').status, 0, 'secure output is allowed');
+    assert.notEqual(f.run('developer').status, 0,
+      'even a private but nonmatching existing output must never be overwritten');
+    assert.equal(readFileSync(output, 'utf8'), sentinel);
+    rmSync(output);
+    assert.equal(f.run('developer').status, 0, 'fresh exclusive output is allowed');
     assert.ok(readFileSync(output, 'utf8').includes('"role": "developer"'));
     assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+
+test('candidate role output is idempotent but immutable once created', () => {
+  const f = setup();
+  try {
+    assert.equal(f.run('developer').status, 0, 'fresh Developer evidence is created');
+    const output = join(f.cwd, 'aieo-output/candidate-developer.json');
+    const originalBytes = readFileSync(output, 'utf8');
+    const originalInode = statSync(output).ino;
+    assert.equal(f.run('developer').status, 0, 'exactly matching retry is idempotent');
+    assert.equal(readFileSync(output, 'utf8'), originalBytes);
+    assert.equal(statSync(output).ino, originalInode,
+      'an idempotent retry must not replace the original evidence inode');
+
+    const tampered = JSON.parse(originalBytes);
+    tampered.status = 'approved';
+    const forgedBytes = JSON.stringify(tampered, null, 2) + '\n';
+    writeFileSync(output, forgedBytes, { mode: 0o600 });
+    assert.notEqual(f.run('developer').status, 0,
+      'a private but different handoff cannot be rewritten into approval');
+    assert.equal(readFileSync(output, 'utf8'), forgedBytes,
+      'rejected output cannot be truncated or overwritten');
+
+    const duplicateKeys = originalBytes.replace(
+      '"role": "developer",', '"role": "qa",\n  "role": "developer",');
+    assert.notEqual(duplicateKeys, originalBytes);
+    writeFileSync(output, duplicateKeys, { mode: 0o600 });
+    assert.notEqual(f.run('developer').status, 0,
+      'duplicate keys with the same final values must not be accepted as a replay');
+    assert.equal(readFileSync(output, 'utf8'), duplicateKeys);
+
+    writeFileSync(output, originalBytes, { mode: 0o600 });
+    assert.equal(f.run('developer').status, 0, 'restored exact evidence is idempotent');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main remains unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
