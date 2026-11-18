@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, statSync, symlinkSync, linkSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const script = join(dirname(fileURLToPath(import.meta.url)), 'aieo-import-handoffs.mjs');
@@ -98,3 +98,76 @@ for (const kind of ['foundation', 'candidate']) {
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   });
 }
+
+const ioUrl = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)),
+  'aieo-role-artifact-io.mjs')).href;
+// The child only simulates a different process uid for an authorization check;
+// it never alters file ownership or runs with elevated privileges.
+function invokeEvidenceIo(cwd, method, args, spoofUid = false) {
+  const script = 'import { ' + method + ' } from ' + JSON.stringify(ioUrl) + ';\n' +
+    (spoofUid ? 'const uid = process.getuid(); process.getuid = () => uid + 1;\n' : '') +
+    method + '(...' + JSON.stringify(args) + ');\n';
+  return spawnSync(process.execPath, ['--input-type=module', '--eval', script],
+    { cwd, encoding: 'utf8', timeout: 15000 });
+}
+
+test('all role evidence readers reject special file/directory bits and foreign uid attestations', () => {
+  for (const [kind, method, role] of [
+    ['foundation', 'readBoundedFoundationRoleReport', 'developer'],
+    ['candidate', 'readBoundedRoleReport', 'developer'],
+    ['model', 'readBoundedModelReport', 'proposal']
+  ]) {
+    const f = fixture(kind === 'candidate' ? 'candidate' : 'foundation', ['developer']);
+    const evidence = kind === 'model'
+      ? join(f.dir, 'model-proposal.json')
+      : f.path('developer');
+    try {
+      if (kind === 'model') {
+        rmSync(f.path('developer'));
+        writeFileSync(evidence, report, { mode: 0o600 });
+      } else {
+        chmodSync(evidence, 0o600);
+      }
+      const run = (spoofUid = false) => invokeEvidenceIo(f.root, method, [role], spoofUid);
+      assert.equal(run().status, 0, kind + ': ordinary private evidence should pass');
+      assert.notEqual(run(true).status, 0, kind + ': unrelated uid must be rejected');
+      for (const mode of [0o4600, 0o2600, 0o1600]) {
+        chmodSync(evidence, mode);
+        assert.equal(statSync(evidence).mode & 0o7000, mode & 0o7000,
+          'fixture must actually set the special permission bit');
+        assert.notEqual(run().status, 0,
+          kind + ': setuid/setgid/sticky metadata must be rejected');
+        chmodSync(evidence, 0o600);
+      }
+      chmodSync(f.dir, 0o2700);
+      assert.notEqual(run().status, 0, kind + ': setgid evidence directory must be rejected');
+      chmodSync(f.dir, 0o755);
+      assert.equal(run().status, 0, kind + ': safe permissions should recover');
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  }
+});
+
+test('role report writers reject unsafe output-directory metadata before creating a report', () => {
+  for (const [method, filename] of [
+    ['writeExclusiveFoundationRoleReport', 'qa.json'],
+    ['writeExclusiveModelRoleReport', 'model-qa.json']
+  ]) {
+    const f = fixture('foundation', ['developer']);
+    try {
+      const output = join(f.dir, filename);
+      const write = (spoofUid = false) =>
+        invokeEvidenceIo(f.root, method, ['qa', { role: 'qa', status: 'passed' }], spoofUid);
+      assert.notEqual(write(true).status, 0, method + ': foreign uid must be rejected');
+      chmodSync(f.dir, 0o2700);
+      assert.notEqual(write().status, 0, method + ': setgid output directory must fail');
+      assert.equal(statSync(f.path('developer')).mode & 0o777, 0o644,
+        'other evidence is never modified by a rejected writer');
+      chmodSync(f.dir, 0o755);
+      assert.equal(write().status, 0, method + ': ordinary output directory should work');
+      assert.equal(statSync(output).mode & 0o777, 0o600);
+      const original = readFileSync(output, 'utf8');
+      assert.notEqual(write().status, 0, 'existing report remains immutable');
+      assert.equal(readFileSync(output, 'utf8'), original);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  }
+});
