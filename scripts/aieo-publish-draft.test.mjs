@@ -53,7 +53,7 @@ function fixture() {
   const reviewer = inspectModelReviewer({ ...args, qa, security });
   for (const [kind, report] of Object.entries({ proposal, qa, security, reviewer })) {
     writeFileSync(join(workspace, 'aieo-output', 'model-' + kind + '.json'),
-      JSON.stringify(report) + '\n', { mode: 0o600 });
+      JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
   }
   const log = join(root, 'fake-gh.log');
   const gh = join(bin, 'gh');
@@ -684,7 +684,7 @@ test('publisher rejects replayed task, missing consent, wrong run or source comm
       ['publisher given another task', {}, { AIEO_MODEL_TASK: 'Different explicitly approved test task.' }],
       ['publisher task missing', {}, { AIEO_MODEL_TASK: '' }]
     ]) {
-      writeFileSync(handoffPath, JSON.stringify({ ...f.args.proposal, ...reportChanges }) + '\n');
+      writeFileSync(handoffPath, JSON.stringify({ ...f.args.proposal, ...reportChanges }, null, 2) + '\n');
       const result = spawnSync(process.execPath, [publisher], {
         cwd: f.workspace, env: { ...f.env, ...envChanges }, encoding: 'utf8', timeout: 20000
       });
@@ -710,7 +710,7 @@ test('tampered model QA evidence stops before any push or PR operation', () => {
   const f = fixture();
   try {
     writeFileSync(join(f.workspace, 'aieo-output/model-qa.json'),
-      JSON.stringify({ ...f.qa, routeCasesPassed: 0 }));
+      JSON.stringify({ ...f.qa, routeCasesPassed: 0 }, null, 2) + '\n');
     const child = spawnSync(process.execPath, [publisher], { cwd: f.workspace,
       env: f.env, encoding: 'utf8', timeout: 20000 });
     assert.notEqual(child.status, 0);
