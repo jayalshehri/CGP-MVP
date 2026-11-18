@@ -37,6 +37,27 @@ for (const kind of ['foundation', 'candidate']) {
       } finally { rmSync(f.root, { recursive: true, force: true }); }
     });
   }
+  test(kind + ' refuses a late invalid bundle member without changing earlier reports', () => {
+    const roles = ['developer', 'qa', 'security'];
+    const f = fixture(kind, roles);
+    try {
+      for (const invalidRole of ['qa', 'security']) {
+        chmodSync(f.path(invalidRole), 0o666);
+        assert.notEqual(f.run().status, 0,
+          'the entire bundle must be rejected before any handoff is normalized');
+        for (const role of roles) {
+          assert.equal(statSync(f.path(role)).mode & 0o777, role === invalidRole ? 0o666 : 0o644,
+            'preflight rejection must preserve each incoming permission');
+          assert.equal(readFileSync(f.path(role), 'utf8'), report,
+            'preflight rejection must preserve every evidence byte');
+        }
+        chmodSync(f.path(invalidRole), 0o644);
+      }
+      assert.equal(f.run().status, 0, 'valid three-role bundle must still import');
+      for (const role of roles)
+        assert.equal(statSync(f.path(role)).mode & 0o777, 0o600);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
   test(kind + ' import rejects aliases, unexpected files, unsafe modes and oversized data', () => {
     const f = fixture(kind, ['developer']);
     const developer = f.path('developer');
