@@ -143,14 +143,16 @@ export function validateDispatch(env) {
       (env.AIEO_MODEL_ENABLED !== 'true' || env.AIEO_SOURCE_SHARING_APPROVED !== 'true')) {
     fail('model source sharing was not approved');
   }
-  // A prior provider/build step may set GH_HOST, GH_REPO or GH_CONFIG_DIR.
-  // Refuse their attempt to redirect the write-scoped gh process before
-  // any local Git, provider handoff, branch push or Draft PR operation.
+  // Reject unsafe overrides in BOTH the live process and any supplied
+  // dispatch context. The general denylist is intentionally stricter than
+  // the endpoint allowlist: even canonical GH_* overrides are not inherited.
+  // Perform these checks before any Git, gh, source or artifact operations.
+  rejectGitEnvironmentOverrides(process.env);
+  rejectGitEnvironmentOverrides(env);
   try {
     verifyOfficialGitHubCliContext(process.env);
     verifyOfficialGitHubCliContext(env);
   } catch { fail('untrusted GitHub CLI endpoint or configuration override'); }
-  rejectGitEnvironmentOverrides(env);
   return env.AIEO_PUBLISH_MODE;
 }
 
