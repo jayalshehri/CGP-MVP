@@ -11,6 +11,24 @@ function block() {
   throw new Error('AIEO model proposal report blocked: unsafe output destination');
 }
 
+// Proposal preflight precedes the optional provider call. An apparently safe
+// mode is not sufficient when the evidence directory belongs to another uid,
+// or contains setuid/setgid/sticky bits. No source disclosure in that case.
+function runnerUid() {
+  const uid = process.getuid?.();
+  if (!Number.isSafeInteger(uid)) block();
+  return uid;
+}
+function safeEvidenceDirectory(entry, uid) {
+  return entry.isDirectory() && !entry.isSymbolicLink() &&
+    entry.uid === uid && !(entry.mode & 0o7022);
+}
+function safeProposalFile(entry, uid) {
+  return entry.isFile() && !entry.isSymbolicLink() &&
+    entry.nlink === 1 && entry.uid === uid &&
+    Boolean(entry.mode & 0o400) && !(entry.mode & 0o7177);
+}
+
 export function assertModelProposalDestination() {
   try {
     mkdirSync(DIR, { mode: 0o700 });
@@ -20,8 +38,7 @@ export function assertModelProposalDestination() {
   let directory;
   try {
     directory = lstatSync(DIR);
-    if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        (directory.mode & 0o022)) block();
+    if (!safeEvidenceDirectory(directory, runnerUid())) block();
     let present = true;
     try { lstatSync(PATH); } catch (error) {
       if (error.code === 'ENOENT') present = false;
@@ -57,12 +74,12 @@ export function writeExclusiveModelProposalReport(report, approvedDirectory) {
     const file = fstatSync(fd);
     const path = lstatSync(PATH);
     const currentDirectory = lstatSync(DIR);
-    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o133) ||
-        file.size !== bytes.length ||
-        !path.isFile() || path.isSymbolicLink() ||
+    const uid = runnerUid();
+    if (!safeProposalFile(file, uid) || file.size !== bytes.length ||
+        !safeProposalFile(path, uid) ||
         path.dev !== file.dev || path.ino !== file.ino ||
-        !currentDirectory.isDirectory() || currentDirectory.isSymbolicLink() ||
-        (currentDirectory.mode & 0o022) ||
+        path.size !== file.size ||
+        !safeEvidenceDirectory(currentDirectory, uid) ||
         currentDirectory.dev !== directory.dev || currentDirectory.ino !== directory.ino) block();
   } catch {
     block();
