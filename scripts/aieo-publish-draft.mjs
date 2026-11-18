@@ -58,18 +58,24 @@ function identical(a, b) {
 function readTrustedCandidate(path) {
   let fd;
   try {
+    const uid = process.getuid?.();
+    if (!Number.isSafeInteger(uid)) fail('candidate runner identity is unavailable');
     const directory = lstatSync('components');
     const prior = lstatSync(path);
     if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        (directory.mode & 0o022) || !prior.isFile() ||
-        prior.isSymbolicLink() || prior.nlink !== 1 ||
-        (prior.mode & 0o133) || prior.size < 1 ||
+        directory.uid !== uid || (directory.mode & 0o7022) ||
+        !prior.isFile() || prior.isSymbolicLink() || prior.nlink !== 1 ||
+        prior.uid !== uid || !(prior.mode & 0o400) ||
+        (prior.mode & 0o7133) || prior.size < 1 ||
         prior.size > 48000) fail('candidate source permissions or size are unsafe');
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const opened = fstatSync(fd);
-    if (!opened.isFile() || opened.nlink !== 1 || (opened.mode & 0o133) ||
+    if (!opened.isFile() || opened.nlink !== 1 || opened.uid !== uid ||
+        !(opened.mode & 0o400) || (opened.mode & 0o7133) ||
         opened.dev !== prior.dev || opened.ino !== prior.ino ||
-        opened.size !== prior.size) fail('candidate source inode changed before read');
+        opened.size !== prior.size ||
+        opened.mtimeMs !== prior.mtimeMs ||
+        opened.ctimeMs !== prior.ctimeMs) fail('candidate source inode changed before read');
     const bytes = Buffer.alloc(opened.size + 1);
     let used = 0;
     while (used < bytes.length) {
@@ -82,13 +88,15 @@ function readTrustedCandidate(path) {
     const directoryNow = lstatSync('components');
     if (used !== opened.size || after.size !== opened.size ||
         after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs ||
-        after.nlink !== 1 || (after.mode & 0o133) ||
+        after.nlink !== 1 || after.uid !== uid ||
+        !(after.mode & 0o400) || (after.mode & 0o7133) ||
         !pathname.isFile() || pathname.isSymbolicLink() ||
-        pathname.nlink !== 1 || (pathname.mode & 0o133) ||
+        pathname.nlink !== 1 || pathname.uid !== uid ||
+        !(pathname.mode & 0o400) || (pathname.mode & 0o7133) ||
         pathname.dev !== opened.dev || pathname.ino !== opened.ino ||
         pathname.size !== opened.size ||
         !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
-        (directoryNow.mode & 0o022) ||
+        directoryNow.uid !== uid || (directoryNow.mode & 0o7022) ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) {
       fail('candidate source or parent path changed during read');
     }
