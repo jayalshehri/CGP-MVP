@@ -91,6 +91,19 @@ export function verifyOfficialCandidateFetchOrigin(urls) {
   return true;
 }
 
+// The gh CLI honors GH_HOST for API transport and GH_REPO for implicit PR
+// targeting. Untrusted prior build steps can inject either through GITHUB_ENV,
+// causing read/write-scoped GH_TOKEN to contact the wrong host or repository.
+// Custom gh configuration is also forbidden at this privileged boundary.
+// Accept only explicit, canonical values (or the standard unset defaults).
+export function verifyOfficialGitHubCliContext(env = process.env) {
+  if (!env ||
+      (env.GH_HOST !== undefined && env.GH_HOST !== 'github.com') ||
+      (env.GH_REPO !== undefined && env.GH_REPO !== REPO) ||
+      (env.GH_CONFIG_DIR !== undefined && env.GH_CONFIG_DIR !== '')) block();
+  return true;
+}
+
 // Candidate role handoffs must be write-once. Replaying an identical report
 // is idempotent for local fixtures, but cannot replace any existing bytes.
 // A fresh write is exclusive and both paths reject aliases and unsafe modes.
@@ -232,6 +245,10 @@ export function runCandidateRole(role, env = process.env) {
   // Reject before Git, gh, or artifact IO: a compromised prior step must not
   // change the trusted repository view or execute helpers under GH_TOKEN.
   if (hasUnsafeGitEnvironment(process.env) || hasUnsafeGitEnvironment(env)) block();
+  // Validate both the real child environment and any injected test context
+  // before invoking git, gh, or reading/writing review evidence.
+  verifyOfficialGitHubCliContext(process.env);
+  verifyOfficialGitHubCliContext(env);
   if (!ROLES.includes(role)) block();
   // A worktree diff may invoke an attribute-selected clean filter despite
   // --no-textconv. Reject effective filters before any Git diff or handoff.
