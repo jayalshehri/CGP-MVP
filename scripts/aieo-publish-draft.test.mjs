@@ -1039,3 +1039,36 @@ for (const variant of ['fetch', 'push', 'insteadOf']) {
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   });
 }
+
+
+test('publisher refuses semantically identical but noncanonical or shadowed model handoffs before GitHub writes', () => {
+  const f = fixture();
+  try {
+    const main = git(f.workspace, 'rev-parse', 'main');
+    for (const kind of ['proposal', 'qa', 'security', 'reviewer']) {
+      const path = join(f.workspace, 'aieo-output', 'model-' + kind + '.json');
+      const original = readFileSync(path, 'utf8');
+      const parsed = JSON.parse(original);
+      const attacks = [
+        ['compact JSON', JSON.stringify(parsed) + '\n'],
+        ['duplicate status', '{\n  "status": "shadow",\n' + original.slice(2)]
+      ];
+      for (const [label, bytes] of attacks) {
+        // JSON.parse(bytes) yields the original report claims in both cases.
+        assert.deepEqual(JSON.parse(bytes), parsed);
+        writeFileSync(path, bytes);
+        const child = spawnSync(process.execPath, [publisher], {
+          cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+        });
+        assert.notEqual(child.status, 0, kind + ': ' + label);
+        assert.equal(existsSync(f.log), false,
+          kind + ': untrusted handoff must not reach gh');
+        assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
+        assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+      }
+      writeFileSync(path, original);
+    }
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
