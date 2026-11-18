@@ -40,10 +40,12 @@ function fixture() {
   };
   return { root, workspace, target, env };
 }
-function readSource(f) {
-  return spawnSync(process.execPath, ['--input-type=module', '-e',
-    'import { readApprovedModelSource } from ' + JSON.stringify(reader) +
-    '; process.stdout.write(readApprovedModelSource())'], {
+function readSource(f, { foreignUid = false } = {}) {
+  const code = 'import { readApprovedModelSource } from ' + JSON.stringify(reader) +
+    '; ' + (foreignUid
+      ? 'const uid = process.getuid(); process.getuid = () => uid + 1; '
+      : '') + 'process.stdout.write(readApprovedModelSource())';
+  return spawnSync(process.execPath, ['--input-type=module', '-e', code], {
     cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 15000
   });
 }
@@ -75,6 +77,12 @@ const cases = [
   ['same-byte symlink outside checkout', (f) => sameOutside(f, 'symlink')],
   ['same-byte hardlink outside checkout', (f) => sameOutside(f, 'hardlink')],
   ['group-writable source', (f) => { chmodSync(f.target, 0o664); }],
+  ['owner-unreadable source', (f) => { chmodSync(f.target, 0o244); }],
+  ['setuid source', (f) => { chmodSync(f.target, 0o4644); }],
+  ['setgid source', (f) => { chmodSync(f.target, 0o2644); }],
+  ['sticky-bit source', (f) => { chmodSync(f.target, 0o1644); }],
+  ['setgid parent directory', (f) => { chmodSync(dirname(f.target), 0o2755); }],
+  ['sticky-bit parent directory', (f) => { chmodSync(dirname(f.target), 0o1755); }],
   ['untracked unexpected file', (f) => { writeFileSync(join(f.workspace, 'new-source.txt'), 'unexpected'); }],
   ['symlink parent directory', (f) => {
     const external = join(f.root, 'external-components');
@@ -94,6 +102,40 @@ for (const [name, mutate] of cases) {
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   });
 }
+
+test('pre-share source reader refuses foreign runner ownership without source output', () => {
+  const f = fixture();
+  try {
+    const result = readSource(f, { foreignUid: true });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /model source blocked/);
+    assert.equal(result.stdout, '');
+    assert.doesNotMatch(result.stderr, /syntheticFixture/);
+    assert.equal(readFileSync(f.target, 'utf8'), 'function syntheticFixture() { return 1; }\n');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('model proposal rejects special-bit source before external transport', () => {
+  const f = fixture();
+  try {
+    chmodSync(f.target, 0o4644);
+    const log = join(f.root, 'provider-called');
+    const shim = join(f.root, 'intercept-special-source.mjs');
+    writeFileSync(shim, [
+      "import { writeFileSync } from 'node:fs';",
+      "globalThis.fetch = async () => { writeFileSync(" + JSON.stringify(log) +
+        ", 'called'); throw new Error('unexpected provider call'); };",
+      ''
+    ].join('\n'));
+    const result = spawnSync(process.execPath, ['--import', shim, proposal], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 15000
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /model source blocked/);
+    assert.equal(existsSync(log), false);
+    assert.equal(existsSync(join(f.workspace, 'aieo-output', 'model-proposal.json')), false);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
 
 test('model proposal never contacts external transport for a same-byte source symlink', () => {
   const f = fixture();
