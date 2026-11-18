@@ -92,6 +92,10 @@ function writeExclusiveReport(path, report) {
         !safeReportFile(current, uid) ||
         current.dev !== file.dev || current.ino !== file.ino ||
         current.size !== file.size ||
+        // A same-inode write or touch after fstat cannot borrow the
+        // descriptor's approval at the final pathname boundary.
+        current.mtimeMs !== file.mtimeMs ||
+        current.ctimeMs !== file.ctimeMs ||
         !safeDirectory(directoryNow, uid) ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) block();
   } catch {

@@ -246,3 +246,65 @@ test('model proposal preflight denies unowned and special-bit evidence directori
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+// A report may retain its pathname, inode, private permissions and byte length
+// while another process rewrites metadata after our writer's final fstat.
+// The final lstat must not approve that different inode state. The shim runs
+// only in a disposable child with synthetic data; no provider call is made.
+test('role and model proposal writers reject same-inode timestamp races after final fstat', () => {
+  const scenarios = [
+    ['writeExclusiveFoundationRoleReport', 'qa.json', ioUrl],
+    ['writeExclusiveModelRoleReport', 'model-qa.json', ioUrl],
+    ['writeExclusiveModelProposalReport', 'model-proposal.json', proposalOutputUrl]
+  ];
+  for (const [method, filename, moduleUrl] of scenarios) {
+    const f = fixture('foundation', ['developer']);
+    try {
+      const target = 'aieo-output/' + filename;
+      const marker = join(f.root, 'interleaved-writer-touch.marker');
+      const shim = join(f.root, 'interleave-writer-path.mjs');
+      writeFileSync(shim, [
+        "import fs from 'node:fs';",
+        "import { syncBuiltinESMExports } from 'node:module';",
+        'const originalLstat = fs.lstatSync;',
+        'let touched = false;',
+        'fs.lstatSync = (path, ...args) => {',
+        '  if (!touched && path === ' + JSON.stringify(target) +
+          ' && fs.existsSync(path)) {',
+        '    touched = true;',
+        "    fs.utimesSync(path, new Date('2020-01-01'), new Date('2020-01-01'));",
+        '    fs.writeFileSync(' + JSON.stringify(marker) + ", 'touched');",
+        '  }',
+        '  return originalLstat(path, ...args);',
+        '};',
+        'syncBuiltinESMExports();',
+        ''
+      ].join('\n'));
+      const invocation = method === 'writeExclusiveModelProposalReport'
+        ? 'const approved = assertModelProposalDestination(); ' +
+          method + '({ schemaVersion: 1, status: "fixture-only" }, approved);'
+        : method + '("qa", { role: "qa", status: "passed" });';
+      const preamble = method === 'writeExclusiveModelProposalReport'
+        ? 'assertModelProposalDestination, ' : '';
+      const script = 'import { ' + preamble + method +
+        ' } from ' + JSON.stringify(moduleUrl) + ';\n' + invocation;
+      const outcome = spawnSync(process.execPath,
+        ['--import', shim, '--input-type=module', '--eval', script], {
+          cwd: f.root, encoding: 'utf8', timeout: 15000
+        });
+      assert.equal(readFileSync(marker, 'utf8'), 'touched',
+        method + ': injected metadata rewrite must execute after file creation');
+      assert.notEqual(outcome.status, 0,
+        method + ': changed final-path metadata must fail closed');
+      assert.match(outcome.stderr,
+        /AIEO role artifact rejected|AIEO model proposal report blocked/);
+      assert.equal(statSync(join(f.root, target)).mode & 0o7777, 0o600,
+        'the rejected fixture remains private');
+      assert.equal(statSync(f.path('developer')).mode & 0o777, 0o644,
+        'unrelated artifact is never modified');
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  }
+});

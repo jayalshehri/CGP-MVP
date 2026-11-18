@@ -79,6 +79,10 @@ export function writeExclusiveModelProposalReport(report, approvedDirectory) {
         !safeProposalFile(path, uid) ||
         path.dev !== file.dev || path.ino !== file.ino ||
         path.size !== file.size ||
+        // Refuse a same-inode metadata rewrite between final fstat and lstat.
+        // The proposal must be exactly the bytes the output writer attested.
+        path.mtimeMs !== file.mtimeMs ||
+        path.ctimeMs !== file.ctimeMs ||
         !safeEvidenceDirectory(currentDirectory, uid) ||
         currentDirectory.dev !== directory.dev || currentDirectory.ino !== directory.ino) block();
   } catch {
