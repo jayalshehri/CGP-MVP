@@ -60,9 +60,15 @@ function setup() {
   savePr();
   const gh = join(bin, 'gh');
   writeFileSync(gh, '#!/usr/bin/env node\n' +
-    "const {readFileSync}=require('node:fs');\n" +
+    "const {readFileSync,writeFileSync,existsSync}=require('node:fs');\n" +
     "if(process.argv.slice(2).join(' ')!=='api repos/jayalshehri/CGP-MVP/pulls/777')process.exit(3);\n" +
-    "process.stdout.write(readFileSync(process.env.AIEO_FAKE_PR_FILE,'utf8'));\n");
+    "const after=process.env.AIEO_FAKE_PR_SECOND;\n" +
+    "if(!after){process.stdout.write(readFileSync(process.env.AIEO_FAKE_PR_FILE,'utf8'));}\n" +
+    "else {const counter=process.env.AIEO_FAKE_PR_COUNTER;\n" +
+    "  if(!counter)process.exit(4);\n" +
+    "  const n=existsSync(counter)?Number(readFileSync(counter,'utf8')):0;\n" +
+    "  writeFileSync(counter,String(n+1));\n" +
+    "  process.stdout.write(readFileSync(n===0?process.env.AIEO_FAKE_PR_FILE:after,'utf8'));}\n");
   chmodSync(gh, 0o755);
   const env = {
     ...process.env,
@@ -330,6 +336,43 @@ test('REST state, actor, branch, repository, and commit mismatches fail closed b
     assert.notEqual(f.run('developer', { GITHUB_REF: 'refs/heads/feature' }).status, 0);
     assert.notEqual(f.run('developer', { GITHUB_REPOSITORY: 'foreign/CGP-MVP' }).status, 0);
     assert.notEqual(f.run('developer', { GH_TOKEN: '' }).status, 0);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('each candidate role reattests remote Draft state before writing evidence', () => {
+  const f = setup();
+  try {
+    const second = join(f.root, 'drifted-pr.json');
+    const counter = join(f.root, 'gh-rest-read-count');
+    const mutations = [
+      ['undrafted', (p) => { p.draft = false; }],
+      ['closed', (p) => { p.state = 'closed'; }],
+      ['merged', (p) => { p.merged_at = '2026-11-19T00:00:00Z'; }],
+      ['retargeted', (p) => { p.base.ref = 'release'; }],
+      ['head-rewritten', (p) => { p.head.sha = 'a'.repeat(40); }],
+      ['base-rewritten', (p) => { p.base.sha = 'b'.repeat(40); }],
+      ['actor-changed', (p) => { p.user.id = 191056639; }],
+      ['foreign-head', (p) => { p.head.repo.full_name = 'foreign/CGP-MVP'; }]
+    ];
+    // The first REST read returns a valid bot Draft; after Git fetch and
+    // independent inspection, the second read observes remote state drift.
+    for (const [name, mutate] of mutations) {
+      const drifted = JSON.parse(JSON.stringify(f.pr));
+      mutate(drifted);
+      writeFileSync(second, JSON.stringify(drifted));
+      rmSync(counter, { force: true });
+      const outcome = f.run('developer', {
+        AIEO_FAKE_PR_SECOND: second, AIEO_FAKE_PR_COUNTER: counter
+      });
+      assert.notEqual(outcome.status, 0, name + ': mutable PR drift must block');
+      assert.match(outcome.stderr, /candidate role blocked/, name);
+      assert.equal(readFileSync(counter, 'utf8'), '2', name + ': both REST reads must occur');
+      assert.equal(existsSync(join(f.cwd, 'aieo-output/candidate-developer.json')), false,
+        name + ': no false Developer report may be written');
+      assert.equal(f.git('rev-parse', 'main'), f.base);
+    }
+    const good = f.run('developer');
+    assert.equal(good.status, 0, good.stderr);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 

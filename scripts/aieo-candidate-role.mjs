@@ -241,6 +241,29 @@ function verifiedRemoteContext(env) {
   return { base, head, number: Number(number) };
 }
 
+// A PR may be undrafted, retargeted, closed or force-pushed while a role is
+// fetching, inspecting and recomputing the proposed candidate. Check the
+// live REST state AGAIN immediately before writing any role attestation;
+// the first response and immutable Git object alone do not authorize a
+// later evidence handoff. Never print an untrusted API response.
+function reattestRemoteDraft({ base, head, number }) {
+  let pr;
+  try {
+    pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
+      { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 }));
+  } catch { block(); }
+  if (pr?.number !== number ||
+      pr?.html_url !== 'https://github.com/' + REPO + '/pull/' + number ||
+      pr?.state !== 'open' || pr?.draft !== true || pr?.merged_at !== null ||
+      pr?.user?.login !== 'github-actions[bot]' ||
+      pr?.user?.id !== 41898282 || pr?.user?.type !== 'Bot' ||
+      pr?.base?.repo?.full_name !== REPO ||
+      pr?.head?.repo?.full_name !== REPO ||
+      pr?.base?.ref !== 'main' || pr?.base?.sha !== base ||
+      !BRANCH.test(pr?.head?.ref || '') ||
+      pr?.head?.sha !== head) block();
+}
+
 export function runCandidateRole(role, env = process.env) {
   // Reject before Git, gh, or artifact IO: a compromised prior step must not
   // change the trusted repository view or execute helpers under GH_TOKEN.
@@ -291,6 +314,7 @@ export function runCandidateRole(role, env = process.env) {
       if (report.status !== 'draft-pr-eligible') block();
     }
   }
+  reattestRemoteDraft({ base, head, number });
   writeReport(role, report);
   return { role, status: report.status, prNumber: number, baseSha: base, headSha: head };
 }
