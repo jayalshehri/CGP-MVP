@@ -163,6 +163,54 @@ test('spoofing offline Actions mode cannot bypass official-origin check with an 
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
+test('post-build finalizer refuses privileged offline-mode spoof before Git or GitHub CLI', () => {
+  const f = setup();
+  try {
+    // Four independently executed reviews yield valid evidence first. The
+    // finalizer must still bind its own process context before using it.
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const result = f.run(role);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+    }
+    const reviewed = execFileSync('git', ['show', f.head + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' });
+    writeFileSync(join(f.cwd, path), reviewed);
+    const verify = (overrides = {}) => spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: { ...f.env, ...overrides }, encoding: 'utf8', timeout: 25000
+    });
+    const good = verify();
+    assert.equal(good.status, 0, good.stderr);
+    assert.equal(JSON.parse(good.stdout).status, 'post-build-draft-reverified');
+
+    // A compromised build step may try to downgrade GITHUB_ACTIONS while
+    // retaining a live-scoped GH_TOKEN. An apparent refusal is insufficient
+    // if Git or gh was already executed with that credential in scope.
+    const markerFile = join(f.root, 'unexpected-post-build-subprocess');
+    for (const executable of ['git', 'gh']) {
+      const executablePath = join(f.root, 'bin', executable);
+      writeFileSync(executablePath, '#!/usr/bin/env node\n' +
+        'require("node:fs").appendFileSync(' + JSON.stringify(markerFile) +
+        ', ' + JSON.stringify(executable + '\n') + ');\n' +
+        'process.exit(42);\n');
+      chmodSync(executablePath, 0o755);
+    }
+    for (const unsafe of [
+      { GH_TOKEN: 'synthetic-privileged-token-placeholder' },
+      { GH_TOKEN: 'synthetic-privileged-token-placeholder', CI: 'true' },
+      { GITHUB_ACTIONS: '0' },
+      { GITHUB_ACTIONS: '' }
+    ]) {
+      const rejected = verify(unsafe);
+      assert.notEqual(rejected.status, 0, 'untrusted finalizer context must fail');
+      assert.match(rejected.stderr, /post-build check blocked/);
+      assert.equal(existsSync(markerFile), false,
+        'spoofed offline context must fail before either Git or gh runs');
+    }
+    assert.equal(f.git('rev-parse', 'main'), f.base,
+      'candidate finalization must never modify main');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test('candidate origin configuration validator rejects missing, malformed and duplicated security inputs', () => {
   const standard = ['core.repositoryformatversion', 'remote.origin.url', 'remote.origin.fetch'];
   assert.equal(verifyOfficialCandidateFetchConfig(standard), true);

@@ -127,6 +127,15 @@ export function verifyPostBuild(env = process.env) {
       env.GITHUB_REPOSITORY !== REPO ||
       !SHA.test(env.GITHUB_SHA || '') ||
       !/^[1-9][0-9]*$/.test(number || '') || !env.GH_TOKEN) fail();
+  // A prior build can influence the subsequent finalizer's environment.
+  // The real post-build checkpoint must never accept a credential-bearing
+  // process that pretends to be an offline test harness. As in the four
+  // independent candidate roles, only exact noncredential sentinels may
+  // run in the local Git fixture outside GitHub Actions.
+  const offlineFixture = env.GITHUB_ACTIONS === 'false' &&
+    (env.GH_TOKEN === 'fixture-never-live' ||
+     env.GH_TOKEN === 'synthetic-fixture-not-a-secret');
+  if (!offlineFixture && env.GITHUB_ACTIONS !== 'true') fail();
   // Git worktree diffs can execute clean filters from info/attributes or
   // global attributes even with no-textconv and a scrubbed Git environment.
   try { assertNoTrackedGitFilters(process.env); } catch { fail(); }
