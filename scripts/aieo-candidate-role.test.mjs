@@ -1889,3 +1889,61 @@ test('candidate role handoff reader refuses group-readable reports before QA run
     assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted main unchanged');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('post-build finalizer refuses foreign-owned and special-mode compiled source before GitHub review', () => {
+  const f = setup();
+  try {
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const result = f.run(role);
+      assert.equal(result.status, 0, role + ': ' + result.stderr);
+    }
+    const target = join(f.cwd, path);
+    const parent = dirname(target);
+    const reviewed = execFileSync('git', ['show', f.head + ':' + path], {
+      cwd: f.cwd, encoding: 'utf8'
+    });
+    writeFileSync(target, reviewed);
+    const verify = (args = [], extra = {}) => spawnSync(process.execPath,
+      [...args, finalizerScript], {
+        cwd: f.cwd, env: { ...f.env, ...extra }, encoding: 'utf8', timeout: 25000
+      });
+    assert.equal(verify().status, 0, 'unchanged trusted post-build candidate is accepted');
+    for (const [label, altered, mode, restored] of [
+      ['owner-unreadable file', target, 0o200, 0o644],
+      ['setuid file', target, 0o4644, 0o644],
+      ['setgid file', target, 0o2644, 0o644],
+      ['sticky file', target, 0o1644, 0o644],
+      ['setuid parent', parent, 0o4755, 0o755],
+      ['setgid parent', parent, 0o2755, 0o755],
+      ['sticky parent', parent, 0o1755, 0o755]
+    ]) {
+      chmodSync(altered, mode);
+      if (!label.includes('unreadable')) {
+        assert.notEqual(statSync(altered).mode & 0o7000, 0,
+          label + ' fixture must actually set the special bit');
+      }
+      const rejected = verify();
+      assert.notEqual(rejected.status, 0, label + ' cannot be approved');
+      assert.match(rejected.stderr, /post-build check blocked/,
+        label + ' must be refused by the post-build gate');
+      chmodSync(altered, restored);
+      assert.equal(verify().status, 0,
+        label + ' removal must restore a valid source fixture');
+    }
+    const shim = join(f.root, 'foreign-runner-uid.mjs');
+    writeFileSync(shim, [
+      'const originalUid = process.getuid();',
+      'process.getuid = () => originalUid + 1;',
+      ''
+    ].join('\n'));
+    const foreign = verify(['--import', shim]);
+    assert.notEqual(foreign.status, 0, 'runner UID mismatch must be rejected');
+    assert.match(foreign.stderr, /post-build check blocked/);
+    assert.equal(verify().status, 0, 'clean current-user finalizer still succeeds');
+    assert.equal(f.git('rev-parse', 'main'), f.base,
+      'no change is made to the baseline branch');
+    assert.equal(f.git('ls-remote', '--heads', 'origin', 'refs/heads/main'),
+      f.base + '\trefs/heads/main', 'remote baseline remains immutable');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
