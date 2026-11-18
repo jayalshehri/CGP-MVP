@@ -158,6 +158,12 @@ function verifiedRemoteContext(env) {
       env.GITHUB_REPOSITORY !== REPO ||
       !/^[1-9][0-9]*$/.test(number || '') ||
       !env.GH_TOKEN) block();
+  // Fail before gh, Git or network contact if a privileged run spoofs local
+  // fixture mode. These literal sentinels are not valid GitHub credentials.
+  const offlineFixture = env.GITHUB_ACTIONS === 'false' &&
+    (env.GH_TOKEN === 'fixture-never-live' ||
+     env.GH_TOKEN === 'synthetic-fixture-not-a-secret');
+  if (!offlineFixture && env.GITHUB_ACTIONS !== 'true') block();
   let pr;
   try {
     pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
@@ -193,10 +199,9 @@ function verifiedRemoteContext(env) {
     const indexEntries = git(['ls-files', '-v', '-z']).split('\0').filter(Boolean);
     if (!indexEntries.length ||
         indexEntries.some((entry) => entry.slice(0, 2) !== 'H ')) block();
-    // Prevent an Actions checkout with a rerouted origin from fetching the
-    // candidate from a different endpoint. Local fixtures are intentionally
-    // isolated file:// remotes and must never be used as live Actions evidence.
-    if (env.GITHUB_ACTIONS === 'true') {
+    // A credential-bearing Actions fetch always needs the official remote,
+    // even if a prior step tried to downgrade the Actions context.
+    if (!offlineFixture) {
       // Origin URL checks do not inspect transport proxy/TLS/extraheader
       // settings, including URL-scoped overrides and remote-helper config.
       const configNames = git(['config', '--name-only', '--list'])
