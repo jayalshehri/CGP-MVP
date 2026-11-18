@@ -38,9 +38,11 @@ export function readBoundedRoleReport(role) {
 
 // Model handoffs also contain untrusted provider-derived data. Never read them
 // through an unbounded or link-following path before the Draft PR publisher.
+// All model-role reports use the canonical JSON writer, including the initial
+// provider proposal. Reject duplicate-key shadowing and noncanonical bytes.
 export function readBoundedModelReport(kind) {
   if (!MODEL_REPORTS.has(kind)) block();
-  return readTrustedJsonReport('aieo-output/model-' + kind + '.json');
+  return readTrustedJsonReport('aieo-output/model-' + kind + '.json', true);
 }
 
 // The foundation's downloadable CI artifacts are read-only evidence. Apply the

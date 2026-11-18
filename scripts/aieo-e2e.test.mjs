@@ -188,7 +188,7 @@ test('model report reader refuses other-readable evidence independently of valid
   });
   try {
     mkdirSync(dirname(report));
-    writeFileSync(report, '{"schemaVersion":1}\n', { mode: 0o600 });
+    writeFileSync(report, JSON.stringify({ schemaVersion: 1 }, null, 2) + '\n', { mode: 0o600 });
     assert.equal(run().status, 0);
     for (const mode of [0o640, 0o604, 0o644]) {
       chmodSync(report, mode);

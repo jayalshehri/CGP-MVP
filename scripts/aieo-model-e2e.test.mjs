@@ -37,7 +37,7 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     writeFileSync(artifact('proposal'), JSON.stringify({
       schemaVersion: 1, status: 'proposed', path: 'components/FeedbackWidget.tsx',
       sourceHash: sha(original), proposedHash: sha(actual)
-    }), { mode: 0o600 });
+    }, null, 2) + '\n', { mode: 0o600 });
     for (const [name, role] of [['gates', 'qa'], ['security', null], ['gates', 'reviewer']]) {
       const child = run(name, role);
       assert.equal(child.status, 0, (role || name) + ': ' + child.stderr);
@@ -51,13 +51,13 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     assert.equal(reviewer.requiresHumanMerge, true);
     const qa = JSON.parse(readFileSync(artifact('qa'), 'utf8'));
     unlinkSync(artifact('reviewer'));
-    writeFileSync(artifact('qa'), JSON.stringify({ ...qa, sourceHash: '0'.repeat(64) }));
+    writeFileSync(artifact('qa'), JSON.stringify({ ...qa, sourceHash: '0'.repeat(64) }, null, 2) + '\n');
     assert.notEqual(run('gates', 'reviewer').status, 0, 'Forged QA evidence must fail');
-    writeFileSync(artifact('qa'), JSON.stringify(qa));
+    writeFileSync(artifact('qa'), JSON.stringify(qa, null, 2) + '\n');
     const security = JSON.parse(readFileSync(artifact('security'), 'utf8'));
     // An absent destination ensures the failure reflects forged evidence,
     // not merely the exclusive report writer rejecting a duplicate path.
-    writeFileSync(artifact('security'), JSON.stringify({ ...security, addedLines: 0 }));
+    writeFileSync(artifact('security'), JSON.stringify({ ...security, addedLines: 0 }, null, 2) + '\n');
     assert.notEqual(run('gates', 'reviewer').status, 0, 'Forged security evidence must fail');
     assert.equal(readFileSync(path, 'utf8'), actual);
   } finally {
@@ -93,7 +93,7 @@ test('independent model-role CLI refuses output aliases and pre-existing reports
       writeFileSync(report('proposal'), JSON.stringify({
         schemaVersion: 1, status: 'proposed', path: 'components/FeedbackWidget.tsx',
         sourceHash: sha(original), proposedHash: sha(actual)
-      }), { mode: 0o600 });
+      }, null, 2) + '\n', { mode: 0o600 });
 
       if (role === 'reviewer') {
         assert.equal(run('gates', 'qa').status, 0);
@@ -142,7 +142,7 @@ test('model QA and Security CLIs reject linked candidate source without emitting
         schemaVersion: 1, status: 'proposed',
         path: 'components/FeedbackWidget.tsx',
         sourceHash: sha(original), proposedHash: sha(candidate)
-      }), { mode: 0o600 });
+      }, null, 2) + '\n', { mode: 0o600 });
       writeFileSync(external, candidate);
       unlinkSync(target);
       if (alias === 'symlink') symlinkSync(external, target);
@@ -163,6 +163,54 @@ test('model QA and Security CLIs reject linked candidate source without emitting
         'independent roles never mutate the linked target');
       assert.equal(git('rev-parse', 'HEAD'), baseline,
         'trusted local source commit must remain unchanged');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+
+test('model evidence readers reject noncanonical and duplicate-key reports for all four roles', () => {
+  // The producer always writes pretty JSON plus a newline. An attacker may
+  // preserve the last parsed value while shadowing a preceding field.
+  // This must fail before any role or privileged publisher trusts the report.
+  const moduleUrl = new URL('./aieo-role-artifact-io.mjs', import.meta.url).href;
+  const program = 'import { readBoundedModelReport } from ' +
+    JSON.stringify(moduleUrl) +
+    '; process.stdout.write(JSON.stringify(readBoundedModelReport(process.argv[1])));';
+  for (const kind of ['proposal', 'qa', 'security', 'reviewer']) {
+    const root = mkdtempSync(join(tmpdir(), 'aieo-canonical-model-evidence-'));
+    const directory = join(root, 'aieo-output');
+    const file = join(directory, 'model-' + kind + '.json');
+    mkdirSync(directory, { mode: 0o700 });
+    const report = {
+      schemaVersion: 1, kind, status: 'passed',
+      details: { fixture: 'synthetic data only' }
+    };
+    const canonical = JSON.stringify(report, null, 2) + '\n';
+    const runReader = () => spawnSync(process.execPath,
+      ['--input-type=module', '-e', program, kind],
+      { cwd: root, encoding: 'utf8', timeout: 15000 });
+    try {
+      writeFileSync(file, canonical, { mode: 0o600 });
+      let child = runReader();
+      assert.equal(child.status, 0, kind + ': ' + child.stderr);
+      assert.deepEqual(JSON.parse(child.stdout), report);
+      const tampered = [
+        ['compact JSON', JSON.stringify(report)],
+        ['duplicate status shadowing', '{\n  "status": "forged",\n' + canonical.slice(2)],
+        ['trailing bytes after a canonical report', canonical + ' ']
+      ];
+      for (const [label, raw] of tampered) {
+        writeFileSync(file, raw);
+        child = runReader();
+        assert.notEqual(child.status, 0, kind + ': ' + label);
+        assert.match(child.stderr, /AIEO role artifact rejected/,
+          kind + ': ' + label + ' must fail closed');
+      }
+      writeFileSync(file, canonical);
+      child = runReader();
+      assert.equal(child.status, 0, kind + ': valid report must recover');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
