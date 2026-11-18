@@ -194,7 +194,7 @@ test('model proposal preflight denies unowned and special-bit evidence directori
       'const approved = assertModelProposalDestination();',
       'writeFileSync(' + JSON.stringify(marker) + ', "after-preflight");',
       'writeExclusiveModelProposalReport({schemaVersion:1,status:"fixture-only"}, approved);'
-    ].join('\\n');
+    ].join('\n');
     return spawnSync(process.execPath, ['--input-type=module', '--eval', source],
       { cwd: root, encoding: 'utf8', timeout: 15000 });
   };
