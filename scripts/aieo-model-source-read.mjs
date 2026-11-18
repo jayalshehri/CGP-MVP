@@ -39,22 +39,30 @@ export function readApprovedModelSource(env = process.env) {
       .split('\0').filter(Boolean);
     if (extra.some((path) => !path.startsWith('aieo-output/'))) block();
 
+    // Never share from a source/parent owned by another uid or carrying
+    // unexpected setuid/setgid/sticky bits, even if Git reports clean bytes.
+    const uid = process.getuid?.();
+    if (!Number.isSafeInteger(uid)) block();
     // Disallow both linked source aliases and a replaced parent directory.
     const directory = lstatSync('components');
     if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        (directory.mode & 0o022)) block();
+        directory.uid !== uid || (directory.mode & 0o7022)) block();
     const prior = lstatSync(MODEL_ALLOWED_PATH);
     if (!prior.isFile() || prior.isSymbolicLink() || prior.nlink !== 1 ||
-        (prior.mode & 0o133) || prior.size < 1 || prior.size > MAX_BYTES) block();
+        prior.uid !== uid || !(prior.mode & 0o400) ||
+        (prior.mode & 0o7133) || prior.size < 1 || prior.size > MAX_BYTES) block();
 
     // Open exactly one regular inode and cap reads; O_NOFOLLOW protects against
     // a final-component symlink swap, O_NONBLOCK against a substituted FIFO.
     fd = openSync(MODEL_ALLOWED_PATH,
       constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const opened = fstatSync(fd);
-    if (!opened.isFile() || opened.nlink !== 1 || (opened.mode & 0o133) ||
+    if (!opened.isFile() || opened.nlink !== 1 || opened.uid !== uid ||
+        !(opened.mode & 0o400) || (opened.mode & 0o7133) ||
         opened.dev !== prior.dev || opened.ino !== prior.ino ||
-        opened.size !== prior.size) block();
+        opened.size !== prior.size ||
+        opened.mtimeMs !== prior.mtimeMs ||
+        opened.ctimeMs !== prior.ctimeMs) block();
     const buffer = Buffer.alloc(opened.size + 1);
     let used = 0;
     while (used < buffer.length) {
@@ -67,13 +75,16 @@ export function readApprovedModelSource(env = process.env) {
     const dirNow = lstatSync('components');
     if (used !== opened.size || after.size !== opened.size ||
         after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs ||
-        after.nlink !== 1 || (after.mode & 0o133) ||
+        after.nlink !== 1 || after.uid !== uid ||
+        !(after.mode & 0o400) || (after.mode & 0o7133) ||
         !pathNow.isFile() || pathNow.isSymbolicLink() ||
-        (pathNow.mode & 0o133) || pathNow.nlink !== 1 ||
+        pathNow.uid !== uid || !(pathNow.mode & 0o400) ||
+        (pathNow.mode & 0o7133) || pathNow.nlink !== 1 ||
         pathNow.size !== opened.size ||
         pathNow.dev !== opened.dev || pathNow.ino !== opened.ino ||
         dirNow.dev !== directory.dev || dirNow.ino !== directory.ino ||
-        !dirNow.isDirectory() || (dirNow.mode & 0o022)) block();
+        !dirNow.isDirectory() || dirNow.isSymbolicLink() ||
+        dirNow.uid !== uid || (dirNow.mode & 0o7022)) block();
 
     // Compare the exact bytes before any source can reach the provider.
     // Node's implicit UTF-8 decoder silently replaces malformed sequences
@@ -104,19 +115,25 @@ export function applyApprovedModelPatch({ original, candidate, env = process.env
 
   let fd;
   try {
+    const uid = process.getuid?.();
+    if (!Number.isSafeInteger(uid)) block();
     const directory = lstatSync('components');
     const before = lstatSync(MODEL_ALLOWED_PATH);
     if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        (directory.mode & 0o022) || !before.isFile() ||
-        before.isSymbolicLink() || before.nlink !== 1 ||
-        (before.mode & 0o133) || before.size < 1 || before.size > MAX_BYTES) block();
+        directory.uid !== uid || (directory.mode & 0o7022) ||
+        !before.isFile() || before.isSymbolicLink() || before.nlink !== 1 ||
+        before.uid !== uid || !(before.mode & 0o400) ||
+        (before.mode & 0o7133) || before.size < 1 || before.size > MAX_BYTES) block();
 
     fd = openSync(MODEL_ALLOWED_PATH,
       constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const opened = fstatSync(fd);
-    if (!opened.isFile() || opened.nlink !== 1 || (opened.mode & 0o133) ||
+    if (!opened.isFile() || opened.nlink !== 1 || opened.uid !== uid ||
+        !(opened.mode & 0o400) || (opened.mode & 0o7133) ||
         opened.dev !== before.dev || opened.ino !== before.ino ||
-        opened.size !== before.size) block();
+        opened.size !== before.size ||
+        opened.mtimeMs !== before.mtimeMs ||
+        opened.ctimeMs !== before.ctimeMs) block();
 
     const buffer = Buffer.alloc(opened.size);
     let used = 0;
@@ -131,13 +148,15 @@ export function applyApprovedModelPatch({ original, candidate, env = process.env
     if (used !== opened.size || !buffer.equals(Buffer.from(original, 'utf8')) ||
         after.size !== opened.size || after.mtimeMs !== opened.mtimeMs ||
         after.ctimeMs !== opened.ctimeMs || after.nlink !== 1 ||
-        (after.mode & 0o133) || !pathNow.isFile() ||
-        pathNow.isSymbolicLink() || (pathNow.mode & 0o133) ||
+        after.uid !== uid || !(after.mode & 0o400) ||
+        (after.mode & 0o7133) || !pathNow.isFile() ||
+        pathNow.isSymbolicLink() || pathNow.uid !== uid ||
+        !(pathNow.mode & 0o400) || (pathNow.mode & 0o7133) ||
         pathNow.nlink !== 1 || pathNow.size !== opened.size ||
         pathNow.dev !== opened.dev || pathNow.ino !== opened.ino ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino ||
         !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
-        (directoryNow.mode & 0o022)) block();
+        directoryNow.uid !== uid || (directoryNow.mode & 0o7022)) block();
 
     const output = Buffer.from(candidate, 'utf8');
     let written = 0;
