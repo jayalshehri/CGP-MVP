@@ -142,9 +142,9 @@ test('spoofing offline Actions mode cannot bypass official-origin check with an 
     // the GitHub API, not merely before the eventual git fetch.
     const marker = join(f.root, 'unexpected-gh-call');
     const gh = join(f.root, 'bin', 'gh');
-    writeFileSync(gh, '#!/usr/bin/env node\\n' +
-      'require("node:fs").writeFileSync(' + JSON.stringify(marker) + ', "called");\\n' +
-      'process.exit(4);\\n');
+    writeFileSync(gh, '#!/usr/bin/env node\n' +
+      'require("node:fs").writeFileSync(' + JSON.stringify(marker) + ', "called");\n' +
+      'process.exit(4);\n');
     chmodSync(gh, 0o755);
 
     for (const unsafe of [
