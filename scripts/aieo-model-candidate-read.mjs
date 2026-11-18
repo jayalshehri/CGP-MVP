@@ -12,12 +12,17 @@ function block() {
 export function readVerifiedModelCandidate() {
   let fd;
   try {
+    // A private-looking inode from another uid or with special permission bits
+    // is not an acceptable local candidate for an independent review role.
+    // GitHub's Linux checkout files belong to the current runner uid.
+    const uid = process.getuid?.();
+    if (!Number.isSafeInteger(uid)) block();
     const directory = lstatSync('components');
     const before = lstatSync(MODEL_ALLOWED_PATH);
     if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        (directory.mode & 0o022) || !before.isFile() ||
-        before.isSymbolicLink() || before.nlink !== 1 ||
-        (before.mode & 0o133) ||
+        directory.uid !== uid || (directory.mode & 0o7022) ||
+        !before.isFile() || before.isSymbolicLink() || before.nlink !== 1 ||
+        before.uid !== uid || (before.mode & 0o7133) ||
         before.size < 1 || before.size > MAX_SOURCE_BYTES) block();
 
     // NOFOLLOW prevents a last-component symlink swap. NONBLOCK prevents
@@ -25,9 +30,12 @@ export function readVerifiedModelCandidate() {
     fd = openSync(MODEL_ALLOWED_PATH,
       constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const opened = fstatSync(fd);
-    if (!opened.isFile() || opened.nlink !== 1 || (opened.mode & 0o133) ||
+    if (!opened.isFile() || opened.nlink !== 1 || opened.uid !== uid ||
+        (opened.mode & 0o7133) ||
         opened.dev !== before.dev || opened.ino !== before.ino ||
-        opened.size !== before.size) block();
+        opened.size !== before.size ||
+        opened.mtimeMs !== before.mtimeMs ||
+        opened.ctimeMs !== before.ctimeMs) block();
 
     const bytes = Buffer.alloc(opened.size + 1);
     let used = 0;
@@ -40,14 +48,15 @@ export function readVerifiedModelCandidate() {
     const pathname = lstatSync(MODEL_ALLOWED_PATH);
     const directoryNow = lstatSync('components');
     if (used !== opened.size || after.size !== opened.size ||
-        after.nlink !== 1 || (after.mode & 0o133) ||
+        after.nlink !== 1 || after.uid !== uid || (after.mode & 0o7133) ||
         after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs ||
         !pathname.isFile() || pathname.isSymbolicLink() ||
-        pathname.nlink !== 1 || (pathname.mode & 0o133) ||
+        pathname.nlink !== 1 || pathname.uid !== uid ||
+        (pathname.mode & 0o7133) ||
         pathname.dev !== opened.dev || pathname.ino !== opened.ino ||
         pathname.size !== opened.size ||
         !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
-        (directoryNow.mode & 0o022) ||
+        directoryNow.uid !== uid || (directoryNow.mode & 0o7022) ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) block();
 
     const text = bytes.toString('utf8', 0, used);
