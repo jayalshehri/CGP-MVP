@@ -796,6 +796,37 @@ test('pre-build replay accepts only four verified role handoffs and a credential
     assert.equal(readFileSync(join(f.cwd, path), 'utf8'), original);
     rmSync(join(f.cwd, '.env.local'));
 
+    // A validated PR is not permission to write through an unowned or
+    // special-mode workspace input. Reject before mutating the baseline.
+    const replayTarget = join(f.cwd, path);
+    const replayParent = dirname(replayTarget);
+    for (const [name, entry, unsafeMode] of [
+      ['owner-unreadable source', replayTarget, 0o200],
+      ['setuid source', replayTarget, 0o4644],
+      ['setgid source', replayTarget, 0o2644],
+      ['sticky source', replayTarget, 0o1644],
+      ['setuid source directory', replayParent, 0o4755],
+      ['setgid source directory', replayParent, 0o2755],
+      ['sticky source directory', replayParent, 0o1755]
+    ]) {
+      const safeMode = statSync(entry).mode & 0o7777;
+      try {
+        chmodSync(entry, unsafeMode);
+        if (unsafeMode & 0o7000) {
+          assert.equal(statSync(entry).mode & 0o7000, unsafeMode & 0o7000,
+            name + ' must actually have the tested special bit');
+        }
+        const blocked = runReplay();
+        assert.notEqual(blocked.status, 0, name + ' must block replay');
+        assert.match(blocked.stderr, /pre-build replay blocked/,
+          name + ' must fail closed without exposing candidate data');
+      } finally {
+        chmodSync(entry, safeMode);
+      }
+      assert.equal(readFileSync(replayTarget, 'utf8'), original,
+        name + ' must preserve original source bytes');
+    }
+
     const accepted = runReplay();
     assert.equal(accepted.status, 0, accepted.stderr);
     assert.equal(JSON.parse(accepted.stdout).status, 'verified-candidate-replayed-for-build');
