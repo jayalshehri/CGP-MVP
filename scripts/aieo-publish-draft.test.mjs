@@ -77,6 +77,9 @@ test('publisher rejects GitHub CLI host, repository and config redirects before 
   const f = fixture();
   try {
     const main = git(f.workspace, 'rev-parse', 'main');
+    // The exact official endpoint/repository are valid explicit settings.
+    assert.equal(validateDispatch({ ...f.env, GH_HOST: 'github.com',
+      GH_REPO: 'jayalshehri/CGP-MVP', GH_CONFIG_DIR: '' }), 'model');
     for (const overrides of [
       { GH_HOST: 'attacker.example.invalid' },
       { GH_HOST: 'github.com.attacker.invalid' },
