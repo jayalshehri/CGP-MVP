@@ -308,3 +308,50 @@ test('role and model proposal writers reject same-inode timestamp races after fi
     }
   }
 });
+
+
+// The download importer runs with permission to chmod artifact evidence. An
+// attacker may touch the SAME inode after the final fstat but before lstat.
+// The file contents, mode, size and pathname still look valid; ctime must
+// invalidate that import. This synthetic preload never contacts GitHub.
+test('download importer rejects same-inode ctime-only race after final fstat', () => {
+  for (const kind of ['foundation', 'candidate']) {
+    const f = fixture(kind, ['developer']);
+    const shim = join(f.root, 'interleave-final-path.mjs');
+    const marker = join(f.root, 'interleaved-ctime.marker');
+    const expected = 'aieo-output/' +
+      (kind === 'candidate' ? 'candidate-' : '') + 'developer.json';
+    try {
+      writeFileSync(shim, [
+        "import fs from 'node:fs';",
+        "import { syncBuiltinESMExports } from 'node:module';",
+        'const native = fs.lstatSync;',
+        'let count = 0;',
+        'fs.lstatSync = (path, ...args) => {',
+        '  if (path === ' + JSON.stringify(expected) + ' && ++count === 3) {',
+        '    // A reversible chmod updates ctime but never mtime or payload.',
+        '    // Delay to make ctime distinguishable on the CI filesystem.',
+        '    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);',
+        '    fs.chmodSync(path, 0o640);',
+        '    fs.chmodSync(path, 0o600);',
+        '    fs.writeFileSync(' + JSON.stringify(marker) + ', "touched");',
+        '  }',
+        '  return native(path, ...args);',
+        '};',
+        'syncBuiltinESMExports();',
+        ''
+      ].join('\n'));
+      const run = spawnSync(process.execPath,
+        ['--import', shim, script, kind, 'developer'],
+        { cwd: f.root, encoding: 'utf8', timeout: 15000 });
+      assert.equal(readFileSync(marker, 'utf8'), 'touched',
+        kind + ': race must run after normalization on the final pathname check');
+      assert.notEqual(run.status, 0, kind + ': a ctime-only mutation must block import');
+      assert.match(run.stderr, /AIEO imported handoff rejected/);
+      assert.equal(readFileSync(f.path('developer'), 'utf8'), report,
+        'rejected input bytes must stay unchanged');
+      assert.equal(statSync(f.path('developer')).mode & 0o7777, 0o600,
+        'no permission widening is allowed');
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  }
+});

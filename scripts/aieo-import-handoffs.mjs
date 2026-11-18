@@ -86,6 +86,11 @@ export function privatizeDownloadedHandoffs(kind, roles) {
             current.uid !== owner || (current.mode & 0o7177) ||
             current.dev !== after.dev || current.ino !== after.ino ||
             current.size !== after.size ||
+            // fchmod updates ctime. Reattest pathname metadata against the
+            // final opened inode, not its pre-normalization state. A same-inode
+            // rewrite between final fstat and lstat must fail closed.
+            current.mtimeMs !== after.mtimeMs ||
+            current.ctimeMs !== after.ctimeMs ||
             !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
             directoryNow.uid !== owner || (directoryNow.mode & 0o7022) ||
             directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) fail();
