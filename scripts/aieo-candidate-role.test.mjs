@@ -1939,7 +1939,20 @@ test('post-build finalizer refuses foreign-owned and special-mode compiled sourc
     ].join('\n'));
     const foreign = verify(['--import', shim]);
     assert.notEqual(foreign.status, 0, 'runner UID mismatch must be rejected');
-    assert.match(foreign.stderr, /post-build check blocked/);
+    // The shared role-artifact guard can reject a foreign UID even earlier
+    // than the finalizer's own source reader; exercise the latter directly.
+    assert.match(foreign.stderr, /role artifact rejected|post-build check blocked/);
+    const direct = [
+      'import { readVerifiedBuildSource } from ' + JSON.stringify('file://' + finalizerScript) + ';',
+      'const uid = process.getuid(); process.getuid = () => uid + 1;',
+      'readVerifiedBuildSource(' + JSON.stringify(path) + ');'
+    ].join('\n');
+    const sourceProbe = spawnSync(process.execPath, ['--input-type=module', '-e', direct], {
+      cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    assert.notEqual(sourceProbe.status, 0,
+      'post-build source reader must independently reject a foreign UID');
+    assert.match(sourceProbe.stderr, /post-build check blocked/);
     assert.equal(verify().status, 0, 'clean current-user finalizer still succeeds');
     assert.equal(f.git('rev-parse', 'main'), f.base,
       'no change is made to the baseline branch');
