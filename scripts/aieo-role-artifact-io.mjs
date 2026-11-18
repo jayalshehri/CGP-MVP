@@ -117,7 +117,11 @@ function readTrustedJsonReport(path, canonical = false) {
     const file = fstatSync(fd);
     if (!safeReportFile(file, uid) ||
         file.dev !== before.dev || file.ino !== before.ino ||
-        file.size !== before.size || file.size < 2 || file.size > MAX_BYTES) block();
+        file.size !== before.size ||
+        // A same-inode rewrite or chmod between lstat and open must not
+        // silently become a different report than the path we attested.
+        file.mtimeMs !== before.mtimeMs || file.ctimeMs !== before.ctimeMs ||
+        file.size < 2 || file.size > MAX_BYTES) block();
     const bytes = Buffer.alloc(file.size + 1);
     let used = 0;
     while (used < bytes.length) {
@@ -138,6 +142,10 @@ function readTrustedJsonReport(path, canonical = false) {
         !safeReportFile(currentPath, uid) ||
         currentPath.dev !== file.dev || currentPath.ino !== file.ino ||
         currentPath.size !== file.size ||
+        // The filename may still point at the SAME inode while its contents
+        // or permissions change after final fstat. Match its metadata too.
+        currentPath.mtimeMs !== after.mtimeMs ||
+        currentPath.ctimeMs !== after.ctimeMs ||
         !safeDirectory(currentDirectory, uid) ||
         currentDirectory.dev !== directory.dev || currentDirectory.ino !== directory.ino) block();
     // Buffer.toString('utf8') silently replaces malformed byte sequences with
