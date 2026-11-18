@@ -238,7 +238,7 @@ function verifiedRemoteContext(env) {
           !entry.endsWith('\t' + MODEL_ALLOWED_PATH)) block();
     }
   } catch { block(); }
-  return { base, head, number: Number(number) };
+  return { base, head, headRef, number: Number(number) };
 }
 
 // A PR may be undrafted, retargeted, closed or force-pushed while a role is
@@ -246,7 +246,7 @@ function verifiedRemoteContext(env) {
 // live REST state AGAIN immediately before writing any role attestation;
 // the first response and immutable Git object alone do not authorize a
 // later evidence handoff. Never print an untrusted API response.
-function reattestRemoteDraft({ base, head, number }) {
+function reattestRemoteDraft({ base, head, headRef, number }) {
   let pr;
   try {
     pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
@@ -261,6 +261,9 @@ function reattestRemoteDraft({ base, head, number }) {
       pr?.head?.repo?.full_name !== REPO ||
       pr?.base?.ref !== 'main' || pr?.base?.sha !== base ||
       !BRANCH.test(pr?.head?.ref || '') ||
+      // The exact branch identity must remain pinned, even if a retargeted
+      // model-proposal branch points to the very same immutable head commit.
+      pr?.head?.ref !== headRef ||
       pr?.head?.sha !== head) block();
 }
 
@@ -276,7 +279,7 @@ export function runCandidateRole(role, env = process.env) {
   // A worktree diff may invoke an attribute-selected clean filter despite
   // --no-textconv. Reject effective filters before any Git diff or handoff.
   try { assertNoTrackedGitFilters(process.env); } catch { block(); }
-  const { base, head, number } = verifiedRemoteContext(env);
+  const { base, head, headRef, number } = verifiedRemoteContext(env);
   let original, actual, changedPaths, diff;
   try {
     original = readStrictGitSource(base);
@@ -314,7 +317,7 @@ export function runCandidateRole(role, env = process.env) {
       if (report.status !== 'draft-pr-eligible') block();
     }
   }
-  reattestRemoteDraft({ base, head, number });
+  reattestRemoteDraft({ base, head, headRef, number });
   writeReport(role, report);
   return { role, status: report.status, prNumber: number, baseSha: base, headSha: head };
 }
