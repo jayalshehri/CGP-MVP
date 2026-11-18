@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { formatCount, NudeeHeading, NudeeMetric, NudeeNavigation } from "../nudee-workspace";
+import ui from "../nudee-workspace.module.css";
 import styles from "./nudee-dashboard.module.css";
 
 type Requirement = {
@@ -162,81 +163,227 @@ export default function NudeeDashboard(){
  });
  const hasFilters=Object.values(filter).some(x=>x!==ALL);
  function field<K extends keyof Filter>(key:K,value:string){setFilter(f=>({...f,[key]:value}));}
- return <main className={styles.root} dir="rtl">
-  <header className={styles.heading}><div><span className={styles.eyebrow}>مكتب إدارة البيانات · المؤشر الوطني للبيانات</span><h1>لوحة مؤشر نُضيء</h1><p>قياس الامتثال ومراجعة الأدلة ومتابعة الإنجاز، وفق بيانات Excel الأصلية وتكليفات CGP المباشرة.</p></div><Link className={styles.back} href="/data-governance/nudee">التكليفات والأدلة</Link></header>
-  <nav className={styles.tabbar} aria-label="صفحات مؤشر نُضيء"><Link href="/data-governance/nudee">إدارة التكليفات</Link><Link aria-current="page" href="/data-governance/nudee-dashboard">لوحة البيانات</Link></nav>
-  {error&&<div role="alert" className={styles.alert}>{error}</div>}
-  {loading?<p role="status">جاري تحميل بيانات المؤشر…</p>:error?<div role="status" className={styles.alert}>تعذر عرض بيانات المؤشر. تحقق من الاتصال والصلاحيات ثم أعد تحميل الصفحة.</div>:!records.length?<div role="status" className={styles.alert}>لم تُستورد متطلبات المؤشر بعد. يرجى إكمال استيراد المصدر والتحقق منه.</div>:<>
-   <section className={styles.filters} aria-label="تصفية بيانات المؤشر">
-    <label>مستوى النضج<select value={filter.level} onChange={e=>field("level",e.target.value)}>{[ALL,...LEVELS].map(v=><option key={v}>{v}</option>)}</select></label>
-    <label>المجال<select value={filter.domain} onChange={e=>field("domain",e.target.value)}>{[ALL,...domains].map(v=><option key={v}>{v}</option>)}</select></label>
-    <label>حالة الامتثال<select value={filter.compliance} onChange={e=>field("compliance",e.target.value)}>{[ALL,...SOURCE_COMPLIANCE].map(v=><option key={v}>{v}</option>)}</select></label>
-    <label>حالة المراجعة<select value={filter.review} onChange={e=>field("review",e.target.value)}>{[ALL,...reviews].map(v=><option key={v}>{v}</option>)}</select></label>
-    <div className={styles.filterBottom}><span>المعروض: {stats.total.toLocaleString("ar-SA")} من أصل {records.length.toLocaleString("ar-SA")} دليل</span><button disabled={!hasFilters} onClick={()=>setFilter({domain:ALL,level:ALL,compliance:ALL,review:ALL})}>مسح التصفية</button></div>
-   </section>
-   <section className={styles.metrics} aria-label="مؤشرات الامتثال">
-    {[
-     ["إجمالي الأدلة",stats.total,"يتضمن جميع الأدلة في التصفية"],
-     ["ممتثل بالكامل",stats.full,fmtPct(stats.full,stats.applicable)+" من الأدلة المنطبقة"],
-     ["ممتثل لمتطلبات الهيئة حسب معادلة Excel",stats.authority,fmtPct(stats.authority,stats.applicable)+" من الأدلة المنطبقة"],
-     ["غير ممتثل",stats.non,fmtPct(stats.non,stats.applicable)+" من الأدلة المنطبقة"],
-     ["غير منطبق",stats.na,"مستبعد من مقام الامتثال"],
-     ["غير مقيّم",stats.unassessed,fmtPct(stats.assessed,stats.total)+" تم تقييمها"],
-     ["امتثال NDMO",fmtPct(stats.full,stats.applicable),"ممتثل بالكامل ÷ الأدلة المنطبقة"],
-     ["إنجاز مراجعة الأدلة",fmtPct(stats.reviewed,stats.total),stats.reviewed+" من "+stats.total+" مكتمل"],
-     ["متأخر عن الجدول",stats.overdue,"وفق مؤشر الجدول الزمني في ملف Excel"]
-    ].map(([label,value,detail])=><article className={styles.metric} key={label}><span>{label}</span><strong>{typeof value==="number"?value.toLocaleString("ar-SA"):value}</strong><small>{detail}</small></article>)}
-   </section>
-   <section className={styles.workflow}><div><span>دورة التكليف في CGP</span><p>تُعرض حالات الأدلة داخل المنصة بصورة منفصلة عن تصنيف الامتثال الرسمي في Excel.</p></div><div className={styles.flowNumbers}><span>المسندة <b>{stats.assigned}</b></span><span>بانتظار التحقق <b>{stats.submitted}</b></span><span>المعتمدة <b>{stats.approved}</b></span></div></section>
-   {stats.unknown>0&&<p role="note" className={styles.warning}>تنبيه جودة بيانات: توجد {stats.unknown} قيمة لا تدخل في نتائج معادلات Excel الأصلية (مثل «ممتثل لمتطلبات الهيئة»)، بينما تحسب المعادلة «ممتثل للمعالي فقط». احتفظنا بالقيم الأصلية ولم نعدلها أو نحتسبها كممتثلة.</p>}
-   <div className={styles.twoCols}>
-    <section className={styles.panel}><h2>حالة الامتثال للمؤشر</h2><p>إجمالي الامتثال لمتطلبات NDMO: {fmtPct(stats.full,stats.applicable)} · امتثال متطلبات الهيئة: {fmtPct(stats.full+stats.authority,stats.applicable)}</p>
-     {[["ممتثل بالكامل",stats.full],["ممتثل للمعالي فقط (صيغة Excel)",stats.authority],["غير ممتثل",stats.non],["غير منطبق",stats.na],["لم يُقيّم",stats.unassessed],["حالة غير معيارية",stats.unknown]].map(([label,n])=><div className={styles.barItem} key={label}><div><span>{label}</span><b>{n}</b></div><div className={styles.track}><div style={{width:(stats.total?100*Number(n)/stats.total:0)+"%"}}/></div></div>)}
-    </section>
-    <section className={styles.panel}><h2>الأدلة حسب مستوى النضج</h2><p>توزيع الأدلة ونتائج المراجعة للمستويات الثلاثة.</p>
-    {LEVELS.map(level=>{const subset=rows.filter(r=>r.maturity_level===level),done=subset.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length;return <div className={styles.levelRow} key={level}><span>{level}</span><strong>{subset.length}</strong><div className={styles.track}><div style={{width:(rows.length?100*subset.length/rows.length:0)+"%"}}/></div><small>مكتمل {done} · {fmtPct(done,subset.length)}</small></div>})}
-    </section>
-   </div>
-   <section className={styles.panel}><div className={styles.sectionHeader}><div><h2>مصفوفة الامتثال حسب المجال</h2><p>المجالات الأربعة عشر، النضج، عدد الأدلة المنطبقة والمقيّمة والمكتملة.</p></div><span className={styles.meta}>{domainMatrix.length} مجال</span></div><div className={styles.tableScroll}><table><thead><tr><th>المجال</th>{LEVELS.map((level,i)=><th key={level}>المستوى {i+1}</th>)}<th>NDMO</th><th>متطلبات الهيئة</th><th>الأدلة</th><th>المنطبقة</th><th>المقيّمة</th><th>المراجعة المكتملة</th></tr></thead><tbody>{domainMatrix.map(d=><tr key={d.name}><th scope="row">{d.name}</th>{d.levels.map((l,i)=><td key={i} title={l.n+" دليل"}>{l.rate===null?"—":l.rate.toLocaleString("ar-SA")+"%"}</td>)}<td>{fmtPct(d.full,d.applicable)}</td><td>{fmtPct(d.full+d.authority,d.applicable)}</td><td>{d.total}</td><td>{d.applicable}</td><td>{d.assessed}</td><td>{d.reviewed}</td></tr>)}<tr className={styles.totalRow}><th scope="row">الإجمالي</th>{LEVELS.map(level=>{const a=rows.filter(r=>r.maturity_level===level);const valid=a.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق");return <td key={level}>{valid.length?fmtPct(valid.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,valid.length):"—"}</td>})}<td>{fmtPct(stats.full,stats.applicable)}</td><td>{fmtPct(stats.full+stats.authority,stats.applicable)}</td><td>{stats.total}</td><td>{stats.applicable}</td><td>{stats.assessed}</td><td>{stats.reviewed}</td></tr></tbody></table></div></section>
-   <section className={styles.panel} aria-label="رسوم الامتثال حسب مستوى النضج">
-    <div className={styles.sectionHeader}><div><h2>امتثال NDMO حسب المجالات ومستوى النضج</h2><p>المقابل المرئي لسلاسل Excel الثلاث: Calc!H30:H43 وQ30:Q43 وZ30:Z43. النسب من الأدلة المنطبقة.</p></div><span className={styles.meta}>3 مستويات</span></div>
-    <div className={styles.domainVisuals}>{LEVELS.map((level,index)=><div className={styles.domainVisual} key={level}><h3>{level}</h3>
-     {domainMatrix.map(d=><div key={d.name} className={styles.domainLine}><span title={d.name}>{d.name}</span><div className={styles.track} role="meter" aria-label={d.name+" - "+level} aria-valuemin={0} aria-valuemax={100} aria-valuenow={d.levels[index].rate??0}><div style={{width:(d.levels[index].rate??0)+"%"}}/></div><strong>{d.levels[index].rate===null?"—":d.levels[index].rate.toLocaleString("ar-SA")+"%"}</strong></div>)}
-    </div>)}</div>
-   </section>
-   <section className={styles.panel} aria-label="توزيع الامتثال حسب المجال">
-    <div className={styles.sectionHeader}><div><h2>توزيع حالة الامتثال في المجالات</h2><p>مقابل سلاسل Excel Calc!AD30:AH43. المتبقي يشمل غير المقيّم وأي قيمة غير معيارية.</p></div><span className={styles.meta}>5 فئات</span></div>
-    <div className={styles.chartLegend}>{[["ممتثل بالكامل","#159b88"],["ممتثل للمعالي فقط","#4f8ed7"],["غير ممتثل","#df786b"],["لا ينطبق","#9ca3af"],["غير مقيّم أو غير معياري","#ccd8da"]].map(([name,color])=><span key={name}><i style={{background:color}}/>{name}</span>)}</div>
-    <div className={styles.stackedList}>{domainMatrix.map(d=><div className={styles.stackedRow} key={d.name}>
-     <span title={d.name}>{d.name}</span>
-     <div className={styles.stackedTrack} role="img" aria-label={d.name+": "+d.full+" ممتثل بالكامل، "+d.authority+" ممتثل للمعالي، "+d.non+" غير ممتثل، "+d.na+" لا ينطبق، "+d.residual+" غير مقيّم أو غير معياري"}>
-      {[[d.full,"#159b88"],[d.authority,"#4f8ed7"],[d.non,"#df786b"],[d.na,"#9ca3af"],[d.residual,"#ccd8da"]].map(([count,color],i)=><div key={i} style={{width:(d.total?100*Number(count)/d.total:0)+"%",background:String(color)}}/>)}
-     </div><strong>{d.total.toLocaleString("ar-SA")}</strong></div>)}</div>
-   </section>
-   <section className={styles.panel}><div className={styles.sectionHeader}><div><h2>الجدول الزمني ومراجعة الأدلة</h2><p>البرنامج الأساسي: 8 أسابيع من 8 نوفمبر إلى 31 ديسمبر 2026. المخطط تراكمي موزون حسب مدة المراحل الأربع (Calc)، والفعلي يقاس بتاريخ الرياض؛ الأسابيع السابقة تتطلب تاريخ إنجاز فعليًا.</p></div><span className={styles.meta}>8 أسابيع</span></div>
-    <div className={styles.stages}>{stages.map(s=><article key={s.level}><b>المرحلة {s.phase}</b><h3>{s.level}</h3><p>{shortDate(s.start)} – {shortDate(s.end)}</p><div className={styles.track}><div style={{width:percent(s.completed,s.n)+"%"}}/></div><small>{s.completed} / {s.n} مكتمل</small></article>)}<article><b>المرحلة 4</b><h3>المراجعة النهائية الشاملة</h3><p>20 ديسمبر – 31 ديسمبر 2026</p><small>مراجعة شاملة لجميع المستويات</small></article></div>
-    <section className={styles.finalReviewPanel} aria-label="تحديث المراجعة الشاملة">
-     <div><h3>المراجعة النهائية الشاملة</h3><p>المرحلة الرابعة مستقلة عن مستويات النضج الثلاثة. أدخل التقدم المعتمد يدويًا كما في Excel (K15)، مع مبرر يوثق كل تغيير. لا يؤدي تحديثها إلى تعديل حالة امتثال أي دليل.</p><strong>{(finalReviewProgress*100).toLocaleString("ar-SA",{maximumFractionDigits:2})}%</strong></div>
-     <div className={styles.finalReviewForm}>
-      <label>نسبة التقدم المعتمدة (%)<input inputMode="decimal" type="number" min="0" max="100" step="0.01" value={finalReviewInput} onChange={e=>setFinalReviewInput(e.target.value)} disabled={finalReviewSaving}/></label>
-      <label>مبرر التحديث<textarea rows={2} maxLength={2000} value={finalReviewNote} onChange={e=>setFinalReviewNote(e.target.value)} disabled={finalReviewSaving} placeholder="ملاحظات مسؤول مكتب إدارة البيانات"/></label>
-      <button type="button" onClick={saveFinalReview} disabled={finalReviewSaving||!finalReviewNote.trim()||!finalReviewInput.trim()}>{finalReviewSaving?"جاري الحفظ...":"حفظ نسبة المراجعة الشاملة"}</button>
-      {finalReviewNotice&&<p role="status">{finalReviewNotice}</p>}
+ const complianceCategories = [
+  {label:"ممتثل بالكامل", color:"#147667"},
+  {label:"ممتثل للمعالي فقط", color:"#5074a4"},
+  {label:"غير ممتثل", color:"#b65a4d"},
+  {label:"لا ينطبق", color:"#82949c"},
+  {label:"غير مقيّم أو غير معياري", color:"#cad6db"},
+ ];
+ const complianceSummary = [
+  ["ممتثل بالكامل", stats.full, fmtPct(stats.full,stats.applicable)+" من الأدلة المنطبقة"],
+  ["ممتثل للمعالي فقط", stats.authority, fmtPct(stats.authority,stats.applicable)+" من الأدلة المنطبقة"],
+  ["غير ممتثل", stats.non, fmtPct(stats.non,stats.applicable)+" من الأدلة المنطبقة"],
+  ["غير منطبق", stats.na, "مستبعد من مقام الامتثال"],
+  ["غير مقيّم", stats.unassessed, fmtPct(stats.assessed,stats.total)+" تم تقييمها"],
+ ] as const;
+ const phases=[...stages,{level:"المراجعة النهائية الشاملة",phase:4,progress:finalReviewProgress,start:"2026-12-20",end:"2026-12-31"}];
+
+ return (
+  <main className={ui.workspace} dir="rtl">
+   <NudeeHeading title="لوحة مؤشر نُضيء" description="الامتثال من بيانات Excel الأصلية، والإنجاز من مراجعات الأدلة في المنصة.">
+    <NudeeNavigation current="dashboard" />
+   </NudeeHeading>
+   {loading ? <p role="status" className={ui.message}>جاري تحميل بيانات المؤشر…</p>
+    : error ? <div className={`${ui.message} ${ui.error}`}>
+      <p role="alert">{error}</p><button type="button" className={ui.button} onClick={()=>window.location.reload()}>إعادة تحميل البيانات</button>
      </div>
-    </section>
-    <div className={styles.phaseHeader}><h3>مخطط المراحل الأربع — 8 أسابيع</h3><span>منجز / متبقٍ وفق حالة المراجعة</span></div>
-    <div className={styles.phaseAxis}><span>المرحلة</span>{Array.from({length:8},(_,i)=><span key={i}>أ{i+1}</span>)}</div>
-    {[...stages,{level:"المراجعة النهائية",phase:4,n:stats.total,completed:0,progress:finalReviewProgress,start:"2026-12-20",end:"2026-12-31"}].map((phase,i)=><div className={styles.phaseBarRow} key={phase.phase}><span>{phase.level}</span><div className={styles.phaseBar}>
-      <div className={styles.phaseBlank} style={{width:i*25+"%"}}/>
-      <div className={styles.phaseDone} style={{width:(25*phase.progress)+"%"}}/>
-      <div className={styles.phaseRemain} style={{width:(25*(1-phase.progress))+"%"}}/>
-      <div className={styles.phaseBlank} style={{width:(3-i)*25+"%"}}/>
-     </div></div>)}
-    <p className={styles.footnote}>مقابل مخطط Excel للمرحلة الأولى والثانية والثالثة والمراجعة الشاملة، موزعة على أسبوعين لكل مرحلة. المراحل الثلاث الأولى مبنية على تقدم الأدلة، بينما المرحلة الرابعة تُحدّث يدويًا من مكتب البيانات وتُسجّل في سجل تدقيق مستقل، دون تغيير الامتثال الرسمي.</p>
-    <div className={styles.weekly}>{weekly.map(w=><div key={w.week} className={styles.week}><span>الأسبوع {w.week}</span><small>{shortDate(w.until)}</small><div className={styles.track} title={"المخطط: "+w.planned+"%"}><div style={{width:w.planned+"%"}}/></div><div className={styles.track+" "+styles.actual} title={"الفعلي: "+w.actual.toFixed(2)+"%"}><div style={{width:w.actual+"%"}}/></div><small>المخطط {w.planned.toLocaleString("ar-SA")}% · الفعلي {w.actual.toLocaleString("ar-SA",{maximumFractionDigits:2})}%</small></div>)}</div>
-    <p className={styles.footnote}>معادلة المخطط مستمدة من Calc!D60:D67 (12.5% كل أسبوع). الفعلي يضم المراحل الأربع بأوزان 25% لكل منها؛ في الأسابيع المكتملة لا تُحسب إلا الأدلة المؤرخة، وتظهر نسبة المراجعة الشاملة المدخلة يدويًا ضمن المرحلة الرابعة. تاريخ القياس المحفوظ بالمصنف الأصلي هو 5 نوفمبر 2026، لذلك قد يختلف الاتجاه الحي عن قيمه المحفوظة.</p>
-   </section>
-   <p className={styles.footnote}>المرجع: أوراق «متابعة الأدلة الداعمة» و«لوحة البيانات» و«الجدول الزمني» و«Calc» من ملف نُضيء الأصلي. معادلة امتثال الجهة في Calc!B10 تحتسب فقط النص «ممتثل للمعالي فقط»؛ نعرض التناقض مع بقية مسميات المصدر بوضوح دون تغيير أية بيانات. المراجعة تشمل حالة المصدر والأدلة المعتمدة في CGP، واعتماد الدليل لا يحوّله تلقائيًا إلى «ممتثل».</p>
-  </>}
- </main>;
+    : !records.length ? <p role="status" className={ui.message}>لم تُستورد متطلبات المؤشر بعد.</p>
+    : <>
+     <section className={`${ui.panel} ${styles.filters}`} aria-labelledby="nudee-filter-title">
+      <div className={styles.sectionHeader}>
+       <div><h2 id="nudee-filter-title">تصفية بيانات المؤشر</h2>
+        <p role="status" className={ui.description}>المعروض: {formatCount.format(stats.total)} من أصل {formatCount.format(records.length)} دليل</p>
+       </div>
+       <button type="button" className={ui.button} disabled={!hasFilters} onClick={()=>setFilter({domain:ALL,level:ALL,compliance:ALL,review:ALL})}>مسح التصفية</button>
+      </div>
+      <div className={styles.filterFields}>
+       <label className={ui.field}>المجال<select value={filter.domain} onChange={e=>field("domain",e.target.value)}>{[ALL,...domains].map(v=><option key={v}>{v}</option>)}</select></label>
+       <label className={ui.field}>مستوى النضج<select value={filter.level} onChange={e=>field("level",e.target.value)}>{[ALL,...LEVELS].map(v=><option key={v}>{v}</option>)}</select></label>
+       <label className={ui.field}>حالة الامتثال<select value={filter.compliance} onChange={e=>field("compliance",e.target.value)}>{[ALL,...SOURCE_COMPLIANCE].map(v=><option key={v}>{v}</option>)}</select></label>
+       <label className={ui.field}>حالة المراجعة<select value={filter.review} onChange={e=>field("review",e.target.value)}>{[ALL,...reviews].map(v=><option key={v}>{v}</option>)}</select></label>
+      </div>
+     </section>
+     {!rows.length && <p role="status" className={ui.message}>لا توجد أدلة تطابق عوامل التصفية الحالية.</p>}
+     <section className={ui.summary} aria-labelledby="nudee-dashboard-summary">
+      <h2 id="nudee-dashboard-summary">ملخص المؤشر</h2>
+      <div className={`${ui.metrics} ${styles.primaryMetrics}`}>
+       <NudeeMetric label="إجمالي الأدلة" value={stats.total} detail="ضمن التصفية الحالية" />
+       <NudeeMetric label="امتثال NDMO" value={fmtPct(stats.full,stats.applicable)} detail="ممتثل بالكامل ÷ الأدلة المنطبقة" />
+       <NudeeMetric label="إنجاز مراجعة الأدلة" value={fmtPct(stats.reviewed,stats.total)} detail={formatCount.format(stats.reviewed)+" من "+formatCount.format(stats.total)+" مكتمل"} />
+       <NudeeMetric label="متأخر عن الجدول" value={stats.overdue} detail="وفق مؤشر الجدول الزمني في Excel" />
+      </div>
+      <dl className={`${ui.panel} ${styles.complianceSummary}`}>
+       {complianceSummary.map(([label,value,detail])=><div key={label}>
+        <dt>{label}</dt><dd><strong>{formatCount.format(value)}</strong><small>{detail}</small></dd>
+       </div>)}
+      </dl>
+     </section>
+     <section className={`${ui.panel} ${styles.workflow}`}>
+      <div><h2>دورة التكليف في CGP</h2><p className={ui.description}>حالات الأدلة داخل المنصة، مستقلة عن الامتثال الرسمي في Excel.</p></div>
+      <dl className={styles.flowNumbers}>
+       <div><dt>المسندة</dt><dd>{formatCount.format(stats.assigned)}</dd></div>
+       <div><dt>بانتظار التحقق</dt><dd>{formatCount.format(stats.submitted)}</dd></div>
+       <div><dt>المعتمدة</dt><dd>{formatCount.format(stats.approved)}</dd></div>
+      </dl>
+     </section>
+     {stats.unknown>0 && <p role="note" className={`${ui.message} ${ui.warning}`}>تنبيه جودة البيانات: {formatCount.format(stats.unknown)} قيمة غير معيارية. تحتسب معادلة Excel «ممتثل للمعالي فقط»، وتبقى القيم الأخرى مثل «ممتثل لمتطلبات الهيئة» كما وردت في المصدر.</p>}
+
+     <div className={styles.twoCols}>
+      <section className={ui.panel}>
+       <h2>حالة الامتثال</h2>
+       <p className={ui.description}>امتثال متطلبات الهيئة <bdi>{fmtPct(stats.full+stats.authority,stats.applicable)}</bdi></p>
+       <div className={styles.chartRows}>
+        {[
+         ["ممتثل بالكامل",stats.full],["ممتثل للمعالي فقط",stats.authority],
+         ["غير ممتثل",stats.non],["غير منطبق",stats.na],["لم يُقيّم",stats.unassessed],["حالة غير معيارية",stats.unknown]
+        ].map(([label,count])=><div className={styles.barItem} key={label}>
+         <div><span>{label}</span><strong>{formatCount.format(Number(count))}</strong></div>
+         <div className={styles.track} aria-hidden="true"><span style={{width:(stats.total?100*Number(count)/stats.total:0)+"%"}} /></div>
+        </div>)}
+       </div>
+      </section>
+      <section className={ui.panel}>
+       <h2>الأدلة حسب مستوى النضج</h2>
+       <p className={ui.description}>توزيع الأدلة ونتائج المراجعة للمستويات الثلاثة.</p>
+       <div className={styles.chartRows}>
+        {LEVELS.map(level=>{
+         const subset=rows.filter(r=>r.maturity_level===level);
+         const done=subset.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length;
+         return <div className={styles.levelRow} key={level}>
+          <div><span>{level}</span><strong>{formatCount.format(subset.length)}</strong></div>
+          <div className={styles.track} aria-hidden="true"><span style={{width:(rows.length?100*subset.length/rows.length:0)+"%"}} /></div>
+          <small>مكتمل {formatCount.format(done)} · <bdi>{fmtPct(done,subset.length)}</bdi></small>
+         </div>;
+        })}
+       </div>
+      </section>
+     </div>
+
+     <section className={ui.panel}>
+      <h2 id="nudee-domain-matrix">مصفوفة الامتثال حسب المجال</h2>
+      <p id="nudee-matrix-description" className={ui.description}>{formatCount.format(domainMatrix.length)} مجال · الامتثال حسب مستوى النضج وحالة الأدلة.</p>
+      <p className={styles.scrollHint}>مرّر أفقيًا لعرض بقية الأعمدة.</p>
+      <div className={styles.tableScroll} role="region" tabIndex={0} aria-labelledby="nudee-domain-matrix" aria-describedby="nudee-matrix-description">
+       <table>
+        <thead><tr><th scope="col">المجال</th>
+         {LEVELS.map((level,i)=><th key={level} scope="col">المستوى {formatCount.format(i+1)}</th>)}
+         <th scope="col" lang="en">NDMO</th><th scope="col">متطلبات الهيئة</th><th scope="col">الأدلة</th><th scope="col">المنطبقة</th><th scope="col">المقيّمة</th><th scope="col">المراجعة المكتملة</th>
+        </tr></thead>
+        <tbody>
+         {domainMatrix.map(d=><tr key={d.name}><th scope="row">{d.name}</th>
+          {d.levels.map((l,i)=><td key={i} title={formatCount.format(l.n)+" دليل"}><bdi>{l.rate===null?"—":l.rate.toLocaleString("ar-SA")+"%"}</bdi></td>)}
+          <td><bdi>{fmtPct(d.full,d.applicable)}</bdi></td><td><bdi>{fmtPct(d.full+d.authority,d.applicable)}</bdi></td>
+          <td>{formatCount.format(d.total)}</td><td>{formatCount.format(d.applicable)}</td><td>{formatCount.format(d.assessed)}</td><td>{formatCount.format(d.reviewed)}</td>
+         </tr>)}
+         <tr className={styles.totalRow}><th scope="row">الإجمالي</th>
+          {LEVELS.map(level=>{
+           const a=rows.filter(r=>r.maturity_level===level);
+           const valid=a.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق");
+           return <td key={level}><bdi>{valid.length?fmtPct(valid.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,valid.length):"—"}</bdi></td>;
+          })}
+          <td><bdi>{fmtPct(stats.full,stats.applicable)}</bdi></td><td><bdi>{fmtPct(stats.full+stats.authority,stats.applicable)}</bdi></td>
+          <td>{formatCount.format(stats.total)}</td><td>{formatCount.format(stats.applicable)}</td><td>{formatCount.format(stats.assessed)}</td><td>{formatCount.format(stats.reviewed)}</td>
+         </tr>
+        </tbody>
+       </table>
+      </div>
+     </section>
+
+     <section className={ui.panel}>
+      <h2>امتثال NDMO حسب المجال ومستوى النضج</h2>
+      <p className={ui.description}>نسبة الامتثال من الأدلة المنطبقة لكل مستوى. تعرض الشرطة غياب أدلة منطبقة.</p>
+      <table className={styles.domainTable}>
+       <thead><tr><th scope="col">المجال</th>{LEVELS.map(level=><th scope="col" key={level}>{level}</th>)}</tr></thead>
+       <tbody>{domainMatrix.map(d=><tr key={d.name}>
+        <th scope="row">{d.name}</th>
+        {d.levels.map(({rate},index)=><td key={LEVELS[index]}>
+         <bdi>{rate===null?"—":rate.toLocaleString("ar-SA")+"%"}</bdi>
+         <div className={styles.track} aria-hidden="true"><span style={{width:(rate??0)+"%"}} /></div>
+        </td>)}
+       </tr>)}</tbody>
+      </table>
+     </section>
+
+     <section className={ui.panel}>
+      <h2>توزيع حالة الامتثال في المجالات</h2>
+      <p className={ui.description}>يمثل طول الشريط حصة كل حالة من أدلة المجال.</p>
+      <ul className={styles.legend}>{complianceCategories.map(({label,color})=><li key={label}><i aria-hidden="true" style={{background:color}} />{label}</li>)}</ul>
+      <div className={styles.stackedList}>{domainMatrix.map(d=><div className={styles.stackedRow} key={d.name}>
+       <span>{d.name}</span>
+       <div className={styles.stackedTrack} role="img" aria-label={d.name+": "+d.full+" ممتثل بالكامل، "+d.authority+" ممتثل للمعالي، "+d.non+" غير ممتثل، "+d.na+" لا ينطبق، "+d.residual+" غير مقيّم أو غير معياري"}>
+        {[d.full,d.authority,d.non,d.na,d.residual].map((count,i)=><span key={complianceCategories[i].label} style={{width:(d.total?100*count/d.total:0)+"%",background:complianceCategories[i].color}} />)}
+       </div>
+       <strong>{formatCount.format(d.total)}</strong>
+      </div>)}</div>
+     </section>
+
+     <section className={ui.panel}>
+      <h2>الجدول الزمني لمراجعة الأدلة</h2>
+      <p className={ui.description}>ثمانية أسابيع من ٨ نوفمبر إلى ٣١ ديسمبر ٢٠٢٦، موزعة على أربع مراحل.</p>
+      <ol className={styles.stages}>
+       {phases.map(phase=><li key={phase.phase}>
+        <div className={styles.stageHeading}><span aria-label={"المرحلة "+formatCount.format(phase.phase)}>{formatCount.format(phase.phase)}</span><h3>{phase.level}</h3></div>
+        <p>{shortDate(phase.start)} – {shortDate(phase.end)}</p>
+        <div className={styles.track} aria-hidden="true"><span style={{width:("completed" in phase?percent(phase.completed,phase.n):finalReviewProgress*100)+"%"}} /></div>
+        <small>{"completed" in phase
+         ? <><bdi>{formatCount.format(phase.completed)} / {formatCount.format(phase.n)}</bdi> مكتمل</>
+         : <>تقدم معتمد <bdi>{(finalReviewProgress*100).toLocaleString("ar-SA",{maximumFractionDigits:2})}%</bdi></>}
+        </small>
+       </li>)}
+      </ol>
+      <div className={styles.sectionHeader}>
+       <h3 id="nudee-phase-chart">مخطط المراحل حسب الأسبوع</h3>
+       <ul className={styles.legend}><li><i className={styles.phaseDone} />منجز</li><li><i className={styles.phaseRemain} />متبقٍ</li></ul>
+      </div>
+      <div className={styles.phaseScroll} role="region" aria-labelledby="nudee-phase-chart" tabIndex={0}>
+       <div className={styles.phaseGrid}>
+        <div className={styles.phaseAxis}><span>المرحلة</span>{Array.from({length:8},(_,i)=><span key={i}>{formatCount.format(i+1)}</span>)}</div>
+        {phases.map((phase,i)=><div className={styles.phaseBarRow} key={phase.phase}>
+         <span>{phase.level}</span>
+         <div className={styles.phaseBar} role="img" aria-label={"الأسبوع "+formatCount.format(i*2+1)+" إلى "+formatCount.format(i*2+2)+"، منجز "+fmtPct(phase.progress,1)}>
+          <div className={styles.phaseDone} style={{width:(25*phase.progress)+"%",marginInlineStart:i*25+"%"}} />
+          <div className={styles.phaseRemain} style={{width:(25*(1-phase.progress))+"%"}} />
+         </div>
+        </div>)}
+       </div>
+      </div>
+      <p className={styles.footnote}>يعرض المخطط التقدم الموزون للأدلة. المرحلة الرابعة تُحدّث يدويًا من مكتب إدارة البيانات وتُسجّل في سجل تدقيق مستقل.</p>
+     </section>
+
+     <section className={ui.panel}>
+      <h2>التوزيع الأسبوعي</h2>
+      <p className={ui.description}>مقارنة التقدم التراكمي المخطط والفعلي، وفق تاريخ القياس في الرياض.</p>
+      <ul className={styles.legend}><li><i className={styles.phaseRemain} />المخطط</li><li><i className={styles.phaseDone} />الفعلي</li></ul>
+      <ol className={styles.weekly}>
+       {weekly.map(w=><li key={w.week} className={styles.week}>
+        <div className={styles.weekLabel}><strong>الأسبوع {formatCount.format(w.week)}</strong><time dateTime={w.until}>{shortDate(w.until)}</time></div>
+        <div className={styles.weekPlot}>
+         <div className={styles.track} aria-hidden="true"><span className={styles.planned} style={{width:w.planned+"%"}} /></div>
+         <bdi><span className="sr-only">المخطط </span>{w.planned.toLocaleString("ar-SA")}%</bdi>
+         <div className={styles.track} aria-hidden="true"><span style={{width:w.actual+"%"}} /></div>
+         <bdi><span className="sr-only">الفعلي </span>{w.actual.toLocaleString("ar-SA",{maximumFractionDigits:2})}%</bdi>
+        </div>
+       </li>)}
+      </ol>
+      <p className={styles.footnote}>المخطط يزيد بمقدار ١٢٫٥٪ كل أسبوع (Calc!D60:D67). الفعلي يجمع المراحل الأربع بأوزان متساوية، ويستخدم تواريخ الإنجاز الفعلية للأسابيع المكتملة. تاريخ القياس في المصنف الأصلي هو ٥ نوفمبر ٢٠٢٦.</p>
+     </section>
+
+     <section className={`${ui.panel} ${styles.finalReviewPanel}`} aria-labelledby="nudee-final-review">
+      <div>
+       <h2 id="nudee-final-review">تحديث المراجعة النهائية الشاملة</h2>
+       <p className={ui.description}>أدخل نسبة المرحلة الرابعة كما في Excel (K15)، مع مبرر يوثق التحديث.</p>
+       <output className={styles.finalValue} aria-label="التقدم المعتمد حاليًا"><bdi>{(finalReviewProgress*100).toLocaleString("ar-SA",{maximumFractionDigits:2})}%</bdi></output>
+      </div>
+      <div className={styles.finalReviewForm}>
+       <label className={ui.field}>نسبة التقدم المعتمدة (%)<input inputMode="decimal" type="number" min="0" max="100" step="0.01" value={finalReviewInput} onChange={e=>setFinalReviewInput(e.target.value)} disabled={finalReviewSaving} /></label>
+       <label className={ui.field}>مبرر التحديث<textarea rows={2} maxLength={2000} value={finalReviewNote} onChange={e=>setFinalReviewNote(e.target.value)} disabled={finalReviewSaving} placeholder="ملاحظات مسؤول مكتب إدارة البيانات" /></label>
+       <button className={`${ui.button} ${ui.primary}`} type="button" onClick={saveFinalReview} disabled={finalReviewSaving||!finalReviewNote.trim()||!finalReviewInput.trim()}>{finalReviewSaving?"جاري الحفظ...":"حفظ نسبة المراجعة الشاملة"}</button>
+       {finalReviewNotice && <p role="status" className={ui.message}>{finalReviewNotice}</p>}
+      </div>
+     </section>
+     <p className={styles.footnote}>المصدر: أوراق «متابعة الأدلة الداعمة» و«لوحة البيانات» و«الجدول الزمني» و«Calc» من ملف نُضيء. امتثال الجهة يتبع معيار النص في Calc!B10، وتستند رسوم المجالات إلى Calc!H30:H43 وQ30:Q43 وZ30:Z43 وAD30:AH43. اعتماد الدليل يحدّث المراجعة داخل المنصة، وتظل حالة الامتثال من المصدر.</p>
+    </>}
+  </main>
+ );
 }
