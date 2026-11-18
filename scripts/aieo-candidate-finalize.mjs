@@ -48,22 +48,32 @@ export function readStrictReviewedGitSource(revision) {
 // bounded, opened inode, not a path that could become a symlink between lstat
 // and readFileSync. Group/world-writable source or parent directories allow a
 // local actor to alter build inputs after the immutable Git review.
-function readVerifiedBuildSource(path) {
+export function readVerifiedBuildSource(path) {
   let fd;
   try {
+    // The independent build may leave an untrusted candidate file even if
+    // its bytes match the reviewed commit. Attest the runner's UID, parent,
+    // special-mode bits and exact opened inode before any worktree diff.
+    const uid = process.getuid?.();
+    if (!Number.isSafeInteger(uid)) fail();
     const directory = lstatSync('components');
     const prior = lstatSync(path);
     if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        (directory.mode & 0o022) || !prior.isFile() ||
-        prior.isSymbolicLink() || prior.nlink !== 1 ||
-        (prior.mode & 0o133) || prior.size < 1 ||
+        directory.uid !== uid || (directory.mode & 0o7022) ||
+        !prior.isFile() || prior.isSymbolicLink() || prior.nlink !== 1 ||
+        prior.uid !== uid || !(prior.mode & 0o400) ||
+        (prior.mode & 0o7133) || prior.size < 1 ||
         prior.size > MAX_SOURCE_BYTES) fail();
 
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const opened = fstatSync(fd);
-    if (!opened.isFile() || opened.nlink !== 1 || (opened.mode & 0o133) ||
+    if (!opened.isFile() || opened.nlink !== 1 ||
+        opened.uid !== uid || !(opened.mode & 0o400) ||
+        (opened.mode & 0o7133) ||
         opened.dev !== prior.dev || opened.ino !== prior.ino ||
-        opened.size !== prior.size) fail();
+        opened.size !== prior.size ||
+        opened.mtimeMs !== prior.mtimeMs ||
+        opened.ctimeMs !== prior.ctimeMs) fail();
 
     const buffer = Buffer.alloc(opened.size + 1);
     let used = 0;
@@ -76,14 +86,18 @@ function readVerifiedBuildSource(path) {
     const pathNow = lstatSync(path);
     const directoryNow = lstatSync('components');
     if (used !== opened.size || after.size !== opened.size ||
-        after.nlink !== 1 || (after.mode & 0o133) ||
+        after.nlink !== 1 || after.uid !== uid ||
+        !(after.mode & 0o400) || (after.mode & 0o7133) ||
         after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs ||
         !pathNow.isFile() || pathNow.isSymbolicLink() ||
-        pathNow.nlink !== 1 || (pathNow.mode & 0o133) ||
+        pathNow.nlink !== 1 || pathNow.uid !== uid ||
+        !(pathNow.mode & 0o400) || (pathNow.mode & 0o7133) ||
         pathNow.dev !== opened.dev || pathNow.ino !== opened.ino ||
         pathNow.size !== opened.size ||
+        pathNow.mtimeMs !== opened.mtimeMs ||
+        pathNow.ctimeMs !== opened.ctimeMs ||
         !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
-        (directoryNow.mode & 0o022) ||
+        directoryNow.uid !== uid || (directoryNow.mode & 0o7022) ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) fail();
     // Post-build verification must bind to the actual bytes compiled, not a
     // lossy UTF-8 string. Node replaces malformed sequences with U+FFFD,
@@ -125,6 +139,9 @@ export function verifyPostBuild(env = process.env) {
   const base = env.GITHUB_SHA;
   const head = developer.headSha;
 
+  // Fail closed on a swapped, foreign-owned or special-mode build source
+  // before any git diff with the role's read-scoped GitHub token.
+  readVerifiedBuildSource(path);
   if (!SHA.test(head || '') || head === base ||
       gitTrim('rev-parse', 'HEAD') !== base ||
       gitTrim('diff', '--cached', '--name-only') !== '' ||
