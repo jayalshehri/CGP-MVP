@@ -16,7 +16,7 @@ const repo = 'jayalshehri/CGP-MVP';
 const branch = 'aieo/model-proposal-77331-1';
 const sourcePath = 'components/FeedbackWidget.tsx';
 const route = '  const controlId = useMemo(() => /^\\/controls\\/(\\d+)(?:\\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);';
-const original = ['function fixture() {', route, '  const statusLabel = "Old status";', '}', ''].join('\\n');
+const original = ['function fixture() {', route, '  const statusLabel = "Old status";', '}', ''].join('\n');
 const candidate = original.replace('"Old status"', '"Current status"');
 
 test('candidate Developer report rejects ctime-only race between fstat and final lstat', () => {
@@ -59,10 +59,10 @@ test('candidate Developer report rejects ctime-only race between fstat and final
       head: { sha: head, ref: branch, repo: { full_name: repo } }
     }));
     const gh = join(bin, 'gh');
-    writeFileSync(gh, '#!/usr/bin/env node\\n' +
-      "const {readFileSync}=require('node:fs');\\n" +
-      "if(process.argv.slice(2).join(' ')!=='api repos/jayalshehri/CGP-MVP/pulls/777')process.exit(3);\\n" +
-      "process.stdout.write(readFileSync(process.env.AIEO_FAKE_PR_FILE,'utf8'));\\n");
+    writeFileSync(gh, '#!/usr/bin/env node\n' +
+      "const {readFileSync}=require('node:fs');\n" +
+      "if(process.argv.slice(2).join(' ')!=='api repos/jayalshehri/CGP-MVP/pulls/777')process.exit(3);\n" +
+      "process.stdout.write(readFileSync(process.env.AIEO_FAKE_PR_FILE,'utf8'));\n");
     chmodSync(gh, 0o755);
 
     const expectedPath = 'aieo-output/candidate-developer.json';
@@ -84,7 +84,7 @@ test('candidate Developer report rejects ctime-only race between fstat and final
       '};',
       'syncBuiltinESMExports();',
       ''
-    ].join('\\n'));
+    ].join('\n'));
     const env = {
       ...process.env,
       NODE_OPTIONS: '',
