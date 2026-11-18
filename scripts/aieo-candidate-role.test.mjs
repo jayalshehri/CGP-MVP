@@ -1991,3 +1991,56 @@ test('post-build finalizer refuses foreign-owned and special-mode compiled sourc
       f.base + '\trefs/heads/main', 'remote baseline remains immutable');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test('independent Developer refuses special-mode evidence directories without writing a report', () => {
+  const f = setup();
+  try {
+    const dir = join(f.cwd, 'aieo-output');
+    const report = join(dir, 'candidate-developer.json');
+    mkdirSync(dir, { mode: 0o700 });
+    for (const [label, mode] of [
+      ['setuid', 0o4700], ['setgid', 0o2700], ['sticky', 0o1700]
+    ]) {
+      chmodSync(dir, mode);
+      assert.equal(statSync(dir).mode & 0o7000, mode & 0o7000,
+        label + ' fixture must actually set the unsafe bit');
+      const rejected = f.run('developer');
+      assert.notEqual(rejected.status, 0, label + ' directory must be rejected');
+      assert.match(rejected.stderr, /AIEO candidate role blocked/);
+      assert.equal(existsSync(report), false,
+        label + ' cannot produce trusted Developer evidence');
+    }
+    chmodSync(dir, 0o700);
+    const accepted = f.run('developer');
+    assert.equal(accepted.status, 0, accepted.stderr);
+    assert.equal(JSON.parse(accepted.stdout).status, 'proposed');
+    assert.equal(statSync(report).mode & 0o7777, 0o600);
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('independent Developer refuses evidence directory with a different runner UID', () => {
+  const f = setup();
+  try {
+    const dir = join(f.cwd, 'aieo-output');
+    const report = join(dir, 'candidate-developer.json');
+    mkdirSync(dir, { mode: 0o700 });
+    // Process-only simulation; do not chown real files or require root.
+    const shim = join(f.root, 'foreign-runner-uid.mjs');
+    writeFileSync(shim, [
+      'const uid = process.getuid();',
+      'process.getuid = () => uid + 1;',
+      ''
+    ].join('\\n'));
+    const blocked = spawnSync(process.execPath,
+      ['--import', shim, roleScript, 'developer'],
+      { cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000 });
+    assert.notEqual(blocked.status, 0, 'foreign-owned evidence directory cannot be trusted');
+    assert.match(blocked.stderr, /AIEO candidate role blocked/);
+    assert.equal(existsSync(report), false, 'no report on ownership mismatch');
+    const valid = f.run('developer');
+    assert.equal(valid.status, 0, valid.stderr);
+    assert.equal(JSON.parse(valid.stdout).status, 'proposed');
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
