@@ -28,6 +28,31 @@ export function privatizeDownloadedHandoffs(kind, roles) {
         directory.uid !== owner || (directory.mode & 0o022)) fail();
     const names = readdirSync(root).sort();
     if (JSON.stringify(names) !== JSON.stringify([...expected].sort())) fail();
+    // Phase 1: validate the COMPLETE downloaded bundle before chmod on any
+    // member. A late invalid QA/Security handoff must not privatize an earlier
+    // Developer report and leave a partially accepted import behind.
+    // Phase 2 below repeats all inode checks before each mutation to resist
+    // races; it is not a filesystem transaction against concurrent writers.
+    for (const name of expected) {
+      const path = root + '/' + name;
+      let fd;
+      try {
+        const before = lstatSync(path);
+        if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 ||
+            before.uid !== owner || !(before.mode & 0o400) ||
+            (before.mode & 0o7133) ||
+            before.size < 2 || before.size > MAX_BYTES) fail();
+        fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+        const opened = fstatSync(fd);
+        if (!opened.isFile() || opened.nlink !== 1 || opened.uid !== owner ||
+            !(opened.mode & 0o400) || (opened.mode & 0o7133) ||
+            opened.dev !== before.dev || opened.ino !== before.ino ||
+            opened.size !== before.size || opened.mtimeMs !== before.mtimeMs ||
+            opened.ctimeMs !== before.ctimeMs) fail();
+      } finally {
+        if (fd !== undefined) closeSync(fd);
+      }
+    }
     for (const name of expected) {
       const path = root + '/' + name;
       let fd;
