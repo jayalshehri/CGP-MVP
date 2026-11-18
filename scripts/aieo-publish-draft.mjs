@@ -276,9 +276,12 @@ export function publishDraft({ env = process.env } = {}) {
       ignored.some((entry) => !allowedGenerated.has(entry))) {
     fail('unexpected ignored repository inputs');
   }
+  // Attest ownership and owner-read permission before Git diff tries to open
+  // the working-tree candidate under the publisher's write-scoped token.
+  // A denied read must fail with a bounded error and no remote operation.
+  const actual = readTrustedCandidate(path);
   command('git', ['diff', '--check']);
   const original = command('git', ['show', 'HEAD:' + path]);
-  const actual = readTrustedCandidate(path);
   const changedPaths = command('git', ['diff', '--name-only']).trim().split('\n').filter(Boolean);
   const diff = command('git', ['diff', '--unified=0', '--', path]);
   const reports = mode === 'model' ? {
