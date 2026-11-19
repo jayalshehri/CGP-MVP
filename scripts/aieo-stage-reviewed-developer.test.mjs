@@ -9,21 +9,26 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stageReviewedDeveloperArtifact } from './aieo-stage-reviewed-developer.mjs';
+import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
+
+const originalLine = "  const controlId = useMemo(() => /^\\/controls\\/(\\d+)/.exec(pagePath)?.[1] ?? null, [pagePath]);";
+const trustedBaseline = 'function example() {\n' + originalLine + '\n}\n';
+const proposedPatch = orchestrate({ task: APPROVED_TASK, source: trustedBaseline }).developer.patchedSource;
 
 function fixture(t) {
   const cwd = mkdtempSync(join(tmpdir(), 'aieo-developer-artifact-'));
   t.after(() => rmSync(cwd, { force: true, recursive: true }));
   mkdirSync(join(cwd, 'components'), { mode: 0o700 });
-  writeFileSync(join(cwd, 'components', 'FeedbackWidget.tsx'), 'trusted baseline\n');
+  writeFileSync(join(cwd, 'components', 'FeedbackWidget.tsx'), trustedBaseline);
   mkdirSync(join(cwd, 'aieo-staging', 'components'),
     { recursive: true, mode: 0o700 });
   writeFileSync(join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx'),
-    'verified developer candidate\n');
+    proposedPatch);
   return cwd;
 }
 function assertUntouched(cwd) {
   assert.equal(readFileSync(join(cwd, 'components', 'FeedbackWidget.tsx'), 'utf8'),
-    'trusted baseline\n');
+    trustedBaseline);
   assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
 }
 test('one bounded developer artifact stages without executing source', (t) => {
@@ -31,7 +36,7 @@ test('one bounded developer artifact stages without executing source', (t) => {
   assert.deepEqual(stageReviewedDeveloperArtifact({ cwd, env: {} }),
     { status: 'developer-artifact-staged', files: 1 });
   assert.equal(readFileSync(join(cwd, 'components', 'FeedbackWidget.tsx'), 'utf8'),
-    'verified developer candidate\n');
+    proposedPatch);
   assert.equal(existsSync(join(cwd, 'aieo-staging')), false);
 });
 for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'OPENROUTER_API_KEY']) {
@@ -122,7 +127,7 @@ test('bounds developer payload reads against concurrent growth', (t) => {
   const cwd = fixture(t);
   const source = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
   const oldRead = fs.readSync;
-  const maxExpected = Buffer.byteLength('verified developer candidate\n');
+  const maxExpected = Buffer.byteLength(proposedPatch);
   let expanded = false;
   let largestRead = 0;
   try {
@@ -173,7 +178,7 @@ test('rejects trusted source swapped to external symlink before write', (t) => {
   }
   assert.equal(swapped, true);
   assert.equal(readFileSync(outside, 'utf8'), 'external original\n');
-  assert.equal(readFileSync(held, 'utf8'), 'trusted baseline\n');
+  assert.equal(readFileSync(held, 'utf8'), trustedBaseline);
   assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
 });
 
@@ -192,4 +197,25 @@ test('rejects writable-by-group trusted component directory', (t) => {
   assert.throws(() => stageReviewedDeveloperArtifact({ cwd, env: {} }),
     /stage blocked/);
   assertUntouched(cwd);
+});
+
+test('rejects well-formed but unreviewed source before modifying checkout', (t) => {
+  const cwd = fixture(t);
+  const artifact = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
+  const changed = proposedPatch.replace('function example()', 'function unreviewed()');
+  assert.notEqual(changed, proposedPatch);
+  writeFileSync(artifact, changed);
+  assert.throws(() => stageReviewedDeveloperArtifact({ cwd, env: {} }),
+    /stage blocked/);
+  assertUntouched(cwd);
+});
+
+test('rejects already-applied baseline as a no-op replay without writing', (t) => {
+  const cwd = fixture(t);
+  const target = join(cwd, 'components', 'FeedbackWidget.tsx');
+  writeFileSync(target, proposedPatch);
+  assert.throws(() => stageReviewedDeveloperArtifact({ cwd, env: {} }),
+    /stage blocked/);
+  assert.equal(readFileSync(target, 'utf8'), proposedPatch);
+  assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
 });

@@ -5,6 +5,7 @@ import {
   openSync, closeSync, fstatSync, ftruncateSync, readSync, constants
 } from 'node:fs';
 import { join } from 'node:path';
+import { APPROVED_TASK, orchestrate } from '../aieo/lib/engine.mjs';
 
 const FILE = 'FeedbackWidget.tsx';
 const MAX_BYTES = 48000;
@@ -110,6 +111,17 @@ export function stageReviewedDeveloperArtifact({
   const trustedParent = safeDirectory(trustedComponents, uid);
   const baseline = safeFile(target, uid, true);
   const candidate = safeFile(join(stagedComponents, FILE), uid);
+  // The downloaded artifact is untrusted even after inode and UTF-8 checks.
+  // Reproduce the exact one-file deterministic fix from trusted source BEFORE
+  // writing any candidate bytes into the clean publisher checkout. The later
+  // credentialed publisher repeats this attestation independently.
+  const reviewed = orchestrate({ task: APPROVED_TASK, source: baseline.bytes.toString('utf8') });
+  if (reviewed.developer.status !== 'proposed' ||
+      reviewed.developer.patchedSource !== candidate.bytes.toString('utf8') ||
+      reviewed.qa.status !== 'passed' ||
+      reviewed.security.status !== 'passed' ||
+      reviewed.reviewer.status !== 'draft-pr-eligible' ||
+      reviewed.reviewer.requiresHumanMerge !== true) block();
   writeVerifiedSource(target, baseline.stat, uid, candidate.bytes,
     trustedComponents, trustedParent);
   rmSync(staging, { recursive: true });
