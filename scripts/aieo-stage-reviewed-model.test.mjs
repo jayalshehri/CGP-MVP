@@ -62,6 +62,10 @@ test('only exact, canonical, bounded model evidence stages on clean separate run
   });
   assert.equal(readFileSync(join(cwd, 'components', 'FeedbackWidget.tsx'), 'utf8'),
     approvedCandidate);
+  assert.equal(fs.statSync(join(cwd, 'components', 'FeedbackWidget.tsx')).mode & 0o777,
+    0o644, 'atomic replacement must preserve trusted source permissions');
+  assert.deepEqual(fs.readdirSync(join(cwd, 'components')),
+    ['FeedbackWidget.tsx'], 'no temporary source files remain');
   for (const [index, name] of reports.entries()) {
     const text = readFileSync(join(cwd, 'aieo-output', name), 'utf8');
     assert.equal(text, captured[index]);
@@ -377,27 +381,75 @@ test('unexpected report injected during handoff blocks before source mutation', 
   assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
 });
 
-test('source open failure after complete report copy cleans output without source change', (t) => {
+test('failed atomic rename after complete reports leaves original source intact', (t) => {
   const cwd = fixture(t);
   const source = join(cwd, 'components', 'FeedbackWidget.tsx');
-  const originalOpen = fs.openSync;
-  let blockedWrite = false;
+  const originalRename = fs.renameSync;
+  let blockedCommit = false;
   try {
-    fs.openSync = (path, flags, ...args) => {
-      if (path === source && (flags & fs.constants.O_WRONLY)) {
-        blockedWrite = true;
-        throw new Error('synthetic trusted-source open failure');
+    fs.renameSync = (from, to) => {
+      if (to === source && from.includes('.aieo-source-')) {
+        blockedCommit = true;
+        throw new Error('synthetic atomic rename failure');
       }
-      return originalOpen(path, flags, ...args);
+      return originalRename(from, to);
     };
     syncBuiltinESMExports();
     assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }),
-      /synthetic trusted-source open failure/);
+      /synthetic atomic rename failure/);
   } finally {
-    fs.openSync = originalOpen;
+    fs.renameSync = originalRename;
     syncBuiltinESMExports();
   }
-  assert.equal(blockedWrite, true);
+  assert.equal(blockedCommit, true);
   assertUntouched(cwd);
+  assert.deepEqual(fs.readdirSync(join(cwd, 'components')), ['FeedbackWidget.tsx']);
   assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
+});
+
+test('partial temporary source write cannot truncate the trusted source', (t) => {
+  const cwd = fixture(t);
+  const originalWrite = fs.writeFileSync;
+  let interrupted = false;
+  try {
+    fs.writeFileSync = (pathOrFd, value, ...args) => {
+      if (!interrupted && typeof pathOrFd === 'number' &&
+          Buffer.isBuffer(value) && value.equals(Buffer.from(approvedCandidate))) {
+        interrupted = true;
+        originalWrite(pathOrFd, value.subarray(0, 12));
+        throw new Error('synthetic partial temporary source write');
+      }
+      return originalWrite(pathOrFd, value, ...args);
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }),
+      /synthetic partial temporary source write/);
+  } finally {
+    fs.writeFileSync = originalWrite;
+    syncBuiltinESMExports();
+  }
+  assert.equal(interrupted, true);
+  assertUntouched(cwd);
+  assert.deepEqual(fs.readdirSync(join(cwd, 'components')), ['FeedbackWidget.tsx']);
+});
+
+test('failed source fsync leaves original source and review handoff untouched', (t) => {
+  const cwd = fixture(t);
+  const originalFsync = fs.fsyncSync;
+  let interrupted = false;
+  try {
+    fs.fsyncSync = () => {
+      interrupted = true;
+      throw new Error('synthetic source fsync failure');
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }),
+      /synthetic source fsync failure/);
+  } finally {
+    fs.fsyncSync = originalFsync;
+    syncBuiltinESMExports();
+  }
+  assert.equal(interrupted, true);
+  assertUntouched(cwd);
+  assert.deepEqual(fs.readdirSync(join(cwd, 'components')), ['FeedbackWidget.tsx']);
 });

@@ -1,8 +1,10 @@
 // Import a bounded model candidate into a FRESH, credential-free publisher job.
 // Build/provider code runs on a different runner; do not execute its artifact.
 import { lstatSync, readdirSync, mkdirSync, writeFileSync, rmSync,
-  openSync, fstatSync, closeSync, ftruncateSync, readSync, constants } from 'node:fs';
-import { join } from 'node:path';
+  openSync, fstatSync, closeSync, fsyncSync, fchmodSync, renameSync,
+  readSync, constants } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 
@@ -81,19 +83,68 @@ function sameSource(stat, expected) {
     stat.mode === expected.mode && stat.size === expected.size &&
     stat.mtimeMs === expected.mtimeMs && stat.ctimeMs === expected.ctimeMs;
 }
+// Prepare the replacement on the same filesystem before touching the trusted
+// source. A short write, fsync failure or rename failure must leave the
+// original inode and bytes intact. Rename is the *only* mutation of the source
+// path; keep the original descriptor open and re-attest it immediately before
+// committing the replacement.
 function writeTrustedSource(path, expected, uid, candidate) {
-  let fd;
+  let sourceFd;
+  let temporaryFd;
+  let temporaryPath;
+  let temporaryIdentity;
   try {
-    fd = openSync(path, constants.O_WRONLY | constants.O_NOFOLLOW |
+    sourceFd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW |
       constants.O_NONBLOCK);
-    const opened = fstatSync(fd);
+    const opened = fstatSync(sourceFd);
     const pathNow = lstatSync(path);
     if (!trustedSource(opened, uid) || !trustedSource(pathNow, uid) ||
         !sameSource(opened, expected) || !sameSource(pathNow, expected)) block();
-    ftruncateSync(fd, 0);
-    writeFileSync(fd, candidate);
+
+    temporaryPath = join(dirname(path),
+      '.aieo-source-' + randomBytes(16).toString('hex') + '.tmp');
+    temporaryFd = openSync(temporaryPath, constants.O_WRONLY |
+      constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW |
+      constants.O_NONBLOCK, 0o600);
+    temporaryIdentity = fstatSync(temporaryFd);
+    if (!temporaryIdentity.isFile() || temporaryIdentity.nlink !== 1 ||
+        temporaryIdentity.uid !== uid || (temporaryIdentity.mode & 0o777) !== 0o600) block();
+    writeFileSync(temporaryFd, candidate);
+    // Preserve the original safe checkout permissions (e.g. 0644), rather
+    // than silently turning every imported source into an owner-only file.
+    fchmodSync(temporaryFd, expected.mode & 0o777);
+    const completed = fstatSync(temporaryFd);
+    if (completed.dev !== temporaryIdentity.dev ||
+        completed.ino !== temporaryIdentity.ino || completed.nlink !== 1 ||
+        completed.size !== candidate.length ||
+        (completed.mode & 0o777) !== (expected.mode & 0o777)) block();
+    fsyncSync(temporaryFd);
+    closeSync(temporaryFd);
+    temporaryFd = undefined;
+
+    const temporaryNow = lstatSync(temporaryPath);
+    const live = fstatSync(sourceFd);
+    const livePath = lstatSync(path);
+    if (!temporaryNow.isFile() || temporaryNow.isSymbolicLink() ||
+        temporaryNow.dev !== temporaryIdentity.dev ||
+        temporaryNow.ino !== temporaryIdentity.ino ||
+        !trustedSource(live, uid) || !trustedSource(livePath, uid) ||
+        !sameSource(live, expected) || !sameSource(livePath, expected)) block();
+    renameSync(temporaryPath, path);
+    temporaryPath = undefined;
   } finally {
-    if (fd !== undefined) closeSync(fd);
+    if (temporaryFd !== undefined) closeSync(temporaryFd);
+    if (sourceFd !== undefined) closeSync(sourceFd);
+    // A failed pre-commit write must never delete a substituted file. Delete
+    // only the regular temporary inode created by this invocation.
+    if (temporaryPath !== undefined && temporaryIdentity !== undefined) {
+      const current = lstatSync(temporaryPath, { throwIfNoEntry: false });
+      if (current?.isFile() && !current.isSymbolicLink() &&
+          current.dev === temporaryIdentity.dev &&
+          current.ino === temporaryIdentity.ino) {
+        rmSync(temporaryPath, { force: true });
+      }
+    }
   }
 }
 
