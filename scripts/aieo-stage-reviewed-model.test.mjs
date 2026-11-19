@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync,
-  symlinkSync, chmodSync, existsSync, rmSync } from 'node:fs';
+  symlinkSync, linkSync, chmodSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stageReviewedModelArtifact } from './aieo-stage-reviewed-model.mjs';
@@ -147,4 +147,26 @@ test('trusted source without owner write permission is rejected before staging',
   chmodSync(join(cwd, 'components', 'FeedbackWidget.tsx'), 0o444);
   assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
   assertUntouched(cwd);
+});
+
+test('hardlinked candidate payload is refused before touching trusted checkout', (t) => {
+  const cwd = fixture(t);
+  const candidate = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
+  const external = join(cwd, 'shared-candidate');
+  linkSync(candidate, external);
+  assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  assertUntouched(cwd);
+  assert.equal(readFileSync(external, 'utf8'), 'bounded untrusted model candidate\n');
+});
+
+test('symlinked model evidence cannot redirect the staged report read', (t) => {
+  const cwd = fixture(t);
+  const evidence = join(cwd, 'aieo-staging', 'aieo-output', reports[0]);
+  const external = join(cwd, 'shared-report.json');
+  writeFileSync(external, JSON.stringify({ schemaVersion: 1, name: reports[0] }, null, 2) + '\n');
+  rmSync(evidence);
+  symlinkSync(external, evidence);
+  assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  assertUntouched(cwd);
+  assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
 });
