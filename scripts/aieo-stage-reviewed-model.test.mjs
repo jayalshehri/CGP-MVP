@@ -120,3 +120,31 @@ test('dangling output symlink is rejected before candidate source is overwritten
   assertUntouched(cwd);
   assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
 });
+
+test('trusted source symlink cannot redirect candidate write to another path', (t) => {
+  const cwd = fixture(t);
+  const outside = mkdtempSync(join(tmpdir(), 'aieo-stage-outside-source-'));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  writeFileSync(join(outside, 'FeedbackWidget.tsx'), 'baseline source\n');
+  rmSync(join(cwd, 'components', 'FeedbackWidget.tsx'));
+  symlinkSync(join(outside, 'FeedbackWidget.tsx'),
+    join(cwd, 'components', 'FeedbackWidget.tsx'));
+  assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  assert.equal(readFileSync(join(outside, 'FeedbackWidget.tsx'), 'utf8'),
+    'baseline source\n');
+  assertUntouched(cwd);
+});
+
+test('executable trusted source is rejected before artifact writes', (t) => {
+  const cwd = fixture(t);
+  chmodSync(join(cwd, 'components', 'FeedbackWidget.tsx'), 0o744);
+  assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  assertUntouched(cwd);
+});
+
+test('trusted source without owner write permission is rejected before staging', (t) => {
+  const cwd = fixture(t);
+  chmodSync(join(cwd, 'components', 'FeedbackWidget.tsx'), 0o444);
+  assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  assertUntouched(cwd);
+});
