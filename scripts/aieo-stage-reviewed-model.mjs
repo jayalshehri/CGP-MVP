@@ -1,7 +1,7 @@
 // Import a bounded model candidate into a FRESH, credential-free publisher job.
 // Build/provider code runs on a different runner; do not execute its artifact.
-import { lstatSync, readdirSync, readFileSync, mkdirSync, writeFileSync, rmSync,
-  openSync, fstatSync, closeSync, ftruncateSync, constants } from 'node:fs';
+import { lstatSync, readdirSync, mkdirSync, writeFileSync, rmSync,
+  openSync, fstatSync, closeSync, ftruncateSync, readSync, constants } from 'node:fs';
 import { join } from 'node:path';
 
 const SOURCE = 'FeedbackWidget.tsx';
@@ -26,6 +26,20 @@ function checkedArtifact(stat, original, uid, maxBytes) {
     stat.uid === uid && !(stat.mode & 0o0022) &&
     stat.size >= 1 && stat.size <= maxBytes && sameSource(stat, original);
 }
+// An inode can grow after fstat. Never use readFileSync(fd), which reads to
+// EOF and could allocate attacker-controlled amounts of memory. Consume only
+// the attested number of bytes, plus one probe byte to detect appended data.
+function readBoundedArtifact(fd, expectedSize) {
+  const bytes = Buffer.alloc(expectedSize);
+  let offset = 0;
+  while (offset < expectedSize) {
+    const count = readSync(fd, bytes, offset, expectedSize - offset, null);
+    if (count <= 0) block();
+    offset += count;
+  }
+  if (readSync(fd, Buffer.alloc(1), 0, 1, null) !== 0) block();
+  return bytes;
+}
 function checkedBytes(path, uid, maxBytes, json = false) {
   const original = lstatSync(path);
   if (!checkedArtifact(original, original, uid, maxBytes)) block();
@@ -35,7 +49,7 @@ function checkedBytes(path, uid, maxBytes, json = false) {
       constants.O_NONBLOCK);
     if (!checkedArtifact(fstatSync(fd), original, uid, maxBytes) ||
         !checkedArtifact(lstatSync(path), original, uid, maxBytes)) block();
-    const bytes = readFileSync(fd);
+    const bytes = readBoundedArtifact(fd, original.size);
     if (bytes.length !== original.size ||
         !checkedArtifact(fstatSync(fd), original, uid, maxBytes) ||
         !checkedArtifact(lstatSync(path), original, uid, maxBytes)) block();
