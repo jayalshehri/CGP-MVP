@@ -94,7 +94,7 @@ test('refuses swapped developer payload inode after pathname attestation', (t) =
   const source = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
   const held = join(cwd, 'original-staged-source');
   const replacement = join(cwd, 'replacement-staged-source');
-  writeFileSync(replacement, 'malicious substituted source\\n');
+  writeFileSync(replacement, 'malicious substituted source\n');
   const oldLstat = fs.lstatSync;
   let swapped = false;
   try {
@@ -122,7 +122,7 @@ test('bounds developer payload reads against concurrent growth', (t) => {
   const cwd = fixture(t);
   const source = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
   const oldRead = fs.readSync;
-  const maxExpected = Buffer.byteLength('verified developer candidate\\n');
+  const maxExpected = Buffer.byteLength('verified developer candidate\n');
   let expanded = false;
   let largestRead = 0;
   try {
@@ -152,7 +152,7 @@ test('rejects trusted source swapped to external symlink before write', (t) => {
   const target = join(cwd, 'components', 'FeedbackWidget.tsx');
   const held = join(cwd, 'original-trusted-source');
   const outside = join(cwd, 'outside-writable-source');
-  writeFileSync(outside, 'external original\\n');
+  writeFileSync(outside, 'external original\n');
   const oldOpen = fs.openSync;
   let swapped = false;
   try {
@@ -172,8 +172,8 @@ test('rejects trusted source swapped to external symlink before write', (t) => {
     syncBuiltinESMExports();
   }
   assert.equal(swapped, true);
-  assert.equal(readFileSync(outside, 'utf8'), 'external original\\n');
-  assert.equal(readFileSync(held, 'utf8'), 'trusted baseline\\n');
+  assert.equal(readFileSync(outside, 'utf8'), 'external original\n');
+  assert.equal(readFileSync(held, 'utf8'), 'trusted baseline\n');
   assertUntouched(cwd);
 });
 
