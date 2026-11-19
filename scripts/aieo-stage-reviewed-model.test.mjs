@@ -14,7 +14,7 @@ import { stageReviewedModelArtifact } from './aieo-stage-reviewed-model.mjs';
 
 const reports = ['model-proposal.json', 'model-qa.json',
   'model-security.json', 'model-reviewer.json'];
-const route = String.raw`  const controlId = useMemo(() => /^\\/controls\\/(\\d+)(?:\\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
+const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
 const trustedBaseline = 'function fixture() {\n' + route + '\n  const sample = 1;\n}\n';
 const approvedCandidate = trustedBaseline.replace('  const sample = 1;', '  const sample = 2;');
 const changedDiff = '@@ -3 +3 @@\n-  const sample = 1;\n+  const sample = 2;\n';
