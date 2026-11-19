@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync,
-  symlinkSync, chmodSync, existsSync, rmSync } from 'node:fs';
+  symlinkSync, linkSync, renameSync, chmodSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stageReviewedModelArtifact } from './aieo-stage-reviewed-model.mjs';
@@ -146,5 +148,66 @@ test('trusted source without owner write permission is rejected before staging',
   const cwd = fixture(t);
   chmodSync(join(cwd, 'components', 'FeedbackWidget.tsx'), 0o444);
   assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  assertUntouched(cwd);
+});
+
+test('hardlinked candidate payload is refused before touching trusted checkout', (t) => {
+  const cwd = fixture(t);
+  const candidate = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
+  const external = join(cwd, 'shared-candidate');
+  linkSync(candidate, external);
+  assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  assertUntouched(cwd);
+  assert.equal(readFileSync(external, 'utf8'), 'bounded untrusted model candidate\n');
+});
+
+test('symlinked model evidence cannot redirect the staged report read', (t) => {
+  const cwd = fixture(t);
+  const evidence = join(cwd, 'aieo-staging', 'aieo-output', reports[0]);
+  const external = join(cwd, 'shared-report.json');
+  writeFileSync(external, JSON.stringify({ schemaVersion: 1, name: reports[0] }, null, 2) + '\n');
+  rmSync(evidence);
+  symlinkSync(external, evidence);
+  assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  assertUntouched(cwd);
+  assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
+});
+
+test('replacement of candidate inode after lstat is rejected before reading substituted bytes', (t) => {
+  const cwd = fixture(t);
+  const candidate = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
+  const held = join(cwd, 'original-candidate');
+  const replacement = join(cwd, 'replacement-candidate');
+  writeFileSync(replacement, 'attacker-controlled payload\n');
+  const oldLstat = fs.lstatSync;
+  const oldRead = fs.readFileSync;
+  let swapped = false;
+  let filenameReads = 0;
+  try {
+    // Simulate a replacement precisely after the initial pathname attestation.
+    // The old name-based read would consume the replacement before rejecting
+    // the changed inode; descriptor attestation must reject without reading.
+    fs.lstatSync = (path, ...args) => {
+      const stat = oldLstat(path, ...args);
+      if (!swapped && path === candidate) {
+        swapped = true;
+        renameSync(candidate, held);
+        renameSync(replacement, candidate);
+      }
+      return stat;
+    };
+    fs.readFileSync = (path, ...args) => {
+      if (path === candidate) filenameReads++;
+      return oldRead(path, ...args);
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  } finally {
+    fs.lstatSync = oldLstat;
+    fs.readFileSync = oldRead;
+    syncBuiltinESMExports();
+  }
+  assert.equal(swapped, true);
+  assert.equal(filenameReads, 0);
   assertUntouched(cwd);
 });

@@ -18,25 +18,37 @@ function checkDirectory(path, uid, names) {
   }
   return stat;
 }
+// Read artifact bytes from an inode-bound descriptor, not a filename that
+// could be replaced with a symlink after lstat. O_NONBLOCK avoids hanging on
+// a swapped FIFO; the descriptor and pathname must both match at each check.
+function checkedArtifact(stat, original, uid, maxBytes) {
+  return stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1 &&
+    stat.uid === uid && !(stat.mode & 0o0022) &&
+    stat.size >= 1 && stat.size <= maxBytes && sameSource(stat, original);
+}
 function checkedBytes(path, uid, maxBytes, json = false) {
-  const stat = lstatSync(path);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 ||
-      stat.uid !== uid || (stat.mode & 0o0022) ||
-      stat.size < 1 || stat.size > maxBytes) block();
-  const bytes = readFileSync(path);
-  const after = lstatSync(path);
-  if (bytes.length !== stat.size || !after.isFile() || after.isSymbolicLink() ||
-      after.nlink !== 1 || after.uid !== uid || (after.mode & 0o0022) ||
-      after.dev !== stat.dev || after.ino !== stat.ino ||
-      after.size !== stat.size || after.mtimeMs !== stat.mtimeMs ||
-      after.ctimeMs !== stat.ctimeMs) block();
-  const decoded = bytes.toString('utf8');
-  if (!Buffer.from(decoded, 'utf8').equals(bytes)) block();
-  if (json) {
-    const parsed = JSON.parse(decoded);
-    if (decoded !== JSON.stringify(parsed, null, 2) + '\n') block();
+  const original = lstatSync(path);
+  if (!checkedArtifact(original, original, uid, maxBytes)) block();
+  let fd;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW |
+      constants.O_NONBLOCK);
+    if (!checkedArtifact(fstatSync(fd), original, uid, maxBytes) ||
+        !checkedArtifact(lstatSync(path), original, uid, maxBytes)) block();
+    const bytes = readFileSync(fd);
+    if (bytes.length !== original.size ||
+        !checkedArtifact(fstatSync(fd), original, uid, maxBytes) ||
+        !checkedArtifact(lstatSync(path), original, uid, maxBytes)) block();
+    const decoded = bytes.toString('utf8');
+    if (!Buffer.from(decoded, 'utf8').equals(bytes)) block();
+    if (json) {
+      const parsed = JSON.parse(decoded);
+      if (decoded !== JSON.stringify(parsed, null, 2) + '\n') block();
+    }
+    return bytes;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
-  return bytes;
 }
 
 // Do not truncate a trusted checkout path after checking only its filename.
