@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, existsSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -105,8 +105,8 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
       AIEO_PUBLISH_MODE: 'model',
       GH_TOKEN: 'fixture-never-live'
     };
-    const run = (args, overrides = {}) => spawnSync(process.execPath, args, {
-      cwd: workspace, env: { ...env, ...overrides }, encoding: 'utf8', timeout: 25000
+    const run = (args, overrides = {}, workingDirectory = workspace) => spawnSync(process.execPath, args, {
+      cwd: workingDirectory, env: { ...env, ...overrides }, encoding: 'utf8', timeout: 25000
     });
 
     const proposal = join(scripts, 'aieo-model-proposal.mjs');
@@ -221,16 +221,64 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
       }
     }
 
-    // The real publisher operates against a temporary Git remote and fake gh executable.
-    const published = run([join(scripts, 'aieo-publish-draft.mjs')]);
-    assert.equal(published.status, 0, 'Publisher: ' + published.stderr);
+    // Model/QA/Security/Reviewer ran in the unprivileged producer checkout.
+    // Emulate the artifact boundary with a SECOND, clean Git checkout: copy
+    // only the five allowlisted handoffs and start the unchanged importer in
+    // its own child process, with neither a model nor a GitHub credential.
+    // The later publisher is a different process and receives its synthetic
+    // GitHub credential only after the stage process has exited successfully.
+    const isolated = join(root, 'isolated-publisher');
+    execFileSync('git', ['clone', '-q', '--branch', 'main', remote, isolated], { cwd: root });
+    const isolatedGit = (...args) => execFileSync('git', args, { cwd: isolated, encoding: 'utf8' });
+    const staging = join(isolated, 'aieo-staging');
+    mkdirSync(join(staging, 'components'), { recursive: true, mode: 0o700 });
+    mkdirSync(join(staging, 'aieo-output'), { recursive: true, mode: 0o700 });
+    copyFileSync(target, join(staging, MODEL_ALLOWED_PATH));
+    for (const name of ['proposal', 'qa', 'security', 'reviewer']) {
+      copyFileSync(report(name), join(staging, 'aieo-output', 'model-' + name + '.json'));
+    }
+    const cleanSource = join(isolated, MODEL_ALLOWED_PATH);
+    assert.equal(readFileSync(cleanSource, 'utf8'), original,
+      'fresh publisher checkout must begin with original trusted source');
+
+    // Inject an extra artifact: independent staging must fail closed without
+    // mutating the checkout or contacting the mocked GitHub remote.
+    const unexpected = join(staging, 'aieo-output', 'unexpected.js');
+    writeFileSync(unexpected, 'unapproved artifact\n');
+    const noCredentialEnv = {
+      GH_TOKEN: '', GITHUB_TOKEN: '', OPENROUTER_API_KEY: ''
+    };
+    const stageScript = join(scripts, 'aieo-stage-reviewed-model.mjs');
+    const blockedStage = run([stageScript], noCredentialEnv, isolated);
+    assert.notEqual(blockedStage.status, 0, 'unexpected handoff must be refused');
+    assert.equal(readFileSync(cleanSource, 'utf8'), original);
+    assert.equal(existsSync(ghLog), false, 'staging failure must not invoke GitHub CLI');
+    rmSync(unexpected);
+
+    const staged = run([stageScript], noCredentialEnv, isolated);
+    assert.equal(staged.status, 0, 'isolated stage: ' + staged.stderr);
+    assert.equal(JSON.parse(staged.stdout).status, 'reviewed-artifact-staged');
+    assert.equal(readFileSync(cleanSource, 'utf8'), candidate);
+    assert.equal(existsSync(staging), false, 'downloaded artifacts must be consumed');
+    for (const name of ['proposal', 'qa', 'security', 'reviewer']) {
+      assert.equal(readFileSync(join(isolated, 'aieo-output', 'model-' + name + '.json'), 'utf8'),
+        readFileSync(report(name), 'utf8'), 'stage must preserve exact reviewed evidence');
+    }
+    assert.equal(existsSync(ghLog), false, 'staging must never invoke GitHub CLI');
+    assert.equal(isolatedGit('branch', '--show-current').trim(), 'main',
+      'staging must not create a branch');
+
+    // Only the third, token-scoped child may push to the disposable bare remote
+    // and call the fake gh CLI. This remains a mock, NOT live GitHub publication.
+    const published = run([join(scripts, 'aieo-publish-draft.mjs')], {}, isolated);
+    assert.equal(published.status, 0, 'isolated Publisher: ' + published.stderr);
     const result = JSON.parse(published.stdout);
     assert.equal(result.status, 'draft-pr-created');
     assert.equal(result.requiresHumanMerge, true);
     assert.equal(result.branch, 'aieo/model-proposal-77331-1');
-    assert.equal(git('show', 'main:' + MODEL_ALLOWED_PATH), original, 'main remains unchanged');
-    assert.equal(git('diff', '--name-only', 'main', 'HEAD').trim(), MODEL_ALLOWED_PATH);
-    assert.match(git('ls-remote', '--heads', remote), /refs\/heads\/aieo\/model-proposal-77331-1/);
+    assert.equal(isolatedGit('show', 'main:' + MODEL_ALLOWED_PATH), original, 'main remains unchanged');
+    assert.equal(isolatedGit('diff', '--name-only', 'main', 'HEAD').trim(), MODEL_ALLOWED_PATH);
+    assert.match(isolatedGit('ls-remote', '--heads', remote), /refs\/heads\/aieo\/model-proposal-77331-1/);
     const ghCommands = readFileSync(ghLog, 'utf8');
     assert.match(ghCommands, /pr create --draft --base main --head aieo\/model-proposal-77331-1/);
     assert.match(ghCommands, /pr view https:\/\/github.com\/jayalshehri\/CGP-MVP\/pull\/777 --json/);
