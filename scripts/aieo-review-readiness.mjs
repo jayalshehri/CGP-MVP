@@ -3,6 +3,8 @@
 // the exact trusted main commit. A stacked Draft branch is NOT a deployable
 // workflow_dispatch target. No application source or secrets are read here.
 import { execFileSync } from 'node:child_process';
+import { hasUnsafeGitEnvironment } from './aieo-git-process-guard.mjs';
+import { verifyCandidateActionsContext, verifyOfficialGitHubCliContext } from './aieo-candidate-role.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
 const WORKFLOW = '.github/workflows/aieo-model-candidate-roles.yml';
@@ -31,6 +33,19 @@ function liveGithub(args) {
 
 export function verifyTrustedReviewReadiness({ env = process.env, gh = liveGithub } = {}) {
   const sha = env.GITHUB_SHA;
+  // This preflight runs while GH_TOKEN is available and BEFORE model source
+  // disclosure. Check both the real process environment and any supplied
+  // context before the FIRST gh subprocess. An injected fixture must not
+  // conceal live credentials or redirect the CLI to another host/repository.
+  try {
+    if (hasUnsafeGitEnvironment(process.env) ||
+        hasUnsafeGitEnvironment(env)) failure();
+    verifyOfficialGitHubCliContext(process.env);
+    verifyOfficialGitHubCliContext(env);
+    const offlineFixture = verifyCandidateActionsContext(env);
+    if (offlineFixture ? gh === liveGithub :
+        process.env.GITHUB_ACTIONS !== 'true') failure();
+  } catch { failure(); }
   if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
       env.GITHUB_REF !== 'refs/heads/main' ||
       env.GITHUB_REPOSITORY !== REPO ||
