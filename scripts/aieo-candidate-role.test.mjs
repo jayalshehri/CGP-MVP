@@ -1026,8 +1026,12 @@ test('pre-build replay rejects live process credentials concealed by injected co
   const root = mkdtempSync(join(tmpdir(), 'aieo-replay-live-credential-'));
   const marker = join(root, 'git-invocation-marker');
   const fakeGit = join(root, 'git');
-  writeFileSync(fakeGit, '#!/bin/sh\\nprintf "invoked\\\\n" >> ' +
-    JSON.stringify(marker) + '\\nexit 98\\n');
+  writeFileSync(fakeGit, [
+    '#!/bin/sh',
+    'printf "invoked\n" >> ' + JSON.stringify(marker),
+    'exit 98',
+    ''
+  ].join('\n'));
   chmodSync(fakeGit, 0o755);
   const url = new URL('./aieo-candidate-replay.mjs', import.meta.url).href;
   const driver = `
