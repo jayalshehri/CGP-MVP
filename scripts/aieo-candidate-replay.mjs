@@ -17,6 +17,7 @@ import {
 
 const REPO = 'jayalshehri/CGP-MVP';
 const SHA = /^[a-f0-9]{40}$/;
+const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const block = () => { throw new Error('AIEO pre-build replay blocked: untrusted candidate or role evidence'); };
@@ -132,6 +133,10 @@ export function replayReviewedCandidate(env = process.env) {
     const head = developer.headSha;
     const number = Number(env.AIEO_PR_NUMBER);
     if (!SHA.test(head || '') || head === base ||
+        // The original independent Developer report also binds the precise
+        // candidate branch; never accept a missing/foreign handoff ref before
+        // replaying its code for npm/Next.js under trusted build tools.
+        !BRANCH.test(developer.headRef || '') ||
         developer.baseSha !== base || developer.prNumber !== number ||
         git('rev-parse', 'HEAD') !== base ||
         git('diff', '--cached', '--name-only') ||
@@ -171,6 +176,7 @@ export function replayReviewedCandidate(env = process.env) {
     const expectedDeveloper = {
       schemaVersion: 1, role: 'developer', status: 'proposed', path: MODEL_ALLOWED_PATH,
       prNumber: number, baseSha: base, headSha: head,
+      headRef: developer.headRef,
       sourceHash: hash(original), proposedHash: hash(candidate),
       diffHash: hash(diff), changedPaths: paths
     };
