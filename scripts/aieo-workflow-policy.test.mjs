@@ -53,6 +53,45 @@ test('approved source-sharing task is bound at proposal and publisher boundaries
   assert.ok(publisher.includes('proposal?.sourceCommitSha !== env.GITHUB_SHA'));
 });
 
+test('model source review and build cannot execute on a GitHub write-token runner', () => {
+  const proposed = model.split('\n  create-model-draft:\n')[1]
+    .split('\n  publish-model-draft:\n')[0];
+  const publisherJob = model.split('\n  publish-model-draft:\n')[1];
+  assert.ok(proposed && publisherJob, 'candidate and publisher must be separate jobs');
+  assert.match(proposed, /permissions:\s*\n\s*contents: read/);
+  assert.doesNotMatch(proposed, /^\s*(?:contents|pull-requests|actions): write/m,
+    'candidate, provider and npm build may not inherit the GitHub write token');
+  assert.match(proposed, /environment: aieo-ai/);
+  assert.match(proposed, /name: Handoff bounded model evidence without write credentials/);
+  assert.match(proposed, /uses: actions\/upload-artifact@[a-f0-9]{40}/);
+  assert.doesNotMatch(proposed, /run: node scripts\/aieo-publish-draft\.mjs/);
+  assert.match(publisherJob, /needs: create-model-draft/);
+  assert.match(publisherJob, /contents: write/);
+  assert.match(publisherJob, /pull-requests: write/);
+  assert.match(publisherJob, /actions: write/);
+  assert.doesNotMatch(publisherJob, /OPENROUTER_API_KEY|OPENROUTER_MODEL_ID|AIEO_MODEL_APPLY/,
+    'fresh publisher runner cannot hold provider credentials');
+  assert.match(publisherJob, /persist-credentials: false/);
+  assert.match(publisherJob, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(publisherJob, /name: aieo-reviewed-model-evidence\s*\n\s*path: aieo-staging/);
+  assert.ok(publisherJob.indexOf('node scripts/aieo-stage-reviewed-model.mjs') <
+    publisherJob.indexOf('node scripts/aieo-publish-draft.mjs'),
+    'artifact must be validated and staged before write credential');
+  const publisherStep = publisherJob.slice(publisherJob.indexOf(
+    '      - name: Publish independently verified candidate as Draft PR only'));
+  assert.match(publisherStep, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.doesNotMatch(publisherJob.slice(0, publisherJob.indexOf(
+    '      - name: Publish independently verified candidate as Draft PR only')),
+    /GH_TOKEN: \$\{\{ github\.token \}\}/,
+    'no GitHub write credential may be exposed to the artifact importer');
+  for (const file of ['components/FeedbackWidget.tsx', 'model-proposal.json',
+    'model-qa.json', 'model-security.json', 'model-reviewer.json']) {
+    assert.ok(proposed.includes(file), 'artifact handoff must explicitly name ' + file);
+  }
+  assert.ok(model.includes("'scripts/aieo-stage-reviewed-model*.mjs'"));
+  assert.ok(model.includes('scripts/aieo-stage-reviewed-model.test.mjs'));
+});
+
 test('developer publisher remains manual and no privileged PR event is added', () => {
   assert.ok(developer.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"));
   assert.ok(developer.includes('permissions:\n  contents: read'));
