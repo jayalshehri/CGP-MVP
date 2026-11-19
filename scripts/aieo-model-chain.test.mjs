@@ -440,6 +440,55 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
     assert.equal(isolatedGit('ls-remote', '--heads', remote).trim(),
       untouchedMain + '\trefs/heads/main', 'fixture remote restored before positive publish');
 
+    // The origin might advance *during* an otherwise valid push. Exercise the
+    // actual Git post-receive boundary rather than simulating stale main
+    // before publication: the publisher must recheck the advertised refs
+    // after push, before it creates any PR or dispatches a workflow.
+    const hookPath = join(remote, 'hooks', 'post-receive');
+    const postPushDrift = [
+      '#!/bin/sh',
+      'set -eu',
+      'while read old new ref; do',
+      '  if [ "$ref" = "refs/heads/aieo/model-proposal-77331-1" ]; then',
+      '    git update-ref refs/heads/main ' + advancedMain + ' ' + untouchedMain,
+      '  fi',
+      'done',
+      ''
+    ].join('\n');
+    remoteRef(driftRef, advancedMain);
+    writeFileSync(hookPath, postPushDrift, { mode: 0o700 });
+    chmodSync(hookPath, 0o700);
+    try {
+      const raced = run([finalPublisher], {}, isolated);
+      assert.notEqual(raced.status, 0, 'post-push main drift must block Draft PR creation');
+      assert.match(raced.stderr, /remote refs changed after candidate push/,
+        'failure must be the post-push re-attestation, not a preflight error');
+      assert.equal(isolatedGit('rev-parse', 'main').trim(), untouchedMain);
+      assert.equal(isolatedGit('show', 'main:' + MODEL_ALLOWED_PATH), original);
+      assert.equal(readFileSync(cleanSource, 'utf8'), candidate);
+      assert.equal(isolatedGit('ls-remote', '--heads', remote, 'main').trim(),
+        advancedMain + '\trefs/heads/main', 'hook must actually advance remote main');
+      const pushed = isolatedGit('ls-remote', '--heads', remote, existingBranch).trim();
+      assert.match(pushed, /^[a-f0-9]{40}\trefs\/heads\/aieo\/model-proposal-77331-1$/,
+        'candidate push must actually succeed before re-attestation rejects it');
+      const calls = readFileSync(ghLog, 'utf8');
+      assert.equal(calls.trim(), 'auth setup-git',
+        'only pre-push credential setup may run; no PR or workflow dispatch');
+    } finally {
+      rmSync(hookPath, { force: true });
+      remoteRef('refs/heads/main', untouchedMain, advancedMain);
+      const proposedSha = isolatedGit('rev-parse', 'HEAD').trim();
+      remoteRef('-d', existingBranch, proposedSha);
+      remoteRef('-d', driftRef, advancedMain);
+      isolatedGit('switch', '-q', 'main');
+      isolatedGit('branch', '-D', 'aieo/model-proposal-77331-1');
+      writeFileSync(cleanSource, candidate);
+      rmSync(ghLog, { force: true });
+    }
+    assert.equal(isolatedGit('ls-remote', '--heads', remote).trim(),
+      untouchedMain + '\trefs/heads/main',
+      'recovered local fixture must contain only original main before positive case');
+
     // Only the third, token-scoped child may push to the disposable bare remote
     // and call the fake gh CLI. This remains a mock, NOT live GitHub publication.
     const published = run([join(scripts, 'aieo-publish-draft.mjs')], {}, isolated);
