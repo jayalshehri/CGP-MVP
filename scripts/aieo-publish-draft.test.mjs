@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
-import { validateDispatch, verifyCandidate, verifyOfficialPublisherOrigin } from './aieo-publish-draft.mjs';
+import { validateDispatch, verifyCandidate, verifyOfficialPublisherOrigin, publisherSubprocessEnvironment } from './aieo-publish-draft.mjs';
 
 const publisher = join(dirname(fileURLToPath(import.meta.url)), 'aieo-publish-draft.mjs');
 const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
@@ -72,6 +72,57 @@ function fixture() {
   };
   return { root, workspace, remote, log, env, target, args, qa, security, reviewer };
 }
+
+// Actual Git and gh children must never inherit arbitrary secrets that a
+// previous build step could have added to the write-token publisher process.
+test('publisher isolates real Git and gh children from unrelated secrets', () => {
+  const f = fixture();
+  try {
+    const secret = 'synthetic-no-disclosure';
+    const inherited = { ...f.env,
+      AIEO_INTERNAL_SECRET: secret, OPENROUTER_API_KEY: secret, NPM_TOKEN: secret,
+      NEXT_PUBLIC_SUPABASE_URL: 'https://invalid.example.invalid'
+    };
+    const childEnv = publisherSubprocessEnvironment(inherited);
+    assert.equal(childEnv.GH_TOKEN, 'fixture-never-live');
+    assert.equal(childEnv.PATH, inherited.PATH);
+    assert.equal(childEnv.GIT_TERMINAL_PROMPT, '0');
+    assert.equal(childEnv.GIT_NO_REPLACE_OBJECTS, '1');
+    for (const key of ['AIEO_INTERNAL_SECRET', 'OPENROUTER_API_KEY',
+      'NPM_TOKEN', 'NEXT_PUBLIC_SUPABASE_URL', 'GITHUB_TOKEN']) {
+      assert.equal(Object.hasOwn(childEnv, key), false, key + ' must be absent');
+    }
+    const fakeGh = join(f.root, 'bin', 'gh');
+    const script = readFileSync(fakeGh, 'utf8');
+    assert.ok(script.includes('const a=process.argv.slice(2);'));
+    writeFileSync(fakeGh, script.replace('const a=process.argv.slice(2);',
+      'if (process.env.AIEO_INTERNAL_SECRET || process.env.OPENROUTER_API_KEY || ' +
+      'process.env.NPM_TOKEN || process.env.NEXT_PUBLIC_SUPABASE_URL) process.exit(89);\n' +
+      'if (process.env.GH_TOKEN !== "fixture-never-live") process.exit(90);\n' +
+      'const a=process.argv.slice(2);'));
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: inherited, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(child.status, 0, 'real fake gh must receive only scoped secrets: ' + child.stderr);
+    assert.match(child.stdout, /draft-pr-created/);
+    assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'aieo/model-proposal-99123-1');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('publisher subprocess environment never forwards test-only knobs in Actions', () => {
+  const scoped = publisherSubprocessEnvironment({
+    PATH: '/usr/bin', HOME: '/tmp', GH_TOKEN: 'synthetic-not-a-secret',
+    GITHUB_ACTIONS: 'true', AIEO_FAKE_GH_LOG: '/tmp/fake.log',
+    AIEO_FAKE_RESPONSE: 'rest-undrafted', GITHUB_TOKEN: 'other-token',
+    GIT_CONFIG_COUNT: '1', OPENROUTER_API_KEY: 'never-forward'
+  });
+  assert.equal(scoped.GH_TOKEN, 'synthetic-not-a-secret');
+  for (const key of ['AIEO_FAKE_GH_LOG', 'AIEO_FAKE_RESPONSE',
+    'GITHUB_TOKEN', 'GIT_CONFIG_COUNT', 'OPENROUTER_API_KEY']) {
+    assert.equal(Object.hasOwn(scoped, key), false);
+  }
+});
 
 test('publisher rejects GitHub CLI host, repository and config redirects before Git or gh', () => {
   const f = fixture();
