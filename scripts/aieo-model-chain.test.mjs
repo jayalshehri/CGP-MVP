@@ -241,14 +241,68 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
     assert.equal(readFileSync(cleanSource, 'utf8'), original,
       'fresh publisher checkout must begin with original trusted source');
 
+    const stageScript = join(scripts, 'aieo-stage-reviewed-model.mjs');
+    const noCredentialEnv = { GH_TOKEN: '', GITHUB_TOKEN: '', OPENROUTER_API_KEY: '' };
+    const stagedSource = join(staging, MODEL_ALLOWED_PATH);
+    const untouchedMain = isolatedGit('rev-parse', 'main').trim();
+    // This is the actual fresh-checkout import process, not a mocked importer.
+    // A syntactically canonical report or a harmless-looking single-line edit
+    // is still untrusted if its hashes do not match the independently reviewed
+    // candidate. None may modify the checkout or reach the write-scoped CLI.
+    for (const name of ['proposal', 'qa', 'security', 'reviewer']) {
+      const evidencePath = join(staging, 'aieo-output', 'model-' + name + '.json');
+      const verified = readFileSync(evidencePath, 'utf8');
+      const forged = JSON.parse(verified);
+      assert.equal(typeof forged.proposedHash, 'string', name + ' must bind candidate hash');
+      forged.proposedHash = '0'.repeat(64);
+      try {
+        writeFileSync(evidencePath, JSON.stringify(forged, null, 2) + '\\n');
+        const rejected = run([stageScript], noCredentialEnv, isolated);
+        assert.notEqual(rejected.status, 0,
+          name + ' forged artifact must fail independent staging');
+        assert.equal(readFileSync(cleanSource, 'utf8'), original);
+        assert.equal(existsSync(join(isolated, 'aieo-output')), false);
+        assert.equal(existsSync(ghLog), false);
+        assert.equal(isolatedGit('rev-parse', 'main').trim(), untouchedMain);
+      } finally {
+        writeFileSync(evidencePath, verified);
+      }
+    }
+
+    const reviewedSource = readFileSync(stagedSource, 'utf8');
+    assert.equal(reviewedSource, candidate);
+    const unreviewedSource = reviewedSource.replace(replacement, replacement + ' ');
+    assert.notEqual(unreviewedSource, reviewedSource,
+      'negative case must change only the reviewed replacement line');
+    try {
+      writeFileSync(stagedSource, unreviewedSource);
+      const rejected = run([stageScript], noCredentialEnv, isolated);
+      assert.notEqual(rejected.status, 0,
+        'a well-formed but unreviewed edit must fail independent staging');
+      assert.equal(readFileSync(cleanSource, 'utf8'), original);
+      assert.equal(existsSync(join(isolated, 'aieo-output')), false);
+      assert.equal(existsSync(ghLog), false);
+      assert.equal(isolatedGit('rev-parse', 'main').trim(), untouchedMain);
+    } finally {
+      writeFileSync(stagedSource, reviewedSource);
+    }
+
+    // Accidental inherited credentials must block staging before any bytes
+    // cross into the privileged checkout, even when all reports are valid.
+    for (const credential of ['GH_TOKEN', 'GITHUB_TOKEN', 'OPENROUTER_API_KEY']) {
+      const rejected = run([stageScript], {
+        ...noCredentialEnv, [credential]: 'test-only-placeholder'
+      }, isolated);
+      assert.notEqual(rejected.status, 0, credential + ' must block staging');
+      assert.equal(readFileSync(cleanSource, 'utf8'), original);
+      assert.equal(existsSync(join(isolated, 'aieo-output')), false);
+      assert.equal(existsSync(ghLog), false);
+    }
+
     // Inject an extra artifact: independent staging must fail closed without
     // mutating the checkout or contacting the mocked GitHub remote.
     const unexpected = join(staging, 'aieo-output', 'unexpected.js');
     writeFileSync(unexpected, 'unapproved artifact\n');
-    const noCredentialEnv = {
-      GH_TOKEN: '', GITHUB_TOKEN: '', OPENROUTER_API_KEY: ''
-    };
-    const stageScript = join(scripts, 'aieo-stage-reviewed-model.mjs');
     const blockedStage = run([stageScript], noCredentialEnv, isolated);
     assert.notEqual(blockedStage.status, 0, 'unexpected handoff must be refused');
     assert.equal(readFileSync(cleanSource, 'utf8'), original);
