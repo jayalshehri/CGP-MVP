@@ -150,8 +150,8 @@ test('publisher rejects privileged offline-mode spoof before Git or gh', () => {
     mkdirSync(trapBin);
     for (const binary of ['git', 'gh']) {
       const script = join(trapBin, binary);
-      writeFileSync(script, '#!/bin/sh\\n' +
-        'printf invoked >> ' + JSON.stringify(marker) + '\\nexit 91\\n');
+      writeFileSync(script, '#!/bin/sh\n' +
+        'printf invoked >> ' + JSON.stringify(marker) + '\nexit 91\n');
       chmodSync(script, 0o755);
     }
     for (const change of [
@@ -173,7 +173,7 @@ test('publisher rejects privileged offline-mode spoof before Git or gh', () => {
     assert.equal(git(f.workspace, 'rev-parse', 'main'), originalMain);
     assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
     assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
-      /refs\\/heads\\/aieo\\//, 'no candidate ref may be published');
+      /refs\/heads\/aieo\//, 'no candidate ref may be published');
     assert.equal(validateDispatch(f.env), 'model', 'real offline fixture stays supported');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
