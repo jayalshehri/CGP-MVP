@@ -623,3 +623,46 @@ test('synthetic multi-agent jobs consume only their exact role artifacts', () =>
   assert.doesNotMatch(foundation, /pattern:\s*aieo-\*|merge-multiple:\s*true/,
     'do not admit untrusted artifact namespaces into synthetic Reviewer');
 });
+
+
+test('deterministic patch build and publisher use isolated runners and exact one-file handoff', () => {
+  const prepare = developer.split('\n  create-draft:\n')[1]?.split('\n  publish-draft:\n')[0];
+  const publish = developer.split('\n  publish-draft:\n')[1];
+  assert.ok(prepare && publish, 'developer prepare and publisher require distinct jobs');
+  assert.match(prepare, /permissions:\s*\n\s*contents: read/);
+  assert.doesNotMatch(prepare, /^\s*(?:contents|pull-requests|actions): write/m,
+    'npm build and candidate cannot receive a write-scoped GitHub token');
+  assert.match(prepare, /changed: \$\{\{ steps\.proposal\.outputs\.changed \}\}/);
+  assert.match(prepare, /node scripts\/aieo-runner\.mjs/);
+  assert.match(prepare, /npm run build/);
+  assert.doesNotMatch(prepare, /GH_TOKEN:|run: node scripts\/aieo-publish-draft\.mjs/);
+  assert.match(prepare, /name: Handoff bounded developer candidate without write credentials/);
+  assert.match(prepare, /uses: actions\/upload-artifact@[a-f0-9]{40}/);
+  assert.match(prepare, /name: aieo-reviewed-developer-source\s*\n\s*path: components\/FeedbackWidget\.tsx/);
+  assert.match(publish, /needs: create-draft/);
+  assert.match(publish, /needs\.create-draft\.outputs\.changed == 'true'/);
+  assert.match(publish, /contents: write/);
+  assert.match(publish, /pull-requests: write/);
+  assert.match(publish, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(publish, /persist-credentials: false/);
+  assert.match(publish, /uses: actions\/download-artifact@[a-f0-9]{40}/);
+  assert.match(publish, /name: aieo-reviewed-developer-source\s*\n\s*path: aieo-staging\/components/);
+  assert.match(publish, /name: Capture isolated developer publisher PATH/);
+  assert.ok(publish.indexOf('node scripts/aieo-stage-reviewed-developer.mjs') <
+    publish.indexOf('node scripts/aieo-publish-draft.mjs'),
+    'staging and integrity checks must precede write-token availability');
+  assert.doesNotMatch(publish, /npm ci|npm run build|AIEO_APPLY:|AIEO_TASK:/,
+    'fresh credentialed publisher cannot run the patcher or npm scripts');
+  const finalStep = publish.indexOf('      - name: Publish verified bounded fix as Draft PR only');
+  assert.ok(finalStep > 0);
+  assert.doesNotMatch(publish.slice(0, finalStep), /GH_TOKEN: \$\{\{ github\.token \}\}/,
+    'no GitHub write credential is exposed during artifact import');
+  assert.match(publish.slice(finalStep), /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(publish.slice(finalStep), /AIEO_PUBLISH_MODE: deterministic/);
+  assert.ok(developer.includes('scripts/aieo-stage-reviewed-developer.test.mjs'));
+  const importer = read('scripts/aieo-stage-reviewed-developer.mjs');
+  assert.match(importer, /process\.env\[name\]/,
+    'importer must reject live credentials even with synthetic env argument');
+  assert.match(importer, /JSON\.stringify\(readdirSync\(path\)\.sort\(\)\)/,
+    'importer must reject unexpected artifact paths');
+});
