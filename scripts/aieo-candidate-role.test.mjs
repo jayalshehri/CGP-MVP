@@ -2036,7 +2036,7 @@ test('read-only Developer, QA, Security, Reviewer and finalizer Git subprocesses
         ',process.argv.slice(2),{stdio:"inherit"});\n' +
       'process.exit(run.status??1);\n');
     chmodSync(interceptedGit, 0o755);
-    const env = { ...f.env, GITHUB_TOKEN: 'synthetic-actions-token',
+    const env = { ...f.env, GITHUB_TOKEN: 'synthetic-fixture-not-a-secret',
       OPENROUTER_API_KEY: 'synthetic-provider-token',
       NPM_TOKEN: 'synthetic-npm-token',
       AWS_SECRET_ACCESS_KEY: 'synthetic-cloud-key',
