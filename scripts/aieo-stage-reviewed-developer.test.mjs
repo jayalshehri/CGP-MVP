@@ -1,8 +1,10 @@
 import test from 'node:test';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import assert from 'node:assert/strict';
 import {
   mkdtempSync, mkdirSync, writeFileSync, readFileSync,
-  symlinkSync, rmSync, existsSync
+  symlinkSync, linkSync, renameSync, chmodSync, rmSync, existsSync
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -82,6 +84,111 @@ test('oversized patch is refused before overwriting baseline', (t) => {
   const cwd = fixture(t);
   writeFileSync(join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx'),
     'a'.repeat(48001));
+  assert.throws(() => stageReviewedDeveloperArtifact({ cwd, env: {} }),
+    /stage blocked/);
+  assertUntouched(cwd);
+});
+
+test('refuses swapped developer payload inode after pathname attestation', (t) => {
+  const cwd = fixture(t);
+  const source = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
+  const held = join(cwd, 'original-staged-source');
+  const replacement = join(cwd, 'replacement-staged-source');
+  writeFileSync(replacement, 'malicious substituted source\n');
+  const oldLstat = fs.lstatSync;
+  let swapped = false;
+  try {
+    fs.lstatSync = (path, ...args) => {
+      const stat = oldLstat(path, ...args);
+      if (!swapped && path === source) {
+        swapped = true;
+        renameSync(source, held);
+        renameSync(replacement, source);
+      }
+      return stat;
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedDeveloperArtifact({ cwd, env: {} }),
+      /stage blocked/);
+  } finally {
+    fs.lstatSync = oldLstat;
+    syncBuiltinESMExports();
+  }
+  assert.equal(swapped, true);
+  assertUntouched(cwd);
+});
+
+test('bounds developer payload reads against concurrent growth', (t) => {
+  const cwd = fixture(t);
+  const source = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
+  const oldRead = fs.readSync;
+  const maxExpected = Buffer.byteLength('verified developer candidate\n');
+  let expanded = false;
+  let largestRead = 0;
+  try {
+    fs.readSync = (fd, buffer, offset, length, position) => {
+      // The baseline source is read first, then the downloaded candidate.
+      if (!expanded && length === maxExpected) {
+        expanded = true;
+        fs.appendFileSync(source, 'X'.repeat(1024 * 1024));
+      }
+      largestRead = Math.max(largestRead, length);
+      return oldRead(fd, buffer, offset, length, position);
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedDeveloperArtifact({ cwd, env: {} }),
+      /stage blocked/);
+  } finally {
+    fs.readSync = oldRead;
+    syncBuiltinESMExports();
+  }
+  assert.equal(expanded, true);
+  assert.ok(largestRead <= maxExpected);
+  assertUntouched(cwd);
+});
+
+test('rejects trusted source swapped to external symlink before write', (t) => {
+  const cwd = fixture(t);
+  const target = join(cwd, 'components', 'FeedbackWidget.tsx');
+  const held = join(cwd, 'original-trusted-source');
+  const outside = join(cwd, 'outside-writable-source');
+  writeFileSync(outside, 'external original\n');
+  const oldOpen = fs.openSync;
+  let swapped = false;
+  try {
+    fs.openSync = (path, flags, ...args) => {
+      if (!swapped && path === target && (flags & fs.constants.O_WRONLY)) {
+        swapped = true;
+        renameSync(target, held);
+        symlinkSync(outside, target);
+      }
+      return oldOpen(path, flags, ...args);
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedDeveloperArtifact({ cwd, env: {} }),
+      /ELOOP|stage blocked/);
+  } finally {
+    fs.openSync = oldOpen;
+    syncBuiltinESMExports();
+  }
+  assert.equal(swapped, true);
+  assert.equal(readFileSync(outside, 'utf8'), 'external original\n');
+  assert.equal(readFileSync(held, 'utf8'), 'trusted baseline\n');
+  assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
+});
+
+test('rejects hardlinked trusted source', (t) => {
+  const cwd = fixture(t);
+  const target = join(cwd, 'components', 'FeedbackWidget.tsx');
+  linkSync(target, join(cwd, 'other-hardlink'));
+  assert.throws(() => stageReviewedDeveloperArtifact({ cwd, env: {} }),
+    /stage blocked/);
+  assertUntouched(cwd);
+});
+
+test('rejects writable-by-group trusted component directory', (t) => {
+  const cwd = fixture(t);
+  chmodSync(join(cwd, 'components'), 0o770);
   assert.throws(() => stageReviewedDeveloperArtifact({ cwd, env: {} }),
     /stage blocked/);
   assertUntouched(cwd);
