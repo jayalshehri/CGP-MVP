@@ -3,6 +3,8 @@
 import { lstatSync, readdirSync, mkdirSync, writeFileSync, rmSync,
   openSync, fstatSync, closeSync, ftruncateSync, readSync, constants } from 'node:fs';
 import { join } from 'node:path';
+import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
+import { inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 
 const SOURCE = 'FeedbackWidget.tsx';
 const REPORTS = ['model-proposal.json', 'model-qa.json',
@@ -95,6 +97,25 @@ function writeTrustedSource(path, expected, uid, candidate) {
   }
 }
 
+// The model workflow permits a single inert JSX copy edit. Reconstruct the
+// precise added line without running untrusted code or external diff tools.
+// The credentialed publisher independently checks the real immutable Git diff.
+function singleLineDiff(original, candidate) {
+  const before = original.split('\n');
+  const after = candidate.split('\n');
+  if (before.length !== after.length) block();
+  let changed = -1;
+  for (let i = 0; i < before.length; i++) {
+    if (before[i] === after[i]) continue;
+    if (changed !== -1 || before[i].length > 4096 ||
+        after[i].length > 4096) block();
+    changed = i;
+  }
+  if (changed === -1) block();
+  return '@@ -' + (changed + 1) + ' +' + (changed + 1) + ' @@\n-' +
+    before[changed] + '\n+' + after[changed] + '\n';
+}
+
 export function stageReviewedModelArtifact({ cwd = process.cwd(), env = process.env } = {}) {
   // A downloaded candidate is never read while either GitHub write credentials
   // or the external model credential is present in this process.
@@ -115,19 +136,36 @@ export function stageReviewedModelArtifact({ cwd = process.cwd(), env = process.
   // A regular source file under a symlinked or writable parent is not trusted.
   // Capture its directory inode before reading artifact bytes.
   const trustedParent = checkDirectory(trustedComponents, uid);
+  const original = lstatSync(source);
+  if (!trustedSource(original, uid)) block();
+  // Canonical JSON and a valid file inode are not proof of independent review.
+  // Bind the evidence to the current source bytes before altering the checkout.
+  const baseline = checkedBytes(source, uid, 48000).toString('utf8');
   const candidate = checkedBytes(join(sourceDir, SOURCE), uid, 48000);
   const reports = REPORTS.map((name) =>
     [name, checkedBytes(join(reportDir, name), uid, 65536, true)]);
-  const original = lstatSync(source);
+  const [proposal, qa, security, reviewer] = reports.map(([, bytes]) =>
+    JSON.parse(bytes.toString('utf8')));
+  const actual = candidate.toString('utf8');
+  const diff = singleLineDiff(baseline, actual);
+  // Recompute QA, Security and Reviewer verdicts from the downloaded source
+  // and clean checkout while NO GitHub or model credentials are present.
+  const observed = inspectModelReviewer({
+    original: baseline, actual, changedPaths: [MODEL_ALLOWED_PATH],
+    diff, proposal, qa, security
+  });
+  if (proposal?.schemaVersion !== 1 || proposal?.sourceShared !== true ||
+      observed.status !== 'draft-pr-eligible' ||
+      observed.requiresHumanMerge !== true ||
+      JSON.stringify(observed) !== JSON.stringify(reviewer)) block();
   const parentAfter = checkDirectory(trustedComponents, uid);
-  // lstat sees even dangling symlinks; existsSync would miss them and allow
-  // the candidate source to be overwritten before mkdirSync then failed.
-  if (!trustedSource(original, uid) ||
+  // lstat detects dangling symlinks. Reattest both source inode and parent.
+  if (!sameSource(lstatSync(source), original) ||
       parentAfter.dev !== trustedParent.dev ||
       parentAfter.ino !== trustedParent.ino ||
       lstatSync(targetDir, { throwIfNoEntry: false })) block();
   // No untrusted candidate is executed, installed as a dependency or loaded as
-  // an import. The privileged publisher independently rechecks Git and reports.
+  // an import. The publisher checks the real Git diff and task/run attestation.
   writeTrustedSource(source, original, uid, candidate);
   mkdirSync(targetDir, { mode: 0o700 });
   for (const [name, bytes] of reports) {

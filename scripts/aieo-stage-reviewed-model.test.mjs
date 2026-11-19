@@ -6,41 +6,65 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync,
   symlinkSync, linkSync, renameSync, chmodSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
+import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
+import { inspectModelDiff } from './aieo-model-security.mjs';
 import { stageReviewedModelArtifact } from './aieo-stage-reviewed-model.mjs';
 
 const reports = ['model-proposal.json', 'model-qa.json',
   'model-security.json', 'model-reviewer.json'];
+const route = String.raw`  const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
+const trustedBaseline = 'function fixture() {\n' + route + '\n  const sample = 1;\n}\n';
+const approvedCandidate = trustedBaseline.replace('  const sample = 1;', '  const sample = 2;');
+const changedDiff = '@@ -3 +3 @@\n-  const sample = 1;\n+  const sample = 2;\n';
+const hash = (value) => createHash('sha256').update(value).digest('hex');
 function fixture(t) {
   const cwd = mkdtempSync(join(tmpdir(), 'aieo-stage-isolated-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   mkdirSync(join(cwd, 'components'), { mode: 0o700 });
-  writeFileSync(join(cwd, 'components', 'FeedbackWidget.tsx'), 'baseline source\n');
+  writeFileSync(join(cwd, 'components', 'FeedbackWidget.tsx'), trustedBaseline);
   mkdirSync(join(cwd, 'aieo-staging', 'components'), { recursive: true, mode: 0o700 });
   mkdirSync(join(cwd, 'aieo-staging', 'aieo-output'), { recursive: true, mode: 0o700 });
   writeFileSync(join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx'),
-    'bounded untrusted model candidate\n');
-  for (const name of reports) {
+    approvedCandidate);
+  const proposal = {
+    schemaVersion: 1, status: 'proposed', path: MODEL_ALLOWED_PATH,
+    sourceHash: hash(trustedBaseline), proposedHash: hash(approvedCandidate),
+    sourceShared: true
+  };
+  const input = {
+    original: trustedBaseline, actual: approvedCandidate,
+    changedPaths: [MODEL_ALLOWED_PATH], diff: changedDiff, proposal
+  };
+  const qa = inspectModelQa({ ...input, report: proposal });
+  const security = inspectModelDiff({ ...input, report: proposal });
+  const reviewer = inspectModelReviewer({ ...input, qa, security });
+  assert.equal(reviewer.status, 'draft-pr-eligible');
+  for (const [index, name] of reports.entries()) {
     writeFileSync(join(cwd, 'aieo-staging', 'aieo-output', name),
-      JSON.stringify({ schemaVersion: 1, name }, null, 2) + '\n');
+      JSON.stringify([proposal, qa, security, reviewer][index], null, 2) + '\n');
   }
   return cwd;
 }
 function assertUntouched(cwd) {
   assert.equal(readFileSync(join(cwd, 'components', 'FeedbackWidget.tsx'), 'utf8'),
-    'baseline source\n');
+    trustedBaseline);
   assert.equal(existsSync(join(cwd, 'aieo-output')), false);
 }
 
 test('only exact, canonical, bounded model evidence stages on clean separate runner', (t) => {
   const cwd = fixture(t);
+  const captured = reports.map((name) =>
+    readFileSync(join(cwd, 'aieo-staging', 'aieo-output', name), 'utf8'));
   assert.deepEqual(stageReviewedModelArtifact({ cwd, env: {} }), {
     status: 'reviewed-artifact-staged', fileCount: 5
   });
   assert.equal(readFileSync(join(cwd, 'components', 'FeedbackWidget.tsx'), 'utf8'),
-    'bounded untrusted model candidate\n');
-  for (const name of reports) {
+    approvedCandidate);
+  for (const [index, name] of reports.entries()) {
     const text = readFileSync(join(cwd, 'aieo-output', name), 'utf8');
-    assert.deepEqual(JSON.parse(text), { schemaVersion: 1, name });
+    assert.equal(text, captured[index]);
   }
   assert.equal(existsSync(join(cwd, 'aieo-staging')), false);
 });
@@ -98,12 +122,12 @@ test('symlinked trusted component directory cannot redirect source write outside
   const cwd = fixture(t);
   const outside = mkdtempSync(join(tmpdir(), 'aieo-stage-external-'));
   t.after(() => rmSync(outside, { recursive: true, force: true }));
-  writeFileSync(join(outside, 'FeedbackWidget.tsx'), 'baseline source\n');
+  writeFileSync(join(outside, 'FeedbackWidget.tsx'), trustedBaseline);
   rmSync(join(cwd, 'components'), { recursive: true });
   symlinkSync(outside, join(cwd, 'components'), 'dir');
   assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
   assert.equal(readFileSync(join(outside, 'FeedbackWidget.tsx'), 'utf8'),
-    'baseline source\n');
+    trustedBaseline);
   assertUntouched(cwd);
   assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
 });
@@ -127,13 +151,13 @@ test('trusted source symlink cannot redirect candidate write to another path', (
   const cwd = fixture(t);
   const outside = mkdtempSync(join(tmpdir(), 'aieo-stage-outside-source-'));
   t.after(() => rmSync(outside, { recursive: true, force: true }));
-  writeFileSync(join(outside, 'FeedbackWidget.tsx'), 'baseline source\n');
+  writeFileSync(join(outside, 'FeedbackWidget.tsx'), trustedBaseline);
   rmSync(join(cwd, 'components', 'FeedbackWidget.tsx'));
   symlinkSync(join(outside, 'FeedbackWidget.tsx'),
     join(cwd, 'components', 'FeedbackWidget.tsx'));
   assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
   assert.equal(readFileSync(join(outside, 'FeedbackWidget.tsx'), 'utf8'),
-    'baseline source\n');
+    trustedBaseline);
   assertUntouched(cwd);
 });
 
@@ -158,7 +182,7 @@ test('hardlinked candidate payload is refused before touching trusted checkout',
   linkSync(candidate, external);
   assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
   assertUntouched(cwd);
-  assert.equal(readFileSync(external, 'utf8'), 'bounded untrusted model candidate\n');
+  assert.equal(readFileSync(external, 'utf8'), approvedCandidate);
 });
 
 test('symlinked model evidence cannot redirect the staged report read', (t) => {
@@ -215,7 +239,7 @@ test('replacement of candidate inode after lstat is rejected before reading subs
 test('a candidate growing while read is bounded and rejected before source mutation', (t) => {
   const cwd = fixture(t);
   const candidate = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
-  const initialSize = Buffer.byteLength('bounded untrusted model candidate\n');
+  const initialSize = Buffer.byteLength(approvedCandidate);
   const originalRead = fs.readSync;
   const originalWholeRead = fs.readFileSync;
   let grew = false;
@@ -267,5 +291,37 @@ test('a candidate truncated after attestation fails on short descriptor read', (
     syncBuiltinESMExports();
   }
   assert.equal(truncated, true);
+  assertUntouched(cwd);
+});
+
+test('well-formed but unauthorized model code is rejected before trusted write', (t) => {
+  const cwd = fixture(t);
+  writeFileSync(join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx'),
+    approvedCandidate.replace('sample = 2', 'sample = 3'));
+  assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  assertUntouched(cwd);
+});
+
+for (const [index, field, value] of [
+  [0, 'sourceHash', '0'.repeat(64)],
+  [1, 'routeCasesPassed', 0],
+  [2, 'addedLines', 0],
+  [3, 'requiresHumanMerge', false]
+]) {
+  test('tampered role evidence is rejected before writing: ' + field, (t) => {
+    const cwd = fixture(t);
+    const path = join(cwd, 'aieo-staging', 'aieo-output', reports[index]);
+    const original = JSON.parse(readFileSync(path, 'utf8'));
+    writeFileSync(path, JSON.stringify({ ...original, [field]: value }, null, 2) + '\n');
+    assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+    assertUntouched(cwd);
+  });
+}
+
+test('a second source line change is rejected before writing', (t) => {
+  const cwd = fixture(t);
+  const candidate = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
+  writeFileSync(candidate, approvedCandidate.replace('function fixture()', 'function changed()'));
+  assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
   assertUntouched(cwd);
 });
