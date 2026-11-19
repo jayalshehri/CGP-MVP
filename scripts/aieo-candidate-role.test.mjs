@@ -1019,6 +1019,51 @@ test('independent roles reject a real feedback network-error handler fix outside
 });
 
 
+test('pre-build replay rejects live process credentials concealed by injected context before Git', () => {
+  // Run the replay entry point in a disposable child with real process
+  // credentials but a clean injected context. A fake Git executable records
+  // whether the pre-build safety gate invoked ANY Git subprocess.
+  const root = mkdtempSync(join(tmpdir(), 'aieo-replay-live-credential-'));
+  const marker = join(root, 'git-invocation-marker');
+  const fakeGit = join(root, 'git');
+  writeFileSync(fakeGit, '#!/bin/sh\\nprintf "invoked\\\\n" >> ' +
+    JSON.stringify(marker) + '\\nexit 98\\n');
+  chmodSync(fakeGit, 0o755);
+  const url = new URL('./aieo-candidate-replay.mjs', import.meta.url).href;
+  const driver = `
+    import { replayReviewedCandidate } from ${JSON.stringify(url)};
+    const injected = {
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_REF: 'refs/heads/main',
+      GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
+      GITHUB_SHA: 'a'.repeat(40),
+      AIEO_PR_NUMBER: '777'
+    };
+    try {
+      replayReviewedCandidate(injected);
+      process.exitCode = 2;
+    } catch (error) {
+      if (!/AIEO pre-build replay blocked/.test(String(error.message))) process.exitCode = 3;
+    }
+  `;
+  try {
+    for (const name of ['GH_TOKEN', 'GITHUB_TOKEN', 'OPENROUTER_API_KEY']) {
+      const child = spawnSync(process.execPath,
+        ['--input-type=module', '-e', driver], {
+          cwd: root, encoding: 'utf8', timeout: 15000,
+          env: {
+            PATH: root + delimiter + process.env.PATH,
+            HOME: root,
+            [name]: 'synthetic-never-real-credential'
+          }
+        });
+      assert.equal(child.status, 0, name + ': replay must fail closed');
+      assert.equal(existsSync(marker), false,
+        name + ': no Git executable may run before credential rejection');
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('pre-build replay accepts only four verified role handoffs and a credential-free Git blob', () => {
   const f = setup();
   const replayScript = join(dirname(fileURLToPath(import.meta.url)), 'aieo-candidate-replay.mjs');
