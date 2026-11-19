@@ -387,6 +387,59 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
       writeFileSync(cleanSource, candidate);
     }
 
+
+    // A valid report, clean checkout and independently approved source are
+    // insufficient if origin/main advances while the model is being reviewed.
+    // Advance ONLY the disposable bare remote to a different valid commit and
+    // prove the write-scoped publisher refuses the now-stale base before gh.
+    git('commit', '--allow-empty', '-qm', 'fixture: unrelated main advanced');
+    const advancedMain = git('rev-parse', 'HEAD').trim();
+    assert.notEqual(advancedMain, untouchedMain);
+    // Make the commit object available to the disposable bare remote without
+    // altering its main ref until the controlled drift window starts.
+    const driftRef = 'refs/heads/aieo-fixture-main-drift';
+    git('push', '-q', 'origin', 'HEAD:' + driftRef);
+    const remoteRef = (...args) => execFileSync('git',
+      ['--git-dir', remote, 'update-ref', ...args], { cwd: root });
+    try {
+      remoteRef('refs/heads/main', advancedMain, untouchedMain);
+      const stale = run([finalPublisher], {}, isolated);
+      assert.notEqual(stale.status, 0,
+        'publisher must refuse if official main changes after staging');
+      assert.match(stale.stderr, /remote main changed since the trusted workflow checkout/);
+      assert.equal(isolatedGit('branch', '--show-current').trim(), 'main');
+      assert.equal(isolatedGit('show', 'main:' + MODEL_ALLOWED_PATH), original);
+      assert.equal(readFileSync(cleanSource, 'utf8'), candidate);
+      assert.equal(existsSync(ghLog), false, 'stale main must not contact gh');
+      assert.doesNotMatch(isolatedGit('ls-remote', '--heads', remote),
+        /refs\/heads\/aieo\/model-proposal-/);
+    } finally {
+      remoteRef('refs/heads/main', untouchedMain, advancedMain);
+      remoteRef('-d', driftRef, advancedMain);
+    }
+
+    // Replayed run IDs must not overwrite an existing remote proposal branch.
+    // Simulate a colliding branch in the disposable bare remote only; the
+    // publisher must reject it without force-pushing, gh, or touching main.
+    const existingBranch = 'refs/heads/aieo/model-proposal-77331-1';
+    remoteRef(existingBranch, untouchedMain);
+    try {
+      const collision = run([finalPublisher], {}, isolated);
+      assert.notEqual(collision.status, 0,
+        'an existing proposal branch must prevent another publication');
+      assert.match(collision.stderr, /candidate branch already exists on origin/);
+      assert.equal(isolatedGit('branch', '--show-current').trim(), 'main');
+      assert.equal(isolatedGit('show', 'main:' + MODEL_ALLOWED_PATH), original);
+      assert.equal(readFileSync(cleanSource, 'utf8'), candidate);
+      assert.equal(existsSync(ghLog), false, 'duplicate branch must not reach gh');
+      assert.match(isolatedGit('ls-remote', '--heads', remote),
+        /refs\/heads\/aieo\/model-proposal-77331-1/);
+    } finally {
+      remoteRef('-d', existingBranch, untouchedMain);
+    }
+    assert.equal(isolatedGit('ls-remote', '--heads', remote).trim(),
+      untouchedMain + '\trefs/heads/main', 'fixture remote restored before positive publish');
+
     // Only the third, token-scoped child may push to the disposable bare remote
     // and call the fake gh CLI. This remains a mock, NOT live GitHub publication.
     const published = run([join(scripts, 'aieo-publish-draft.mjs')], {}, isolated);
