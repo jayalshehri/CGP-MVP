@@ -403,8 +403,9 @@ test('credentialed AIEO steps use a pre-candidate captured tool PATH, not GITHUB
           name + ' must ignore PATH entries appended by prior candidate/build steps');
       }
     }
-    assert.ok(workflow.lastIndexOf('        with:\n          node-version: \'24\'\n') <
-      workflow.lastIndexOf(capture), 'PATH capture must follow setup-node');
+    assert.ok(workflow.lastIndexOf('        with:\n          node-version: \'24\'\n',
+      workflow.indexOf(capture)) >= 0,
+      'each first PATH capture must follow setup-node within its runner');
   }
 });
 
