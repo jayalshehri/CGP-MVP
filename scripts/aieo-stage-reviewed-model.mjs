@@ -1,6 +1,7 @@
 // Import a bounded model candidate into a FRESH, credential-free publisher job.
 // Build/provider code runs on a different runner; do not execute its artifact.
-import { lstatSync, readdirSync, readFileSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync, mkdirSync, writeFileSync, rmSync,
+  openSync, fstatSync, closeSync, ftruncateSync, constants } from 'node:fs';
 import { join } from 'node:path';
 
 const SOURCE = 'FeedbackWidget.tsx';
@@ -38,6 +39,36 @@ function checkedBytes(path, uid, maxBytes, json = false) {
   return bytes;
 }
 
+// Do not truncate a trusted checkout path after checking only its filename.
+// Open with O_NOFOLLOW, then attest the opened descriptor AND the path to the
+// same regular, privately writable inode immediately before any source write.
+// If the path was swapped to a link or another file, fail without modifying it.
+function trustedSource(stat, uid) {
+  return stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1 &&
+    stat.uid === uid && (stat.mode & 0o600) === 0o600 &&
+    !(stat.mode & 0o7133) && stat.size >= 1 && stat.size <= 48000;
+}
+function sameSource(stat, expected) {
+  return stat.dev === expected.dev && stat.ino === expected.ino &&
+    stat.mode === expected.mode && stat.size === expected.size &&
+    stat.mtimeMs === expected.mtimeMs && stat.ctimeMs === expected.ctimeMs;
+}
+function writeTrustedSource(path, expected, uid, candidate) {
+  let fd;
+  try {
+    fd = openSync(path, constants.O_WRONLY | constants.O_NOFOLLOW |
+      constants.O_NONBLOCK);
+    const opened = fstatSync(fd);
+    const pathNow = lstatSync(path);
+    if (!trustedSource(opened, uid) || !trustedSource(pathNow, uid) ||
+        !sameSource(opened, expected) || !sameSource(pathNow, expected)) block();
+    ftruncateSync(fd, 0);
+    writeFileSync(fd, candidate);
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
 export function stageReviewedModelArtifact({ cwd = process.cwd(), env = process.env } = {}) {
   // A downloaded candidate is never read while either GitHub write credentials
   // or the external model credential is present in this process.
@@ -65,15 +96,13 @@ export function stageReviewedModelArtifact({ cwd = process.cwd(), env = process.
   const parentAfter = checkDirectory(trustedComponents, uid);
   // lstat sees even dangling symlinks; existsSync would miss them and allow
   // the candidate source to be overwritten before mkdirSync then failed.
-  if (!original.isFile() || original.isSymbolicLink() ||
-      original.nlink !== 1 || original.uid !== uid ||
-      (original.mode & 0o0022) || original.size < 1 || original.size > 48000 ||
+  if (!trustedSource(original, uid) ||
       parentAfter.dev !== trustedParent.dev ||
       parentAfter.ino !== trustedParent.ino ||
       lstatSync(targetDir, { throwIfNoEntry: false })) block();
   // No untrusted candidate is executed, installed as a dependency or loaded as
   // an import. The privileged publisher independently rechecks Git and reports.
-  writeFileSync(source, candidate);
+  writeTrustedSource(source, original, uid, candidate);
   mkdirSync(targetDir, { mode: 0o700 });
   for (const [name, bytes] of reports) {
     writeFileSync(join(targetDir, name), bytes, { flag: 'wx', mode: 0o600 });
