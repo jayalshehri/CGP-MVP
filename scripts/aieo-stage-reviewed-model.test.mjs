@@ -77,3 +77,17 @@ test('duplicate-key or malformed UTF-8 handoffs are rejected before any write', 
   assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
   assertUntouched(cwd);
 });
+
+test('real process credential cannot be hidden by a synthetic staging context', (t) => {
+  const cwd = fixture(t);
+  const previous = process.env.GH_TOKEN;
+  try {
+    process.env.GH_TOKEN = 'synthetic-credential-do-not-use';
+    assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }),
+      /stage blocked/);
+    assertUntouched(cwd);
+  } finally {
+    if (previous === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = previous;
+  }
+});
