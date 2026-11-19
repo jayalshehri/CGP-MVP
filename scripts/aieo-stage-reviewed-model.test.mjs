@@ -215,7 +215,7 @@ test('replacement of candidate inode after lstat is rejected before reading subs
 test('a candidate growing while read is bounded and rejected before source mutation', (t) => {
   const cwd = fixture(t);
   const candidate = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
-  const initialSize = Buffer.byteLength('bounded untrusted model candidate\\n');
+  const initialSize = Buffer.byteLength('bounded untrusted model candidate\n');
   const originalRead = fs.readSync;
   const originalWholeRead = fs.readFileSync;
   let grew = false;
