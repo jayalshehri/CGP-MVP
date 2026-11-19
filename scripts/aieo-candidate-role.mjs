@@ -164,6 +164,24 @@ function writeReport(role, report) {
   } catch { block(); }
   finally { if (fd !== undefined) closeSync(fd); }
 }
+// An injected fixture object cannot make an actual credential-bearing process
+// skip the official GitHub origin check. Inspect both the supplied context and
+// the live process before ANY git/gh subprocess or artifact IO. Only two
+// intentionally nonfunctional sentinels are eligible for offline rehearsal.
+const OFFLINE_FIXTURE_TOKENS = new Set([
+  'fixture-never-live', 'synthetic-fixture-not-a-secret'
+]);
+export function verifyCandidateActionsContext(env = process.env) {
+  const offlineFixture = env?.GITHUB_ACTIONS === 'false' &&
+    OFFLINE_FIXTURE_TOKENS.has(env?.GH_TOKEN);
+  const liveProcessCredential = [process.env.GH_TOKEN, process.env.GITHUB_TOKEN]
+    .some((value) => typeof value === 'string' && value.length > 0 &&
+      !OFFLINE_FIXTURE_TOKENS.has(value));
+  if ((!offlineFixture && env?.GITHUB_ACTIONS !== 'true') ||
+      (liveProcessCredential &&
+        (process.env.GITHUB_ACTIONS !== 'true' || env?.GITHUB_ACTIONS !== 'true'))) block();
+  return offlineFixture;
+}
 function verifiedRemoteContext(env) {
   const number = env.AIEO_PR_NUMBER;
   if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
@@ -171,12 +189,7 @@ function verifiedRemoteContext(env) {
       env.GITHUB_REPOSITORY !== REPO ||
       !/^[1-9][0-9]*$/.test(number || '') ||
       !env.GH_TOKEN) block();
-  // Fail before gh, Git or network contact if a privileged run spoofs local
-  // fixture mode. These literal sentinels are not valid GitHub credentials.
-  const offlineFixture = env.GITHUB_ACTIONS === 'false' &&
-    (env.GH_TOKEN === 'fixture-never-live' ||
-     env.GH_TOKEN === 'synthetic-fixture-not-a-secret');
-  if (!offlineFixture && env.GITHUB_ACTIONS !== 'true') block();
+  const offlineFixture = verifyCandidateActionsContext(env);
   let pr;
   try {
     pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
@@ -275,6 +288,7 @@ export function runCandidateRole(role, env = process.env) {
   // before invoking git, gh, or reading/writing review evidence.
   verifyOfficialGitHubCliContext(process.env);
   verifyOfficialGitHubCliContext(env);
+  verifyCandidateActionsContext(env);
   if (!ROLES.includes(role)) block();
   // A worktree diff may invoke an attribute-selected clean filter despite
   // --no-textconv. Reject effective filters before any Git diff or handoff.
