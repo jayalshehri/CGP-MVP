@@ -1,6 +1,6 @@
 // Import a bounded model candidate into a FRESH, credential-free publisher job.
 // Build/provider code runs on a different runner; do not execute its artifact.
-import { existsSync, lstatSync, readdirSync, readFileSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SOURCE = 'FeedbackWidget.tsx';
@@ -11,8 +11,11 @@ function checkDirectory(path, uid, names) {
   const stat = lstatSync(path);
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== uid ||
       (stat.mode & 0o0022)) block();
-  const actual = readdirSync(path).sort();
-  if (JSON.stringify(actual) !== JSON.stringify([...names].sort())) block();
+  if (names) {
+    const actual = readdirSync(path).sort();
+    if (JSON.stringify(actual) !== JSON.stringify([...names].sort())) block();
+  }
+  return stat;
 }
 function checkedBytes(path, uid, maxBytes, json = false) {
   const stat = lstatSync(path);
@@ -20,7 +23,12 @@ function checkedBytes(path, uid, maxBytes, json = false) {
       stat.uid !== uid || (stat.mode & 0o0022) ||
       stat.size < 1 || stat.size > maxBytes) block();
   const bytes = readFileSync(path);
-  if (bytes.length !== stat.size) block();
+  const after = lstatSync(path);
+  if (bytes.length !== stat.size || !after.isFile() || after.isSymbolicLink() ||
+      after.nlink !== 1 || after.uid !== uid || (after.mode & 0o0022) ||
+      after.dev !== stat.dev || after.ino !== stat.ino ||
+      after.size !== stat.size || after.mtimeMs !== stat.mtimeMs ||
+      after.ctimeMs !== stat.ctimeMs) block();
   const decoded = bytes.toString('utf8');
   if (!Buffer.from(decoded, 'utf8').equals(bytes)) block();
   if (json) {
@@ -40,19 +48,29 @@ export function stageReviewedModelArtifact({ cwd = process.cwd(), env = process.
   const staging = join(cwd, 'aieo-staging');
   const sourceDir = join(staging, 'components');
   const reportDir = join(staging, 'aieo-output');
-  const source = join(cwd, 'components', SOURCE);
+  const trustedComponents = join(cwd, 'components');
+  const source = join(trustedComponents, SOURCE);
   const targetDir = join(cwd, 'aieo-output');
   // Reject any unexpected payload or path BEFORE modifying the clean checkout.
   checkDirectory(staging, uid, ['components', 'aieo-output']);
   checkDirectory(sourceDir, uid, [SOURCE]);
   checkDirectory(reportDir, uid, REPORTS);
+  // A regular source file under a symlinked or writable parent is not trusted.
+  // Capture its directory inode before reading artifact bytes.
+  const trustedParent = checkDirectory(trustedComponents, uid);
   const candidate = checkedBytes(join(sourceDir, SOURCE), uid, 48000);
   const reports = REPORTS.map((name) =>
     [name, checkedBytes(join(reportDir, name), uid, 65536, true)]);
   const original = lstatSync(source);
+  const parentAfter = checkDirectory(trustedComponents, uid);
+  // lstat sees even dangling symlinks; existsSync would miss them and allow
+  // the candidate source to be overwritten before mkdirSync then failed.
   if (!original.isFile() || original.isSymbolicLink() ||
       original.nlink !== 1 || original.uid !== uid ||
-      (original.mode & 0o0022) || existsSync(targetDir)) block();
+      (original.mode & 0o0022) || original.size < 1 || original.size > 48000 ||
+      parentAfter.dev !== trustedParent.dev ||
+      parentAfter.ino !== trustedParent.ino ||
+      lstatSync(targetDir, { throwIfNoEntry: false })) block();
   // No untrusted candidate is executed, installed as a dependency or loaded as
   // an import. The privileged publisher independently rechecks Git and reports.
   writeFileSync(source, candidate);
