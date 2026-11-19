@@ -152,6 +152,7 @@ export function verifyPostBuild(env = process.env) {
   // before any git diff with the role's read-scoped GitHub token.
   readVerifiedBuildSource(path);
   if (!SHA.test(head || '') || head === base ||
+      !BRANCH.test(developer.headRef || '') ||
       gitTrim('rev-parse', 'HEAD') !== base ||
       gitTrim('diff', '--cached', '--name-only') !== '' ||
       gitTrim('diff', '--name-only') !== path ||
@@ -201,6 +202,7 @@ export function verifyPostBuild(env = process.env) {
   const expectedDeveloper = {
     schemaVersion: 1, role: 'developer', status: 'proposed', path,
     prNumber: Number(number), baseSha: base, headSha: head,
+    headRef: developer.headRef,
     sourceHash: hash(original), proposedHash: hash(actual),
     diffHash: hash(diff), changedPaths
   };
@@ -236,7 +238,11 @@ export function verifyPostBuild(env = process.env) {
       pr.base?.ref !== 'main' || pr.base?.sha !== base ||
       pr.base?.repo?.full_name !== REPO ||
       pr.head?.repo?.full_name !== REPO ||
-      !BRANCH.test(pr.head?.ref || '') || pr.head?.sha !== head) fail();
+      !BRANCH.test(pr.head?.ref || '') ||
+      // The original Developer handoff pins the head branch identity. A PR
+      // retargeted to another valid model-proposal branch at the SAME commit
+      // after independent review must not inherit its prior approvals.
+      pr.head?.ref !== developer.headRef || pr.head?.sha !== head) fail();
 
   return { status: 'post-build-draft-reverified', prNumber: Number(number),
     baseSha: base, headSha: head, requiresHumanMerge: true };

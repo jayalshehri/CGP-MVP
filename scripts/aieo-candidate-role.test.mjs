@@ -1128,6 +1128,27 @@ test('post-build gate reattests the exact independently reviewed blob and curren
     assert.equal(outcome.headSha, f.head);
     assert.equal(outcome.requiresHumanMerge, true);
     assert.equal(f.git('rev-parse', 'main'), f.base);
+    const developerProof = JSON.parse(readFileSync(
+      join(f.cwd, 'aieo-output/candidate-developer.json'), 'utf8'));
+    assert.equal(developerProof.headRef, branch,
+      'Developer pins the exact remotely reviewed head branch');
+
+    // A valid new branch can point to exactly the same immutable candidate.
+    // Retargeting the Draft after all four roles but before finalization must
+    // not borrow earlier attestations based solely on identical commit SHAs.
+    const otherBranch = 'aieo/model-proposal-77331-2';
+    f.git('push', '-q', 'origin', f.head + ':refs/heads/' + otherBranch);
+    f.pr.head.ref = otherBranch;
+    f.savePr();
+    assert.equal(f.pr.head.sha, f.head);
+    const retargeted = verify();
+    assert.notEqual(retargeted.status, 0,
+      'post-build must reject same-SHA retarget to a second allowed branch');
+    assert.match(retargeted.stderr, /post-build check blocked/);
+    f.pr.head.ref = branch;
+    f.savePr();
+    assert.equal(verify().status, 0, 'restoring exact reviewed branch passes');
+    assert.equal(f.git('rev-parse', 'main'), f.base);
 
     // Source bytes are unchanged, but insecure permissions could let an
     // unrelated process alter the build replay between two approvals.

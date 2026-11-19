@@ -307,7 +307,7 @@ export function runCandidateRole(role, env = process.env) {
 
   const developer = {
     schemaVersion: 1, role: 'developer', status: 'proposed', path: MODEL_ALLOWED_PATH,
-    prNumber: number, baseSha: base, headSha: head,
+    prNumber: number, baseSha: base, headSha: head, headRef,
     sourceHash: hash(original), proposedHash: hash(actual),
     diffHash: hash(diff), changedPaths
   };
