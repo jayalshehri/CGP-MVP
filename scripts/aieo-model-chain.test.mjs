@@ -249,12 +249,21 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
     // A syntactically canonical report or a harmless-looking single-line edit
     // is still untrusted if its hashes do not match the independently reviewed
     // candidate. None may modify the checkout or reach the write-scoped CLI.
-    for (const name of ['proposal', 'qa', 'security', 'reviewer']) {
+    for (const [name, field] of [
+      ['proposal', 'proposedHash'], ['qa', 'proposedHash'],
+      ['security', 'addedLines'], ['reviewer', 'proposedHash']
+    ]) {
       const evidencePath = join(staging, 'aieo-output', 'model-' + name + '.json');
       const verified = readFileSync(evidencePath, 'utf8');
       const forged = JSON.parse(verified);
-      assert.equal(typeof forged.proposedHash, 'string', name + ' must bind candidate hash');
-      forged.proposedHash = '0'.repeat(64);
+      assert.ok(Object.hasOwn(forged, field), name + ' must contain expected review evidence');
+      if (field === 'addedLines') {
+        assert.equal(typeof forged.addedLines, 'number');
+        forged.addedLines += 1;
+      } else {
+        assert.equal(typeof forged.proposedHash, 'string');
+        forged.proposedHash = '0'.repeat(64);
+      }
       try {
         writeFileSync(evidencePath, JSON.stringify(forged, null, 2) + '\n');
         assert.deepEqual(JSON.parse(readFileSync(evidencePath, 'utf8')), forged,
