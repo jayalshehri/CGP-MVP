@@ -97,8 +97,8 @@ test('publisher isolates real Git and gh children from unrelated secrets', () =>
     assert.ok(script.includes('const a=process.argv.slice(2);'));
     writeFileSync(fakeGh, script.replace('const a=process.argv.slice(2);',
       'if (process.env.AIEO_INTERNAL_SECRET || process.env.OPENROUTER_API_KEY || ' +
-      'process.env.NPM_TOKEN || process.env.NEXT_PUBLIC_SUPABASE_URL) process.exit(89);\\n' +
-      'if (process.env.GH_TOKEN !== "fixture-never-live") process.exit(90);\\n' +
+      'process.env.NPM_TOKEN || process.env.NEXT_PUBLIC_SUPABASE_URL) process.exit(89);\n' +
+      'if (process.env.GH_TOKEN !== "fixture-never-live") process.exit(90);\n' +
       'const a=process.argv.slice(2);'));
     const child = spawnSync(process.execPath, [publisher], {
       cwd: f.workspace, env: inherited, encoding: 'utf8', timeout: 25000
