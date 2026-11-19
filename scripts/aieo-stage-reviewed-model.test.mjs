@@ -404,7 +404,8 @@ test('failed atomic rename after complete reports leaves original source intact'
   assert.equal(blockedCommit, true);
   assertUntouched(cwd);
   assert.deepEqual(fs.readdirSync(join(cwd, 'components')), ['FeedbackWidget.tsx']);
-  assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
+  assert.equal(existsSync(join(cwd, 'aieo-staging')), false,
+    'the artifact is deleted before attempting the atomic source commit');
 });
 
 test('partial temporary source write cannot truncate the trusted source', (t) => {
@@ -452,4 +453,65 @@ test('failed source fsync leaves original source and review handoff untouched', 
   assert.equal(interrupted, true);
   assertUntouched(cwd);
   assert.deepEqual(fs.readdirSync(join(cwd, 'components')), ['FeedbackWidget.tsx']);
+});
+
+test('failed staging cleanup cannot leave a modified trusted source', (t) => {
+  const cwd = fixture(t);
+  const staging = join(cwd, 'aieo-staging');
+  const originalRemove = fs.rmSync;
+  let interrupted = false;
+  try {
+    fs.rmSync = (path, options) => {
+      if (path === staging) {
+        interrupted = true;
+        throw new Error('synthetic staging cleanup failure');
+      }
+      return originalRemove(path, options);
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }),
+      /synthetic staging cleanup failure/);
+  } finally {
+    fs.rmSync = originalRemove;
+    syncBuiltinESMExports();
+  }
+  assert.equal(interrupted, true);
+  assertUntouched(cwd);
+  assert.equal(existsSync(staging), true);
+  assert.deepEqual(fs.readdirSync(join(cwd, 'components')),
+    ['FeedbackWidget.tsx']);
+});
+
+test('substituted staging tree is refused rather than recursively removed', (t) => {
+  const cwd = fixture(t);
+  const staging = join(cwd, 'aieo-staging');
+  const held = join(cwd, 'original-staging');
+  const outside = mkdtempSync(join(tmpdir(), 'aieo-stage-cleanup-victim-'));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  writeFileSync(join(outside, 'sentinel.txt'), 'must survive');
+  const finalReport = join(cwd, 'aieo-output', 'model-reviewer.json');
+  const originalWrite = fs.writeFileSync;
+  let swapped = false;
+  try {
+    fs.writeFileSync = (path, ...args) => {
+      const result = originalWrite(path, ...args);
+      if (path === finalReport && !swapped) {
+        swapped = true;
+        renameSync(staging, held);
+        symlinkSync(outside, staging, 'dir');
+      }
+      return result;
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }),
+      /stage blocked/);
+  } finally {
+    fs.writeFileSync = originalWrite;
+    syncBuiltinESMExports();
+  }
+  assert.equal(swapped, true);
+  assertUntouched(cwd);
+  assert.equal(readFileSync(join(outside, 'sentinel.txt'), 'utf8'),
+    'must survive');
+  assert.equal(existsSync(held), true);
 });
