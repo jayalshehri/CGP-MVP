@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync,
-  symlinkSync, existsSync, rmSync } from 'node:fs';
+  symlinkSync, chmodSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stageReviewedModelArtifact } from './aieo-stage-reviewed-model.mjs';
@@ -90,4 +90,33 @@ test('real process credential cannot be hidden by a synthetic staging context', 
     if (previous === undefined) delete process.env.GH_TOKEN;
     else process.env.GH_TOKEN = previous;
   }
+});
+
+test('symlinked trusted component directory cannot redirect source write outside checkout', (t) => {
+  const cwd = fixture(t);
+  const outside = mkdtempSync(join(tmpdir(), 'aieo-stage-external-'));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  writeFileSync(join(outside, 'FeedbackWidget.tsx'), 'baseline source\n');
+  rmSync(join(cwd, 'components'), { recursive: true });
+  symlinkSync(outside, join(cwd, 'components'), 'dir');
+  assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  assert.equal(readFileSync(join(outside, 'FeedbackWidget.tsx'), 'utf8'),
+    'baseline source\n');
+  assertUntouched(cwd);
+  assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
+});
+
+test('group-writable trusted component directory is refused before any write', (t) => {
+  const cwd = fixture(t);
+  chmodSync(join(cwd, 'components'), 0o770);
+  assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  assertUntouched(cwd);
+});
+
+test('dangling output symlink is rejected before candidate source is overwritten', (t) => {
+  const cwd = fixture(t);
+  symlinkSync(join(cwd, 'missing-output-target'), join(cwd, 'aieo-output'), 'dir');
+  assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  assertUntouched(cwd);
+  assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
 });
