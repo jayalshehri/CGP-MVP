@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync, symlinkSync, linkSync, unlinkSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
@@ -66,7 +66,7 @@ function fixture() {
     GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
     GITHUB_RUN_ID: '99123', GITHUB_RUN_ATTEMPT: '1',
     GITHUB_SHA: git(workspace, 'rev-parse', 'HEAD'),
-    GH_TOKEN: 'placeholder-not-a-real-secret',
+    GH_TOKEN: 'fixture-never-live',
     AIEO_PUBLISH_MODE: 'model', AIEO_MODEL_ENABLED: 'true',
     AIEO_SOURCE_SHARING_APPROVED: 'true', AIEO_MODEL_TASK: approvedTask
   };
@@ -119,7 +119,7 @@ test('publisher checks live process overrides even with a clean injected dispatc
     GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
     GITHUB_RUN_ID: '99123',
     GITHUB_RUN_ATTEMPT: '1',
-    GH_TOKEN: 'synthetic-not-an-auth-token',
+    GITHUB_ACTIONS: 'false', GH_TOKEN: 'synthetic-fixture-not-a-secret',
     AIEO_PUBLISH_MODE: 'deterministic'
   };
   const script = 'import { validateDispatch } from ' +
@@ -136,6 +136,70 @@ test('publisher checks live process overrides even with a clean injected dispatc
       { env: { ...process.env, ...injection }, encoding: 'utf8', timeout: 10000 });
     assert.notEqual(child.status, 0);
     assert.match(child.stderr, /untrusted inherited Git environment override/);
+  }
+});
+
+// GITHUB_ACTIONS=false is never sufficient to bypass official GitHub origin
+// checks while a real, credential-bearing publisher context is in scope.
+test('publisher rejects privileged offline-mode spoof before Git or gh', () => {
+  const f = fixture();
+  try {
+    const originalMain = git(f.workspace, 'rev-parse', 'main');
+    const trapBin = join(f.root, 'trap-bin');
+    const marker = join(f.root, 'unsafe-command-executed');
+    mkdirSync(trapBin);
+    for (const binary of ['git', 'gh']) {
+      const script = join(trapBin, binary);
+      writeFileSync(script, '#!/bin/sh\n' +
+        'printf invoked >> ' + JSON.stringify(marker) + '\nexit 91\n');
+      chmodSync(script, 0o755);
+    }
+    for (const change of [
+      { GITHUB_ACTIONS: 'false', GH_TOKEN: 'looks-like-a-live-token' },
+      { GITHUB_ACTIONS: 'FALSE', GH_TOKEN: 'looks-like-a-live-token' },
+      { GITHUB_ACTIONS: '', GH_TOKEN: 'looks-like-a-live-token' },
+      { GITHUB_ACTIONS: 'false', GH_TOKEN: 'synthetic-only-do-not-use' }
+    ]) {
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace,
+        env: { ...f.env, ...change, PATH: trapBin + delimiter + f.env.PATH },
+        encoding: 'utf8', timeout: 20000
+      });
+      assert.notEqual(child.status, 0, 'spoofed Actions context must be blocked');
+      assert.match(child.stderr, /publisher requires genuine Actions context for credentials/);
+      assert.equal(existsSync(marker), false, 'no Git or gh process may run');
+      assert.equal(existsSync(f.log), false, 'no GitHub CLI use');
+    }
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), originalMain);
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+      /refs\/heads\/aieo\//, 'no candidate ref may be published');
+    assert.equal(validateDispatch(f.env), 'model', 'real offline fixture stays supported');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('publisher checks process credentials even with a sanitized fixture context', () => {
+  const fixtureEnv = {
+    GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main',
+    GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
+    GITHUB_RUN_ID: '99123', GITHUB_RUN_ATTEMPT: '1',
+    GITHUB_ACTIONS: 'false', GH_TOKEN: 'fixture-never-live',
+    AIEO_PUBLISH_MODE: 'deterministic'
+  };
+  const script = 'import { validateDispatch } from ' +
+    JSON.stringify(new URL('./aieo-publish-draft.mjs', import.meta.url).href) +
+    '; validateDispatch(' + JSON.stringify(fixtureEnv) + ');';
+  for (const injected of [
+    { GITHUB_ACTIONS: 'false', GH_TOKEN: 'looks-like-a-live-token' },
+    { GITHUB_ACTIONS: 'true', GH_TOKEN: 'looks-like-a-live-token' },
+    { GITHUB_ACTIONS: 'false', GITHUB_TOKEN: 'looks-like-a-live-token',
+      GH_TOKEN: 'fixture-never-live' }
+  ]) {
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      env: { ...process.env, ...injected }, encoding: 'utf8', timeout: 10000
+    });
+    assert.notEqual(child.status, 0);
+    assert.match(child.stderr, /publisher requires genuine Actions context for credentials/);
   }
 });
 
@@ -501,7 +565,8 @@ test('publisher blocks inherited Git executable/config overrides before any remo
 test('publisher rejects unsafe dispatch contexts and missing source consent', () => {
   const env = { GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main',
     GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP', GITHUB_RUN_ID: '77',
-    GITHUB_RUN_ATTEMPT: '1', GH_TOKEN: 'synthetic', AIEO_PUBLISH_MODE: 'model',
+    GITHUB_RUN_ATTEMPT: '1', GITHUB_ACTIONS: 'false',
+    GH_TOKEN: 'fixture-never-live', AIEO_PUBLISH_MODE: 'model',
     AIEO_MODEL_ENABLED: 'true', AIEO_SOURCE_SHARING_APPROVED: 'true' };
   assert.equal(validateDispatch(env), 'model');
   for (const overrides of [

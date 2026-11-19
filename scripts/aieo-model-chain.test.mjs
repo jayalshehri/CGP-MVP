@@ -103,7 +103,7 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
       AIEO_MODEL_TASK: task,
       AIEO_MODEL_APPLY: '1',
       AIEO_PUBLISH_MODE: 'model',
-      GH_TOKEN: 'synthetic-only-do-not-use'
+      GH_TOKEN: 'fixture-never-live'
     };
     const run = (args, overrides = {}) => spawnSync(process.execPath, args, {
       cwd: workspace, env: { ...env, ...overrides }, encoding: 'utf8', timeout: 25000

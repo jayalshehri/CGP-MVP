@@ -52,6 +52,16 @@ function identical(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+// Only literal, nonfunctional fixture credentials may run against an isolated
+// file:// Git remote. A live token must never downgrade an Actions publisher
+// to offline mode and thereby bypass the official fetch/push origin check.
+const OFFLINE_FIXTURE_TOKENS = new Set([
+  'fixture-never-live', 'synthetic-fixture-not-a-secret'
+]);
+function isOfflinePublisherFixture(env) {
+  return env?.GITHUB_ACTIONS === 'false' && OFFLINE_FIXTURE_TOKENS.has(env?.GH_TOKEN);
+}
+
 // Read the candidate from one bounded, private, ordinary inode. This happens
 // before any branch, push, or PR write; a Git diff alone cannot prove that a
 // group-writable file, swapped symlink, or replaced parent path is trusted.
@@ -143,6 +153,17 @@ export function validateDispatch(env) {
       (env.AIEO_MODEL_ENABLED !== 'true' || env.AIEO_SOURCE_SHARING_APPROVED !== 'true')) {
     fail('model source sharing was not approved');
   }
+  // Never trust a caller's GITHUB_ACTIONS=false claim to disable origin
+  // verification when a usable GH_TOKEN/GITHUB_TOKEN exists. Check the real
+  // process too: an injected fixture context cannot conceal a live token.
+  const liveProcessCredential = [process.env.GH_TOKEN, process.env.GITHUB_TOKEN]
+    .some((value) => typeof value === 'string' && value.length > 0 &&
+      !OFFLINE_FIXTURE_TOKENS.has(value));
+  if ((env.GITHUB_ACTIONS !== 'true' && !isOfflinePublisherFixture(env)) ||
+      (liveProcessCredential && (process.env.GITHUB_ACTIONS !== 'true' ||
+        env.GITHUB_ACTIONS !== 'true'))) {
+    fail('publisher requires genuine Actions context for credentials');
+  }
   // Reject unsafe overrides in BOTH the live process and any supplied
   // dispatch context. The general denylist is intentionally stricter than
   // the endpoint allowlist: even canonical GH_* overrides are not inherited.
@@ -214,7 +235,7 @@ export function verifyOfficialPublisherOrigin(fetchUrls, pushUrls) {
   return true;
 }
 function assertTrustedOrigin(env) {
-  if (env.GITHUB_ACTIONS !== 'true') return; // isolated offline Git fixtures only
+  if (env.GITHUB_ACTIONS !== 'true') return; // validateDispatch already pinned a credential-free fixture
   // An official origin URL is insufficient: Git may route push/fetch through
   // a URL-scoped proxy, inject credentials/headers, disable TLS, or run a
   // configured remote helper. Refuse these before any network operation while
