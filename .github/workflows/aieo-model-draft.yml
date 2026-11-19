@@ -5,6 +5,7 @@ on:
       - '.github/workflows/aieo-model-draft.yml'
       - 'aieo/**'
       - 'scripts/aieo-model-*.mjs'
+      - 'scripts/aieo-stage-reviewed-model*.mjs'
       - 'scripts/aieo-publish-draft*.mjs'
       - 'scripts/aieo-candidate-role*.mjs'
       - 'scripts/aieo-git-process-guard.mjs'
@@ -48,7 +49,7 @@ jobs:
         with:
           node-version: '24'
       - name: Run model adapter and independent security unit tests (mock only)
-        run: node --test scripts/aieo-model-provider.test.mjs scripts/aieo-model-git.test.mjs scripts/aieo-model-source-read.test.mjs scripts/aieo-model-candidate-read.test.mjs scripts/aieo-model-security.test.mjs scripts/aieo-model-gates.test.mjs scripts/aieo-model-e2e.test.mjs scripts/aieo-model-chain.test.mjs scripts/aieo-publish-draft.test.mjs scripts/aieo-remote-draft.test.mjs scripts/aieo-candidate-role.test.mjs scripts/aieo-candidate-report-race.test.mjs scripts/aieo-git-process-guard.test.mjs scripts/aieo-workflow-policy.test.mjs scripts/aieo-review-readiness.test.mjs scripts/aieo-import-handoffs.test.mjs
+        run: node --test scripts/aieo-model-provider.test.mjs scripts/aieo-model-git.test.mjs scripts/aieo-model-source-read.test.mjs scripts/aieo-model-candidate-read.test.mjs scripts/aieo-model-security.test.mjs scripts/aieo-model-gates.test.mjs scripts/aieo-model-e2e.test.mjs scripts/aieo-model-chain.test.mjs scripts/aieo-publish-draft.test.mjs scripts/aieo-remote-draft.test.mjs scripts/aieo-candidate-role.test.mjs scripts/aieo-candidate-report-race.test.mjs scripts/aieo-git-process-guard.test.mjs scripts/aieo-workflow-policy.test.mjs scripts/aieo-review-readiness.test.mjs scripts/aieo-import-handoffs.test.mjs scripts/aieo-stage-reviewed-model.test.mjs
       - name: Assert no source changed
         run: git diff --exit-code -- components/FeedbackWidget.tsx
 
@@ -60,9 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
-      contents: write
-      pull-requests: write
-      actions: write
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
         with:
@@ -171,6 +170,88 @@ jobs:
           npx next typegen
           npx tsc --noEmit
           npm run build
+      # Provider output and npm build NEVER share a runner with GH_TOKEN.
+      # Upload only the exact allowlisted source and four canonical redacted
+      # reports; the next job starts with a clean checkout and independent recheck.
+      - name: Handoff bounded model evidence without write credentials
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-reviewed-model-evidence
+          path: |
+            components/FeedbackWidget.tsx
+            aieo-output/model-proposal.json
+            aieo-output/model-qa.json
+            aieo-output/model-security.json
+            aieo-output/model-reviewer.json
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-model-draft:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true
+    needs: create-model-draft
+    name: Isolated Draft-only publication from reviewed artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      - name: Capture isolated publisher PATH before artifact import
+        id: trusted-path
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+        run: |
+          set -euo pipefail
+          [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
+          printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
+      - name: Download exact bounded model evidence on clean runner
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-reviewed-model-evidence
+          path: aieo-staging
+      - name: Stage exact model evidence before granting GitHub write credential
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: node scripts/aieo-stage-reviewed-model.mjs
       - name: Publish independently verified candidate as Draft PR only
         env:
           BASH_ENV: ''
