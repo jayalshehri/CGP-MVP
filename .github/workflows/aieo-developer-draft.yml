@@ -156,8 +156,84 @@ jobs:
           LD_DEBUG_OUTPUT: ''
         run: |
           set -euo pipefail
-          [[ -n "$PATH" && "$PATH" != *$'\\n'* && "$PATH" != *$'\\r'* ]]
-          printf 'path=%s\\n' "$PATH" >> "$GITHUB_OUTPUT"
+          [[ -n "$PATH" && "$PATH" != *      - name: Download only the approved developer source artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-reviewed-developer-source
+          path: aieo-staging/components
+      - name: Import bounded source before granting GitHub write credential
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: node scripts/aieo-stage-reviewed-developer.mjs
+      - name: Publish verified bounded fix as Draft PR only
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+          GH_TOKEN: ${{ github.token }}
+          AIEO_PUBLISH_MODE: deterministic
+        run: node scripts/aieo-publish-draft.mjs
+\n'* && "$PATH" != *      - name: Download only the approved developer source artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-reviewed-developer-source
+          path: aieo-staging/components
+      - name: Import bounded source before granting GitHub write credential
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: node scripts/aieo-stage-reviewed-developer.mjs
+      - name: Publish verified bounded fix as Draft PR only
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+          GH_TOKEN: ${{ github.token }}
+          AIEO_PUBLISH_MODE: deterministic
+        run: node scripts/aieo-publish-draft.mjs
+\r'* ]]
+          printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
       - name: Download only the approved developer source artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
         env:
