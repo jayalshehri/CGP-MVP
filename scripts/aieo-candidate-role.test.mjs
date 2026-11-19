@@ -191,10 +191,10 @@ test('roles and finalizer reject an injected fixture masking live process creden
     const markerFile = join(f.root, 'unexpected-live-context-subprocess');
     for (const binary of ['git', 'gh']) {
       const executable = join(f.root, 'bin', binary);
-      writeFileSync(executable, '#!/usr/bin/env node\\n' +
+      writeFileSync(executable, '#!/usr/bin/env node\n' +
         'require("node:fs").appendFileSync(' +
-        JSON.stringify(markerFile) + ', "invoked\\\\n");\\n' +
-        'process.exit(91);\\n');
+        JSON.stringify(markerFile) + ', "invoked\\n");\n' +
+        'process.exit(91);\n');
       chmodSync(executable, 0o755);
     }
     const context = {
