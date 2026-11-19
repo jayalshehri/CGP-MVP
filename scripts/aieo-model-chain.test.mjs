@@ -256,7 +256,9 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
       assert.equal(typeof forged.proposedHash, 'string', name + ' must bind candidate hash');
       forged.proposedHash = '0'.repeat(64);
       try {
-        writeFileSync(evidencePath, JSON.stringify(forged, null, 2) + '\\n');
+        writeFileSync(evidencePath, JSON.stringify(forged, null, 2) + '\n');
+        assert.deepEqual(JSON.parse(readFileSync(evidencePath, 'utf8')), forged,
+          'the tampered report must remain valid JSON');
         const rejected = run([stageScript], noCredentialEnv, isolated);
         assert.notEqual(rejected.status, 0,
           name + ' forged artifact must fail independent staging');
