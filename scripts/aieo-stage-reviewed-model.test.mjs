@@ -325,3 +325,79 @@ test('a second source line change is rejected before writing', (t) => {
   assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
   assertUntouched(cwd);
 });
+
+test('partial report-copy failure leaves trusted source unchanged and removes output', (t) => {
+  const cwd = fixture(t);
+  const failedPath = join(cwd, 'aieo-output', 'model-security.json');
+  const originalWrite = fs.writeFileSync;
+  let simulated = false;
+  try {
+    fs.writeFileSync = (path, ...args) => {
+      if (path === failedPath) {
+        simulated = true;
+        throw new Error('synthetic report-copy failure');
+      }
+      return originalWrite(path, ...args);
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }),
+      /synthetic report-copy failure/);
+  } finally {
+    fs.writeFileSync = originalWrite;
+    syncBuiltinESMExports();
+  }
+  assert.equal(simulated, true);
+  assertUntouched(cwd);
+  assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
+});
+
+test('unexpected report injected during handoff blocks before source mutation', (t) => {
+  const cwd = fixture(t);
+  const lastReport = join(cwd, 'aieo-output', 'model-reviewer.json');
+  const originalWrite = fs.writeFileSync;
+  let injected = false;
+  try {
+    fs.writeFileSync = (path, ...args) => {
+      const value = originalWrite(path, ...args);
+      if (path === lastReport && !injected) {
+        injected = true;
+        originalWrite(join(cwd, 'aieo-output', 'rogue.json'), '{}\\n');
+      }
+      return value;
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }),
+      /stage blocked/);
+  } finally {
+    fs.writeFileSync = originalWrite;
+    syncBuiltinESMExports();
+  }
+  assert.equal(injected, true);
+  assertUntouched(cwd);
+  assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
+});
+
+test('source open failure after complete report copy cleans output without source change', (t) => {
+  const cwd = fixture(t);
+  const source = join(cwd, 'components', 'FeedbackWidget.tsx');
+  const originalOpen = fs.openSync;
+  let blockedWrite = false;
+  try {
+    fs.openSync = (path, flags, ...args) => {
+      if (path === source && (flags & fs.constants.O_WRONLY)) {
+        blockedWrite = true;
+        throw new Error('synthetic trusted-source open failure');
+      }
+      return originalOpen(path, flags, ...args);
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }),
+      /synthetic trusted-source open failure/);
+  } finally {
+    fs.openSync = originalOpen;
+    syncBuiltinESMExports();
+  }
+  assert.equal(blockedWrite, true);
+  assertUntouched(cwd);
+  assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
+});
