@@ -211,3 +211,61 @@ test('replacement of candidate inode after lstat is rejected before reading subs
   assert.equal(filenameReads, 0);
   assertUntouched(cwd);
 });
+
+test('a candidate growing while read is bounded and rejected before source mutation', (t) => {
+  const cwd = fixture(t);
+  const candidate = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
+  const initialSize = Buffer.byteLength('bounded untrusted model candidate\\n');
+  const originalRead = fs.readSync;
+  const originalWholeRead = fs.readFileSync;
+  let grew = false;
+  let largestRead = 0;
+  let wholeDescriptorReads = 0;
+  try {
+    fs.readSync = (fd, buffer, offset, length, position) => {
+      if (!grew) {
+        grew = true;
+        fs.appendFileSync(candidate, 'X'.repeat(1024 * 1024));
+      }
+      largestRead = Math.max(largestRead, length);
+      return originalRead(fd, buffer, offset, length, position);
+    };
+    fs.readFileSync = (path, ...args) => {
+      if (typeof path === 'number') wholeDescriptorReads++;
+      return originalWholeRead(path, ...args);
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  } finally {
+    fs.readSync = originalRead;
+    fs.readFileSync = originalWholeRead;
+    syncBuiltinESMExports();
+  }
+  assert.equal(grew, true);
+  assert.equal(wholeDescriptorReads, 0);
+  assert.ok(largestRead <= initialSize);
+  assertUntouched(cwd);
+});
+
+test('a candidate truncated after attestation fails on short descriptor read', (t) => {
+  const cwd = fixture(t);
+  const candidate = join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx');
+  const originalRead = fs.readSync;
+  let truncated = false;
+  try {
+    fs.readSync = (fd, buffer, offset, length, position) => {
+      if (!truncated) {
+        truncated = true;
+        fs.truncateSync(candidate, 0);
+      }
+      return originalRead(fd, buffer, offset, length, position);
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
+  } finally {
+    fs.readSync = originalRead;
+    syncBuiltinESMExports();
+  }
+  assert.equal(truncated, true);
+  assertUntouched(cwd);
+});
