@@ -10,7 +10,8 @@ const env = {
   GITHUB_REF: 'refs/heads/main',
   GITHUB_REPOSITORY: repo,
   GITHUB_SHA: sha,
-  GH_TOKEN: 'synthetic-placeholder-only'
+  GITHUB_ACTIONS: 'false',
+  GH_TOKEN: 'fixture-never-live'
 };
 
 function fixture({ badRef, workflowState, missingPath, malformed, throwing } = {}) {
@@ -70,5 +71,73 @@ test('missing or disabled workflow, stale main and missing role implementation f
     const f = fixture(options);
     assert.throws(() => verifyTrustedReviewReadiness({ env, gh: f.gh }),
       /trusted main reviewer workflow is not ready/);
+  }
+});
+
+test('unsafe Git, GitHub CLI and transport overrides fail before any gh request', () => {
+  for (const change of [
+    { GH_HOST: 'untrusted.example.invalid' },
+    { GH_HOST: 'github.com' },
+    { GH_REPO: 'another/repository' },
+    { GH_CONFIG_DIR: '/tmp/alternate-gh' },
+    { HTTPS_PROXY: 'https://proxy.example.invalid' },
+    { NODE_EXTRA_CA_CERTS: '/tmp/untrusted-ca.pem' },
+    { GIT_CONFIG_COUNT: '1' }
+  ]) {
+    const f = fixture();
+    assert.throws(() => verifyTrustedReviewReadiness({
+      env: { ...env, ...change }, gh: f.gh
+    }), /trusted main reviewer workflow is not ready/);
+    assert.equal(f.calls.length, 0,
+      'preflight must reject hostile overrides before first authenticated gh API');
+  }
+});
+
+test('clean injected fixture cannot conceal unsafe live process environment', () => {
+  const prior = process.env.GH_HOST;
+  const f = fixture();
+  try {
+    process.env.GH_HOST = 'untrusted.example.invalid';
+    assert.throws(() => verifyTrustedReviewReadiness({ env, gh: f.gh }),
+      /trusted main reviewer workflow is not ready/);
+    assert.equal(f.calls.length, 0);
+  } finally {
+    if (prior === undefined) delete process.env.GH_HOST;
+    else process.env.GH_HOST = prior;
+  }
+});
+
+test('offline fixture cannot reach the actual gh CLI, and spoofed Actions fails', () => {
+  assert.throws(() => verifyTrustedReviewReadiness({ env }),
+    /trusted main reviewer workflow is not ready/);
+  const previous = process.env.GITHUB_ACTIONS;
+  const f = fixture();
+  try {
+    process.env.GITHUB_ACTIONS = 'false';
+    assert.throws(() => verifyTrustedReviewReadiness({
+      env: { ...env, GITHUB_ACTIONS: 'true' }, gh: f.gh
+    }), /trusted main reviewer workflow is not ready/);
+    assert.equal(f.calls.length, 0);
+  } finally {
+    if (previous === undefined) delete process.env.GITHUB_ACTIONS;
+    else process.env.GITHUB_ACTIONS = previous;
+  }
+});
+
+test('a hidden live process credential cannot downgrade privileged readiness to fixture mode', () => {
+  const previousToken = process.env.GH_TOKEN;
+  const previousActions = process.env.GITHUB_ACTIONS;
+  const f = fixture();
+  try {
+    process.env.GH_TOKEN = 'testing-only-nonfunctional-token';
+    process.env.GITHUB_ACTIONS = 'false';
+    assert.throws(() => verifyTrustedReviewReadiness({ env, gh: f.gh }),
+      /trusted main reviewer workflow is not ready/);
+    assert.equal(f.calls.length, 0);
+  } finally {
+    if (previousToken === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = previousToken;
+    if (previousActions === undefined) delete process.env.GITHUB_ACTIONS;
+    else process.env.GITHUB_ACTIONS = previousActions;
   }
 });
