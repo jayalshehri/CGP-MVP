@@ -11,7 +11,7 @@ import { readBoundedModelReport } from './aieo-role-artifact-io.mjs';
 import { hasUnsafeGitEnvironment, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
 import { verifyOfficialCandidateFetchConfig, verifyOfficialGitHubCliContext } from './aieo-candidate-role.mjs';
 
-function command(binary, args) {
+function command(binary, args, { raw = false } = {}) {
   // Repository-local Git config is not a trust boundary: core.fsmonitor and
   // diff.external can run executable helpers during seemingly read-only
   // ls-files/diff calls while the publisher holds its write-scoped GH_TOKEN.
@@ -44,9 +44,29 @@ function command(binary, args) {
   // Prevent local refs/replace from silently rewriting reviewed Git blobs
   // while the privileged publisher retains a scoped GitHub write token.
   return execFileSync(binary, safeArgs, {
-    encoding: 'utf8', stdio: 'pipe',
+    encoding: raw ? undefined : 'utf8', stdio: 'pipe',
     env: binary === 'git' ? { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' } : process.env
   });
+}
+// Preserve immutable Git blob bytes until strict UTF-8 validation. Node's
+// default string decoding replaces malformed sequences with U+FFFD, which
+// could make the publisher approve a different source than the committed
+// baseline or candidate. All reviewers must see the same exact bytes.
+function readStrictPublishedBlob(revision, path) {
+  let bytes;
+  try {
+    bytes = command('git', ['show', revision + ':' + path], { raw: true });
+  } catch {
+    fail('immutable Git source blob is unreadable');
+  }
+  if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > 48000) {
+    fail('immutable Git source blob has unsafe length');
+  }
+  const decoded = bytes.toString('utf8');
+  if (!Buffer.from(decoded, 'utf8').equals(bytes)) {
+    fail('immutable Git source blob contains invalid UTF-8');
+  }
+  return decoded;
 }
 function identical(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -311,7 +331,7 @@ export function publishDraft({ env = process.env } = {}) {
   // A denied read must fail with a bounded error and no remote operation.
   const actual = readTrustedCandidate(path);
   command('git', ['diff', '--check']);
-  const original = command('git', ['show', 'HEAD:' + path]);
+  const original = readStrictPublishedBlob('HEAD', path);
   const changedPaths = command('git', ['diff', '--name-only']).trim().split('\n').filter(Boolean);
   const diff = command('git', ['diff', '--unified=0', '--', path]);
   const reports = mode === 'model' ? {
@@ -356,7 +376,7 @@ export function publishDraft({ env = process.env } = {}) {
   // immutable commit with the verified bytes before contacting GitHub.
   const committedPaths = command('git', ['diff', '--name-only', baseSha, candidateSha]).trim();
   const committedMode = command('git', ['ls-tree', candidateSha, '--', path]).trim();
-  if (command('git', ['show', candidateSha + ':' + path]) !== actual ||
+  if (readStrictPublishedBlob(candidateSha, path) !== actual ||
       committedPaths !== path ||
       !/^100644 blob [a-f0-9]{40}\tcomponents\/FeedbackWidget\.tsx$/.test(committedMode) ||
       command('git', ['rev-list', '--parents', '-n', '1', candidateSha]).trim() !==

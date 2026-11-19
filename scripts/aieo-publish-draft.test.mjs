@@ -970,6 +970,46 @@ for (const [name, alter] of [
   });
 }
 
+// A malformed blob in trusted Git history must never be normalized into a
+// string and treated as the exact approved base. Git accepts arbitrary bytes;
+// Node's UTF-8 decode does not. The candidate itself is valid UTF-8 here, so
+// only an independent raw-byte check on the immutable base detects the flaw.
+test('publisher rejects invalid UTF-8 in immutable base before GitHub writes', () => {
+  const f = fixture();
+  try {
+    const raw = Buffer.from(f.args.original.replace(
+      '  const sample = 1;', '  const sample = 1; //~'), 'utf8');
+    const marker = raw.indexOf(Buffer.from('~'));
+    assert.ok(marker >= 0);
+    raw[marker] = 0xff;
+    writeFileSync(f.target, raw);
+    git(f.workspace, 'add', '--', MODEL_ALLOWED_PATH);
+    git(f.workspace, 'commit', '-qm', 'fixture malformed base bytes');
+    git(f.workspace, 'push', '-q', 'origin', 'main');
+    const base = git(f.workspace, 'rev-parse', 'main');
+    f.env.GITHUB_SHA = base;
+    const normalized = readFileSync(f.target, 'utf8');
+    assert.equal(normalized.includes('\uFFFD'), true,
+      'control: plain UTF-8 reading silently changes base bytes');
+    assert.equal(Buffer.from(normalized, 'utf8').equals(raw), false);
+    writeFileSync(f.target,
+      normalized.replace('  const sample = 1;', '  const sample = 2;'));
+    assert.equal(git(f.workspace, 'diff', '--name-only'), MODEL_ALLOWED_PATH);
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0, 'invalid immutable base must fail closed');
+    assert.match(child.stderr, /immutable Git source blob contains invalid UTF-8/);
+    assert.equal(existsSync(f.log), false, 'no GitHub CLI may be called');
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), base);
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+      /refs\/heads\/aieo\/model-proposal-99123-1/);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
 // A lossy UTF-8 decode can make the reviewer approve a normalized string
 // while Git publishes different raw candidate bytes. This fixture deliberately
 // recomputes *valid* QA/Security/Reviewer reports over the lossy decoded text:
