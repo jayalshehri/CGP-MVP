@@ -15,12 +15,9 @@ import { stageReviewedModelArtifact } from './aieo-stage-reviewed-model.mjs';
 const reports = ['model-proposal.json', 'model-qa.json',
   'model-security.json', 'model-reviewer.json'];
 const route = String.raw`  const controlId = useMemo(() => /^\\/controls\\/(\\d+)(?:\\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);`;
-const trustedBaseline = [
-  'function fixture() {', route, '  return <>',
-  '    <strong>Old label</strong>', '  </>;', '}', ''
-].join('\n');
-const approvedCandidate = trustedBaseline.replace('Old label', 'New label');
-const changedDiff = '@@ -4 +4 @@\n-    <strong>Old label</strong>\n+    <strong>New label</strong>\n';
+const trustedBaseline = 'function fixture() {\n' + route + '\n  const sample = 1;\n}\n';
+const approvedCandidate = trustedBaseline.replace('  const sample = 1;', '  const sample = 2;');
+const changedDiff = '@@ -3 +3 @@\n-  const sample = 1;\n+  const sample = 2;\n';
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 function fixture(t) {
   const cwd = mkdtempSync(join(tmpdir(), 'aieo-stage-isolated-'));
@@ -300,7 +297,7 @@ test('a candidate truncated after attestation fails on short descriptor read', (
 test('well-formed but unauthorized model code is rejected before trusted write', (t) => {
   const cwd = fixture(t);
   writeFileSync(join(cwd, 'aieo-staging', 'components', 'FeedbackWidget.tsx'),
-    approvedCandidate.replace('New label', 'Unreviewed label'));
+    approvedCandidate.replace('sample = 2', 'sample = 3'));
   assert.throws(() => stageReviewedModelArtifact({ cwd, env: {} }), /stage blocked/);
   assertUntouched(cwd);
 });
