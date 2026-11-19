@@ -21,6 +21,12 @@ const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const block = () => { throw new Error('AIEO pre-build replay blocked: untrusted candidate or role evidence'); };
+// The caller may inject a harmless-looking context object, but npm will run
+// with the actual Node process environment. Reject real credentials from
+// BOTH contexts before inspecting Git or writing a candidate build input.
+const hasBuildCredential = (source) => Boolean(
+  source?.GH_TOKEN || source?.GITHUB_TOKEN || source?.OPENROUTER_API_KEY
+);
 const git = (...args) => execFileSync('git', readOnlyGitArguments(args), {
   encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
   env: readOnlyGitEnvironment(process.env)
@@ -117,7 +123,7 @@ export function replayReviewedCandidate(env = process.env) {
   // This pre-build step does not need an API or provider token. A model
   // candidate must not reach npm/Next.js with credentials in its environment.
   if (hasUnsafeGitEnvironment(process.env) || hasUnsafeGitEnvironment(env) ||
-      env.GH_TOKEN || env.GITHUB_TOKEN || env.OPENROUTER_API_KEY ||
+      hasBuildCredential(process.env) || hasBuildCredential(env) ||
       env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
       env.GITHUB_REF !== 'refs/heads/main' ||
       env.GITHUB_REPOSITORY !== REPO ||
