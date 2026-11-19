@@ -77,6 +77,7 @@ function setup() {
     GITHUB_ACTIONS: 'false',
     PATH: bin + delimiter + process.env.PATH,
     GH_TOKEN: 'fixture-never-live',
+    GITHUB_TOKEN: 'fixture-never-live', // never inherit a CI token in local fixtures
     GITHUB_EVENT_NAME: 'workflow_dispatch',
     GITHUB_REF: 'refs/heads/main',
     GITHUB_SHA: base,
@@ -166,6 +167,71 @@ test('spoofing offline Actions mode cannot bypass official-origin check with an 
       assert.equal(existsSync(join(f.cwd, 'aieo-output/candidate-developer.json')), false);
     }
     assert.equal(f.git('rev-parse', 'main'), f.base, 'trusted fixture main stays unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+// An imported caller may supply a sanitized offline object while the real
+// process still owns a GitHub credential. All five separate entry points must
+// reject that contradiction BEFORE any Git or gh subprocess is started.
+test('roles and finalizer reject an injected fixture masking live process credentials', () => {
+  const f = setup();
+  try {
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const clean = f.run(role);
+      assert.equal(clean.status, 0, role + ': ' + clean.stderr);
+    }
+    const reviewed = execFileSync('git', ['show', f.head + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' });
+    writeFileSync(join(f.cwd, path), reviewed);
+    const cleanFinal = spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(cleanFinal.status, 0, cleanFinal.stderr);
+
+    const markerFile = join(f.root, 'unexpected-live-context-subprocess');
+    for (const binary of ['git', 'gh']) {
+      const executable = join(f.root, 'bin', binary);
+      writeFileSync(executable, '#!/usr/bin/env node\\n' +
+        'require("node:fs").appendFileSync(' +
+        JSON.stringify(markerFile) + ', "invoked\\\\n");\\n' +
+        'process.exit(91);\\n');
+      chmodSync(executable, 0o755);
+    }
+    const context = {
+      GITHUB_ACTIONS: 'false', GH_TOKEN: 'fixture-never-live',
+      GITHUB_EVENT_NAME: f.env.GITHUB_EVENT_NAME,
+      GITHUB_REF: f.env.GITHUB_REF,
+      GITHUB_REPOSITORY: f.env.GITHUB_REPOSITORY,
+      GITHUB_SHA: f.env.GITHUB_SHA,
+      AIEO_PR_NUMBER: f.env.AIEO_PR_NUMBER
+    };
+    const roleUrl = new URL('./aieo-candidate-role.mjs', import.meta.url).href;
+    const finalizerUrl = new URL('./aieo-candidate-finalize.mjs', import.meta.url).href;
+    const variations = [
+      { GITHUB_ACTIONS: 'false', GH_TOKEN: 'synthetic-live-token-placeholder' },
+      { GITHUB_ACTIONS: 'true', GH_TOKEN: 'synthetic-live-token-placeholder' },
+      { GITHUB_ACTIONS: 'false', GH_TOKEN: 'fixture-never-live',
+        GITHUB_TOKEN: 'synthetic-live-token-placeholder' }
+    ];
+    for (const injectedProcess of variations) {
+      for (const role of ['developer', 'qa', 'security', 'reviewer', 'finalizer']) {
+        const code = role === 'finalizer'
+          ? 'import {verifyPostBuild} from ' + JSON.stringify(finalizerUrl) +
+            '; verifyPostBuild(' + JSON.stringify(context) + ');'
+          : 'import {runCandidateRole} from ' + JSON.stringify(roleUrl) +
+            '; runCandidateRole(' + JSON.stringify(role) + ',' +
+            JSON.stringify(context) + ');';
+        const child = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
+          cwd: f.cwd, env: { ...f.env, ...injectedProcess },
+          encoding: 'utf8', timeout: 12000
+        });
+        assert.notEqual(child.status, 0, role + ' must reject process/context mismatch');
+        assert.match(child.stderr, /candidate role blocked|post-build check blocked/);
+        assert.equal(existsSync(markerFile), false,
+          role + ' must not start Git or gh with a live credential');
+      }
+    }
+    assert.equal(f.git('rev-parse', 'main'), f.base);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
