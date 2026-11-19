@@ -489,6 +489,50 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
       untouchedMain + '\trefs/heads/main',
       'recovered local fixture must contain only original main before positive case');
 
+    // A server-side hook may also replace the just-pushed candidate ref
+    // while leaving main untouched. The independently reviewed commit must
+    // remain the advertised remote branch head before ANY PR is created.
+    const postPushCandidateHijack = [
+      '#!/bin/sh',
+      'set -eu',
+      'while read old new ref; do',
+      '  if [ "$ref" = "refs/heads/aieo/model-proposal-77331-1" ]; then',
+      '    git update-ref ' + existingBranch + ' ' + untouchedMain + ' "$new"',
+      '  fi',
+      'done',
+      ''
+    ].join('\n');
+    writeFileSync(hookPath, postPushCandidateHijack, { mode: 0o700 });
+    chmodSync(hookPath, 0o700);
+    try {
+      const hijacked = run([finalPublisher], {}, isolated);
+      assert.notEqual(hijacked.status, 0,
+        'post-push candidate-ref replacement must block Draft publication');
+      assert.match(hijacked.stderr, /remote refs changed after candidate push/,
+        'candidate-ref race must fail at post-push re-attestation');
+      assert.equal(isolatedGit('rev-parse', 'main').trim(), untouchedMain);
+      assert.equal(isolatedGit('show', 'main:' + MODEL_ALLOWED_PATH), original);
+      assert.equal(readFileSync(cleanSource, 'utf8'), candidate);
+      assert.equal(isolatedGit('ls-remote', '--heads', remote, 'main').trim(),
+        untouchedMain + '\trefs/heads/main',
+        'candidate-ref tampering must not change remote main');
+      assert.equal(isolatedGit('ls-remote', '--heads', remote, existingBranch).trim(),
+        untouchedMain + '\t' + existingBranch,
+        'hook must actually replace the pushed candidate with the original source commit');
+      assert.equal(readFileSync(ghLog, 'utf8').trim(), 'auth setup-git',
+        'no PR creation or workflow dispatch is allowed after remote head replacement');
+    } finally {
+      rmSync(hookPath, { force: true });
+      remoteRef('-d', existingBranch, untouchedMain);
+      isolatedGit('switch', '-q', 'main');
+      isolatedGit('branch', '-D', 'aieo/model-proposal-77331-1');
+      writeFileSync(cleanSource, candidate);
+      rmSync(ghLog, { force: true });
+    }
+    assert.equal(isolatedGit('ls-remote', '--heads', remote).trim(),
+      untouchedMain + '\trefs/heads/main',
+      'remote fixture must be restored before the successful mocked publication');
+
     // Only the third, token-scoped child may push to the disposable bare remote
     // and call the fake gh CLI. This remains a mock, NOT live GitHub publication.
     const published = run([join(scripts, 'aieo-publish-draft.mjs')], {}, isolated);
