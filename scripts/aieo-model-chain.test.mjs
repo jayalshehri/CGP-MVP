@@ -408,7 +408,7 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
       assert.equal(readFileSync(cleanSource, 'utf8'), candidate);
       assert.equal(existsSync(ghLog), false, 'stale main must not contact gh');
       assert.doesNotMatch(isolatedGit('ls-remote', '--heads', remote),
-        /refs\\/heads\\/aieo\\/model-proposal-/);
+        /refs\/heads\/aieo\/model-proposal-/);
     } finally {
       remoteRef('refs/heads/main', untouchedMain, advancedMain);
     }
@@ -428,7 +428,7 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
       assert.equal(readFileSync(cleanSource, 'utf8'), candidate);
       assert.equal(existsSync(ghLog), false, 'duplicate branch must not reach gh');
       assert.match(isolatedGit('ls-remote', '--heads', remote),
-        /refs\\/heads\\/aieo\\/model-proposal-77331-1/);
+        /refs\/heads\/aieo\/model-proposal-77331-1/);
     } finally {
       remoteRef('-d', existingBranch, untouchedMain);
     }
