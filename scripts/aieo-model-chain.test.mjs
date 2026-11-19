@@ -395,6 +395,10 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
     git('commit', '--allow-empty', '-qm', 'fixture: unrelated main advanced');
     const advancedMain = git('rev-parse', 'HEAD').trim();
     assert.notEqual(advancedMain, untouchedMain);
+    // Make the commit object available to the disposable bare remote without
+    // altering its main ref until the controlled drift window starts.
+    const driftRef = 'refs/heads/aieo-fixture-main-drift';
+    git('push', '-q', 'origin', 'HEAD:' + driftRef);
     const remoteRef = (...args) => execFileSync('git',
       ['--git-dir', remote, 'update-ref', ...args], { cwd: root });
     try {
@@ -411,6 +415,7 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
         /refs\/heads\/aieo\/model-proposal-/);
     } finally {
       remoteRef('refs/heads/main', untouchedMain, advancedMain);
+      remoteRef('-d', driftRef, advancedMain);
     }
 
     // Replayed run IDs must not overwrite an existing remote proposal branch.
