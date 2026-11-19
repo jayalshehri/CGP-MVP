@@ -11,6 +11,32 @@ import { readBoundedModelReport } from './aieo-role-artifact-io.mjs';
 import { hasUnsafeGitEnvironment, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
 import { verifyOfficialCandidateFetchConfig, verifyOfficialGitHubCliContext } from './aieo-candidate-role.mjs';
 
+// The publisher is the ONLY AIEO process allowed to hold a GitHub write token.
+// Never pass unrelated CI, provider or application credentials to Git or gh:
+// even an allowlisted Git executable or authenticated CLI must receive only
+// the minimum OS environment and the scoped GitHub credential it requires.
+const PUBLISHER_CHILD_ENV = new Set([
+  'PATH', 'HOME', 'LANG', 'LANGUAGE', 'LC_ALL', 'LC_CTYPE', 'LC_MESSAGES',
+  'TMPDIR', 'TMP', 'TEMP', 'CI', 'GITHUB_ACTIONS', 'GH_TOKEN',
+  'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'USERPROFILE'
+]);
+export function publisherSubprocessEnvironment(env = process.env) {
+  const result = {};
+  for (const name of PUBLISHER_CHILD_ENV) {
+    if (Object.hasOwn(env, name)) result[name] = env[name];
+  }
+  // Disposable file:// fixtures use a fake gh process to test PR readback.
+  // These two test-only variables are never forwarded in credentialed Actions.
+  if (isOfflinePublisherFixture(env)) {
+    for (const name of ['AIEO_FAKE_GH_LOG', 'AIEO_FAKE_RESPONSE']) {
+      if (Object.hasOwn(env, name)) result[name] = env[name];
+    }
+  }
+  result.GIT_NO_REPLACE_OBJECTS = '1';
+  result.GIT_TERMINAL_PROMPT = '0';
+  return result;
+}
+
 function command(binary, args, { raw = false } = {}) {
   // Repository-local Git config is not a trust boundary: core.fsmonitor and
   // diff.external can run executable helpers during seemingly read-only
@@ -45,7 +71,7 @@ function command(binary, args, { raw = false } = {}) {
   // while the privileged publisher retains a scoped GitHub write token.
   return execFileSync(binary, safeArgs, {
     encoding: raw ? undefined : 'utf8', stdio: 'pipe',
-    env: binary === 'git' ? { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' } : process.env
+    env: publisherSubprocessEnvironment(process.env)
   });
 }
 // Preserve immutable Git blob bytes until strict UTF-8 validation. Node's
