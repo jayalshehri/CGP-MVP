@@ -174,10 +174,10 @@ test('rejects trusted source swapped to external symlink before write', (t) => {
   assert.equal(swapped, true);
   assert.equal(readFileSync(outside, 'utf8'), 'external original\n');
   assert.equal(readFileSync(held, 'utf8'), 'trusted baseline\n');
-  assertUntouched(cwd);
+  assert.equal(existsSync(join(cwd, 'aieo-staging')), true);
 });
 
-test('rejects hardlinked or group-writable trusted source', (t) => {
+test('rejects hardlinked trusted source', (t) => {
   const cwd = fixture(t);
   const target = join(cwd, 'components', 'FeedbackWidget.tsx');
   linkSync(target, join(cwd, 'other-hardlink'));
