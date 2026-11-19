@@ -333,6 +333,60 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
     assert.equal(isolatedGit('branch', '--show-current').trim(), 'main',
       'staging must not create a branch');
 
+    // The isolated publisher receives a valid, fully staged artifact, but its
+    // own verification must still reject handoff corruption that happens AFTER
+    // staging succeeds and BEFORE the write-scoped process starts. This
+    // boundary differs from the earlier stage rejection tests.
+    const finalPublisher = join(scripts, 'aieo-publish-draft.mjs');
+    for (const [role, field] of [
+      ['proposal', 'sourceHash'], ['qa', 'proposedHash'],
+      ['security', 'addedLines'], ['reviewer', 'proposedHash']
+    ]) {
+      const stagedReport = join(isolated, 'aieo-output', 'model-' + role + '.json');
+      const accepted = readFileSync(stagedReport, 'utf8');
+      const forged = JSON.parse(accepted);
+      assert.ok(Object.hasOwn(forged, field), role + ' must carry the attested field');
+      if (field === 'addedLines') {
+        assert.equal(typeof forged[field], 'number');
+        forged[field] += 1;
+      } else {
+        assert.equal(typeof forged[field], 'string');
+        forged[field] = '0'.repeat(64);
+      }
+      try {
+        writeFileSync(stagedReport, JSON.stringify(forged, null, 2) + '\n');
+        const refused = run([finalPublisher], {}, isolated);
+        assert.notEqual(refused.status, 0,
+          role + ' post-stage forgery must fail at the final publisher boundary');
+        assert.equal(readFileSync(cleanSource, 'utf8'), candidate);
+        assert.equal(isolatedGit('branch', '--show-current').trim(), 'main');
+        assert.equal(isolatedGit('show', 'main:' + MODEL_ALLOWED_PATH), original);
+        assert.doesNotMatch(isolatedGit('ls-remote', '--heads', remote),
+          /refs\/heads\/aieo\/model-proposal-/);
+        assert.equal(existsSync(ghLog), false,
+          role + ' forgery must not reach GitHub CLI');
+      } finally {
+        writeFileSync(stagedReport, accepted);
+      }
+    }
+
+    const unreviewedPublishedSource = candidate.replace(replacement, replacement + ' ');
+    assert.notEqual(unreviewedPublishedSource, candidate,
+      'post-stage candidate mutation must actually alter the source');
+    try {
+      writeFileSync(cleanSource, unreviewedPublishedSource);
+      const refused = run([finalPublisher], {}, isolated);
+      assert.notEqual(refused.status, 0,
+        'post-stage candidate mutation must fail independently in publisher');
+      assert.equal(isolatedGit('branch', '--show-current').trim(), 'main');
+      assert.equal(isolatedGit('show', 'main:' + MODEL_ALLOWED_PATH), original);
+      assert.doesNotMatch(isolatedGit('ls-remote', '--heads', remote),
+        /refs\/heads\/aieo\/model-proposal-/);
+      assert.equal(existsSync(ghLog), false);
+    } finally {
+      writeFileSync(cleanSource, candidate);
+    }
+
     // Only the third, token-scoped child may push to the disposable bare remote
     // and call the fake gh CLI. This remains a mock, NOT live GitHub publication.
     const published = run([join(scripts, 'aieo-publish-draft.mjs')], {}, isolated);
