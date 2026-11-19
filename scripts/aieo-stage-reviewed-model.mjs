@@ -33,7 +33,8 @@ function checkedBytes(path, uid, maxBytes, json = false) {
 export function stageReviewedModelArtifact({ cwd = process.cwd(), env = process.env } = {}) {
   // A downloaded candidate is never read while either GitHub write credentials
   // or the external model credential is present in this process.
-  if (['GH_TOKEN', 'GITHUB_TOKEN', 'OPENROUTER_API_KEY'].some((key) => env[key])) block();
+  if (['GH_TOKEN', 'GITHUB_TOKEN', 'OPENROUTER_API_KEY'].some((key) =>
+    env[key] || process.env[key])) block();
   const uid = process.getuid?.();
   if (!Number.isSafeInteger(uid)) block();
   const staging = join(cwd, 'aieo-staging');
