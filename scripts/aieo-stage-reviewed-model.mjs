@@ -164,12 +164,28 @@ export function stageReviewedModelArtifact({ cwd = process.cwd(), env = process.
       parentAfter.dev !== trustedParent.dev ||
       parentAfter.ino !== trustedParent.ino ||
       lstatSync(targetDir, { throwIfNoEntry: false })) block();
-  // No untrusted candidate is executed, installed as a dependency or loaded as
-  // an import. The publisher checks the real Git diff and task/run attestation.
-  writeTrustedSource(source, original, uid, candidate);
+  // Copy verified reports BEFORE changing trusted code. Otherwise an I/O
+  // failure halfway through copying leaves a dirty checkout with no complete
+  // evidence handoff. Never process any unexpected output file.
   mkdirSync(targetDir, { mode: 0o700 });
-  for (const [name, bytes] of reports) {
-    writeFileSync(join(targetDir, name), bytes, { flag: 'wx', mode: 0o600 });
+  const outputDir = checkDirectory(targetDir, uid);
+  try {
+    for (const [name, bytes] of reports) {
+      writeFileSync(join(targetDir, name), bytes, { flag: 'wx', mode: 0o600 });
+    }
+    checkDirectory(targetDir, uid, REPORTS);
+    // No untrusted candidate is executed, installed as a dependency or
+    // loaded as an import. The publisher independently rechecks the Git diff.
+    writeTrustedSource(source, original, uid, candidate);
+  } catch (error) {
+    // Only clean up the directory we created. A replaced output path must
+    // never cause deletion of an unrelated directory.
+    const current = lstatSync(targetDir, { throwIfNoEntry: false });
+    if (current?.isDirectory() && !current.isSymbolicLink() &&
+        current.dev === outputDir.dev && current.ino === outputDir.ino) {
+      rmSync(targetDir, { recursive: true, force: true });
+    }
+    throw error;
   }
   // The publisher rejects every untracked input outside aieo-output.
   rmSync(staging, { recursive: true });
