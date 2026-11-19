@@ -181,9 +181,9 @@ export function stageReviewedModelArtifact({ cwd = process.cwd(), env = process.
   const source = join(trustedComponents, SOURCE);
   const targetDir = join(cwd, 'aieo-output');
   // Reject any unexpected payload or path BEFORE modifying the clean checkout.
-  checkDirectory(staging, uid, ['components', 'aieo-output']);
-  checkDirectory(sourceDir, uid, [SOURCE]);
-  checkDirectory(reportDir, uid, REPORTS);
+  const stagingRoot = checkDirectory(staging, uid, ['components', 'aieo-output']);
+  const sourceRoot = checkDirectory(sourceDir, uid, [SOURCE]);
+  const reportRoot = checkDirectory(reportDir, uid, REPORTS);
   // A regular source file under a symlinked or writable parent is not trusted.
   // Capture its directory inode before reading artifact bytes.
   const trustedParent = checkDirectory(trustedComponents, uid);
@@ -225,8 +225,22 @@ export function stageReviewedModelArtifact({ cwd = process.cwd(), env = process.
       writeFileSync(join(targetDir, name), bytes, { flag: 'wx', mode: 0o600 });
     }
     checkDirectory(targetDir, uid, REPORTS);
+    // Finish every potentially failing cleanup BEFORE committing the reviewed
+    // source. Otherwise a failed staging-directory deletion reports failure
+    // after the source was already changed, leaving a dirty checkout.
+    // Reattest the exact downloaded tree before any recursive removal.
+    for (const [path, expected, names] of [
+      [staging, stagingRoot, ['components', 'aieo-output']],
+      [sourceDir, sourceRoot, [SOURCE]],
+      [reportDir, reportRoot, REPORTS]
+    ]) {
+      const current = checkDirectory(path, uid, names);
+      if (current.dev !== expected.dev || current.ino !== expected.ino) block();
+    }
+    rmSync(staging, { recursive: true });
     // No untrusted candidate is executed, installed as a dependency or
     // loaded as an import. The publisher independently rechecks the Git diff.
+    // Atomic source replacement is the final mutating operation.
     writeTrustedSource(source, original, uid, candidate);
   } catch (error) {
     // Only clean up the directory we created. A replaced output path must
@@ -239,7 +253,6 @@ export function stageReviewedModelArtifact({ cwd = process.cwd(), env = process.
     throw error;
   }
   // The publisher rejects every untracked input outside aieo-output.
-  rmSync(staging, { recursive: true });
   return { status: 'reviewed-artifact-staged', fileCount: 1 + reports.length };
 }
 
