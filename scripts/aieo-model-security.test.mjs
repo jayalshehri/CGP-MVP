@@ -1005,3 +1005,29 @@ test('independent Security freezes lowercase JSX member props despite a forged d
     }).status, 'passed', tag);
   }
 });
+
+test('independent Security freezes bare JSX tag changes despite a forged diff', () => {
+  for (const [from, to] of [
+    ['<div>Old copy</div>', '<form>Old copy</form>'],
+    ['<p>Old copy</p>', '<iframe>Old copy</iframe>'],
+    ['<button>Old copy</button>', '<div>Old copy</div>'],
+    ['<div>Old copy</div>', '<div>Old copy</div><form>Send</form>']
+  ]) {
+    const before = 'const view = (' + from + ');\n';
+    const after = before.replace(from, to);
+    const verdict = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+  Old copy', // deliberately hides the JSX tag change
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.status, 'failed', from + ' -> ' + to);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  const before = 'const view = (<p>Old copy</p>);\n';
+  const after = before.replace('Old copy', 'New copy');
+  assert.equal(inspectModelDiff({
+    original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const view = (<p>New copy</p>);',
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+  }).status, 'passed');
+});
