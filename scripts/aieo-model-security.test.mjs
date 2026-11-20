@@ -954,3 +954,29 @@ test('independent Security accepts copy containing prop-shaped literal text', ()
   });
   assert.equal(verdict.status, 'passed');
 });
+
+test('independent Security rejects removed JSX restrictions even when a supplied diff is forged', () => {
+  for (const [tag, prop] of [
+    ['iframe', 'sandbox="allow-scripts"'],
+    ['iframe', 'referrerPolicy="no-referrer"'],
+    ['button', 'disabled'],
+    ['form', 'noValidate'],
+    ['input', 'required']
+  ]) {
+    const before = 'const view = (<' + tag + '\n  ' + prop + '\n  title="Old copy"\n/>);\n';
+    const after = before.replace('  ' + prop + '\n', '');
+    const verdict = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+  title="Old copy"', // deliberately omits security-attribute deletion
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.status, 'failed', tag + ' ' + prop);
+  }
+  const before = 'const view = (<iframe\n  sandbox="allow-scripts"\n/>);\n';
+  const after = before.replace('<iframe\n  sandbox="allow-scripts"\n/>', '<p>Safe replacement</p>');
+  assert.equal(inspectModelDiff({
+    original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+<p>Safe replacement</p>',
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+  }).status, 'failed');
+});
