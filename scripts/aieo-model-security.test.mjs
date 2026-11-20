@@ -476,3 +476,51 @@ test('independent Security fails closed on HTML injection and srcDoc in committe
   });
   assert.equal(safe.status, 'passed');
 });
+
+test('independent Security screens actual candidate bytes even with an incomplete supplied diff', () => {
+  const allegedSafeDiff = '@@ -1 +1 @@\\n-const items = 1;\\n+const items = 2;\\n'.replaceAll('\\n', '\n');
+  const candidates = [
+    'const items = 2;\nnode.innerHTML = untrustedMarkup;\n',
+    'const items = 2;\nconst reply = fetch("/outbound");\n',
+    'const items = 2;\nconst target = window.location;\n'
+  ];
+  for (const candidate of candidates) {
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: allegedSafeDiff,
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed', 'unsafe actual bytes cannot be hidden by a clean diff');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  const safeCandidate = 'const items = 2; // benign presentation change\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safeCandidate, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: allegedSafeDiff,
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safeCandidate) }
+  }).status, 'passed');
+});
+
+test('independent Security bounds actual changed lines despite a truncated diff', () => {
+  const candidate = 'const items = 2;\n' +
+    Array.from({ length: 22 }, (_, index) => 'const label' + index + ' = "' + index + '";').join('\n') + '\n';
+  const verdict = inspectModelDiff({
+    original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(candidate) }
+  });
+  assert.equal(verdict.status, 'failed');
+  assert.ok(verdict.findings.includes('Too many new code lines'));
+});
+
+test('independent Security catches dangerous token completed by one-character edit', () => {
+  const before = 'const reply = feXch("/outbound");\n';
+  const after = 'const reply = fetch("/outbound");\n';
+  const verdict = inspectModelDiff({
+    original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-const reply = feXch("/outbound");\n+const reply = fetch("/outbound");\n',
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+  });
+  assert.equal(verdict.status, 'failed');
+  assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+});
