@@ -627,3 +627,34 @@ test('independent Security counts repeated outbound tags despite a clean claimed
   assert.equal(verdict.status, 'failed');
   assert.ok(verdict.findings.includes('Potentially unsafe new code'));
 });
+
+test('independent Security checks every outbound JSX prop and value on an existing tag', () => {
+  const base = 'const view = (<img\n  src={safeUrl > cutoff ? safeUrl : fallback}\n  alt="Before > After"\n/>);\n';
+  const changes = [
+    ['  alt="Before > After"\n', '  alt="Before > After"\n  srcSet={untrustedUrl}\n'],
+    ['  src={safeUrl > cutoff ? safeUrl : fallback}\n',
+      '  src={untrustedUrl > cutoff ? safeUrl : fallback}\n'],
+    ['  alt="Before > After"\n', '  alt="Before > After"\n  {...untrustedProps}\n'],
+    ['  alt="Before > After"\n', '  alt="Before > After"\n  src={safeUrl}\n']
+  ];
+  for (const [find, replace] of changes) {
+    const candidate = base.replace(find, replace);
+    assert.notEqual(candidate, base);
+    const verdict = inspectModelDiff({
+      original: base, actual: candidate,
+      changedPaths: [MODEL_ALLOWED_PATH],
+      // Deliberately hide the added attribute to exercise committed candidate inspection.
+      diff: '+  alt="Before > After"',
+      report: { status: 'proposed', sourceHash: hash(base),
+        proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed', replace);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), replace);
+  }
+  const safe = base.replace('alt="Before > After"', 'alt="Updated description"');
+  assert.equal(inspectModelDiff({
+    original: base, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+  alt="Updated description"',
+    report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(safe) }
+  }).status, 'passed', 'unchanged src with a harmless alt change is accepted');
+});
