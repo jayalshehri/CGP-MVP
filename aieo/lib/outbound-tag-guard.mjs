@@ -7,7 +7,11 @@
 // Do not use the i flag: it would make the capitalized component alternative
 // match arbitrary lower-case identifiers after '<' in ordinary comparisons.
 // Lower-case custom elements (web components) and namespaced JSX/SVG tags
-// can also bind src/href or spread props. Lowercase dotted JSX member names\n// (ui.Button) are components too, even if the leading namespace is lowercase.\n// Match native HTML names only when the *entire tag name* ends, so <a-custom>\n// is not accidentally parsed as an invalid <a> opening tag.\n// SVG container elements can change
+// can also bind src/href or spread props. Lowercase dotted JSX member names
+// (ui.Button) are components too, even if the leading namespace is lowercase.
+// Match native HTML names only when the *entire tag name* ends, so <a-custom>
+// is not accidentally parsed as an invalid <a> opening tag.
+// SVG container elements can change
 // the resolution of existing relative URLs via xmlBase / xml:base, even if
 // no href/src is added. Do not let those opening tags evade
 // full-source comparison merely because they are not native HTML tag names.
