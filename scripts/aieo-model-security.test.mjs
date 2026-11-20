@@ -445,3 +445,34 @@ test('independent Security blocks invisible Unicode in actual candidate addition
   assert.equal(assess('const items = 2; // حالة العرض\n').status, 'passed',
     'normal Arabic display text remains permissible');
 });
+
+test('independent Security fails closed on HTML injection and srcDoc in committed diff', () => {
+  const sinks = [
+    '<div dangerouslySetInnerHTML={{ __html: unsafeHtml }} />',
+    '<iframe srcDoc={unsafeHtml} />',
+    'const frameProps = { srcDoc: unsafeHtml };',
+    'node.insertAdjacentHTML("beforeend", unsafeHtml);',
+    'const parsed = new DOMParser();',
+    'node.innerHTML = unsafeHtml;',
+    'node.outerHTML = unsafeHtml;'
+  ];
+  for (const line of sinks) {
+    const candidate = 'const items = 2;\n' + line + '\n';
+    const reviewed = inspectModelDiff({
+      original, actual: candidate,
+      changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -1 +1,2 @@\n-const items = 1;\n+const items = 2;\n+' + line + '\n',
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(candidate) }
+    });
+    assert.equal(reviewed.status, 'failed', line);
+    assert.ok(reviewed.findings.includes('Potentially unsafe new code'));
+  }
+  const safeCandidate = 'const items = 2; // harmless display change\n';
+  const safe = inspectModelDiff({
+    original, actual: safeCandidate,
+    changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2; // harmless display change\n',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safeCandidate) }
+  });
+  assert.equal(safe.status, 'passed');
+});

@@ -66,6 +66,10 @@ const dynamicCodeReflection = /\b(?:constructor|__proto__|prototype|setPrototype
 
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
 const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
+// Model-created HTML parse/assignment sinks can execute attacker-controlled
+// markup without a fetch() call. The FeedbackWidget text-only patch scope
+// has no reason to introduce these APIs or React's srcDoc property.
+const rawHtmlSink = /\b(?:dangerouslySetInnerHTML|srcDoc|insertAdjacentHTML|DOMParser|innerHTML|outerHTML)\b/i;
 
 // Never buffer an unbounded provider response: real fetch supplies a readable byte stream.
 const MAX_PROVIDER_BYTES = 18000;
@@ -178,7 +182,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
   if (containsCredentials(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) || dynamicGlobalMember.test(replace) || ambientGlobalReference.test(replace) || encodedJavaScriptEscape.test(replace) || dynamicCodeReflection.test(replace) ||
-      outboundMarkup.test(replace) || outboundCss.test(replace) ||
+      outboundMarkup.test(replace) || outboundCss.test(replace) || rawHtmlSink.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }

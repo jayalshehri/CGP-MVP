@@ -67,6 +67,10 @@ const dynamicCodeReflection = /\b(?:constructor|__proto__|prototype|setPrototype
 
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
 const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
+// Model-created HTML parse/assignment sinks can execute attacker-controlled
+// markup without a fetch() call. The FeedbackWidget text-only patch scope
+// has no reason to introduce these APIs or React's srcDoc property.
+const rawHtmlSink = /\b(?:dangerouslySetInnerHTML|srcDoc|insertAdjacentHTML|DOMParser|innerHTML|outerHTML)\b/i;
 
 // The source-bearing submit handler is security-critical. Preserve its complete body,
 // not only snippets that could survive inside comments or unreachable branches.
@@ -104,7 +108,8 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
       unsafeInvisible.test(additions.join('\n')) || unsafeLineControl.test(additions.join('\n')) ||
       unsafeNonstandardUnicode.test(additions.join('\n')) ||
       dynamicCodeReflection.test(additions.join('\n')) ||
-      outboundMarkup.test(additions.join('\n')) || outboundCss.test(additions.join('\n'))) {
+      outboundMarkup.test(additions.join('\n')) || outboundCss.test(additions.join('\n')) ||
+      rawHtmlSink.test(additions.join('\n'))) {
     findings.push('Potentially unsafe new code');
   }
   if (typeof original === 'string' && typeof actual === 'string') {
