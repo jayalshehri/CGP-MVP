@@ -1,5 +1,6 @@
 // AIEO optional external-model adapter. Disabled by default; never runs on PR/push.
 import { createHash } from 'node:crypto';
+import { introducesOutboundTagAttribute } from './outbound-tag-guard.mjs';
 
 export const MODEL_ALLOWED_PATH = 'components/FeedbackWidget.tsx';
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
@@ -210,7 +211,10 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
   const patchedSource = source.replace(find, replace);
-  if (introducesOutboundMarkup(source, patchedSource)) {
+  // Check every sensitive prop on a pre-existing JSX tag, not merely its
+  // first src/href match; the original first-match guard remains in force.
+  if (introducesOutboundMarkup(source, patchedSource) ||
+      introducesOutboundTagAttribute(source, patchedSource)) {
     return { status: 'rejected', reason: 'Model edit introduces outbound markup' };
   }
   return {
