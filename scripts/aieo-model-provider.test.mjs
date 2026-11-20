@@ -1451,15 +1451,43 @@ test('model freezes every unassigned JSX prop, including custom booleans', () =>
     assert.equal(result.status, 'rejected', tag + ' ' + attribute);
   }
   const before = 'const view = (<div\n  customFlag\n  title="Old copy"\n/>);\n';
-  const changed = before.replace('  customFlag\n', '');
   assert.equal(validateModelPatch({
     source: before, response: JSON.stringify({
       path: MODEL_ALLOWED_PATH, find: '  customFlag\n  title="Old copy"\n',
       replace: '  title="Old copy"\n',
-      explanation: 'Synthetic boolean removal: no new behavior'
+      explanation: 'Synthetic boolean removal must be frozen'
     })
-  }).status, 'proposed');
-  assert.ok(!changed.includes('customFlag'));
+  }).status, 'rejected');
+});
+
+
+test('model refuses removal of pre-existing JSX restrictions and protected tags', () => {
+  for (const [tag, prop] of [
+    ['iframe', 'sandbox="allow-scripts"'],
+    ['iframe', 'referrerPolicy="no-referrer"'],
+    ['button', 'disabled'],
+    ['form', 'noValidate'],
+    ['input', 'required']
+  ]) {
+    const before = 'const view = (<' + tag + '\n  ' + prop + '\n  title="Old copy"\n/>);\n';
+    const result = validateModelPatch({
+      source: before, response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH,
+        find: '  ' + prop + '\n  title="Old copy"\n',
+        replace: '  title="Old copy"\n',
+        explanation: 'Synthetic removal of existing JSX security restriction'
+      })
+    });
+    assert.equal(result.status, 'rejected', tag + ' ' + prop);
+  }
+  const before = 'const view = (<iframe\n  sandbox="allow-scripts"\n/>);\n';
+  assert.equal(validateModelPatch({
+    source: before, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: '<iframe\n  sandbox="allow-scripts"\n/>',
+      replace: '<p>Safe replacement</p>',
+      explanation: 'Synthetic removal of entire signed JSX element'
+    })
+  }).status, 'rejected');
 });
 
 test('model accepts quoted literal copy containing prop-shaped text', () => {
