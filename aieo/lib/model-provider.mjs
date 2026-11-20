@@ -11,6 +11,12 @@ const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 // PGP private-key headers must not bypass disclosure checks merely because
 // their secret values lack known provider-specific token prefixes.
 const credentials = /gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-[a-z0-9]{20,}|(?:sk-proj-|sk-live-|sb_secret_)[a-z0-9_-]{20,}|(?:AKIA|ASIA)[0-9A-Z]{16}|-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----|-----BEGIN PGP PRIVATE KEY BLOCK-----|(?:service_role|password|api[_-]?key|client_secret|aws_secret_access_key|accountkey)\s*[:=]\s*(?:["'][^"'\r\n]{8,}|[a-z0-9_+/=-]{12,})|\bBearer\s+[a-z0-9._~+/-]{16,}|\bBasic\s+[a-z0-9+/]{12,}={0,2}|\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s/?#@"'<>]{1,256}@|(?:[?&](?:x-amz-(?:signature|credential|security-token)|sig)=)[a-z0-9%+/_=-]{20,}|\bxox[baprs]-[a-z0-9-]{20,}|\bAIza[a-z0-9_-]{35}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{16,}/i;
+// Opaque OAuth/session tokens and API keys often appear in a URL query or a
+// quoted JSON/config field rather than with a known vendor prefix. Fail closed
+// before disclosure and on every model response field. These are heuristics,
+// not a guarantee that arbitrary secrets are discoverable.
+const opaqueTokenCredentials = /(?:[?&](?:access[_-]?token|refresh[_-]?token|id[_-]?token|session[_-]?token|auth[_-]?token|api[_-]?key|apikey|token|key)=[a-z0-9._~%+/-]{12,}|\b["']?(?:access[_-]?token|refresh[_-]?token|id[_-]?token|session[_-]?token|auth[_-]?token|api[_-]?key|apikey|token)["']?\s*[:=]\s*(?:["'][a-z0-9._~%+/-]{12,}["']|[a-z0-9._~%+/-]{12,})|\bAuthorization\s*:\s*(?:Token|ApiKey)\s+[a-z0-9._~+/-]{12,})/i;
+const containsCredentials = (value) => credentials.test(value) || opaqueTokenCredentials.test(value);
 const forbidden = /(?:\beval\s*\(|\bFunction\s*\(|\bchild_process\b|\bprocess\.env\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bimport\s+|\brequire\s*\()/i;
 
 // Block browser navigation and side-channel transports in even a one-line UI patch.
@@ -150,7 +156,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   // Limits are byte-based; truncation below is by code point, not UTF-16 unit.
   if (!exactUtf8(parsed.explanation) ||
       Buffer.byteLength(parsed.explanation, 'utf8') > 1200 ||
-      credentials.test(parsed.explanation) || /[\u0000-\u001F\u007F]/.test(parsed.explanation) ||
+      containsCredentials(parsed.explanation) || /[\u0000-\u001F\u007F]/.test(parsed.explanation) ||
       unsafeInvisible.test(parsed.explanation) || unsafeLineControl.test(parsed.explanation) ||
       unsafeNonstandardUnicode.test(parsed.explanation)) {
     return { status: 'rejected', reason: 'Unsafe model explanation' };
@@ -161,7 +167,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   const findBytes = Buffer.byteLength(find, 'utf8');
   const replaceBytes = Buffer.byteLength(replace, 'utf8');
   if (!exactUtf8(find) || !exactUtf8(replace) ||
-      credentials.test(find) ||
+      containsCredentials(find) ||
       unsafeInvisible.test(find) || unsafeInvisible.test(replace) ||
       unsafeLineControl.test(find) || unsafeLineControl.test(replace) ||
       unsafeNonstandardUnicode.test(find) || unsafeNonstandardUnicode.test(replace) ||
@@ -171,7 +177,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     return { status: 'rejected', reason: 'Proposed edit outside bounded size limits' };
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
-  if (credentials.test(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) || dynamicGlobalMember.test(replace) || ambientGlobalReference.test(replace) || encodedJavaScriptEscape.test(replace) || dynamicCodeReflection.test(replace) ||
+  if (containsCredentials(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) || dynamicGlobalMember.test(replace) || ambientGlobalReference.test(replace) || encodedJavaScriptEscape.test(replace) || dynamicCodeReflection.test(replace) ||
       outboundMarkup.test(replace) || outboundCss.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
@@ -189,7 +195,7 @@ export function buildModelRequest({ source, path = MODEL_ALLOWED_PATH, task, mod
   if (shareApproved !== true) throw new Error('External source sharing must be explicitly approved');
   if (path !== MODEL_ALLOWED_PATH || typeof source !== 'string' ||
       Buffer.byteLength(source, 'utf8') > 12000 || !exactUtf8(source) ||
-      credentials.test(source) || promptBoundaryMarker.test(source) ||
+      containsCredentials(source) || promptBoundaryMarker.test(source) ||
       unsafeInvisible.test(source) || unsafeLineControl.test(source) ||
       unsafeNonstandardUnicode.test(source) ||
       /(?:\.env|secrets\/|service_role)/i.test(path)) {
@@ -197,7 +203,7 @@ export function buildModelRequest({ source, path = MODEL_ALLOWED_PATH, task, mod
   }
   if (typeof task !== 'string' || task.length < 12 ||
       Buffer.byteLength(task, 'utf8') > 500 || !exactUtf8(task) ||
-      credentials.test(task) || promptBoundaryMarker.test(task) ||
+      containsCredentials(task) || promptBoundaryMarker.test(task) ||
       unsafeTaskControl.test(task) || unsafeInvisible.test(task) || unsafeLineControl.test(task) ||
       unsafeNonstandardUnicode.test(task) ||
       typeof model !== 'string' || !/^[a-z0-9_.-]+\/[a-z0-9_.:-]+$/i.test(model)) {

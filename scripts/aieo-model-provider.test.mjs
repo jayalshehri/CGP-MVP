@@ -941,3 +941,51 @@ test('URI userinfo, HTTP Basic and encrypted private-key markers fail closed at 
     task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
   }), 'ordinary URLs without userinfo must remain allowed');
 });
+
+
+test('opaque OAuth, API-key and session tokens fail closed before disclosure or model acceptance', async () => {
+  // Synthetic, non-authenticating tokens only; never use real credentials.
+  const markers = [
+    '?access_token=' + 't'.repeat(28),
+    '&refresh_token=' + 'r'.repeat(28),
+    '?token=' + 'q'.repeat(30),
+    '?key=' + 'k'.repeat(24),
+    'https://service.example.invalid/api?api_key=' + 'a'.repeat(28),
+    '{"access_token":"' + 'j'.repeat(28) + '"}',
+    'session_token = "' + 's'.repeat(28) + '"',
+    'Authorization: Token ' + 'h'.repeat(28),
+    'Authorization: ApiKey ' + 'v'.repeat(28)
+  ];
+  let requests = 0;
+  const transport = async () => { requests += 1; throw new Error('unsafe transport must not be invoked'); };
+  for (const marker of markers) {
+    const taintedSource = source + '\n// ' + marker;
+    assert.throws(() => buildModelRequest({
+      source: taintedSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }), 'source boundary: ' + marker);
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }), 'task boundary: ' + marker);
+    assert.equal((await requestModelPatch({ source: taintedSource, task, env, transport })).status, 'blocked');
+    assert.equal((await requestModelPatch({ source, task: task + ' ' + marker, env, transport })).status, 'blocked');
+    for (const result of [
+      validateModelPatch({ source: taintedSource,
+        response: JSON.stringify({ path: MODEL_ALLOWED_PATH, find: '// ' + marker,
+          replace: '// sanitized fixture', explanation: 'Remove synthetic token' }) }),
+      validateModelPatch({ source,
+        response: JSON.stringify({ path: MODEL_ALLOWED_PATH, find,
+          replace: '  const sample = "' + marker + '";', explanation: 'Fixture replacement' }) }),
+      validateModelPatch({ source,
+        response: JSON.stringify({ path: MODEL_ALLOWED_PATH, find, replace: replacement,
+          explanation: 'Fixture ' + marker }) })
+    ]) {
+      assert.equal(result.status, 'rejected', 'must refuse model echo: ' + marker);
+      assert.equal(JSON.stringify(result).includes(marker), false, 'never echo a token in rejection metadata');
+    }
+  }
+  assert.equal(requests, 0, 'no opaque secret can reach the provider transport');
+  assert.doesNotThrow(() => buildModelRequest({
+    source: source + '\n// https://service.example.invalid/?page=2&view=compact',
+    task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+  }), 'ordinary non-secret query parameters remain allowed');
+});
