@@ -1093,3 +1093,18 @@ test('model rejects outbound attributes added within unchanged multiline JSX tag
   });
   assert.equal(safe.status, 'proposed');
 });
+
+test('model full-source JSX guard counts duplicate outbound sink instances', () => {
+  const before = ["const view = (<>","  <img","    alt=\"Icon\"","    src={existingUrl}","  />","  <img","    alt=\"Icon\"","  />","</>);",""].join('\n');
+  const find = '    alt="Icon"\n  />\n</>);';
+  const replace = '    alt="Icon"\n    src={existingUrl}\n  />\n</>);';
+  const verdict = validateModelPatch({
+    source: before,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Fixture adds a second copy of the existing outbound tag'
+    })
+  });
+  assert.equal(verdict.status, 'rejected');
+  assert.equal(verdict.patchedSource, undefined);
+});

@@ -613,3 +613,17 @@ test('independent Security rejects hidden outbound JSX attributes even with trun
     report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
   }).status, 'passed');
 });
+
+test('independent Security counts repeated outbound tags despite a clean claimed diff', () => {
+  const before = ["const view = (<>","  <img","    alt=\"Icon\"","    src={existingUrl}","  />","  <img","    alt=\"Icon\"","  />","</>);",""].join('\n');
+  const after = before.replace('    alt="Icon"\n  />\n</>);',
+    '    alt="Icon"\n    src={existingUrl}\n  />\n</>);');
+  assert.notEqual(after, before);
+  const verdict = inspectModelDiff({
+    original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+  alt="Icon"',
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+  });
+  assert.equal(verdict.status, 'failed');
+  assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+});
