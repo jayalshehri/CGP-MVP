@@ -5,7 +5,10 @@
 // carry href/src URLs even when no native <a>, <img>, or <form> is present.
 // Do not use the i flag: it would make the capitalized component alternative
 // match arbitrary lower-case identifiers after '<' in ordinary comparisons.
-const tagStart = /<\s*(?:(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object|animate|animateMotion|animateTransform|set|textPath|mpath|pattern|linearGradient|radialGradient|filter|mask|clipPath|marker|cursor|fontFaceUri|font-face-uri)\b|[A-Z][\w.:-]*(?=[\s/>]))/g;
+// Lower-case custom elements (web components) and namespaced JSX/SVG tags
+// can also bind src/href or spread props. Do not let those opening tags evade
+// full-source comparison merely because they are not native HTML tag names.
+const tagStart = /<\s*(?:(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object|animate|animateMotion|animateTransform|set|textPath|mpath|pattern|linearGradient|radialGradient|filter|mask|clipPath|marker|cursor|fontFaceUri|font-face-uri)\b|[A-Z][\w.:-]*(?=[\s/>])|[a-z][\w.]*[-:][\w.:-]+(?=[\s/>]))/g;
 const outboundAttribute = /\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=/gi;
 const jsxSpread = /\{\s*\.\.\./g;
 
