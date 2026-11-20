@@ -1002,6 +1002,7 @@ test('OAuth URL fragment bearer tokens are denied at every independent model bou
     '#session_token=' + 'd'.repeat(30),
     '#api_key=' + 'e'.repeat(30),
     '#token=' + 'f'.repeat(30),
+    '#key=' + 'h'.repeat(30),
     'https://fixture.example.invalid/callback#auth_token=' + 'g'.repeat(30)
   ];
   let requests = 0;
