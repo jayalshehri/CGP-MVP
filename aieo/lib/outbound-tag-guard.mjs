@@ -1,5 +1,6 @@
-// Detect newly introduced outbound JSX capabilities even when an edit changes
-// an attribute AFTER an existing src/href. This deliberately conservative,
+// Freeze JSX behavior-bearing attributes on both sides of a bounded UI-copy
+// edit. Adding/changing props and removing existing restrictions (e.g.
+// sandbox/disabled) are unsafe even when no new code is introduced. This deliberately conservative,
 // bounded scan is not a general-purpose JSX or HTML parser.
 // Include SVG referencing elements and capitalized React components: both can
 // carry href/src URLs even when no native <a>, <img>, or <form> is present.
@@ -145,5 +146,10 @@ export function introducesOutboundTagAttribute(original, candidate) {
     if (!remaining) return true;
     counts.set(entry, remaining - 1);
   }
-  return false;
+  // This is a UI-copy-only model task. Removing a pre-existing capability
+  // can itself enable unsafe behavior (for example, dropping an iframe sandbox,
+  // a disabled state or a restrictive form attribute). Reject missing signed
+  // tags as well as newly introduced/changed ones. Literal descriptive copy
+  // attributes are excluded above and may still be edited.
+  return [...counts.values()].some((remaining) => remaining !== 0);
 }
