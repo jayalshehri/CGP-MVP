@@ -1513,7 +1513,7 @@ test('model freezes lowercase dotted JSX member props without blocking safe labe
     });
     assert.equal(trial('  title="Old copy"\n',
       '  title="Old copy"\n  onClick={existingCallback}\n').status, 'rejected', tag);
-    assert.equal(trial('  disabled\n', '').status, 'rejected', tag);
+    assert.equal(trial('  disabled\n  title="Old copy"\n',\n      '  title="Old copy"\n').status, 'rejected', tag);
     assert.equal(trial('  title="Old copy"\n',
       '  title="Updated copy"\n').status, 'proposed', tag);
   }
