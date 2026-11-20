@@ -7,7 +7,10 @@ const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 // Conservative scan before sending source or task text to an external provider.
 // Pattern matching cannot guarantee that all secret formats have been detected.
 // Also refuse JWT-shaped credentials even without an explicit Bearer prefix.
-const credentials = /gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-[a-z0-9]{20,}|(?:sk-proj-|sk-live-|sb_secret_)[a-z0-9_-]{20,}|(?:AKIA|ASIA)[0-9A-Z]{16}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:service_role|password|api[_-]?key|client_secret|aws_secret_access_key|accountkey)\s*[:=]\s*(?:["'][^"'\r\n]{8,}|[a-z0-9_+/=-]{12,})|\bBearer\s+[a-z0-9._~+/-]{16,}|(?:[?&](?:x-amz-(?:signature|credential|security-token)|sig)=)[a-z0-9%+/_=-]{20,}|\bxox[baprs]-[a-z0-9-]{20,}|\bAIza[a-z0-9_-]{35}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{16,}/i;
+// HTTP Basic credentials, URI userinfo (including database DSNs), and encrypted/
+// PGP private-key headers must not bypass disclosure checks merely because
+// their secret values lack known provider-specific token prefixes.
+const credentials = /gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-[a-z0-9]{20,}|(?:sk-proj-|sk-live-|sb_secret_)[a-z0-9_-]{20,}|(?:AKIA|ASIA)[0-9A-Z]{16}|-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----|-----BEGIN PGP PRIVATE KEY BLOCK-----|(?:service_role|password|api[_-]?key|client_secret|aws_secret_access_key|accountkey)\s*[:=]\s*(?:["'][^"'\r\n]{8,}|[a-z0-9_+/=-]{12,})|\bBearer\s+[a-z0-9._~+/-]{16,}|\bBasic\s+[a-z0-9+/]{12,}={0,2}|\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s/?#@"'<>]{1,256}@|(?:[?&](?:x-amz-(?:signature|credential|security-token)|sig)=)[a-z0-9%+/_=-]{20,}|\bxox[baprs]-[a-z0-9-]{20,}|\bAIza[a-z0-9_-]{35}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{16,}/i;
 const forbidden = /(?:\beval\s*\(|\bFunction\s*\(|\bchild_process\b|\bprocess\.env\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bimport\s+|\brequire\s*\()/i;
 
 // Block browser navigation and side-channel transports in even a one-line UI patch.
@@ -158,6 +161,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   const findBytes = Buffer.byteLength(find, 'utf8');
   const replaceBytes = Buffer.byteLength(replace, 'utf8');
   if (!exactUtf8(find) || !exactUtf8(replace) ||
+      credentials.test(find) ||
       unsafeInvisible.test(find) || unsafeInvisible.test(replace) ||
       unsafeLineControl.test(find) || unsafeLineControl.test(replace) ||
       unsafeNonstandardUnicode.test(find) || unsafeNonstandardUnicode.test(replace) ||
