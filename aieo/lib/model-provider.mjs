@@ -161,6 +161,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   const findBytes = Buffer.byteLength(find, 'utf8');
   const replaceBytes = Buffer.byteLength(replace, 'utf8');
   if (!exactUtf8(find) || !exactUtf8(replace) ||
+      credentials.test(find) ||
       unsafeInvisible.test(find) || unsafeInvisible.test(replace) ||
       unsafeLineControl.test(find) || unsafeLineControl.test(replace) ||
       unsafeNonstandardUnicode.test(find) || unsafeNonstandardUnicode.test(replace) ||
