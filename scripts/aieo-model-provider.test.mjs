@@ -1139,3 +1139,49 @@ test('model blocks new outbound props after existing src on multiline JSX', () =
   });
   assert.equal(safe.status, 'proposed');
 });
+
+test('model refuses SVG references and custom JSX outbound props absent from native-tag list', () => {
+  const scenarios = [
+    { tag: 'textPath', inert: 'data-label="Path label"', outbound: 'href={remotePath}' },
+    { tag: 'animate', inert: 'attributeName="opacity"', outbound: 'href={remoteTarget}' },
+    { tag: 'linearGradient', inert: 'id="brandGradient"', outbound: 'xlinkHref={remoteGradient}' },
+    { tag: 'BrandImage', inert: 'alt="Preview"', outbound: 'src={remoteAsset}' }
+  ];
+  for (const { tag, inert, outbound } of scenarios) {
+    const base = ['const view = (<'+tag, '  '+inert, '/>);', ''].join('\n');
+    const find = '  ' + inert + '\n';
+    const replace = find + '  ' + outbound + '\n';
+    const verdict = validateModelPatch({
+      source: base,
+      response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find, replace,
+        explanation: 'Synthetic JSX reference regression; no external request'
+      })
+    });
+    assert.equal(verdict.status, 'rejected', tag + ' ' + outbound);
+    assert.equal(verdict.patchedSource, undefined);
+  }
+
+  // Preserve harmless UI copy and existing, unchanged SVG references.
+  const base = 'const view = (<textPath\n  href={approvedLocalPath}\n  aria-label="Old label"\n/>);\n';
+  const safe = validateModelPatch({
+    source: base,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH,
+      find: '  aria-label="Old label"\n',
+      replace: '  aria-label="New label"\n',
+      explanation: 'Safe local text update with unchanged SVG href'
+    })
+  });
+  assert.equal(safe.status, 'proposed');
+  const unsafe = validateModelPatch({
+    source: base,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH,
+      find: '  href={approvedLocalPath}\n',
+      replace: '  href={untrustedRemotePath}\n',
+      explanation: 'Synthetic SVG URL replacement regression'
+    })
+  });
+  assert.equal(unsafe.status, 'rejected');
+});

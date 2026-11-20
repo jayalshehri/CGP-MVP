@@ -1,7 +1,11 @@
 // Detect newly introduced outbound JSX capabilities even when an edit changes
 // an attribute AFTER an existing src/href. This deliberately conservative,
 // bounded scan is not a general-purpose JSX or HTML parser.
-const tagStart = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b/gi;
+// Include SVG referencing elements and capitalized React components: both can
+// carry href/src URLs even when no native <a>, <img>, or <form> is present.
+// Do not use the i flag: it would make the capitalized component alternative
+// match arbitrary lower-case identifiers after '<' in ordinary comparisons.
+const tagStart = /<\s*(?:(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object|animate|animateMotion|animateTransform|set|textPath|mpath|pattern|linearGradient|radialGradient|filter|mask|clipPath|marker|cursor|fontFaceUri|font-face-uri)\b|[A-Z][\w.:-]*(?=[\s/>]))/g;
 const outboundAttribute = /\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=/gi;
 const jsxSpread = /\{\s*\.\.\./g;
 
