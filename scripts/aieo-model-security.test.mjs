@@ -594,18 +594,18 @@ test('independent Security rejects hidden outbound JSX attributes even with trun
     ['<form', 'id="localForm"', 'action={unsafeUrl}', '>Text</form>']
   ];
   for (const [tag, marker, outbound, closing] of scenarios) {
-    const before = ['const view = (' + tag, '  ' + marker, closing + ');', ''].join('\\n');
-    const after = ['const view = (' + tag, '  ' + marker, '  ' + outbound, closing + ');', ''].join('\\n');
+    const before = ['const view = (' + tag, '  ' + marker, closing + ');', ''].join('\n');
+    const after = ['const view = (' + tag, '  ' + marker, '  ' + outbound, closing + ');', ''].join('\n');
     const verdict = inspectModelDiff({
       original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
       // Deliberately omit the outbound line, proving Security checks candidate bytes.
-      diff: '@@ -1 +1 @@\\n-const before = true;\\n+const after = true;\\n',
+      diff: '@@ -1 +1 @@\n-const before = true;\n+const after = true;\n',
       report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
     });
     assert.equal(verdict.status, 'failed', outbound);
     assert.ok(verdict.findings.includes('Potentially unsafe new code'), outbound);
   }
-  const before = ['const view = (<img', '  alt="Decorative"', '/>);', ''].join('\\n');
+  const before = ['const view = (<img', '  alt="Decorative"', '/>);', ''].join('\n');
   const after = before.replace('Decorative', 'Illustration');
   assert.equal(inspectModelDiff({
     original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
