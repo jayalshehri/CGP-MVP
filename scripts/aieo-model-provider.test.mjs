@@ -1527,3 +1527,31 @@ test('model freezes lowercase dotted JSX member props without blocking safe labe
     })
   }).status, 'proposed');
 });
+
+test('model freezes JSX tag shape even without assigned or boolean props', () => {
+  for (const [from, to] of [
+    ['<div>Old copy</div>', '<form>Old copy</form>'],
+    ['<p>Old copy</p>', '<iframe>Old copy</iframe>'],
+    ['<button>Old copy</button>', '<div>Old copy</div>'],
+    ['<div>Old copy</div>', '<div>Old copy</div><form>Send</form>']
+  ]) {
+    const source = 'const view = (' + from + ');\n';
+    const result = validateModelPatch({
+      source,
+      response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find: from, replace: to,
+        explanation: 'Synthetic bare JSX tag-structure change must be denied'
+      })
+    });
+    assert.equal(result.status, 'rejected', from + ' -> ' + to);
+  }
+  const source = 'const view = (<p>Old copy</p>);\n';
+  assert.equal(validateModelPatch({
+    source,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH,
+      find: '<p>Old copy</p>', replace: '<p>New copy</p>',
+      explanation: 'Inert copy change keeps tag identity and count'
+    })
+  }).status, 'proposed');
+});
