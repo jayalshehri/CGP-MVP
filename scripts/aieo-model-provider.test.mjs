@@ -1213,7 +1213,7 @@ test('model rejects outbound props in lowercase custom elements and namespace ta
       explanation: 'Keep the existing outbound reference intact'
     })
   });
-  assert.equal(safe.status, 'proposed', 'harmless text attribute edit should remain accepted');
+  assert.equal(safe.status, 'rejected', 'custom component props are not guaranteed to be inert');
   const changedSrc = validateModelPatch({
     source: base, response: JSON.stringify({
       path: MODEL_ALLOWED_PATH, find: '  src={approvedAsset}\n',
@@ -1516,16 +1516,16 @@ test('model freezes lowercase dotted JSX member props without blocking safe labe
     assert.equal(trial('  disabled\n  title="Old copy"\n',
       '  title="Old copy"\n').status, 'rejected', tag);
     assert.equal(trial('  title="Old copy"\n',
-      '  title="Updated copy"\n').status, 'proposed', tag);
+      '  title="Updated copy"\n').status, 'rejected', tag);
   }
   // Native <a> must not match only the prefix of the web-component name.
   const custom = 'const view = (<a-custom\n  disabled\n  title="Before"\n/>);\n';
   assert.equal(validateModelPatch({
     source: custom, response: JSON.stringify({
       path: MODEL_ALLOWED_PATH, find: '  title="Before"\n',
-      replace: '  title="After"\n', explanation: 'Harmless web-component label'
+      replace: '  title="After"\n', explanation: 'Web-component props may have side effects'
     })
-  }).status, 'proposed');
+  }).status, 'rejected');
 });
 
 test('model freezes JSX tag shape even without assigned or boolean props', () => {
@@ -1552,6 +1552,42 @@ test('model freezes JSX tag shape even without assigned or boolean props', () =>
       path: MODEL_ALLOWED_PATH,
       find: '<p>Old copy</p>', replace: '<p>New copy</p>',
       explanation: 'Inert copy change keeps tag identity and count'
+    })
+  }).status, 'proposed');
+});
+
+
+test('model freezes opaque component mount and quoted props; keeps native labels editable', () => {
+  for (const component of ['TelemetryWidget', 'ui.Telemetry', 'asset-viewer']) {
+    const original = 'const view = (<div>Old copy</div>);\n';
+    for (const replacement of [
+      '<' + component + ' />',
+      '<div>Old copy</div><' + component + ' />'
+    ]) {
+      assert.equal(validateModelPatch({
+        source: original,
+        response: JSON.stringify({
+          path: MODEL_ALLOWED_PATH, find: '<div>Old copy</div>',
+          replace: replacement,
+          explanation: 'Synthetic mount of pre-existing effectful component'
+        })
+      }).status, 'rejected', component + ' mount');
+    }
+    const before = 'const view = (<' + component + '\n  title="Old copy"\n/>);\n';
+    assert.equal(validateModelPatch({
+      source: before, response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH,
+        find: '  title="Old copy"\n', replace: '  title="New copy"\n',
+        explanation: 'Opaque custom component props may have side effects'
+      })
+    }).status, 'rejected', component + ' title');
+  }
+  const original = 'const view = (<div title="Old copy">Text</div>);\n';
+  assert.equal(validateModelPatch({
+    source: original, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: 'title="Old copy"',
+      replace: 'title="New copy"',
+      explanation: 'Intrinsic static title is descriptive'
     })
   }).status, 'proposed');
 });
