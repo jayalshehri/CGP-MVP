@@ -11,7 +11,10 @@
 // no href/src is added. Do not let those opening tags evade
 // full-source comparison merely because they are not native HTML tag names.
 const tagStart = /<\s*(?:(?:a|area|svg|g|defs|symbol|foreignObject|path|rect|circle|ellipse|line|polyline|polygon|text|tspan|stop|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object|animate|animateMotion|animateTransform|set|textPath|mpath|pattern|linearGradient|radialGradient|filter|mask|clipPath|marker|cursor|fontFaceUri|font-face-uri)\b|[A-Z][\w.:-]*(?=[\s/>])|[a-z][\w.]*[-:][\w.:-]+(?=[\s/>]))/g;
-const outboundAttribute = /\b(?:href|xlinkHref|xmlBase|xml:base|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=/gi;
+// Anchor ping URLs send network requests on activation; attributionSrc can
+// trigger attribution-reporting requests. They are outbound capabilities too,
+// even if existing href/src values stay unchanged.
+const outboundAttribute = /\b(?:href|xlinkHref|xmlBase|xml:base|src|srcSet|imageSrcSet|action|formAction|ping|attributionSrc|data|poster|content)\s*=/gi;
 const jsxSpread = /\{\s*\.\.\./g;
 
 // Quoted '>' and JSX comparisons must not terminate an opening tag early.
