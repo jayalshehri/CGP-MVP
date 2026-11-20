@@ -841,3 +841,45 @@ test('independent Security refuses newly wired JSX effects despite an incomplete
   assert.equal(verdict.status, 'failed');
   assert.ok(verdict.findings.includes('Potentially unsafe new code'));
 });
+
+
+test('independent Security rejects intrinsic callback refs and effects with forged Git diff', () => {
+  for (const [tag, prop] of [
+    ['p', 'ref={existingCallback}'],
+    ['pre', 'onMouseEnter={existingSideEffect}'],
+    ['nav', 'onClick={existingSideEffect}'],
+    ['details', 'onToggle={existingSideEffect}'],
+    ['summary', 'onClick={existingSideEffect}'],
+    ['dialog', 'onClose={existingSideEffect}'],
+    ['textarea', 'onChange={existingSideEffect}'],
+    ['select', 'onChange={existingSideEffect}'],
+    ['option', 'onMouseOver={existingSideEffect}'],
+    ['figure', 'style={existingRemoteStyle}'],
+    ['figcaption', 'ref={existingCallback}']
+  ]) {
+    const before = 'const view = (<'+tag+'\n  aria-label="Old caption"\n/>);\n';
+    const after = before.replace('  aria-label="Old caption"\n',
+      '  aria-label="Old caption"\n  '+prop+'\n');
+    const verdict = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+  aria-label="Old caption"', // forged: omits the actual effect
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.status, 'failed', tag + ': ' + prop);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  const before = 'const view = (<p\n  ref={approvedCallback}\n  aria-label="Old caption"\n/>);\n';
+  for (const [oldValue, newValue, expected] of [
+    ['approvedCallback', 'anotherCallback', 'failed'],
+    ['Old caption', 'New caption', 'passed']
+  ]) {
+    const after = before.replace(oldValue, newValue);
+    const verdict = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+  aria-label="Old caption"', // source verification must prevail
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.status, expected);
+    if (expected === 'failed') assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+});
