@@ -1501,3 +1501,29 @@ test('model accepts quoted literal copy containing prop-shaped text', () => {
   });
   assert.equal(result.status, 'proposed');
 });
+
+test('model freezes lowercase dotted JSX member props without blocking safe labels', () => {
+  for (const tag of ['ui.Button', 'widgets.Picture', 'helpers.$Panel']) {
+    const before = 'const view = (<' + tag + '\n  disabled\n  title="Old copy"\n/>);\n';
+    const trial = (find, replace) => validateModelPatch({
+      source: before, response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find, replace,
+        explanation: 'Synthetic dotted JSX member component regression'
+      })
+    });
+    assert.equal(trial('  title="Old copy"\n',
+      '  title="Old copy"\n  onClick={existingCallback}\n').status, 'rejected', tag);
+    assert.equal(trial('  disabled\n  title="Old copy"\n',
+      '  title="Old copy"\n').status, 'rejected', tag);
+    assert.equal(trial('  title="Old copy"\n',
+      '  title="Updated copy"\n').status, 'proposed', tag);
+  }
+  // Native <a> must not match only the prefix of the web-component name.
+  const custom = 'const view = (<a-custom\n  disabled\n  title="Before"\n/>);\n';
+  assert.equal(validateModelPatch({
+    source: custom, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: '  title="Before"\n',
+      replace: '  title="After"\n', explanation: 'Harmless web-component label'
+    })
+  }).status, 'proposed');
+});
