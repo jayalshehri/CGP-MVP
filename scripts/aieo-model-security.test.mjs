@@ -524,3 +524,37 @@ test('independent Security catches dangerous token completed by one-character ed
   assert.equal(verdict.status, 'failed');
   assert.ok(verdict.findings.includes('Potentially unsafe new code'));
 });
+
+test('independent Security rejects block-comment delimiters hidden by a truncated diff', () => {
+  const claimedDiff = '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n';
+  for (const candidate of [
+    'const items = 2;\n/* hidden disabled code */\n',
+    'const items = 2;\nconst marker = "*/";\n'
+  ]) {
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: claimedDiff,
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed', 'candidate comment delimiters cannot be hidden by a clean diff');
+    assert.ok(verdict.findings.includes('New block-comment delimiters are not allowed in model changes'));
+  }
+  const clean = 'const items = 2; // harmless presentation edit\n';
+  assert.equal(inspectModelDiff({
+    original, actual: clean, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: claimedDiff,
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(clean) }
+  }).status, 'passed');
+});
+
+test('independent Security checks completed block-comment tokens after a one-byte edit', () => {
+  const before = 'const marker = "/X";\n';
+  const after = 'const marker = "/*";\n';
+  const verdict = inspectModelDiff({
+    original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-const marker = "/X";\n+const marker = "/X";\n',
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+  });
+  assert.equal(verdict.status, 'failed');
+  assert.ok(verdict.findings.includes('New block-comment delimiters are not allowed in model changes'));
+});
