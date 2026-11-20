@@ -1067,3 +1067,22 @@ test('independent Security freezes opaque component mount and quoted props despi
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
   }).status, 'passed');
 });
+
+
+test('independent Security rejects case-only React component and prop substitutions', () => {
+  for (const [from, to] of [
+    ['<AdminPanel />', '<ADMINPanel />'],
+    ['<ui.AdminPanel />', '<ui.adminPanel />'],
+    ['<AdminPanel mode="safe" />', '<AdminPanel Mode="safe" />']
+  ]) {
+    const original = 'const view = (' + from + ');\n';
+    const actual = original.replace(from, to);
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+Old copy', // forged to omit the case-only JSX change
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', from + ' -> ' + to);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+});
