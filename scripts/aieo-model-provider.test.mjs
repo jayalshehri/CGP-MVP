@@ -1039,3 +1039,30 @@ test('OAuth URL fragment bearer tokens are denied at every independent model bou
     task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
   }), 'ordinary documentation anchors are not credentials');
 });
+
+test('model provider refuses HTML injection and iframe srcDoc sinks before candidate promotion', () => {
+  const sinks = [
+    '<div dangerouslySetInnerHTML={{ __html: unsafeHtml }} />',
+    '<iframe srcDoc={unsafeHtml} />',
+    'const frameProps = { srcDoc: unsafeHtml };',
+    'node.insertAdjacentHTML("beforeend", unsafeHtml);',
+    'const parsed = new DOMParser();',
+    'node.innerHTML = unsafeHtml;',
+    'node.outerHTML = unsafeHtml;'
+  ];
+  for (const replace of sinks) {
+    const response = JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic injection-sink regression'
+    });
+    const checked = validateModelPatch({ response, source });
+    assert.equal(checked.status, 'rejected', replace);
+    assert.equal(checked.patchedSource, undefined);
+  }
+  const safe = JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find,
+    replace: '  const sample = 102; // safe local label',
+    explanation: 'Harmless local UI change'
+  });
+  assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
+});
