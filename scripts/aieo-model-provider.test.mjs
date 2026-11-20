@@ -1386,3 +1386,49 @@ test('model blocks callback refs and JSX effects on previously omitted intrinsic
   assert.equal(change('  ref={approvedCallback}\n', '  ref={anotherCallback}\n').status, 'rejected');
   assert.equal(change('  aria-label="Old caption"\n', '  aria-label="New caption"\n').status, 'proposed');
 });
+
+test('model freezes unknown and boolean JSX props but permits literal copy', () => {
+  const cases = [
+    ['button', 'type="submit"'],
+    ['form', 'method="post"'],
+    ['form', 'noValidate'],
+    ['input', 'autoFocus'],
+    ['input', 'disabled'],
+    ['input', 'formTarget="_top"'],
+    ['input', 'formMethod="post"'],
+    ['a', 'target="_blank"'],
+    ['a', 'rel="opener"'],
+    ['iframe', 'sandbox="allow-scripts"'],
+    ['meta', 'httpEquiv="refresh"'],
+    ['asset-viewer', 'customHandler={existingCallback}'],
+    ['p', 'aria-label={existingSideEffect()}']
+  ];
+  for (const [tag, prop] of cases) {
+    const before = 'const view = (<'+tag+'\n  title="Old copy"\n/>);\n';
+    const find = '  title="Old copy"\n';
+    const verdict = validateModelPatch({
+      source: before,
+      response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find, replace: find + '  '+prop+'\n',
+        explanation: 'Synthetic default-deny JSX attribute test'
+      })
+    });
+    assert.equal(verdict.status, 'rejected', tag + ' ' + prop);
+  }
+  const before = 'const view = (<button\n  type="button"\n  title="Old copy"\n/>);\n';
+  const change = (find, replace) => validateModelPatch({
+    source: before, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic immutable semantic-property test'
+    })
+  });
+  assert.equal(change('  type="button"\n', '  type="submit"\n').status, 'rejected');
+  assert.equal(change('  title="Old copy"\n', '  title="New copy"\n').status, 'proposed');
+  const alt = 'const view = (<img\n  alt="Before"\n/>);\n';
+  assert.equal(validateModelPatch({
+    source: alt, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: '  alt="Before"\n',
+      replace: '  alt="After"\n', explanation: 'Harmless quoted alt text'
+    })
+  }).status, 'proposed');
+});
