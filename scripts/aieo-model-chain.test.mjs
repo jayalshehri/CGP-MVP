@@ -548,12 +548,12 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
     assert.equal(isolatedGit('show', 'main:' + MODEL_ALLOWED_PATH), original);
     assert.equal(readFileSync(cleanSource, 'utf8'), candidate);
     assert.equal(isolatedGit('ls-remote', '--heads', remote, existingBranch).trim(),
-      untouchedMain + '\\t' + existingBranch,
+      untouchedMain + '\t' + existingBranch,
       'fake REST readback must actually replace candidate branch on bare remote');
     const restCalls = readFileSync(ghLog, 'utf8');
     assert.match(restCalls, /pr create --draft/);
-    assert.match(restCalls, /pr view https:\\/\\/github\\.com\\/jayalshehri\\/CGP-MVP\\/pull\\/777 --json/);
-    assert.match(restCalls, /api repos\\/jayalshehri\\/CGP-MVP\\/pulls\\/777 --jq/);
+    assert.match(restCalls, /pr view https:\/\/github\.com\/jayalshehri\/CGP-MVP\/pull\/777 --json/);
+    assert.match(restCalls, /api repos\/jayalshehri\/CGP-MVP\/pulls\/777 --jq/);
     assert.doesNotMatch(restCalls, /^workflow run /m,
       'no CI or agent review dispatch after failed REST PR attestation');
     // An actual GitHub Draft could now exist, but must never be reported as
@@ -565,7 +565,7 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
     writeFileSync(cleanSource, candidate);
     rmSync(ghLog, { force: true });
     assert.equal(isolatedGit('ls-remote', '--heads', remote).trim(),
-      untouchedMain + '\\trefs/heads/main',
+      untouchedMain + '\trefs/heads/main',
       'failed REST attestation must leave only original remote main in fixture');
 
     // Only the third, token-scoped child may push to the disposable bare remote
