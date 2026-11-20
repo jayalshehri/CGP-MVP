@@ -658,3 +658,40 @@ test('independent Security checks every outbound JSX prop and value on an existi
     report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(safe) }
   }).status, 'passed', 'unchanged src with a harmless alt change is accepted');
 });
+
+test('independent Security rejects SVG and custom JSX outbound references with forged clean diff', () => {
+  const scenarios = [
+    ['textPath', 'data-label="Path label"', 'href={remotePath}'],
+    ['animate', 'attributeName="opacity"', 'href={remoteTarget}'],
+    ['linearGradient', 'id="brandGradient"', 'xlinkHref={remoteGradient}'],
+    ['BrandImage', 'alt="Preview"', 'src={remoteAsset}']
+  ];
+  for (const [tag, inert, outbound] of scenarios) {
+    const before = ['const view = (<'+tag, '  '+inert, '/>);', ''].join('\n');
+    const after = before.replace('  '+inert+'\n', '  '+inert+'\n  '+outbound+'\n');
+    assert.notEqual(after, before);
+    const verdict = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      // Intentionally omit the added URL property from the claimed diff.
+      diff: '+  ' + inert,
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.status, 'failed', tag + ' ' + outbound);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  const base = 'const view = (<textPath\n  href={approvedLocalPath}\n  aria-label="Old label"\n/>);\n';
+  const safe = base.replace('Old label', 'New label');
+  assert.equal(inspectModelDiff({
+    original: base, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+  aria-label="New label"',
+    report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(safe) }
+  }).status, 'passed');
+  const changedHref = base.replace('approvedLocalPath', 'untrustedRemotePath');
+  const rejected = inspectModelDiff({
+    original: base, actual: changedHref, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+  aria-label="Old label"',
+    report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(changedHref) }
+  });
+  assert.equal(rejected.status, 'failed');
+  assert.ok(rejected.findings.includes('Potentially unsafe new code'));
+});
