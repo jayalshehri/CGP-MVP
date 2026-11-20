@@ -568,7 +568,7 @@ test('independent Security rejects provider-known opaque credentials even when r
     'const status = "Authorization: Token ' + 'c'.repeat(24) + '";',
     'const status = "Authorization: Basic ' + 'd'.repeat(24) + '";',
     'const status = "postgresql://fixture:' + 'e'.repeat(24) + '@example.invalid/db";',
-    'const status = "{\\"session_token\\":\\"' + 'f'.repeat(24) + '\\"}";'
+    'const status = {"session_token":"' + 'f'.repeat(24) + '"};'
   ];
   const omitted = '@@ -1 +1 @@\\n-const items = 1;\\n+const items = 2;\\n'.replaceAll('\\n', '\n');
   for (const line of credentialLines) {
