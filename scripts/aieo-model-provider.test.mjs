@@ -1110,15 +1110,15 @@ test('model full-source JSX guard counts duplicate outbound sink instances', () 
 });
 
 test('model blocks new outbound props after existing src on multiline JSX', () => {
-  const base = 'const view = (<img\\n  src={safeUrl}\\n  alt="Before > After"\\n/>);\\n';
+  const base = 'const view = (<img\n  src={safeUrl}\n  alt="Before > After"\n/>);\n';
   const scenarios = [
-    { find: '  alt="Before > After"\\n',
-      replace: '  alt="Before > After"\\n  srcSet={untrustedUrl}\\n' },
-    { find: '  src={safeUrl}\\n', replace: '  src={untrustedUrl}\\n' },
-    { find: '  alt="Before > After"\\n',
-      replace: '  alt="Before > After"\\n  {...untrustedProps}\\n' },
-    { find: '  alt="Before > After"\\n',
-      replace: '  alt="Before > After"\\n  src={safeUrl}\\n' }
+    { find: '  alt="Before > After"\n',
+      replace: '  alt="Before > After"\n  srcSet={untrustedUrl}\n' },
+    { find: '  src={safeUrl}\n', replace: '  src={untrustedUrl}\n' },
+    { find: '  alt="Before > After"\n',
+      replace: '  alt="Before > After"\n  {...untrustedProps}\n' },
+    { find: '  alt="Before > After"\n',
+      replace: '  alt="Before > After"\n  src={safeUrl}\n' }
   ];
   for (const { find, replace } of scenarios) {
     const response = JSON.stringify({
@@ -1132,8 +1132,8 @@ test('model blocks new outbound props after existing src on multiline JSX', () =
   const safe = validateModelPatch({
     source: base,
     response: JSON.stringify({
-      path: MODEL_ALLOWED_PATH, find: '  alt="Before > After"\\n',
-      replace: '  alt="Updated description"\\n',
+      path: MODEL_ALLOWED_PATH, find: '  alt="Before > After"\n',
+      replace: '  alt="Updated description"\n',
       explanation: 'Benign alt text change beside an existing unchanged src'
     })
   });
