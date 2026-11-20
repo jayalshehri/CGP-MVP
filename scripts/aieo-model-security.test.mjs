@@ -883,3 +883,44 @@ test('independent Security rejects intrinsic callback refs and effects with forg
     if (expected === 'failed') assert.ok(verdict.findings.includes('Potentially unsafe new code'));
   }
 });
+
+test('independent Security freezes unknown and boolean JSX effects with forged Git diff', () => {
+  for (const [tag, prop] of [
+    ['button', 'type="submit"'],
+    ['form', 'method="post"'],
+    ['form', 'noValidate'],
+    ['input', 'autoFocus'],
+    ['input', 'disabled'],
+    ['input', 'formMethod="post"'],
+    ['a', 'target="_blank"'],
+    ['a', 'rel="opener"'],
+    ['iframe', 'sandbox="allow-scripts"'],
+    ['meta', 'httpEquiv="refresh"'],
+    ['asset-viewer', 'customHandler={existingCallback}'],
+    ['p', 'aria-label={existingSideEffect()}']
+  ]) {
+    const before = 'const view = (<'+tag+'\n  title="Old copy"\n/>);\n';
+    const after = before.replace('  title="Old copy"\n',
+      '  title="Old copy"\n  '+prop+'\n');
+    const result = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+  title="Old copy"', // forged: omits the actual effect
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(result.status, 'failed', tag + ': ' + prop);
+    assert.ok(result.findings.includes('Potentially unsafe new code'));
+  }
+  const before = 'const view = (<button\n  type="button"\n  title="Old copy"\n/>);\n';
+  for (const [find, replace, expected] of [
+    ['type="button"', 'type="submit"', 'failed'],
+    ['Old copy', 'New copy', 'passed']
+  ]) {
+    const after = before.replace(find, replace);
+    const result = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+  title="Old copy"',
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(result.status, expected);
+  }
+});

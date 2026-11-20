@@ -19,7 +19,14 @@ const tagStart = /<\s*(?:(?:p|pre|nav|details|summary|dialog|textarea|select|opt
 // Anchor ping URLs send network requests on activation; attributionSrc can
 // trigger attribution-reporting requests. They are outbound capabilities too,
 // even if existing href/src values stay unchanged.
-const outboundAttribute = /\b(?:on[A-Z][A-Za-z0-9]*|style|ref|href|xlinkHref|xmlBase|xml:base|src|srcSet|imageSrcSet|action|formAction|ping|attributionSrc|data|poster|content)\s*=/gi;
+// This bounded model task is UI copy only. A denylist of dangerous JSX
+// props misses behaviour-changing attributes such as type, formMethod, target
+// and custom component props. Freeze every assigned prop except plain quoted
+// text-only copy props; expressions can invoke existing side-effecting callbacks.
+const assignedAttribute = /\b([A-Za-z_][A-Za-z0-9_:.-]*)\s*=/g;
+const inertLiteralCopyProps = new Set(['alt', 'title', 'placeholder', 'aria-label', 'aria-description']);
+// JSX also permits boolean attributes without '='; block newly enabled effects.
+const booleanEffectAttribute = /\b(?:autoFocus|required|disabled|checked|multiple|readOnly|allowFullScreen|muted|playsInline|hidden|inert|open|selected|itemScope|noValidate|formNoValidate|download)\b(?=\s|\/?>)/gi;
 const jsxSpread = /\{\s*\.\.\./g;
 
 // Quoted '>' and JSX comparisons must not terminate an opening tag early.
@@ -77,12 +84,19 @@ function outboundTagSignatures(source) {
     if (end < 0) return null;
     const tag = source.slice(match.index, end);
     const outgoing = [];
-    for (const attribute of tag.matchAll(outboundAttribute)) {
+    for (const attribute of tag.matchAll(assignedAttribute)) {
       const valStart = attribute.index + attribute[0].length;
       const valEnd = readValue(tag, valStart);
       if (valEnd < 0) return null;
-      outgoing.push(attribute[0].replace(/\s+/g, '').toLowerCase() +
-        tag.slice(valStart, valEnd).trim());
+      const name = attribute[1].toLowerCase();
+      const value = tag.slice(valStart, valEnd).trim();
+      const literal = (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"));
+      if (inertLiteralCopyProps.has(name) && literal) continue;
+      outgoing.push(attribute[0].replace(/\s+/g, '').toLowerCase() + value);
+    }
+    for (const attribute of tag.matchAll(booleanEffectAttribute)) {
+      outgoing.push('boolean:' + attribute[0].toLowerCase());
     }
     for (const spread of tag.matchAll(jsxSpread)) {
       const valEnd = scanEnd(tag, spread.index, '{', tag.length);
