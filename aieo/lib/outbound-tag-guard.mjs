@@ -29,6 +29,15 @@ const tagStart = /<\s*(?:(?:p|pre|nav|details|summary|dialog|textarea|select|opt
 // and custom component props. Freeze every assigned prop except plain quoted
 // text-only copy props; expressions can invoke existing side-effecting callbacks.
 const inertLiteralCopyProps = new Set(['alt', 'title', 'placeholder', 'aria-label', 'aria-description']);
+// An interactive or navigation-capable element can change browser behavior
+// even without src, href or callback props. Freeze these element types by
+// their identity and count; inert presentation markup and illustrative
+// markup-shaped text are not new capabilities by themselves.
+const structuralEffectTags = new Set([
+  'a', 'area', 'audio', 'base', 'button', 'details', 'dialog', 'embed',
+  'form', 'iframe', 'input', 'link', 'meta', 'object', 'option', 'script',
+  'select', 'source', 'summary', 'textarea', 'track', 'video'
+]);
 // Parse attributes sequentially instead of regex-matching arbitrary text in
 // quoted values or JSX expressions. All bare boolean props are behavior-bearing
 // by default, not just an incomplete list of known HTML booleans. An ambiguous
@@ -130,13 +139,14 @@ function outboundTagSignatures(source) {
     const tag = source.slice(match.index, end);
     const outgoing = parseTagAttributes(tag, match[0].length);
     if (!outgoing) return null;
-    // Freeze the identity and count of protected JSX opening tags even when
-    // there are no behavior-bearing attributes. A bare <form>, <button> or
-    // <iframe> can alter behavior by its presence alone; a UI-copy-only model
-    // patch must not add, remove or swap such elements. Literal descriptive
-    // attribute values may still change because they are excluded above.
-    signatures.push(match[0].replace(/\s+/g, '').toLowerCase() +
-      ':' + JSON.stringify(outgoing.sort()));
+    // Even attribute-free <form>, <button> and <iframe> have browser
+    // semantics. Do not let a UI-copy-only patch add, remove or replace them.
+    // Keep the earlier behavior-prop signatures for all recognized JSX tags.
+    const tagName = match[0].slice(1).trim().toLowerCase();
+    if (outgoing.length || structuralEffectTags.has(tagName)) {
+      signatures.push(match[0].replace(/\s+/g, '').toLowerCase() +
+        ':' + JSON.stringify(outgoing.sort()));
+    }
   }
   return signatures;
 }
