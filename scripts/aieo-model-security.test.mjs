@@ -558,3 +558,31 @@ test('independent Security checks completed block-comment tokens after a one-byt
   assert.equal(verdict.status, 'failed');
   assert.ok(verdict.findings.includes('New block-comment delimiters are not allowed in model changes'));
 });
+
+
+test('independent Security rejects provider-known opaque credentials even when reported diff omits them', () => {
+  // All values are synthetic and must never be sent to an external service.
+  const credentialLines = [
+    'const status = "?access_token=' + 'a'.repeat(24) + '";',
+    'const status = "#refresh_token=' + 'b'.repeat(24) + '";',
+    'const status = "Authorization: Token ' + 'c'.repeat(24) + '";',
+    'const status = "Authorization: Basic ' + 'd'.repeat(24) + '";',
+    'const status = "postgresql://fixture:' + 'e'.repeat(24) + '@example.invalid/db";',
+    'const status = {"session_token":"' + 'f'.repeat(24) + '"};'
+  ];
+  const omitted = '@@ -1 +1 @@\\n-const items = 1;\\n+const items = 2;\\n'.replaceAll('\\n', '\n');
+  for (const line of credentialLines) {
+    const candidate = 'const items = 2;\n' + line + '\n';
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH], diff: omitted,
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed', line);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), line);
+  }
+  const safe = 'const items = 2; // Public documentation: https://example.invalid/manual\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH], diff: omitted,
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
