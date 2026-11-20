@@ -1345,3 +1345,44 @@ test('model refuses event binding and style changes on ordinary presentation ele
     })
   }).status, 'rejected');
 });
+
+
+test('model blocks callback refs and JSX effects on previously omitted intrinsic HTML tags', () => {
+  // Reference props can invoke pre-existing callbacks on mount without adding
+  // any network-call text. Native controls and semantic tags were previously
+  // outside the opening-tag scanner whitelist.
+  const cases = [
+    ['p', 'ref={existingCallback}'],
+    ['pre', 'onMouseEnter={existingSideEffect}'],
+    ['nav', 'onClick={existingSideEffect}'],
+    ['details', 'onToggle={existingSideEffect}'],
+    ['summary', 'onClick={existingSideEffect}'],
+    ['dialog', 'onClose={existingSideEffect}'],
+    ['textarea', 'onChange={existingSideEffect}'],
+    ['select', 'onChange={existingSideEffect}'],
+    ['option', 'onMouseOver={existingSideEffect}'],
+    ['figure', 'style={existingRemoteStyle}'],
+    ['figcaption', 'ref={existingCallback}']
+  ];
+  for (const [tag, effect] of cases) {
+    const before = 'const view = (<'+tag+'\n  aria-label="Old caption"\n/>);\n';
+    const find = '  aria-label="Old caption"\n';
+    const result = validateModelPatch({
+      source: before, response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find, replace: find + '  '+effect+'\n',
+        explanation: 'Synthetic intrinsic JSX effect regression'
+      })
+    });
+    assert.equal(result.status, 'rejected', tag + ': ' + effect);
+    assert.equal(result.patchedSource, undefined);
+  }
+  const before = 'const view = (<p\n  ref={approvedCallback}\n  aria-label="Old caption"\n/>);\n';
+  const change = (find, replace) => validateModelPatch({
+    source: before, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic reference-preservation regression'
+    })
+  });
+  assert.equal(change('  ref={approvedCallback}\n', '  ref={anotherCallback}\n').status, 'rejected');
+  assert.equal(change('  aria-label="Old caption"\n', '  aria-label="New caption"\n').status, 'proposed');
+});
