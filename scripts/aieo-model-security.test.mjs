@@ -695,3 +695,39 @@ test('independent Security rejects SVG and custom JSX outbound references with f
   assert.equal(rejected.status, 'failed');
   assert.ok(rejected.findings.includes('Potentially unsafe new code'));
 });
+
+test('independent Security catches custom-element outbound attributes despite omitted Git additions', () => {
+  const scenarios = [
+    ['asset-viewer', 'title="Preview"', 'src={remoteAsset}'],
+    ['file-preview', 'aria-label="Preview"', 'href={remoteDocument}'],
+    ['svg:customPath', 'data-label="Route"', 'xlinkHref={remotePath}'],
+    ['asset-viewer', 'title="Preview"', '{...externalProps}']
+  ];
+  for (const [tag, inert, outbound] of scenarios) {
+    const before = ['const view = (<'+tag, '  '+inert, '/>);', ''].join('\n');
+    const after = before.replace('  '+inert+'\n', '  '+inert+'\n  '+outbound+'\n');
+    assert.notEqual(after, before);
+    const verdict = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+  ' + inert, // forged incomplete diff deliberately omits the new sink
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.status, 'failed', tag + ' ' + outbound);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  const before = 'const view = (<asset-viewer\n  src={approvedAsset}\n  title="Old copy"\n/>);\n';
+  const safe = before.replace('Old copy', 'New copy');
+  assert.equal(inspectModelDiff({
+    original: before, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+  title="New copy"',
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(safe) }
+  }).status, 'passed');
+  const changed = before.replace('approvedAsset', 'untrustedRemoteAsset');
+  const swapped = inspectModelDiff({
+    original: before, actual: changed, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+  title="Old copy"', // omit the actual URL change
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(changed) }
+  });
+  assert.equal(swapped.status, 'failed');
+  assert.ok(swapped.findings.includes('Potentially unsafe new code'));
+});
