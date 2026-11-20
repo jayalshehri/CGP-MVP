@@ -1591,3 +1591,20 @@ test('model freezes opaque component mount and quoted props; keeps native labels
     })
   }).status, 'proposed');
 });
+
+
+test('model rejects case-only React component and prop substitutions', () => {
+  for (const [from, to] of [
+    ['<AdminPanel />', '<ADMINPanel />'],
+    ['<ui.AdminPanel />', '<ui.adminPanel />'],
+    ['<AdminPanel mode="safe" />', '<AdminPanel Mode="safe" />']
+  ]) {
+    const source = 'const view = (' + from + ');\n';
+    assert.equal(validateModelPatch({
+      source, response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find: from, replace: to,
+        explanation: 'Case-sensitive JSX component signature regression'
+      })
+    }).status, 'rejected', from + ' -> ' + to);
+  }
+});
