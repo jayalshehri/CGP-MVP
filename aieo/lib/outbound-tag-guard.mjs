@@ -130,10 +130,13 @@ function outboundTagSignatures(source) {
     const tag = source.slice(match.index, end);
     const outgoing = parseTagAttributes(tag, match[0].length);
     if (!outgoing) return null;
-    if (outgoing.length) {
-      signatures.push(match[0].replace(/\s+/g, '').toLowerCase() +
-        ':' + JSON.stringify(outgoing.sort()));
-    }
+    // Freeze the identity and count of protected JSX opening tags even when
+    // there are no behavior-bearing attributes. A bare <form>, <button> or
+    // <iframe> can alter behavior by its presence alone; a UI-copy-only model
+    // patch must not add, remove or swap such elements. Literal descriptive
+    // attribute values may still change because they are excluded above.
+    signatures.push(match[0].replace(/\s+/g, '').toLowerCase() +
+      ':' + JSON.stringify(outgoing.sort()));
   }
   return signatures;
 }
