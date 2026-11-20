@@ -799,3 +799,45 @@ test('independent Security compares ping and attributionSrc even with forged cle
   assert.equal(result.status, 'failed');
   assert.ok(result.findings.includes('Potentially unsafe new code'));
 });
+
+
+test('independent Security refuses newly wired JSX effects despite an incomplete Git diff', () => {
+  for (const [tag, prop] of [
+    ['div', 'onMouseEnter={sendSensitiveInfo}'],
+    ['span', 'style={untrustedRemoteStyle}'],
+    ['section', 'onClick={existingSideEffect}'],
+    ['label', 'onFocus={existingSideEffect}']
+  ]) {
+    const before = 'const view = (<'+tag+'\n  aria-label="Preview"\n/>);\n';
+    const after = before.replace('  aria-label="Preview"\n',
+      '  aria-label="Preview"\n  '+prop+'\n');
+    const result = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+  aria-label="Preview"', // deliberately omits the actual effect
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(result.status, 'failed', tag + ' ' + prop);
+    assert.ok(result.findings.includes('Potentially unsafe new code'), prop);
+  }
+  const before = 'const view = (<div\n  style={approvedStyle}\n  aria-label="Old label"\n/>);\n';
+  for (const [oldValue, newValue] of [
+    ['approvedStyle', 'untrustedStyle'], ['Old label', 'New label']
+  ]) {
+    const after = before.replace(oldValue, newValue);
+    const result = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+  aria-label="Old label"',
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(result.status, oldValue === 'approvedStyle' ? 'failed' : 'passed');
+  }
+  const hasEvent = 'const view = (<div\n  onClick={approvedHandler}\n  aria-label="Old label"\n/>);\n';
+  const changed = hasEvent.replace('approvedHandler', 'otherExistingHandler');
+  const verdict = inspectModelDiff({
+    original: hasEvent, actual: changed, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+  aria-label="Old label"',
+    report: { status: 'proposed', sourceHash: hash(hasEvent), proposedHash: hash(changed) }
+  });
+  assert.equal(verdict.status, 'failed');
+  assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+});

@@ -1303,3 +1303,45 @@ test('model rejects ping and attributionSrc side-channel properties on existing 
   });
   assert.equal(changed.status, 'rejected', 'existing ping URL must remain unchanged');
 });
+
+
+test('model refuses event binding and style changes on ordinary presentation elements', () => {
+  const cases = [
+    ['div', 'aria-label="Preview"', 'onMouseEnter={sendSensitiveInfo}'],
+    ['span', 'aria-label="Preview"', 'style={untrustedRemoteStyle}'],
+    ['section', 'aria-label="Preview"', 'onClick={existingSideEffect}'],
+    ['label', 'aria-label="Preview"', 'onFocus={existingSideEffect}']
+  ];
+  for (const [tag, inert, effect] of cases) {
+    const before = 'const view = (<'+tag+'\n  '+inert+'\n/>);\n';
+    const find = '  '+inert+'\n';
+    const result = validateModelPatch({
+      source: before, response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find, replace: find + '  '+effect+'\n',
+        explanation: 'Synthetic effect-handler regression fixture'
+      })
+    });
+    assert.equal(result.status, 'rejected', tag + ' ' + effect);
+    assert.equal(result.patchedSource, undefined);
+  }
+  const before = 'const view = (<div\n  style={approvedPresentationStyle}\n  aria-label="Old copy"\n/>);\n';
+  const change = (find, replace) => validateModelPatch({
+    source: before, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic presentation-only policy regression'
+    })
+  });
+  assert.equal(change('  style={approvedPresentationStyle}\n',
+    '  style={untrustedPresentationStyle}\n').status, 'rejected');
+  assert.equal(change('  aria-label="Old copy"\n',
+    '  aria-label="Updated copy"\n').status, 'proposed');
+  const withEvent = 'const view = (<div\n  onClick={approvedHandler}\n  aria-label="Old copy"\n/>);\n';
+  assert.equal(validateModelPatch({
+    source: withEvent, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH,
+      find: '  onClick={approvedHandler}\n',
+      replace: '  onClick={otherExistingHandler}\n',
+      explanation: 'Synthetic event substitution regression'
+    })
+  }).status, 'rejected');
+});
