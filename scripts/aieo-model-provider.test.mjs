@@ -1473,8 +1473,8 @@ test('model refuses removal of pre-existing JSX restrictions and protected tags'
     const result = validateModelPatch({
       source: before, response: JSON.stringify({
         path: MODEL_ALLOWED_PATH,
-        find: '  ' + prop + '\n',
-        replace: '',
+        find: '  ' + prop + '\n  title="Old copy"\n',
+        replace: '  title="Old copy"\n',
         explanation: 'Synthetic removal of existing JSX security restriction'
       })
     });
