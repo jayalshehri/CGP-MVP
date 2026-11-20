@@ -586,3 +586,30 @@ test('independent Security rejects provider-known opaque credentials even when r
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed');
 });
+
+test('independent Security rejects hidden outbound JSX attributes even with truncated diff', () => {
+  const scenarios = [
+    ['<img', 'alt="Decorative"', 'src={unsafeUrl}', '/>'],
+    ['<a', 'title="Details"', 'href={unsafeUrl}', '>Help</a>'],
+    ['<form', 'id="localForm"', 'action={unsafeUrl}', '>Text</form>']
+  ];
+  for (const [tag, marker, outbound, closing] of scenarios) {
+    const before = ['const view = (' + tag, '  ' + marker, closing + ');', ''].join('\\n');
+    const after = ['const view = (' + tag, '  ' + marker, '  ' + outbound, closing + ');', ''].join('\\n');
+    const verdict = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      // Deliberately omit the outbound line, proving Security checks candidate bytes.
+      diff: '@@ -1 +1 @@\\n-const before = true;\\n+const after = true;\\n',
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.status, 'failed', outbound);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), outbound);
+  }
+  const before = ['const view = (<img', '  alt="Decorative"', '/>);', ''].join('\\n');
+  const after = before.replace('Decorative', 'Illustration');
+  assert.equal(inspectModelDiff({
+    original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+  alt="Illustration"',
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+  }).status, 'passed');
+});
