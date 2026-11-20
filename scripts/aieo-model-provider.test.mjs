@@ -1066,3 +1066,45 @@ test('model provider refuses HTML injection and iframe srcDoc sinks before candi
   });
   assert.equal(validateModelPatch({ response: safe, source }).status, 'proposed');
 });
+
+test('model rejects outbound attributes added within unchanged multiline JSX tags', () => {
+  const scenarios = [
+    { original: 'const view = (<img\n  alt="Decorative"\n/>);\n', find: '  alt="Decorative"\n', replace: '  alt="Decorative"\n  src={unsafeUrl}\n' },
+    { original: 'const view = (<a\n  title="Details"\n>Help</a>);\n', find: '  title="Details"\n', replace: '  title="Details"\n  href={unsafeUrl}\n' },
+    { original: 'const view = (<form\n  id="localForm"\n>Text</form>);\n', find: '  id="localForm"\n', replace: '  id="localForm"\n  action={unsafeUrl}\n' }
+  ];
+  for (const entry of scenarios) {
+    const response = JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: entry.find, replace: entry.replace,
+      explanation: 'Synthetic JSX boundary test only'
+    });
+    const checked = validateModelPatch({ source: entry.original, response });
+    assert.equal(checked.status, 'rejected', 'a split outbound tag must be rejected');
+    assert.equal(checked.patchedSource, undefined);
+  }
+  const safeSource = 'const view = (<img\n  alt="Decorative"\n/>);\n';
+  const safe = validateModelPatch({
+    source: safeSource,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: '  alt="Decorative"\n',
+      replace: '  alt="Illustration"\n',
+      explanation: 'Harmless local alt-text improvement'
+    })
+  });
+  assert.equal(safe.status, 'proposed');
+});
+
+test('model full-source JSX guard counts duplicate outbound sink instances', () => {
+  const before = ["const view = (<>","  <img","    alt=\"Icon\"","    src={existingUrl}","  />","  <img","    alt=\"Icon\"","  />","</>);",""].join('\n');
+  const find = '    alt="Icon"\n  />\n</>);';
+  const replace = '    alt="Icon"\n    src={existingUrl}\n  />\n</>);';
+  const verdict = validateModelPatch({
+    source: before,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Fixture adds a second copy of the existing outbound tag'
+    })
+  });
+  assert.equal(verdict.status, 'rejected');
+  assert.equal(verdict.patchedSource, undefined);
+});

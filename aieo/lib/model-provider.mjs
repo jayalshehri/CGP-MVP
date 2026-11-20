@@ -74,6 +74,26 @@ const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
 // has no reason to introduce these APIs or React's srcDoc property.
 const rawHtmlSink = /\b(?:dangerouslySetInnerHTML|srcDoc|insertAdjacentHTML|DOMParser|innerHTML|outerHTML)\b/i;
 
+// A model can insert an outbound JSX attribute inside an *existing* multiline
+// tag. Its replacement and Git diff may contain only "src={...}", not "<img".
+// Compare full source/candidate markup matches as a multiset: a second copy
+// of an already present sink is also a new outbound capability. Existing
+// markup unchanged by this bounded edit is not itself a new finding.
+function introducesOutboundMarkup(original, candidate) {
+  if (typeof original !== 'string' || typeof candidate !== 'string') return false;
+  const matcher = new RegExp(outboundMarkup.source, 'gi');
+  const existing = new Map();
+  for (const [value] of original.matchAll(matcher)) {
+    existing.set(value, (existing.get(value) || 0) + 1);
+  }
+  for (const [value] of candidate.matchAll(matcher)) {
+    const remaining = existing.get(value) || 0;
+    if (!remaining) return true;
+    existing.set(value, remaining - 1);
+  }
+  return false;
+}
+
 // Never buffer an unbounded provider response: real fetch supplies a readable byte stream.
 const MAX_PROVIDER_BYTES = 18000;
 async function readLimitedProviderBody(response) {
@@ -190,6 +210,9 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
   const patchedSource = source.replace(find, replace);
+  if (introducesOutboundMarkup(source, patchedSource)) {
+    return { status: 'rejected', reason: 'Model edit introduces outbound markup' };
+  }
   return {
     status: 'proposed', path, sourceHash: sha256(source),
     proposedHash: sha256(patchedSource), patchedSource,
