@@ -731,3 +731,38 @@ test('independent Security catches custom-element outbound attributes despite om
   assert.equal(swapped.status, 'failed');
   assert.ok(swapped.findings.includes('Potentially unsafe new code'));
 });
+
+
+test('independent Security rejects SVG xmlBase source changes with forged incomplete diff', () => {
+  for (const [tag, attribute] of [
+    ['svg', 'xmlBase'], ['g', 'xml:base'],
+    ['path', 'xmlBase'], ['symbol', 'xml:base']
+  ]) {
+    const before = 'const icon = (<'+tag+'\n  aria-label="Local icon"\n/>);\n';
+    const after = before.replace('  aria-label="Local icon"\n',
+      '  aria-label="Local icon"\n  ' + attribute + '={untrustedBaseUri}\n');
+    assert.notEqual(before, after);
+    const verdict = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+  aria-label="Local icon"', // Omits the new XML base on purpose
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.status, 'failed', tag + ' ' + attribute);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  const before = 'const icon = (<svg\n  xmlBase={approvedBase}\n  aria-label="Old name"\n/>);\n';
+  const safe = before.replace('Old name', 'New name');
+  assert.equal(inspectModelDiff({
+    original: before, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+  aria-label="New name"',
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(safe) }
+  }).status, 'passed');
+  const changed = before.replace('approvedBase', 'untrustedBaseUri');
+  const verdict = inspectModelDiff({
+    original: before, actual: changed, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+  aria-label="Old name"', // Omit the actual URL-base replacement
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(changed) }
+  });
+  assert.equal(verdict.status, 'failed');
+  assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+});

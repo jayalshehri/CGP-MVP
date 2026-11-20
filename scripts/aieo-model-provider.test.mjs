@@ -1223,3 +1223,42 @@ test('model rejects outbound props in lowercase custom elements and namespace ta
   });
   assert.equal(changedSrc.status, 'rejected');
 });
+
+
+test('model blocks SVG xmlBase and xml:base URL-base changes across container tags', () => {
+  // An XML base can redirect pre-existing relative references without adding
+  // a new href/src. The proposed edit is attribute-only on an existing opener.
+  for (const [tag, attribute] of [
+    ['svg', 'xmlBase'], ['g', 'xml:base'],
+    ['path', 'xmlBase'], ['symbol', 'xml:base']
+  ]) {
+    const before = 'const icon = (<'+tag+'\n  aria-label="Local icon"\n/>);\n';
+    const find = '  aria-label="Local icon"\n';
+    const replace = find + '  ' + attribute + '={untrustedBaseUri}\n';
+    const verdict = validateModelPatch({
+      source: before, response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find, replace,
+        explanation: 'Synthetic SVG base URL modification'
+      })
+    });
+    assert.equal(verdict.status, 'rejected', tag + ' ' + attribute);
+    assert.equal(verdict.patchedSource, undefined);
+  }
+  const before = 'const icon = (<svg\n  xmlBase={approvedBase}\n  aria-label="Old name"\n/>);\n';
+  const safe = validateModelPatch({
+    source: before, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: '  aria-label="Old name"\n',
+      replace: '  aria-label="New name"\n',
+      explanation: 'Only change a harmless label'
+    })
+  });
+  assert.equal(safe.status, 'proposed');
+  const changed = validateModelPatch({
+    source: before, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: '  xmlBase={approvedBase}\n',
+      replace: '  xmlBase={untrustedBaseUri}\n',
+      explanation: 'Synthetic SVG base URL replacement'
+    })
+  });
+  assert.equal(changed.status, 'rejected');
+});
