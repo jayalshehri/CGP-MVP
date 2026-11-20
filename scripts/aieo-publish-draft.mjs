@@ -436,6 +436,15 @@ export function publishDraft({ env = process.env } = {}) {
   // Failure stops downstream CI dispatch and success reporting; no auto-delete/merge.
   const attested = verifyRemoteDraft({ url: pr, branch, baseSha, candidateSha,
     path, gh: command });
+  // The independent GraphQL/REST Draft readbacks can both be individually
+  // valid while a remote ref changes immediately after the REST response.
+  // Recheck the actual Git advertised refs before dispatching read-only CI or
+  // claiming publication. This narrows, but cannot eliminate, cross-API races.
+  const postAttestationRefs = command('git', ['ls-remote', '--exit-code', 'origin',
+    'refs/heads/main', 'refs/heads/' + branch]).trim().split('\n').sort();
+  if (!identical(postAttestationRefs, requiredRefs)) {
+    fail('remote refs changed after Draft attestation');
+  }
   if (mode === 'model') {
     command('gh', ['workflow', 'run', 'cgp-required-ci.yml', '--ref', branch]);
     // GITHUB_TOKEN-created PRs do not fire pull_request workflows. Explicitly
