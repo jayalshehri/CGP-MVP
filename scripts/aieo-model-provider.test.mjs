@@ -925,6 +925,15 @@ test('URI userinfo, HTTP Basic and encrypted private-key markers fail closed at 
       assert.equal(result.status, 'rejected', 'provider output must not echo: ' + marker);
       assert.equal(JSON.stringify(result).includes(marker), false, 'rejection must not repeat a credential');
     }
+    // A provider must not smuggle a copied secret in the find field, even if
+    // its proposed replacement would remove it. Validate every JSON field.
+    const hiddenFind = validateModelPatch({
+      source: sourceWithMarker,
+      response: JSON.stringify({ path: MODEL_ALLOWED_PATH, find: '// ' + marker,
+        replace: replacement, explanation: 'Remove a synthetic marker' })
+    });
+    assert.equal(hiddenFind.status, 'rejected', 'find must not carry private data: ' + marker);
+    assert.equal(JSON.stringify(hiddenFind).includes(marker), false);
   }
   assert.equal(requests, 0, 'no userinfo, Basic header or private key marker may reach OpenRouter');
   assert.doesNotThrow(() => buildModelRequest({
