@@ -3,7 +3,7 @@ import { readVerifiedModelCandidate } from './aieo-model-candidate-read.mjs';
 import { readBoundedModelReport, writeExclusiveModelRoleReport } from './aieo-role-artifact-io.mjs';
 import { modelGit, preflightModelGit } from './aieo-model-git.mjs';
 import { createHash } from 'node:crypto';
-import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
+import { MODEL_ALLOWED_PATH, containsCredentials } from '../aieo/lib/model-provider.mjs';
 
 const hash = (content) => createHash('sha256').update(content).digest('hex');
 // Scan only new lines; a bounded UI repair must not introduce active browser exfiltration,
@@ -123,7 +123,11 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
   const reviewedLines = [...additions, ...actualDeltaLines];
   const reviewedText = reviewedLines.join('\n');
   if (additions.length > 20 || actualDeltaLines.length > 20) findings.push('Too many new code lines');
-  if (reviewedLines.some((line) => suspect.test(line) || browserExfil.test(line) || browserLocation.test(line) || optionalNetworkCall.test(line)) ||
+  // Independently inspect the actual candidate text for opaque OAuth/session
+  // tokens, Basic auth, and credential-bearing URLs. The provider also screens
+  // these formats, but its prior proposal verdict is not trusted evidence.
+  if (containsCredentials(reviewedText) ||
+      reviewedLines.some((line) => suspect.test(line) || browserExfil.test(line) || browserLocation.test(line) || optionalNetworkCall.test(line)) ||
       indirectNetworkCall.test(reviewedText) ||
       networkCapabilityReference.test(reviewedText) ||
       dynamicGlobalMember.test(reviewedText) || ambientGlobalReference.test(reviewedText) ||
