@@ -924,3 +924,33 @@ test('independent Security freezes unknown and boolean JSX effects with forged G
     assert.equal(result.status, expected);
   }
 });
+
+test('independent Security freezes arbitrary JSX boolean props even with forged diff', () => {
+  for (const [tag, attribute] of [
+    ['input', 'capture'], ['audio', 'autoPlay'], ['button', 'popover'],
+    ['iframe', 'allowPaymentRequest'], ['asset-viewer', 'customFlag'],
+    ['p', 'translate'], ['input', 'enterKeyHint']
+  ]) {
+    const before = 'const view = (<'+tag+'\n  title="Old copy"\n/>);\n';
+    const after = before.replace('  title="Old copy"\n',
+      '  title="Old copy"\n  ' + attribute + '\n');
+    const verdict = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+  title="Old copy"', // deliberately hides the boolean addition
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.status, 'failed', tag + ' ' + attribute);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+});
+
+test('independent Security accepts copy containing prop-shaped literal text', () => {
+  const before = 'const view = (<div\n  title="Safe label with customFlag=off"\n  aria-label="Old caption"\n/>);\n';
+  const after = before.replace('Old caption', 'New caption');
+  const verdict = inspectModelDiff({
+    original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+  aria-label="New caption"',
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+  });
+  assert.equal(verdict.status, 'passed');
+});

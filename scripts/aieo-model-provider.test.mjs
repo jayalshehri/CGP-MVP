@@ -1432,3 +1432,44 @@ test('model freezes unknown and boolean JSX props but permits literal copy', () 
     })
   }).status, 'proposed');
 });
+
+test('model freezes every unassigned JSX prop, including custom booleans', () => {
+  for (const [tag, attribute] of [
+    ['input', 'capture'], ['audio', 'autoPlay'], ['button', 'popover'],
+    ['iframe', 'allowPaymentRequest'], ['asset-viewer', 'customFlag'],
+    ['p', 'translate'], ['input', 'enterKeyHint']
+  ]) {
+    const before = 'const view = (<'+tag+'\n  title="Old copy"\n/>);\n';
+    const find = '  title="Old copy"\n';
+    const result = validateModelPatch({
+      source: before, response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find,
+        replace: find + '  ' + attribute + '\n',
+        explanation: 'Synthetic JSX boolean default-deny regression'
+      })
+    });
+    assert.equal(result.status, 'rejected', tag + ' ' + attribute);
+  }
+  const before = 'const view = (<div\n  customFlag\n  title="Old copy"\n/>);\n';
+  const changed = before.replace('  customFlag\n', '');
+  assert.equal(validateModelPatch({
+    source: before, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: '  customFlag\n  title="Old copy"\n',
+      replace: '  title="Old copy"\n',
+      explanation: 'Synthetic boolean removal: no new behavior'
+    })
+  }).status, 'proposed');
+  assert.ok(!changed.includes('customFlag'));
+});
+
+test('model accepts quoted literal copy containing prop-shaped text', () => {
+  const before = 'const view = (<div\n  title="Safe label with customFlag=off"\n  aria-label="Old caption"\n/>);\n';
+  const result = validateModelPatch({
+    source: before, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: '  aria-label="Old caption"\n',
+      replace: '  aria-label="New caption"\n',
+      explanation: 'Synthetic safe literal copy update'
+    })
+  });
+  assert.equal(result.status, 'proposed');
+});
