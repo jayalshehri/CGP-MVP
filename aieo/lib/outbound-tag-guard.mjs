@@ -27,12 +27,19 @@ const tagStart = /<\s*(?:(?:p|pre|nav|details|summary|dialog|textarea|select|opt
 // This bounded model task is UI copy only. A denylist of dangerous JSX
 // props misses behaviour-changing attributes such as type, formMethod, target
 // and custom component props. Freeze every assigned prop except plain quoted
-// text-only copy props; expressions can invoke existing side-effecting callbacks.
+// text-only copy props on recognized intrinsic elements; expressions can invoke existing side-effecting callbacks.
 const inertLiteralCopyProps = new Set(['alt', 'title', 'placeholder', 'aria-label', 'aria-description']);
 // An interactive or navigation-capable element can change browser behavior
 // even without src, href or callback props. Freeze these element types by
 // their identity and count; inert presentation markup and illustrative
 // markup-shaped text are not new capabilities by themselves.
+// React's intrinsic SVG elements include camelCase names; these are not
+// opaque user-defined components, so their static label copy stays editable.
+const intrinsicSvgNames = new Set([
+  'foreignObject', 'feImage', 'animateMotion', 'animateTransform',
+  'textPath', 'linearGradient', 'radialGradient', 'clipPath', 'fontFaceUri',
+  'font-face-uri'
+]);
 const structuralEffectTags = new Set([
   'a', 'area', 'audio', 'base', 'button', 'details', 'dialog', 'embed',
   'form', 'iframe', 'input', 'link', 'meta', 'object', 'option', 'script',
@@ -91,7 +98,7 @@ function readValue(text, begin) {
 // counting tags would miss new props after unchanged src or href. Sequential
 // parsing also prevents an apparent "prop=" embedded inside an inert title
 // string from being mistaken for an actual JSX attribute.
-function parseTagAttributes(tag, prefixLength) {
+function parseTagAttributes(tag, prefixLength, opaqueComponent) {
   const outgoing = [];
   let cursor = prefixLength;
   while (cursor < tag.length) {
@@ -113,7 +120,7 @@ function parseTagAttributes(tag, prefixLength) {
     if (tag[cursor] !== '=') {
       // Every unassigned JSX prop can have an effect, including unknown props
       // on React components and web components. Do not maintain a denylist.
-      outgoing.push('boolean:' + name.toLowerCase());
+      outgoing.push('boolean:' + name);
       continue;
     }
     cursor++;
@@ -122,8 +129,10 @@ function parseTagAttributes(tag, prefixLength) {
     const value = tag.slice(cursor, end).trim();
     const literal = (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"));
-    if (!inertLiteralCopyProps.has(name.toLowerCase()) || !literal) {
-      outgoing.push(name.toLowerCase() + '=' + value);
+    // Component props are opaque to this guard: even a quoted title or aria-label
+    // may trigger custom rendering, navigation, or side effects in user code.
+    if (opaqueComponent || !inertLiteralCopyProps.has(name.toLowerCase()) || !literal) {
+      outgoing.push(name + '=' + value);
     }
     cursor = end;
   }
@@ -137,14 +146,21 @@ function outboundTagSignatures(source) {
       Math.min(source.length, match.index + 4096));
     if (end < 0) return null;
     const tag = source.slice(match.index, end);
-    const outgoing = parseTagAttributes(tag, match[0].length);
+    const tagName = match[0].slice(1).trim();
+    // Uppercase React components, dotted members, namespaced JSX and web
+    // components execute arbitrary existing code when mounted. Their presence
+    // and *every* prop value must remain unchanged in a copy-only patch.
+    // Unknown plain lowercase HTML tags are not recognized by this scanner.
+    const opaqueComponent = /[A-Z.$:-]/.test(tagName) && !intrinsicSvgNames.has(tagName);
+    const outgoing = parseTagAttributes(tag, match[0].length, opaqueComponent);
     if (!outgoing) return null;
     // Even attribute-free <form>, <button> and <iframe> have browser
     // semantics. Do not let a UI-copy-only patch add, remove or replace them.
     // Keep the earlier behavior-prop signatures for all recognized JSX tags.
-    const tagName = match[0].slice(1).trim().toLowerCase();
-    if (outgoing.length || structuralEffectTags.has(tagName)) {
-      signatures.push(match[0].replace(/\s+/g, '').toLowerCase() +
+    if (outgoing.length || structuralEffectTags.has(tagName.toLowerCase()) || opaqueComponent) {
+      // Preserve casing: React component names and prop keys are case-sensitive.
+      // Lowercasing the signature could hide an effectful component swap.
+      signatures.push(match[0].replace(/\s+/g, '') +
         ':' + JSON.stringify(outgoing.sort()));
     }
   }

@@ -721,7 +721,7 @@ test('independent Security catches custom-element outbound attributes despite om
     original: before, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
     diff: '+  title="New copy"',
     report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(safe) }
-  }).status, 'passed');
+  }).status, 'failed');
   const changed = before.replace('approvedAsset', 'untrustedRemoteAsset');
   const swapped = inspectModelDiff({
     original: before, actual: changed, changedPaths: [MODEL_ALLOWED_PATH],
@@ -1002,7 +1002,7 @@ test('independent Security freezes lowercase JSX member props despite a forged d
       original: before, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
       diff: '+  title="Updated copy"',
       report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(safe) }
-    }).status, 'passed', tag);
+    }).status, 'failed', tag);
   }
 });
 
@@ -1030,4 +1030,59 @@ test('independent Security freezes bare JSX tag changes despite a forged diff', 
     diff: '+const view = (<p>New copy</p>);',
     report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
   }).status, 'passed');
+});
+
+
+test('independent Security freezes opaque component mount and quoted props despite forged diff', () => {
+  for (const component of ['TelemetryWidget', 'ui.Telemetry', 'asset-viewer']) {
+    const original = 'const view = (<div>Old copy</div>);\n';
+    for (const replacement of [
+      '<' + component + ' />',
+      '<div>Old copy</div><' + component + ' />'
+    ]) {
+      const actual = original.replace('<div>Old copy</div>', replacement);
+      const verdict = inspectModelDiff({
+        original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+        diff: '+Old copy', // deliberately omits executable component insertion
+        report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+      });
+      assert.equal(verdict.status, 'failed', component + ' mount');
+      assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+    }
+    const before = 'const view = (<' + component + '\n  title="Old copy"\n/>);\n';
+    const after = before.replace('Old copy', 'New copy');
+    const verdict = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+New copy', // deliberately omits component prop change
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.status, 'failed', component + ' title');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  const original = 'const view = (<div title="Old copy">Text</div>);\n';
+  const actual = original.replace('Old copy', 'New copy');
+  assert.equal(inspectModelDiff({
+    original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const view = (<div title="New copy">Text</div>);',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+  }).status, 'passed');
+});
+
+
+test('independent Security rejects case-only React component and prop substitutions', () => {
+  for (const [from, to] of [
+    ['<AdminPanel />', '<ADMINPanel />'],
+    ['<ui.AdminPanel />', '<ui.adminPanel />'],
+    ['<AdminPanel mode="safe" />', '<AdminPanel Mode="safe" />']
+  ]) {
+    const original = 'const view = (' + from + ');\n';
+    const actual = original.replace(from, to);
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+Old copy', // forged to omit the case-only JSX change
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', from + ' -> ' + to);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
 });
