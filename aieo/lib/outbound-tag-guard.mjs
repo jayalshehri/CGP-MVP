@@ -10,15 +10,16 @@
 // the resolution of existing relative URLs via xmlBase / xml:base, even if
 // no href/src is added. Do not let those opening tags evade
 // full-source comparison merely because they are not native HTML tag names.
-const tagStart = /<\s*(?:(?:div|span|section|article|main|header|footer|aside|label|strong|em|small|h[1-6]|ul|ol|li|table|tr|td|th|blockquote|q|del|ins|body|html|picture|canvas|a|area|svg|g|defs|symbol|foreignObject|path|rect|circle|ellipse|line|polyline|polygon|text|tspan|stop|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object|animate|animateMotion|animateTransform|set|textPath|mpath|pattern|linearGradient|radialGradient|filter|mask|clipPath|marker|cursor|fontFaceUri|font-face-uri)\b|[A-Z][\w.:-]*(?=[\s/>])|[a-z][\w.]*[-:][\w.:-]+(?=[\s/>]))/g;
-// JSX event handlers can invoke pre-existing side-effecting callbacks without
-// adding fetch or navigation tokens; style can activate an existing background
-// URL. Protect changes to these effect-bearing props on native presentation
+const tagStart = /<\s*(?:(?:p|pre|nav|details|summary|dialog|textarea|select|option|optgroup|fieldset|legend|figure|figcaption|output|progress|meter|time|code|kbd|samp|b|i|u|s|mark|abbr|address|cite|dfn|sub|sup|hr|wbr|br|dl|dt|dd|thead|tbody|tfoot|col|colgroup|caption|menu|template|slot|map|param|hgroup|ruby|rt|rp|bdi|bdo|div|span|section|article|main|header|footer|aside|label|strong|em|small|h[1-6]|ul|ol|li|table|tr|td|th|blockquote|q|del|ins|body|html|picture|canvas|a|area|svg|g|defs|symbol|foreignObject|path|rect|circle|ellipse|line|polyline|polygon|text|tspan|stop|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object|animate|animateMotion|animateTransform|set|textPath|mpath|pattern|linearGradient|radialGradient|filter|mask|clipPath|marker|cursor|fontFaceUri|font-face-uri)\b|[A-Z][\w.:-]*(?=[\s/>])|[a-z][\w.]*[-:][\w.:-]+(?=[\s/>]))/g;
+// JSX event handlers and callback refs can invoke pre-existing side-effecting
+// callbacks without adding fetch or navigation tokens; style can activate an
+// existing background URL. Expand native element coverage beyond layout tags
+// to interactive controls and text/semantic HTML elements. Protect changes to these effect-bearing props on native presentation
 // elements too, while leaving unrelated labels and text edits possible.
 // Anchor ping URLs send network requests on activation; attributionSrc can
 // trigger attribution-reporting requests. They are outbound capabilities too,
 // even if existing href/src values stay unchanged.
-const outboundAttribute = /\b(?:on[A-Z][A-Za-z0-9]*|style|href|xlinkHref|xmlBase|xml:base|src|srcSet|imageSrcSet|action|formAction|ping|attributionSrc|data|poster|content)\s*=/gi;
+const outboundAttribute = /\b(?:on[A-Z][A-Za-z0-9]*|style|ref|href|xlinkHref|xmlBase|xml:base|src|srcSet|imageSrcSet|action|formAction|ping|attributionSrc|data|poster|content)\s*=/gi;
 const jsxSpread = /\{\s*\.\.\./g;
 
 // Quoted '>' and JSX comparisons must not terminate an opening tag early.
