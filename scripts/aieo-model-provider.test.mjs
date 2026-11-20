@@ -1185,3 +1185,41 @@ test('model refuses SVG references and custom JSX outbound props absent from nat
   });
   assert.equal(unsafe.status, 'rejected');
 });
+
+test('model rejects outbound props in lowercase custom elements and namespace tags', () => {
+  // These opening tags were not covered by the native HTML / uppercase React scanner.
+  const scenarios = [
+    ['asset-viewer', 'title="Preview"', 'src={remoteAsset}'],
+    ['file-preview', 'aria-label="Preview"', 'href={remoteDocument}'],
+    ['svg:customPath', 'data-label="Route"', 'xlinkHref={remotePath}'],
+    ['asset-viewer', 'title="Preview"', '{...externalProps}']
+  ];
+  for (const [tag, inert, outbound] of scenarios) {
+    const base = ['const view = (<'+tag, '  '+inert, '/>);', ''].join('\n');
+    const find = '  ' + inert + '\n';
+    const response = JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace: find + '  ' + outbound + '\n',
+      explanation: 'Synthetic custom element safety case'
+    });
+    const verdict = validateModelPatch({ source: base, response });
+    assert.equal(verdict.status, 'rejected', tag + ' ' + outbound);
+    assert.equal(verdict.patchedSource, undefined);
+  }
+  const base = 'const view = (<asset-viewer\n  src={approvedAsset}\n  title="Old copy"\n/>);\n';
+  const safe = validateModelPatch({
+    source: base, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: '  title="Old copy"\n',
+      replace: '  title="New copy"\n',
+      explanation: 'Keep the existing outbound reference intact'
+    })
+  });
+  assert.equal(safe.status, 'proposed', 'harmless text attribute edit should remain accepted');
+  const changedSrc = validateModelPatch({
+    source: base, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: '  src={approvedAsset}\n',
+      replace: '  src={untrustedRemoteAsset}\n',
+      explanation: 'Synthetic existing custom element URL swap'
+    })
+  });
+  assert.equal(changedSrc.status, 'rejected');
+});
