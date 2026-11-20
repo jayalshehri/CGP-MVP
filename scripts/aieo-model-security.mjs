@@ -148,8 +148,9 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
       findings.push('Feedback form submit binding was changed');
     }
   }
-  // Added block comments can disable code while leaving protected strings intact.
-  if (additions.some((line) => line.includes('/*') || line.includes('*/'))) {
+  // A supplied diff can be truncated: block-comment delimiters must be
+  // screened in the actual candidate delta, not only in diff additions.
+  if (reviewedLines.some((line) => line.includes('/*') || line.includes('*/'))) {
     findings.push('New block-comment delimiters are not allowed in model changes');
   }
   return { status: findings.length ? 'failed' : 'passed', findings, addedLines: additions.length };
