@@ -1262,3 +1262,44 @@ test('model blocks SVG xmlBase and xml:base URL-base changes across container ta
   });
   assert.equal(changed.status, 'rejected');
 });
+
+test('model rejects ping and attributionSrc side-channel properties on existing tags', () => {
+  // The URL-bearing ping and attributionSrc props can issue network requests
+  // without adding or altering any href/src property.
+  for (const [tag, prop] of [
+    ['a', 'ping'], ['a', 'attributionSrc'],
+    ['img', 'attributionsrc'], ['asset-viewer', 'ping']
+  ]) {
+    const before = 'const view = (<'+tag+'\n  aria-label="Public description"\n/>);\n';
+    const find = '  aria-label="Public description"\n';
+    const attempted = validateModelPatch({
+      source: before,
+      response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find,
+        replace: find + '  ' + prop + '={untrustedRemoteEndpoint}\n',
+        explanation: 'Synthetic outbound-property regression'
+      })
+    });
+    assert.equal(attempted.status, 'rejected', tag + ' ' + prop);
+    assert.equal(attempted.patchedSource, undefined);
+  }
+  const before = 'const view = (<a\n  ping={approvedEndpoint}\n  aria-label="Old label"\n/>);\n';
+  const safe = validateModelPatch({
+    source: before,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: '  aria-label="Old label"\n',
+      replace: '  aria-label="New label"\n',
+      explanation: 'Only the inert text changed'
+    })
+  });
+  assert.equal(safe.status, 'proposed', 'unchanged ping permits harmless copy edits');
+  const changed = validateModelPatch({
+    source: before,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: '  ping={approvedEndpoint}\n',
+      replace: '  ping={untrustedRemoteEndpoint}\n',
+      explanation: 'Synthetic outbound URL replacement'
+    })
+  });
+  assert.equal(changed.status, 'rejected', 'existing ping URL must remain unchanged');
+});
