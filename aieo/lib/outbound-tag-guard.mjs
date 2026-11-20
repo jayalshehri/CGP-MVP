@@ -23,11 +23,11 @@ const tagStart = /<\s*(?:(?:p|pre|nav|details|summary|dialog|textarea|select|opt
 // props misses behaviour-changing attributes such as type, formMethod, target
 // and custom component props. Freeze every assigned prop except plain quoted
 // text-only copy props; expressions can invoke existing side-effecting callbacks.
-const assignedAttribute = /\b([A-Za-z_][A-Za-z0-9_:.-]*)\s*=/g;
 const inertLiteralCopyProps = new Set(['alt', 'title', 'placeholder', 'aria-label', 'aria-description']);
-// JSX also permits boolean attributes without '='; block newly enabled effects.
-const booleanEffectAttribute = /\b(?:autoFocus|required|disabled|checked|multiple|readOnly|allowFullScreen|muted|playsInline|hidden|inert|open|selected|itemScope|noValidate|formNoValidate|download)\b(?=\s|\/?>)/gi;
-const jsxSpread = /\{\s*\.\.\./g;
+// Parse attributes sequentially instead of regex-matching arbitrary text in
+// quoted values or JSX expressions. All bare boolean props are behavior-bearing
+// by default, not just an incomplete list of known HTML booleans. An ambiguous
+// opening tag fails closed for both model preflight and independent Security.
 
 // Quoted '>' and JSX comparisons must not terminate an opening tag early.
 // Malformed or >4096-character opening tags are rejected, not silently ignored.
@@ -74,8 +74,48 @@ function readValue(text, begin) {
 }
 
 // Attribute *values* and multiplicities are part of the signature. Merely
-// counting tags would miss a new srcSet after an unchanged src, or a value
-// change inside the same existing opening tag. Unrelated alt text may change.
+// counting tags would miss new props after unchanged src or href. Sequential
+// parsing also prevents an apparent "prop=" embedded inside an inert title
+// string from being mistaken for an actual JSX attribute.
+function parseTagAttributes(tag, prefixLength) {
+  const outgoing = [];
+  let cursor = prefixLength;
+  while (cursor < tag.length) {
+    while (/\s/.test(tag[cursor] || '')) cursor++;
+    if (tag[cursor] === '>' ||
+        (tag[cursor] === '/' && tag[cursor + 1] === '>')) return outgoing;
+    if (tag[cursor] === '{') {
+      const end = scanEnd(tag, cursor, '{', tag.length);
+      const expression = end > 0 ? tag.slice(cursor, end) : '';
+      if (!/^\{\s*\.\.\./.test(expression)) return null;
+      outgoing.push('spread:' + expression);
+      cursor = end;
+      continue;
+    }
+    const name = /^[A-Za-z_][A-Za-z0-9_:.-]*/.exec(tag.slice(cursor))?.[0];
+    if (!name) return null;
+    cursor += name.length;
+    while (/\s/.test(tag[cursor] || '')) cursor++;
+    if (tag[cursor] !== '=') {
+      // Every unassigned JSX prop can have an effect, including unknown props
+      // on React components and web components. Do not maintain a denylist.
+      outgoing.push('boolean:' + name.toLowerCase());
+      continue;
+    }
+    cursor++;
+    const end = readValue(tag, cursor);
+    if (end < 0) return null;
+    const value = tag.slice(cursor, end).trim();
+    const literal = (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"));
+    if (!inertLiteralCopyProps.has(name.toLowerCase()) || !literal) {
+      outgoing.push(name.toLowerCase() + '=' + value);
+    }
+    cursor = end;
+  }
+  return null; // malformed opening tag
+}
+
 function outboundTagSignatures(source) {
   const signatures = [];
   for (const match of source.matchAll(tagStart)) {
@@ -83,26 +123,8 @@ function outboundTagSignatures(source) {
       Math.min(source.length, match.index + 4096));
     if (end < 0) return null;
     const tag = source.slice(match.index, end);
-    const outgoing = [];
-    for (const attribute of tag.matchAll(assignedAttribute)) {
-      const valStart = attribute.index + attribute[0].length;
-      const valEnd = readValue(tag, valStart);
-      if (valEnd < 0) return null;
-      const name = attribute[1].toLowerCase();
-      const value = tag.slice(valStart, valEnd).trim();
-      const literal = (value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"));
-      if (inertLiteralCopyProps.has(name) && literal) continue;
-      outgoing.push(attribute[0].replace(/\s+/g, '').toLowerCase() + value);
-    }
-    for (const attribute of tag.matchAll(booleanEffectAttribute)) {
-      outgoing.push('boolean:' + attribute[0].toLowerCase());
-    }
-    for (const spread of tag.matchAll(jsxSpread)) {
-      const valEnd = scanEnd(tag, spread.index, '{', tag.length);
-      if (valEnd < 0) return null;
-      outgoing.push('spread:' + tag.slice(spread.index, valEnd));
-    }
+    const outgoing = parseTagAttributes(tag, match[0].length);
+    if (!outgoing) return null;
     if (outgoing.length) {
       signatures.push(match[0].replace(/\s+/g, '').toLowerCase() +
         ':' + JSON.stringify(outgoing.sort()));
