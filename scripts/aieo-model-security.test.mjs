@@ -980,3 +980,28 @@ test('independent Security rejects removed JSX restrictions even when a supplied
     report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
   }).status, 'failed');
 });
+
+test('independent Security freezes lowercase JSX member props despite a forged diff', () => {
+  for (const tag of ['ui.Button', 'widgets.Picture', 'helpers.$Panel']) {
+    const before = 'const view = (<' + tag + '\n  disabled\n  title="Old copy"\n/>);\n';
+    for (const after of [
+      before.replace('  title="Old copy"\n',
+        '  title="Old copy"\n  onClick={existingCallback}\n'),
+      before.replace('  disabled\n', '')
+    ]) {
+      const verdict = inspectModelDiff({
+        original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+        diff: '+  title="Old copy"', // forged: hides behavior modification
+        report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+      });
+      assert.equal(verdict.status, 'failed', tag);
+      assert.ok(verdict.findings.includes('Potentially unsafe new code'), tag);
+    }
+    const safe = before.replace('Old copy', 'Updated copy');
+    assert.equal(inspectModelDiff({
+      original: before, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+  title="Updated copy"',
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(safe) }
+    }).status, 'passed', tag);
+  }
+});
