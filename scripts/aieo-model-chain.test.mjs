@@ -85,7 +85,7 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
     ].join('\n'));
 
     const gh = join(bin, 'gh');
-    writeFileSync(gh, "#!/usr/bin/env node\nconst {appendFileSync}=require('node:fs');\nconst {execFileSync}=require('node:child_process');\nconst a=process.argv.slice(2);\nappendFileSync(process.env.AIEO_FAKE_GH_LOG,a.join(' ')+'\\n');\nconst g=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();\nif(a[0]==='pr'&&a[1]==='create'){\n  console.log('https://github.com/jayalshehri/CGP-MVP/pull/777');process.exit(0);\n}\nif(a[0]==='pr'&&a[1]==='view'){\n  console.log(JSON.stringify({\n    url:'https://github.com/jayalshehri/CGP-MVP/pull/777',state:'OPEN',isDraft:true,\n    baseRefName:'main',headRefName:'aieo/model-proposal-77331-1',\n    baseRefOid:g('rev-parse','main'),headRefOid:g('rev-parse','HEAD'),\n    headRepository:{nameWithOwner:'jayalshehri/CGP-MVP'},headRepositoryOwner:{login:'jayalshehri'},\n    files:[{path:'components/FeedbackWidget.tsx'}]\n  }));process.exit(0);\n}\nif(a[0]==='api'&&a[1]==='repos/jayalshehri/CGP-MVP/pulls/777'){\n  console.log(JSON.stringify({number:777,url:'https://github.com/jayalshehri/CGP-MVP/pull/777',\n    login:'github-actions[bot]',id:41898282,type:'Bot',\n    state:'open',draft:true,mergedAt:null,baseRef:'main',baseSha:g('rev-parse','main'),\n    baseRepo:'jayalshehri/CGP-MVP',headRef:'aieo/model-proposal-77331-1',\n    headSha:g('rev-parse','HEAD'),headRepo:'jayalshehri/CGP-MVP'}));process.exit(0);\n}\nif(a[0]==='auth'||a[0]==='workflow')process.exit(0);\nprocess.exit(4);\n");
+    writeFileSync(gh, "#!/usr/bin/env node\nconst {appendFileSync}=require('node:fs');\nconst {execFileSync}=require('node:child_process');\nconst a=process.argv.slice(2);\nappendFileSync(process.env.AIEO_FAKE_GH_LOG,a.join(' ')+'\\n');\nconst g=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();\nif(a[0]==='pr'&&a[1]==='create'){\n  console.log('https://github.com/jayalshehri/CGP-MVP/pull/777');process.exit(0);\n}\nif(a[0]==='pr'&&a[1]==='view'){\n  console.log(JSON.stringify({\n    url:'https://github.com/jayalshehri/CGP-MVP/pull/777',state:'OPEN',isDraft:true,\n    baseRefName:'main',headRefName:'aieo/model-proposal-77331-1',\n    baseRefOid:g('rev-parse','main'),headRefOid:g('rev-parse','HEAD'),\n    headRepository:{nameWithOwner:'jayalshehri/CGP-MVP'},headRepositoryOwner:{login:'jayalshehri'},\n    files:[{path:'components/FeedbackWidget.tsx'}]\n  }));process.exit(0);\n}\nif(a[0]==='api'&&a[1]==='repos/jayalshehri/CGP-MVP/pulls/777'){\n  if(process.env.AIEO_FAKE_RESPONSE==='rest-candidate-ref-swapped'){\n    execFileSync('git',['--git-dir',g('remote','get-url','origin'),'update-ref','refs/heads/aieo/model-proposal-77331-1',g('rev-parse','main'),g('rev-parse','HEAD')]);\n  }\n  console.log(JSON.stringify({number:777,url:'https://github.com/jayalshehri/CGP-MVP/pull/777',\n    login:'github-actions[bot]',id:41898282,type:'Bot',\n    state:'open',draft:true,mergedAt:null,baseRef:'main',baseSha:g('rev-parse','main'),\n    baseRepo:'jayalshehri/CGP-MVP',headRef:'aieo/model-proposal-77331-1',\n    headSha:g('ls-remote','origin','refs/heads/aieo/model-proposal-77331-1').slice(0,40),headRepo:'jayalshehri/CGP-MVP'}));process.exit(0);\n}\nif(a[0]==='auth'||a[0]==='workflow')process.exit(0);\nprocess.exit(4);\n");
     chmodSync(gh, 0o755);
     const env = {
       ...process.env, PATH: bin + delimiter + process.env.PATH,
@@ -532,6 +532,41 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
     assert.equal(isolatedGit('ls-remote', '--heads', remote).trim(),
       untouchedMain + '\trefs/heads/main',
       'remote fixture must be restored before the successful mocked publication');
+
+    // A Draft PR can be created and pass its first GraphQL readback, then be
+    // force-replaced before the independent REST actor/branch attestation.
+    // Exercise the final publisher's real remote second-read gate, not just
+    // a forged JSON response. This cannot prove real GitHub publication.
+    const restRaced = run([finalPublisher], {
+      AIEO_FAKE_RESPONSE: 'rest-candidate-ref-swapped'
+    }, isolated);
+    assert.notEqual(restRaced.status, 0,
+      'post-create candidate-ref replacement must reject Draft attestation');
+    assert.match(restRaced.stderr, /remote Draft PR attestation failed/,
+      'the second GitHub readback must catch a real remote ref swap');
+    assert.equal(isolatedGit('rev-parse', 'main').trim(), untouchedMain);
+    assert.equal(isolatedGit('show', 'main:' + MODEL_ALLOWED_PATH), original);
+    assert.equal(readFileSync(cleanSource, 'utf8'), candidate);
+    assert.equal(isolatedGit('ls-remote', '--heads', remote, existingBranch).trim(),
+      untouchedMain + '\\t' + existingBranch,
+      'fake REST readback must actually replace candidate branch on bare remote');
+    const restCalls = readFileSync(ghLog, 'utf8');
+    assert.match(restCalls, /pr create --draft/);
+    assert.match(restCalls, /pr view https:\\/\\/github\\.com\\/jayalshehri\\/CGP-MVP\\/pull\\/777 --json/);
+    assert.match(restCalls, /api repos\\/jayalshehri\\/CGP-MVP\\/pulls\\/777 --jq/);
+    assert.doesNotMatch(restCalls, /^workflow run /m,
+      'no CI or agent review dispatch after failed REST PR attestation');
+    // An actual GitHub Draft could now exist, but must never be reported as
+    // verified or trigger downstream reviews. Reset only the disposable Git
+    // fixture before the final positive mocked publication.
+    remoteRef('-d', existingBranch, untouchedMain);
+    isolatedGit('switch', '-q', 'main');
+    isolatedGit('branch', '-D', 'aieo/model-proposal-77331-1');
+    writeFileSync(cleanSource, candidate);
+    rmSync(ghLog, { force: true });
+    assert.equal(isolatedGit('ls-remote', '--heads', remote).trim(),
+      untouchedMain + '\\trefs/heads/main',
+      'failed REST attestation must leave only original remote main in fixture');
 
     // Only the third, token-scoped child may push to the disposable bare remote
     // and call the fake gh CLI. This remains a mock, NOT live GitHub publication.
