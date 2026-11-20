@@ -989,3 +989,52 @@ test('opaque OAuth, API-key and session tokens fail closed before disclosure or 
     task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
   }), 'ordinary non-secret query parameters remain allowed');
 });
+
+
+ 
+test('OAuth URL fragment bearer tokens are denied at every independent model boundary', async () => {
+  // Only synthetic, non-authenticating markers; fragment tokens must not evade
+  // the same approval guard that already denies query-string bearer tokens.
+  const markers = [
+    '#access_token=' + 'a'.repeat(30),
+    '#refresh_token=' + 'b'.repeat(30),
+    '#id_token=' + 'c'.repeat(30),
+    '#session_token=' + 'd'.repeat(30),
+    '#api_key=' + 'e'.repeat(30),
+    '#token=' + 'f'.repeat(30),
+    'https://fixture.example.invalid/callback#auth_token=' + 'g'.repeat(30)
+  ];
+  let requests = 0;
+  const transport = async () => {
+    requests++;
+    throw new Error('URL fragment credentials must never be disclosed');
+  };
+  for (const marker of markers) {
+    const unsafeSource = source + '\n// ' + marker;
+    assert.throws(() => buildModelRequest({
+      source: unsafeSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }), 'source disclosure refused: ' + marker);
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }), 'task disclosure refused: ' + marker);
+    assert.equal((await requestModelPatch({ source: unsafeSource, task, env, transport })).status, 'blocked');
+    assert.equal((await requestModelPatch({ source, task: task + ' ' + marker, env, transport })).status, 'blocked');
+    for (const proposal of [
+      { find: '// ' + marker, replace: '// redacted fixture', explanation: 'Synthetic removal' },
+      { find, replace: '  const sample = "' + marker + '";', explanation: 'Synthetic replacement' },
+      { find, replace: replacement, explanation: 'Synthetic ' + marker }
+    ]) {
+      const result = validateModelPatch({
+        source: proposal.find === find ? source : unsafeSource,
+        response: JSON.stringify({ path: MODEL_ALLOWED_PATH, ...proposal })
+      });
+      assert.equal(result.status, 'rejected', 'model output credential refusal: ' + marker);
+      assert.equal(JSON.stringify(result).includes(marker), false, 'rejection may not echo secret');
+    }
+  }
+  assert.equal(requests, 0, 'provider transport is never invoked with fragment credentials');
+  assert.doesNotThrow(() => buildModelRequest({
+    source: source + '\n// https://docs.example.invalid/guide#installation',
+    task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+  }), 'ordinary documentation anchors are not credentials');
+});
