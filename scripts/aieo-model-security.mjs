@@ -4,6 +4,7 @@ import { readBoundedModelReport, writeExclusiveModelRoleReport } from './aieo-ro
 import { modelGit, preflightModelGit } from './aieo-model-git.mjs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH, containsCredentials } from '../aieo/lib/model-provider.mjs';
+import { introducesOutboundTagAttribute } from '../aieo/lib/outbound-tag-guard.mjs';
 
 const hash = (content) => createHash('sha256').update(content).digest('hex');
 // Scan only new lines; a bounded UI repair must not introduce active browser exfiltration,
@@ -157,7 +158,8 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
       dynamicCodeReflection.test(reviewedText) ||
       outboundMarkup.test(reviewedText) || outboundCss.test(reviewedText) ||
       rawHtmlSink.test(reviewedText) ||
-      introducesOutboundMarkup(original, actual)) {
+      introducesOutboundMarkup(original, actual) ||
+      introducesOutboundTagAttribute(original, actual)) {
     findings.push('Potentially unsafe new code');
   }
   if (typeof original === 'string' && typeof actual === 'string') {
