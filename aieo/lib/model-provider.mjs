@@ -209,8 +209,15 @@ export function buildModelRequest({ source, path = MODEL_ALLOWED_PATH, task, mod
 }
 
 export async function requestModelPatch({ source, path = MODEL_ALLOWED_PATH, task, env = {}, transport = fetch }) {
+  // Check dispatch provenance again at the network boundary, not only in
+  // the upstream trusted source reader. This is defense in depth: these env
+  // claims alone never replace checkout and human-consent attestation there.
   if (env.AIEO_MODEL_ENABLED !== 'true' || env.AIEO_SOURCE_SHARING_APPROVED !== 'true' ||
       env.GITHUB_EVENT_NAME !== 'workflow_dispatch' || env.GITHUB_REF !== 'refs/heads/main' ||
+      env.GITHUB_REPOSITORY !== 'jayalshehri/CGP-MVP' ||
+      !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA || '') ||
+      !/^[0-9]+$/.test(env.GITHUB_RUN_ID || '') ||
+      !/^[1-9][0-9]*$/.test(env.GITHUB_RUN_ATTEMPT || '') ||
       typeof env.OPENROUTER_API_KEY !== 'string' || !env.OPENROUTER_API_KEY ||
       !env.OPENROUTER_MODEL_ID) {
     return { status: 'blocked', reason: 'Manual trusted workflow, source consent or provider configuration missing' };

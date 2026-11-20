@@ -11,6 +11,10 @@ const env = {
   AIEO_SOURCE_SHARING_APPROVED: 'true',
   GITHUB_EVENT_NAME: 'workflow_dispatch',
   GITHUB_REF: 'refs/heads/main',
+  GITHUB_REPOSITORY: 'jayalshehri/CGP-MVP',
+  GITHUB_SHA: 'a'.repeat(40),
+  GITHUB_RUN_ID: '77331',
+  GITHUB_RUN_ATTEMPT: '1',
   OPENROUTER_API_KEY: 'synthetic-key-not-real',
   OPENROUTER_MODEL_ID: 'provider/safe-model:free'
 };
@@ -136,17 +140,30 @@ test('no source disclosure without explicit consent and privacy scan', () => {
   assert.throws(() => buildModelRequest({ source: 'const api_key = "plaintext-secret";', task, model: env.OPENROUTER_MODEL_ID, shareApproved: true }));
   assert.throws(() => buildModelRequest({ source, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true, path: '.env' }));
 });
-test('manual restrictions block all network calls on PR, missing secret, or missing consent', async () => {
+test('manual consent and exact GitHub dispatch provenance are required before model disclosure', async () => {
   let calls = 0;
   const transport = () => { calls += 1; throw new Error('must not call'); };
   const variants = [
     { ...env, GITHUB_EVENT_NAME: 'pull_request' },
     { ...env, OPENROUTER_API_KEY: '' },
     { ...env, AIEO_SOURCE_SHARING_APPROVED: 'false' },
-    { ...env, GITHUB_REF: 'refs/heads/feature' }
+    { ...env, GITHUB_REF: 'refs/heads/feature' },
+    { ...env, GITHUB_REPOSITORY: 'other/CGP-MVP' },
+    { ...env, GITHUB_REPOSITORY: '' },
+    { ...env, GITHUB_SHA: 'short' },
+    { ...env, GITHUB_SHA: '' },
+    { ...env, GITHUB_RUN_ID: '' },
+    { ...env, GITHUB_RUN_ID: 'invalid-run' },
+    { ...env, GITHUB_RUN_ATTEMPT: '0' },
+    { ...env, GITHUB_RUN_ATTEMPT: '' }
   ];
-  for (const current of variants) assert.equal((await requestModelPatch({ source, task, env: current, transport })).status, 'blocked');
-  assert.equal(calls, 0);
+  for (const current of variants) {
+    assert.deepEqual(await requestModelPatch({ source, task, env: current, transport }), {
+      status: 'blocked',
+      reason: 'Manual trusted workflow, source consent or provider configuration missing'
+    });
+  }
+  assert.equal(calls, 0, 'a spoofed repository, checkout or run must not contact OpenRouter');
 });
 test('mock provider call sends bounded source and returns validated proposal only', async () => {
   let requests = 0;
