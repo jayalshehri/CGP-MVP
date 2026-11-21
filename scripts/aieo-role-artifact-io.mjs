@@ -20,8 +20,10 @@ function trustedOwner() {
   return uid;
 }
 function safeDirectory(entry, uid) {
+  // Refuse ALL group/other permissions, including read/traversal, and special
+  // mode bits. Artifact names and future role evidence belong in private dirs.
   return entry.isDirectory() && !entry.isSymbolicLink() &&
-    // Neither read nor traversal by group/other is permitted: report names\n    // and future evidence must never be discoverable through a public folder.\n    entry.uid === uid && !(entry.mode & 0o7077);
+    entry.uid === uid && !(entry.mode & 0o7077);
 }
 function safeReportFile(entry, uid) {
   return entry.isFile() && !entry.isSymbolicLink() &&
