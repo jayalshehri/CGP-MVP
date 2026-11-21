@@ -13,7 +13,8 @@ function block() {
 
 // Proposal preflight precedes the optional provider call. An apparently safe
 // mode is not sufficient when the evidence directory belongs to another uid,
-// or contains setuid/setgid/sticky bits. No source disclosure in that case.
+// has group/other read/traversal or setuid/setgid/sticky bits. Never share source
+// with the provider from a publicly accessible evidence directory.
 function runnerUid() {
   const uid = process.getuid?.();
   if (!Number.isSafeInteger(uid)) block();
@@ -21,7 +22,7 @@ function runnerUid() {
 }
 function safeEvidenceDirectory(entry, uid) {
   return entry.isDirectory() && !entry.isSymbolicLink() &&
-    entry.uid === uid && !(entry.mode & 0o7022);
+    entry.uid === uid && !(entry.mode & 0o7077);
 }
 function safeProposalFile(entry, uid) {
   return entry.isFile() && !entry.isSymbolicLink() &&
