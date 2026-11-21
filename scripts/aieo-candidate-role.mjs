@@ -8,7 +8,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
-import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitHubCliEnvironment, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
 
 const SHA = /^[a-f0-9]{40}$/;
 const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
@@ -211,7 +211,8 @@ function verifiedRemoteContext(env) {
   let pr;
   try {
     pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
-      { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 }));
+      { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
+        env: readOnlyGitHubCliEnvironment(process.env) }));
   } catch { block(); }
   const base = pr?.base?.sha;
   const head = pr?.head?.sha;
@@ -281,7 +282,8 @@ function reattestRemoteDraft({ base, head, headRef, number }) {
   let pr;
   try {
     pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
-      { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 }));
+      { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
+        env: readOnlyGitHubCliEnvironment(process.env) }));
   } catch { block(); }
   if (pr?.number !== number ||
       pr?.html_url !== 'https://github.com/' + REPO + '/pull/' + number ||

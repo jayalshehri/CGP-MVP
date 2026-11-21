@@ -60,6 +60,25 @@ export function readOnlyGitEnvironment(env = process.env) {
   return scoped;
 }
 
+// Unlike Git, the independent roles' GH CLI must receive the read-scoped
+// GitHub API credential, but no provider, app, CI or arbitrary environment
+// secrets inherited from an earlier job step. Keep the same allowlisted OS
+// variables as Git and add only GH_TOKEN. Synthetic local fixtures may pass
+// their exact fake API response file paths; those test variables are never
+// forwarded to a credentialed Actions process.
+export function readOnlyGitHubCliEnvironment(env = process.env) {
+  const scoped = readOnlyGitEnvironment(env);
+  if (Object.hasOwn(env, 'GH_TOKEN')) scoped.GH_TOKEN = env.GH_TOKEN;
+  if (env.GITHUB_ACTIONS === 'false' &&
+      ['fixture-never-live', 'synthetic-fixture-not-a-secret'].includes(env.GH_TOKEN)) {
+    for (const name of ['AIEO_FAKE_PR_FILE', 'AIEO_FAKE_PR_SECOND',
+      'AIEO_FAKE_PR_COUNTER']) {
+      if (Object.hasOwn(env, name)) scoped[name] = env[name];
+    }
+  }
+  return scoped;
+}
+
 /**
  * Git reads must never honor repository/global settings that enable remote
  * shell transports or executable credential helpers. A read-only fetch can

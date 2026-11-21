@@ -9,7 +9,7 @@ import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mj
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
 import { verifyOfficialGitHubCliContext, verifyCandidateActionsContext } from './aieo-candidate-role.mjs';
-import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitHubCliEnvironment, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
 const SHA = /^[a-f0-9]{40}$/;
@@ -228,7 +228,8 @@ export function verifyPostBuild(env = process.env) {
   let pr;
   try {
     pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
-      { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000 }));
+      { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
+        env: readOnlyGitHubCliEnvironment(process.env) }));
   } catch { fail(); }
   if (pr.number !== Number(number) ||
       pr.html_url !== 'https://github.com/' + REPO + '/pull/' + number ||

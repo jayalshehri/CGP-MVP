@@ -2474,3 +2474,55 @@ test('real candidate Developer process refuses nonprivate evidence directories b
     assert.equal(f.git('rev-parse', 'main'), f.base);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test('all four real role CLIs and post-build check scope gh API children to GH_TOKEN only', () => {
+  const f = setup();
+  try {
+    const gh = join(f.root, 'bin', 'gh');
+    const stub = readFileSync(gh, 'utf8');
+    const needle = 'const after=process.env.AIEO_FAKE_PR_SECOND;';
+    assert.ok(stub.includes(needle), 'the isolated GitHub API stub must be active');
+    const guard = [
+      "if (process.env.GH_TOKEN !== 'fixture-never-live' ||",
+      "    !process.env.AIEO_FAKE_PR_FILE ||",
+      "    ['GITHUB_TOKEN', 'OPENROUTER_API_KEY', 'NPM_TOKEN',",
+      "     'DATABASE_URL', 'ORG_SESSION_DATA', 'CUSTOM_PAT',",
+      "     'AIEO_UNRELATED_SESSION'].some((name) =>",
+      "       Object.hasOwn(process.env, name))) process.exit(93);"
+    ].join('\n') + '\n';
+    writeFileSync(gh, stub.replace(needle, guard + needle));
+
+    const inherited = {
+      ...f.env,
+      GITHUB_TOKEN: 'synthetic-fixture-not-a-secret',
+      OPENROUTER_API_KEY: 'synthetic-provider-credential',
+      NPM_TOKEN: 'synthetic-package-credential',
+      DATABASE_URL: 'postgres://synthetic:password@example.invalid/test',
+      ORG_SESSION_DATA: 'synthetic-org-session',
+      CUSTOM_PAT: 'synthetic-unknown-credential',
+      AIEO_UNRELATED_SESSION: 'synthetic-private-value'
+    };
+    for (const [role, status] of [
+      ['developer', 'proposed'],
+      ['qa', 'passed'],
+      ['security', 'passed'],
+      ['reviewer', 'draft-pr-eligible']
+    ]) {
+      const result = f.run(role, inherited);
+      assert.equal(result.status, 0,
+        role + ' must preserve API readback without leaking other credentials: ' + result.stderr);
+      assert.equal(JSON.parse(result.stdout).status, status);
+    }
+    // The finalizer is a distinct process and must obey the same gh API
+    // environment restriction AFTER the candidate build.
+    const reviewed = execFileSync('git', ['show', f.head + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' });
+    writeFileSync(join(f.cwd, path), reviewed);
+    const final = spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: inherited, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(final.status, 0, 'post-build gh API must be scoped: ' + final.stderr);
+    assert.equal(JSON.parse(final.stdout).status, 'post-build-draft-reverified');
+    assert.equal(f.git('rev-parse', 'main'), f.base, 'fixture main is never changed');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
