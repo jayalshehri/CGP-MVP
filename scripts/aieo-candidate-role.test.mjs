@@ -2494,7 +2494,7 @@ test('all four real role CLIs and post-build check scope gh API children to GH_T
 
     const inherited = {
       ...f.env,
-      GITHUB_TOKEN: 'synthetic-ci-credential',
+      GITHUB_TOKEN: 'synthetic-fixture-not-a-secret',
       OPENROUTER_API_KEY: 'synthetic-provider-credential',
       NPM_TOKEN: 'synthetic-package-credential',
       DATABASE_URL: 'postgres://synthetic:password@example.invalid/test',
