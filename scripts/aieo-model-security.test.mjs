@@ -1086,3 +1086,41 @@ test('independent Security rejects case-only React component and prop substituti
     assert.ok(verdict.findings.includes('Potentially unsafe new code'));
   }
 });
+
+test('independent Security freezes dollar and underscore JSX components despite forged diffs', () => {
+  for (const component of ['$Telemetry', '_telemetry', 'Panel$', 'UI.$Panel', 'UI._Panel', '$ui.Widget']) {
+    const original = 'const view = (<div>Old copy</div>);\n';
+    const actual = original.replace('<div>Old copy</div>',
+      '<div>Old copy</div><' + component + ' />');
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+Old copy', // deliberately omits the component mount
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', component + ' mount');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), component);
+
+    const before = 'const view = (<' + component + '\n  title="Old label"\n/>);\n';
+    for (const replacement of [
+      '  title="New label"\n',
+      '  title="Old label"\n  onClick={existingCallback}\n'
+    ]) {
+      const changed = before.replace('  title="Old label"\n', replacement);
+      const reviewed = inspectModelDiff({
+        original: before, actual: changed, changedPaths: [MODEL_ALLOWED_PATH],
+        diff: '+Old label', // deliberately hides the real prop modification
+        report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(changed) }
+      });
+      assert.equal(reviewed.status, 'failed', component + ' prop change');
+      assert.ok(reviewed.findings.includes('Potentially unsafe new code'), component);
+    }
+  }
+
+  const original = 'const view = (<p title="Old label">Text</p>);\n';
+  const actual = original.replace('Old label', 'New label');
+  assert.equal(inspectModelDiff({
+    original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const view = (<p title="New label">Text</p>);',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+  }).status, 'passed');
+});
