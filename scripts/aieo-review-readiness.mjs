@@ -3,7 +3,7 @@
 // the exact trusted main commit. A stacked Draft branch is NOT a deployable
 // workflow_dispatch target. No application source or secrets are read here.
 import { execFileSync } from 'node:child_process';
-import { hasUnsafeGitEnvironment } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, pinReadOnlyGitHubCli, readOnlyGitHubCliEnvironment } from './aieo-git-process-guard.mjs';
 import { verifyCandidateActionsContext, verifyOfficialGitHubCliContext } from './aieo-candidate-role.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
@@ -27,8 +27,14 @@ function parseJson(value) {
   } catch { /* Fail closed without logging remote output. */ }
   failure();
 }
-function liveGithub(args) {
-  return execFileSync('gh', args, { encoding: 'utf8', stdio: 'pipe', maxBuffer: 32000 });
+// The readiness check holds GH_TOKEN before external source disclosure. Pin the
+// real CLI once for the entire preflight and pass only the read-only GitHub
+// credential and minimal OS environment to its subprocesses.
+function liveGithub(args, executable) {
+  return execFileSync(executable, args, {
+    encoding: 'utf8', stdio: 'pipe', maxBuffer: 32000,
+    env: readOnlyGitHubCliEnvironment(process.env)
+  });
 }
 
 export function verifyTrustedReviewReadiness({ env = process.env, gh = liveGithub } = {}) {
@@ -51,14 +57,21 @@ export function verifyTrustedReviewReadiness({ env = process.env, gh = liveGithu
       env.GITHUB_REPOSITORY !== REPO ||
       !SHA.test(sha || '') || !env.GH_TOKEN ||
       typeof gh !== 'function') failure();
+  let query = gh;
   try {
-    const ref = parseJson(gh(['api', 'repos/' + REPO + '/git/ref/heads/main',
+    if (gh === liveGithub) {
+      const executable = pinReadOnlyGitHubCli(process.env);
+      query = (args) => liveGithub(args, executable);
+    }
+  } catch { failure(); }
+  try {
+    const ref = parseJson(query(['api', 'repos/' + REPO + '/git/ref/heads/main',
       '--jq', '{sha:.object.sha,type:.object.type}']));
     if (ref.sha !== sha || ref.type !== 'commit') failure();
 
     // A file checked into a Draft branch is insufficient: Actions must know
     // this workflow as an ACTIVE workflow on the default branch.
-    const registered = parseJson(gh(['api', 'repos/' + REPO +
+    const registered = parseJson(query(['api', 'repos/' + REPO +
       '/actions/workflows/aieo-model-candidate-roles.yml',
       '--jq', '{path:.path,state:.state}']));
     if (registered.path !== WORKFLOW || registered.state !== 'active') failure();
@@ -66,7 +79,7 @@ export function verifyTrustedReviewReadiness({ env = process.env, gh = liveGithu
     // Pin every required role implementation to the very same main commit.
     // Query metadata only: neither file contents nor model prompts are emitted.
     for (const path of REQUIRED) {
-      const item = parseJson(gh(['api', 'repos/' + REPO + '/contents/' +
+      const item = parseJson(query(['api', 'repos/' + REPO + '/contents/' +
         path + '?ref=' + sha, '--jq', '{path:.path,type:.type}']));
       if (item.path !== path || item.type !== 'file') failure();
     }
