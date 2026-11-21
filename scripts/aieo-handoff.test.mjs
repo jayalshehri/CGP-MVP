@@ -161,3 +161,57 @@ test('handoffs cannot bless a different task even when both caller and artifact 
     sourceHash, candidateHash, expected: report.developer
   }), /Invalid, stale, or mismatched developer handoff artifact/);
 });
+
+test('proposed Developer and Draft-eligible Reviewer reject identical source/candidate identities', () => {
+  for (const role of ['developer', 'reviewer']) {
+    const verdict = { ...report[role], ...(role === 'developer'
+      ? { bounded: true, candidateHash: sourceHash }
+      : { handoffValidated: true }) };
+    assert.throws(() => buildHandoffArtifact({
+      role, task: APPROVED_TASK, sourceHash, candidateHash: sourceHash, verdict
+    }), /Inconsistent .* handoff state and content hashes/,
+    role + ' cannot create a proposed handoff with no content change');
+
+    const forged = { ...make(role), candidateHash: sourceHash };
+    assert.throws(() => verifyHandoffArtifact({
+      artifact: forged, role, task: APPROVED_TASK,
+      sourceHash, candidateHash: sourceHash, expected: report[role]
+    }), /Inconsistent .* handoff state and content hashes/,
+    role + ' cannot receive a forged proposed handoff with equal hashes');
+  }
+});
+
+test('legitimate no-change flow verifies but changed hashes cannot masquerade as no-change', () => {
+  const correctedLine = '  const controlId = useMemo(() => /^\\/controls\\/(\\d+)(?:\\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);';
+  const fixedSource = source.replace(vulnerableLine, correctedLine);
+  assert.notEqual(fixedSource, source, 'synthetic source must actually be corrected');
+  const fixed = publicReport(orchestrate({ task: APPROVED_TASK, source: fixedSource }));
+  const fixedHash = fixed.developer.sourceHash;
+  assert.equal(fixed.developer.status, 'no-change');
+  assert.equal(fixed.reviewer.status, 'verified-no-change');
+  assert.equal(fixedHash, fixed.developer.candidateHash);
+
+  for (const role of ['developer', 'reviewer']) {
+    const verdict = { ...fixed[role], ...(role === 'developer'
+      ? { bounded: true } : { handoffValidated: true }) };
+    const valid = buildHandoffArtifact({
+      role, task: APPROVED_TASK, sourceHash: fixedHash,
+      candidateHash: fixedHash, verdict
+    });
+    assert.equal(verifyHandoffArtifact({
+      artifact: valid, role, task: APPROVED_TASK,
+      sourceHash: fixedHash, candidateHash: fixedHash, expected: fixed[role]
+    }), valid);
+
+    const changedVerdict = { ...verdict, ...(role === 'developer'
+      ? { candidateHash } : {}) };
+    assert.throws(() => buildHandoffArtifact({
+      role, task: APPROVED_TASK, sourceHash: fixedHash, candidateHash,
+      verdict: changedVerdict
+    }), /Inconsistent .* handoff state and content hashes/);
+    assert.throws(() => verifyHandoffArtifact({
+      artifact: { ...valid, candidateHash }, role, task: APPROVED_TASK,
+      sourceHash: fixedHash, candidateHash, expected: fixed[role]
+    }), /Inconsistent .* handoff state and content hashes/);
+  }
+});
