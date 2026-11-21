@@ -21,7 +21,7 @@ function trustedOwner() {
 }
 function safeDirectory(entry, uid) {
   return entry.isDirectory() && !entry.isSymbolicLink() &&
-    entry.uid === uid && !(entry.mode & 0o7022);
+    // Neither read nor traversal by group/other is permitted: report names\n    // and future evidence must never be discoverable through a public folder.\n    entry.uid === uid && !(entry.mode & 0o7077);
 }
 function safeReportFile(entry, uid) {
   return entry.isFile() && !entry.isSymbolicLink() &&
