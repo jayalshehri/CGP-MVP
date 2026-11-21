@@ -1071,6 +1071,58 @@ for (const [name, alter] of [
   });
 }
 
+// The publisher verifies a candidate via the opened inode and then verifies
+// the final pathname. An attacker may touch that same inode after final fstat,
+// restoring private mode and size. Reject the changed ctime before any push.
+test('publisher rejects same-inode metadata mutation between final fstat and lstat', () => {
+  const f = fixture();
+  try {
+    const base = git(f.workspace, 'rev-parse', 'main');
+    const source = readFileSync(f.target, 'utf8');
+    const preload = join(f.root, 'publisher-final-path-race.mjs');
+    const marker = join(f.root, 'final-path-race.marker');
+    writeFileSync(preload, [
+      "import fs from 'node:fs';",
+      "import { syncBuiltinESMExports } from 'node:module';",
+      'const nativeLstat = fs.lstatSync;',
+      'let sourceStats = 0;',
+      'fs.lstatSync = (path, ...args) => {',
+      '  if (path === ' + JSON.stringify(MODEL_ALLOWED_PATH) + ' && ++sourceStats === 3) {',
+      '    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 40);',
+      '    fs.chmodSync(path, 0o600);',
+      '    fs.chmodSync(path, 0o644);',
+      '    fs.writeFileSync(' + JSON.stringify(marker) + ', "mutated");',
+      '  }',
+      '  return nativeLstat(path, ...args);',
+      '};',
+      'syncBuiltinESMExports();',
+      ''
+    ].join('\\n'));
+    const attacked = spawnSync(process.execPath, ['--import', preload, publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(readFileSync(marker, 'utf8'), 'mutated',
+      'control: race must happen after descriptor fstat and before pathname lstat');
+    assert.notEqual(attacked.status, 0, 'same-inode ctime change must fail closed');
+    assert.match(attacked.stderr, /untrusted candidate source or directory/);
+    assert.equal(readFileSync(f.target, 'utf8'), source,
+      'attack must preserve the exact reviewed source bytes');
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), base);
+    assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
+    assert.equal(existsSync(f.log), false, 'failed attestation cannot contact GitHub CLI');
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+      /refs\\/heads\\/aieo\\/model-proposal-99123-1/);
+    const healthy = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(healthy.status, 0, healthy.stderr);
+    assert.equal(JSON.parse(healthy.stdout).status, 'draft-pr-created');
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), base);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
 // A malformed blob in trusted Git history must never be normalized into a
 // string and treated as the exact approved base. Git accepts arbitrary bytes;
 // Node's UTF-8 decode does not. The candidate itself is valid UTF-8 here, so
