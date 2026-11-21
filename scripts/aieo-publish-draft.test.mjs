@@ -1022,8 +1022,8 @@ test('publisher keeps pinned Git executable after PATH symlink swap during auth'
     const rogueGit = join(f.root, 'bin', 'rogue-git');
     const rogueMarker = join(f.root, 'rogue-git-invoked');
     symlinkSync(realGit, gitLink);
-    writeFileSync(rogueGit, '#!/bin/sh\\nprintf invoked > ' +
-      JSON.stringify(rogueMarker) + '\\nexit 97\\n', { mode: 0o755 });
+    writeFileSync(rogueGit, '#!/bin/sh\nprintf invoked > ' +
+      JSON.stringify(rogueMarker) + '\nexit 97\n', { mode: 0o755 });
 
     // The fake gh API readback also invokes Git for its fixture metadata.
     // Explicitly bind those test-only reads to real Git, so they cannot mask
@@ -1037,7 +1037,7 @@ test('publisher keeps pinned Git executable after PATH symlink swap during auth'
     const swap = "if(a[0]==='auth'&&process.env.AIEO_FAKE_RESPONSE==='auth-swap-git-symlink'){" +
       "const fs=require('node:fs');fs.unlinkSync(" + JSON.stringify(gitLink) +
       ");fs.symlinkSync(" + JSON.stringify(rogueGit) + "," + JSON.stringify(gitLink) +
-      ");process.exit(0);}\\n";
+      ");process.exit(0);}\n";
     writeFileSync(fakeGh, source.replace(readbackGit,
       'const g=(...args)=>execFileSync(' + JSON.stringify(realGit) + ',args,')
       .replace(authMarker, swap + authMarker));
@@ -1055,7 +1055,7 @@ test('publisher keeps pinned Git executable after PATH symlink swap during auth'
       'untrusted Git binary may never execute, including the token-bearing push');
     assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
     assert.match(git(f.workspace, 'ls-remote', '--heads', f.remote),
-      /refs\\/heads\\/aieo\\/model-proposal-99123-1/);
+      /refs\/heads\/aieo\/model-proposal-99123-1/);
     assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
