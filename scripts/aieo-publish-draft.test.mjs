@@ -1007,6 +1007,59 @@ test('publisher continues with pinned gh executable after PATH symlink swap duri
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
+// The write-scoped Git push must use the Git executable that was inspected
+// before gh authentication. Otherwise a PATH symlink swap at auth time can
+// redirect the push (and GH_TOKEN) to a rogue binary, even if the gh CLI
+// itself is pinned. Test a real Git repository and a fixture-only credential.
+test('publisher keeps pinned Git executable after PATH symlink swap during auth', () => {
+  const f = fixture();
+  try {
+    const realGit = (process.env.PATH || '').split(delimiter)
+      .map((directory) => join(directory, 'git'))
+      .find((path) => existsSync(path));
+    assert.ok(realGit, 'fixture requires a working system git');
+    const gitLink = join(f.root, 'bin', 'git');
+    const rogueGit = join(f.root, 'bin', 'rogue-git');
+    const rogueMarker = join(f.root, 'rogue-git-invoked');
+    symlinkSync(realGit, gitLink);
+    writeFileSync(rogueGit, '#!/bin/sh\nprintf invoked > ' +
+      JSON.stringify(rogueMarker) + '\nexit 97\n', { mode: 0o755 });
+
+    // The fake gh API readback also invokes Git for its fixture metadata.
+    // Explicitly bind those test-only reads to real Git, so they cannot mask
+    // whether the *publisher's* own later calls honor the pinned executable.
+    const fakeGh = join(f.root, 'bin', 'gh');
+    const source = readFileSync(fakeGh, 'utf8');
+    const readbackGit = "const g=(...args)=>execFileSync('git',args,";
+    const authMarker = "if(a[0]==='auth'||a[0]==='workflow')process.exit(0);";
+    assert.ok(source.includes(readbackGit));
+    assert.ok(source.includes(authMarker));
+    const swap = "if(a[0]==='auth'&&process.env.AIEO_FAKE_RESPONSE==='auth-swap-git-symlink'){" +
+      "const fs=require('node:fs');fs.unlinkSync(" + JSON.stringify(gitLink) +
+      ");fs.symlinkSync(" + JSON.stringify(rogueGit) + "," + JSON.stringify(gitLink) +
+      ");process.exit(0);}\n";
+    writeFileSync(fakeGh, source.replace(readbackGit,
+      'const g=(...args)=>execFileSync(' + JSON.stringify(realGit) + ',args,')
+      .replace(authMarker, swap + authMarker));
+
+    const main = git(f.workspace, 'rev-parse', 'main');
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace,
+      env: { ...f.env, AIEO_FAKE_RESPONSE: 'auth-swap-git-symlink' },
+      encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(readlinkSync(gitLink), rogueGit, 'control: auth must replace PATH git');
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+    assert.equal(existsSync(rogueMarker), false,
+      'untrusted Git binary may never execute, including the token-bearing push');
+    assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
+    assert.match(git(f.workspace, 'ls-remote', '--heads', f.remote),
+      /refs\/heads\/aieo\/model-proposal-99123-1/);
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test('publisher rejects remote main drift before branch, push, or any GitHub CLI call', () => {
   const f = fixture();
   try {

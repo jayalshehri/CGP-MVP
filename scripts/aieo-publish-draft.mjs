@@ -38,6 +38,31 @@ export function publisherSubprocessEnvironment(env = process.env) {
   return result;
 }
 
+// Resolve Git only once, before any publisher Git operation. Authentication
+// setup can mutate a writable PATH git symlink; the token-bearing push must
+// use the same executable as the credential-free preflight and local commit.
+// Pinning the realpath also prevents a substituted PATH binary from seeing
+// the repository-scoped GH_TOKEN after gh auth setup-git.
+let pinnedPublisherGitExecutable = null;
+function pinPublisherGitExecutable() {
+  if (pinnedPublisherGitExecutable) return;
+  const directories = (process.env.PATH || '').split(delimiter);
+  if (!directories.length || directories.some((path) => !path || !isAbsolute(path))) {
+    fail('publisher PATH does not identify a trusted Git executable');
+  }
+  for (const directory of directories) {
+    try {
+      const candidate = join(directory, 'git');
+      const info = statSync(candidate);
+      if (info.isFile() && (info.mode & 0o111)) {
+        pinnedPublisherGitExecutable = realpathSync(candidate);
+        return;
+      }
+    } catch { /* Skip PATH directories without an executable git. */ }
+  }
+  fail('publisher Git executable not found');
+}
+
 function command(binary, args, { raw = false } = {}) {
   // Repository-local Git config is not a trust boundary: core.fsmonitor and
   // diff.external can run executable helpers during seemingly read-only
@@ -80,7 +105,10 @@ function command(binary, args, { raw = false } = {}) {
     args[2] === 'push' && args[3] === 'origin' &&
     /^HEAD:refs\/heads\/aieo\/(?:model-proposal|repair-feedback)-[0-9]+-[1-9][0-9]*$/.test(args[4]);
   if (binary === 'git' && !authorizedPush) delete env.GH_TOKEN;
-  return execFileSync(binary, safeArgs, {
+  if (binary === 'git' && !pinnedPublisherGitExecutable) {
+    fail('publisher Git executable was not attested');
+  }
+  return execFileSync(binary === 'git' ? pinnedPublisherGitExecutable : binary, safeArgs, {
     encoding: raw ? undefined : 'utf8', stdio: 'pipe', env
   });
 }
@@ -403,6 +431,7 @@ function assertTrustedCheckout(env, path) {
 
 export function publishDraft({ env = process.env } = {}) {
   const mode = validateDispatch(env);
+  pinPublisherGitExecutable();
   const path = MODEL_ALLOWED_PATH;
   // A clean filter on ANY tracked file can execute during an unscoped
   // worktree diff, before the one-file scope check. Do not attest only the
