@@ -1097,7 +1097,7 @@ test('publisher rejects same-inode metadata mutation between final fstat and lst
       '};',
       'syncBuiltinESMExports();',
       ''
-    ].join('\\n'));
+    ].join('\n'));
     const attacked = spawnSync(process.execPath, ['--import', preload, publisher], {
       cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 25000
     });
@@ -1111,7 +1111,7 @@ test('publisher rejects same-inode metadata mutation between final fstat and lst
     assert.equal(git(f.workspace, 'branch', '--show-current'), 'main');
     assert.equal(existsSync(f.log), false, 'failed attestation cannot contact GitHub CLI');
     assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
-      /refs\\/heads\\/aieo\\/model-proposal-99123-1/);
+      /refs\/heads\/aieo\/model-proposal-99123-1/);
     const healthy = spawnSync(process.execPath, [publisher], {
       cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 25000
     });
