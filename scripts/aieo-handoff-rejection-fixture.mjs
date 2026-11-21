@@ -155,7 +155,7 @@ function exercisePublicEvidenceDirectory(role) {
     if (role === 'reviewer') {
       for (const prior of roles) {
         writeFileSync(join(work, 'aieo-output', prior + '.json'),
-          JSON.stringify(originals[prior], null, 2) + '\\n',
+          JSON.stringify(originals[prior], null, 2) + '\n',
           { mode: 0o600, flag: 'wx' });
       }
     }
