@@ -210,8 +210,8 @@ test('model proposal preflight denies unowned and special-bit evidence directori
   const dir = join(root, 'aieo-output');
   const marker = join(root, 'provider-would-run.flag');
   const output = join(dir, 'model-proposal.json');
-  mkdirSync(dir, { mode: 0o755 });
-  chmodSync(dir, 0o755);
+  mkdirSync(dir, { mode: 0o700 });
+  chmodSync(dir, 0o700);
   const run = (foreignUid = false) => {
     const source = [
       'import { writeFileSync } from "node:fs";',
@@ -234,7 +234,14 @@ test('model proposal preflight denies unowned and special-bit evidence directori
       assert.equal(existsSync(marker), false, 'provider simulation must not run');
       assert.equal(existsSync(output), false, 'no report may be written');
     }
-    chmodSync(dir, 0o755);
+    for (const mode of [0o755, 0o750]) {
+      chmodSync(dir, mode);
+      assert.notEqual(run().status, 0,
+        'public evidence directory must block before provider request: ' + mode.toString(8));
+      assert.equal(existsSync(marker), false, 'public directory must not reach provider');
+      assert.equal(existsSync(output), false, 'public directory must not create proposal');
+    }
+    chmodSync(dir, 0o700);
     assert.notEqual(run(true).status, 0, 'a foreign runner uid must block');
     assert.equal(existsSync(marker), false);
     assert.equal(existsSync(output), false);
