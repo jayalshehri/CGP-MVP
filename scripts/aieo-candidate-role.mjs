@@ -2,7 +2,7 @@
 // All role processes run trusted main-branch code and inspect immutable Git commits.
 // This is post-creation QA, not authorization to merge, publish or disclose source.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, lstatSync, openSync, fstatSync, writeSync, closeSync, constants } from 'node:fs';
+import { mkdirSync, lstatSync, openSync, fstatSync, readSync, writeSync, closeSync, constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
@@ -119,7 +119,7 @@ function writeReport(role, report) {
   try {
     // O_EXCL atomically refuses an existing output, even if it is an ordinary
     // private file. Do not reopen old reports writable and truncate them.
-    fd = openSync(name, constants.O_WRONLY | constants.O_CREAT |
+    fd = openSync(name, constants.O_RDWR | constants.O_CREAT |
       constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
   } catch (error) {
     if (error?.code !== 'EEXIST') block();
@@ -143,6 +143,21 @@ function writeReport(role, report) {
       if (count <= 0) block();
       written += count;
     }
+    // A successful write return value only attests the count, not the bytes.
+    // Independently read back the same opened inode, with a one-byte overread
+    // guard, before allowing Developer/QA/Security/Reviewer evidence to pass.
+    // This is especially important for the first Developer handoff, which has
+    // no preceding report against which its content can be compared.
+    const echoed = Buffer.alloc(data.length + 1);
+    let echoedBytes = 0;
+    while (echoedBytes < echoed.length) {
+      const count = readSync(fd, echoed, echoedBytes,
+        echoed.length - echoedBytes, echoedBytes);
+      if (count === 0) break;
+      echoedBytes += count;
+    }
+    if (echoedBytes !== data.length ||
+        !echoed.subarray(0, echoedBytes).equals(data)) block();
     const file = fstatSync(fd);
     const current = lstatSync(name);
     const directoryNow = trustedReportDirectory();
