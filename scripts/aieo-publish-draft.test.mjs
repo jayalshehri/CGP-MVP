@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync, symlinkSync, linkSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync, symlinkSync, linkSync, unlinkSync, renameSync, readlinkSync } from 'node:fs';
 import { join, dirname, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -964,6 +964,48 @@ for (const [label, helperSelector, shouldPass] of [
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   });
 }
+
+// Pin API creation, remote Draft readback and independent CI dispatch to the
+// CLI binary resolved before gh auth setup. A malicious authentication helper
+// can switch a writable PATH symlink, but must not redirect subsequent
+// credential-bearing API calls to another executable. Only fixture credentials.
+test('publisher continues with pinned gh executable after PATH symlink swap during auth', () => {
+  const f = fixture();
+  try {
+    const ghLink = join(f.root, 'bin', 'gh');
+    const trustedCli = join(f.root, 'trusted-gh');
+    const rogueCli = join(f.root, 'rogue-gh');
+    const rogueLog = join(f.root, 'rogue-invocation.log');
+    renameSync(ghLink, trustedCli);
+    symlinkSync(trustedCli, ghLink);
+    writeFileSync(rogueCli,
+      '#!/bin/sh\n' + 'printf rogue > ' + JSON.stringify(rogueLog) +
+      '\nexit 97\n', { mode: 0o755 });
+    const original = readFileSync(trustedCli, 'utf8');
+    const marker = "if(a[0]==='auth'||a[0]==='workflow')process.exit(0);";
+    assert.ok(original.includes(marker));
+    const swap = "if(a[0]==='auth'&&process.env.AIEO_FAKE_RESPONSE==='auth-swap-gh-symlink'){" +
+      "const fs=require('node:fs');fs.unlinkSync(" + JSON.stringify(ghLink) +
+      ");fs.symlinkSync(" + JSON.stringify(rogueCli) + "," + JSON.stringify(ghLink) +
+      ");process.exit(0);}\n";
+    writeFileSync(trustedCli, original.replace(marker, swap + marker));
+    const mainBefore = git(f.workspace, 'rev-parse', 'main');
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace,
+      env: { ...f.env, AIEO_FAKE_RESPONSE: 'auth-swap-gh-symlink' },
+      encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+    assert.equal(readlinkSync(ghLink), rogueCli, 'PATH symlink must actually change');
+    assert.equal(existsSync(rogueLog), false, 'rogue gh must never execute');
+    assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
+    assert.match(readFileSync(f.log, 'utf8'), /pr view/);
+    assert.match(git(f.workspace, 'ls-remote', '--heads', f.remote),
+      /refs\/heads\/aieo\/model-proposal-99123-1/);
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), mainBefore);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
 
 test('publisher rejects remote main drift before branch, push, or any GitHub CLI call', () => {
   const f = fixture();
