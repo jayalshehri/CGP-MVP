@@ -294,8 +294,18 @@ export function verifyOfficialPublisherOrigin(fetchUrls, pushUrls) {
   }
   return true;
 }
+// Remote aliases are mutable Git configuration. Capture BOTH resolved fetch
+// and push targets, and re-attest them after local Git work and gh auth setup.
+// This also guards the offline file-remote rehearsal against a late pushurl
+// rewrite, without making that fixture an authorization for live publication.
+function resolvedOrigin() {
+  const urls = (options) => command('git', ['remote', 'get-url', ...options, 'origin'])
+    .trim().split('\n');
+  return { fetchUrls: urls(['--all']), pushUrls: urls(['--push', '--all']) };
+}
 function assertTrustedOrigin(env) {
-  if (env.GITHUB_ACTIONS !== 'true') return; // validateDispatch already pinned a credential-free fixture
+  const observed = resolvedOrigin();
+  if (env.GITHUB_ACTIONS !== 'true') return observed; // credential-free fixture only
   // An official origin URL is insufficient: Git may route push/fetch through
   // a URL-scoped proxy, inject credentials/headers, disable TLS, or run a
   // configured remote helper. Refuse these before any network operation while
@@ -305,9 +315,8 @@ function assertTrustedOrigin(env) {
     .trim().split('\n');
   try { verifyOfficialCandidateFetchConfig(configNames); }
   catch { fail('publisher Git transport configuration is unsafe'); }
-  const urls = (options) => command('git', ['remote', 'get-url', ...options, 'origin'])
-    .trim().split('\n');
-  verifyOfficialPublisherOrigin(urls(['--all']), urls(['--push', '--all']));
+  verifyOfficialPublisherOrigin(observed.fetchUrls, observed.pushUrls);
+  return observed;
 }
 
 function assertTrustedCheckout(env, path) {
@@ -343,7 +352,7 @@ export function publishDraft({ env = process.env } = {}) {
   catch { fail('Git content filter; executable clean filters are forbidden'); }
   assertTrustedCheckout(env, path);
   // Fail before token-bearing remote reads, branch creation or publication.
-  assertTrustedOrigin(env);
+  const initialOrigin = assertTrustedOrigin(env);
   // Refuse pre-staged changes, untracked files and whitespace errors before any write.
   if (command('git', ['diff', '--cached', '--name-only']).trim()) fail('unexpected staged files');
   if (command('git', ['ls-files', '--others', '--exclude-standard'])
@@ -423,7 +432,19 @@ export function publishDraft({ env = process.env } = {}) {
         candidateSha + ' ' + baseSha) {
     fail('committed proposal differs from independently reviewed candidate');
   }
+  // A prior local Git operation could change .git/config (including pushurl)
+  // after the first trusted-origin preflight. Recheck the full transport
+  // policy before gh authentication, while no remote candidate was pushed.
+  if (!identical(assertTrustedOrigin(env), initialOrigin)) {
+    fail('origin resolution changed before candidate push');
+  }
   command('gh', ['auth', 'setup-git']);
+  // The authentication setup itself is another subprocess boundary. If it
+  // rewrites origin's pushurl or URL aliases, never send the candidate or
+  // GH_TOKEN to the newly selected destination.
+  if (!identical(resolvedOrigin(), initialOrigin)) {
+    fail('origin resolution changed before candidate push');
+  }
   // Disable pre-push hooks as well: they otherwise execute with the
   // write-scoped GitHub token even though pre-commit hooks are disabled.
   command('git', ['-c', 'core.hooksPath=/dev/null', 'push',
