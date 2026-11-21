@@ -19,7 +19,7 @@ const route = '  const controlId = useMemo(() => /^\\/controls\\/(\\d+)(?:\\/|$)
 const original = ['function fixture() {', route, '  const statusLabel = "Old status";', '}', ''].join('\n');
 const candidate = original.replace('"Old status"', '"Current status"');
 
-test('candidate Developer report rejects ctime-only race between fstat and final lstat', () => {
+test('candidate Developer report rejects ctime race and silently corrupted write bytes', () => {
   const root = mkdtempSync(join(tmpdir(), 'aieo-role-report-race-'));
   try {
     const cwd = join(root, 'work');
@@ -119,6 +119,48 @@ test('candidate Developer report rejects ctime-only race between fstat and final
     assert.equal(statSync(join(cwd, expectedPath)).mode & 0o7777, 0o600);
     assert.equal(git('rev-parse', 'main'), base,
       'untrusted report must never change the trusted main commit');
+
+    // A writeSync can report the original byte count while a faulty or
+    // injected writer actually stores different bytes. The producer must
+    // compare the inode's readback with its intended canonical report.
+    rmSync(join(cwd, 'aieo-output'), { recursive: true, force: true });
+    const corruptMarker = join(root, 'corrupted-write.marker');
+    writeFileSync(shim, [
+      "import fs from 'node:fs';",
+      "import { syncBuiltinESMExports } from 'node:module';",
+      'const nativeWrite = fs.writeSync;',
+      'let corrupted = false;',
+      'fs.writeSync = (fd, data, offset, length, position) => {',
+      '  const status = Buffer.from(' + JSON.stringify('"status": "proposed"') + ');',
+      '  if (!corrupted && Buffer.isBuffer(data) && data.includes(status)) {',
+      '    corrupted = true;',
+      '    const changed = Buffer.from(data);',
+      '    const tokenAt = changed.indexOf(Buffer.from(' + JSON.stringify('"proposed"') + '));',
+      '    changed[tokenAt + 8] = 0x58; // "proposeX" keeps the original byte length',
+      '    fs.writeFileSync(' + JSON.stringify(corruptMarker) + ', "corrupted");',
+      '    return nativeWrite(fd, changed, offset, length, position);',
+      '  }',
+      '  return nativeWrite(fd, data, offset, length, position);',
+      '};',
+      'syncBuiltinESMExports();',
+      ''
+    ].join('\n'));
+    const poisoned = run(true);
+    assert.equal(readFileSync(corruptMarker, 'utf8'), 'corrupted',
+      'the deliberate same-length write alteration must actually execute');
+    assert.notEqual(poisoned.status, 0, 'mismatched on-disk report must fail closed');
+    assert.match(poisoned.stderr, /candidate role blocked/);
+    assert.match(readFileSync(join(cwd, expectedPath), 'utf8'), /"proposeX"/,
+      'the test must demonstrate altered bytes actually reached the inode');
+    assert.equal(git('rev-parse', 'main'), base,
+      'failed evidence must not modify the trusted branch');
+
+    rmSync(join(cwd, 'aieo-output'), { recursive: true, force: true });
+    const recovered = run(false);
+    assert.equal(recovered.status, 0, recovered.stderr);
+    assert.equal(JSON.parse(recovered.stdout).status, 'proposed',
+      'an untouched private report must still be accepted');
+
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
