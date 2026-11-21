@@ -79,7 +79,9 @@ function writeExclusiveReport(path, report) {
     if (!safeDirectory(directory, uid)) block();
     // Exclusivity must be enforced by the open syscall, not an earlier
     // existence check. O_NOFOLLOW adds another barrier to alias swaps.
-    fd = openSync(path, constants.O_WRONLY | constants.O_CREAT |
+    // Open read/write exclusively so the producer can verify the exact bytes
+    // from the same inode before any downstream role sees a success report.
+    fd = openSync(path, constants.O_RDWR | constants.O_CREAT |
       constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     let used = 0;
     while (used < data.length) {
@@ -87,6 +89,18 @@ function writeExclusiveReport(path, report) {
       if (count <= 0) block();
       used += count;
     }
+    // The successful write count alone does not prove what hit the inode:
+    // verify a byte-for-byte readback, including an extra-byte check.
+    // This catches a corrupted or altered write before committing evidence.
+    const echoed = Buffer.alloc(data.length + 1);
+    let echoedBytes = 0;
+    while (echoedBytes < echoed.length) {
+      const count = readSync(fd, echoed, echoedBytes, echoed.length - echoedBytes, echoedBytes);
+      if (count === 0) break;
+      echoedBytes += count;
+    }
+    if (echoedBytes !== data.length ||
+        !echoed.subarray(0, echoedBytes).equals(data)) block();
     const file = fstatSync(fd);
     const current = lstatSync(path);
     const directoryNow = lstatSync('aieo-output');
