@@ -190,6 +190,7 @@ test('legitimate no-change flow verifies but changed hashes cannot masquerade as
   assert.equal(fixed.developer.status, 'no-change');
   assert.equal(fixed.reviewer.status, 'verified-no-change');
   assert.equal(fixedHash, fixed.developer.candidateHash);
+  assert.notEqual(fixedHash, sourceHash, 'stale and fixed synthetic source must differ');
 
   for (const role of ['developer', 'reviewer']) {
     const verdict = { ...fixed[role], ...(role === 'developer'
@@ -204,14 +205,14 @@ test('legitimate no-change flow verifies but changed hashes cannot masquerade as
     }), valid);
 
     const changedVerdict = { ...verdict, ...(role === 'developer'
-      ? { candidateHash } : {}) };
+      ? { candidateHash: sourceHash } : {}) };
     assert.throws(() => buildHandoffArtifact({
-      role, task: APPROVED_TASK, sourceHash: fixedHash, candidateHash,
+      role, task: APPROVED_TASK, sourceHash: fixedHash, candidateHash: sourceHash,
       verdict: changedVerdict
     }), /Inconsistent .* handoff state and content hashes/);
     assert.throws(() => verifyHandoffArtifact({
-      artifact: { ...valid, candidateHash }, role, task: APPROVED_TASK,
-      sourceHash: fixedHash, candidateHash, expected: fixed[role]
+      artifact: { ...valid, candidateHash: sourceHash }, role, task: APPROVED_TASK,
+      sourceHash: fixedHash, candidateHash: sourceHash, expected: fixed[role]
     }), /Inconsistent .* handoff state and content hashes/);
   }
 });
