@@ -78,44 +78,57 @@ for (const [label, mutate] of mutations) exercise(label, mutate);
 
 // GitHub jobs are independent: a downloaded, authentic handoff from a previous
 // job must not be accepted against a changed checkout, even if nobody edits
-// the artifact itself. Exercise each of the three receiving CLIs on its own
-// against copies of the real GitHub-downloaded evidence.
-for (const role of ['qa', 'security', 'reviewer']) {
-  const work = mkdtempSync(join(tmpdir(), 'aieo-source-drift-'));
-  try {
-    mkdirSync(join(work, 'components'), { mode: 0o700 });
-    mkdirSync(join(work, 'aieo-output'), { mode: 0o700 });
-    const changedSource = fixtureSource + '\n// Synthetic source drift after Developer attestation\n';
-    assert.notEqual(changedSource, fixtureSource);
-    writeFileSync(join(work, 'components', 'FeedbackWidget.tsx'),
-      changedSource, { mode: 0o600, flag: 'wx' });
-    const inputs = role === 'reviewer' ? roles : ['developer'];
-    for (const prior of inputs) {
-      writeFileSync(join(work, 'aieo-output', prior + '.json'),
-        JSON.stringify(originals[prior], null, 2) + '\n',
-        { mode: 0o600, flag: 'wx' });
+// the artifact itself. Test BOTH appended bytes and an equal-byte-length
+// mutation: accepting the latter would expose size-only source attestations.
+const originalMarker = 'function example() {';
+assert.equal(fixtureSource.split(originalMarker).length - 1, 1,
+  'synthetic fixture must contain exactly one same-length mutation marker');
+const sameLengthSource = fixtureSource.replace(originalMarker, 'function Example() {');
+assert.notEqual(sameLengthSource, fixtureSource);
+assert.equal(Buffer.byteLength(sameLengthSource), Buffer.byteLength(fixtureSource),
+  'same-length test must not be reducible to a file-size check');
+const driftCases = [
+  ['appended', fixtureSource + '\n// Synthetic source drift after Developer attestation\n'],
+  ['same-byte-length', sameLengthSource]
+];
+for (const [driftType, changedSource] of driftCases) {
+  for (const role of ['qa', 'security', 'reviewer']) {
+    const work = mkdtempSync(join(tmpdir(), 'aieo-source-drift-'));
+    try {
+      mkdirSync(join(work, 'components'), { mode: 0o700 });
+      mkdirSync(join(work, 'aieo-output'), { mode: 0o700 });
+      assert.notEqual(changedSource, fixtureSource);
+      writeFileSync(join(work, 'components', 'FeedbackWidget.tsx'),
+        changedSource, { mode: 0o600, flag: 'wx' });
+      const inputs = role === 'reviewer' ? roles : ['developer'];
+      for (const prior of inputs) {
+        writeFileSync(join(work, 'aieo-output', prior + '.json'),
+          JSON.stringify(originals[prior], null, 2) + '\n',
+          { mode: 0o600, flag: 'wx' });
+      }
+      const checked = spawnSync(process.execPath, [roleCli, role], {
+        cwd: work,
+        env: { PATH: process.env.PATH || '/usr/bin:/bin',
+          AIEO_TASK: 'feedback-control-route-boundary' },
+        encoding: 'utf8', timeout: 10000
+      });
+      assert.equal(checked.error, undefined, role + ': drift check did not execute');
+      assert.notEqual(checked.status, 0,
+        role + ': stale downloaded evidence was incorrectly approved after ' + driftType);
+      assert.match(checked.stderr, /Invalid, stale, or mismatched developer handoff artifact/,
+        role + ': rejection must be source-bound, not an unrelated failure');
+      assert.equal(existsSync(join(work, 'aieo-output', role + '.json')), false,
+        role + ': stale evidence must not produce new role approval');
+      assert.equal(readFileSync(join(work, 'components', 'FeedbackWidget.tsx'), 'utf8'),
+        changedSource, role + ': rejection must not alter the test source');
+      console.log(role + ': rejected authentic handoff after ' + driftType + ' source drift');
+    } finally {
+      rmSync(work, { recursive: true, force: true });
     }
-    const checked = spawnSync(process.execPath, [roleCli, role], {
-      cwd: work,
-      env: { PATH: process.env.PATH || '/usr/bin:/bin',
-        AIEO_TASK: 'feedback-control-route-boundary' },
-      encoding: 'utf8', timeout: 10000
-    });
-    assert.equal(checked.error, undefined, role + ': drift check did not execute');
-    assert.notEqual(checked.status, 0,
-      role + ': stale downloaded evidence was incorrectly approved');
-    assert.match(checked.stderr, /Invalid, stale, or mismatched developer handoff artifact/,
-      role + ': rejection must be an actual source-bound evidence mismatch');
-    assert.equal(existsSync(join(work, 'aieo-output', role + '.json')), false,
-      role + ': stale evidence must not produce new role approval');
-    assert.equal(readFileSync(join(work, 'components', 'FeedbackWidget.tsx'), 'utf8'),
-      changedSource, role + ': rejection must not alter the test source');
-    console.log(role + ': rejected authentic handoff after source drift');
-  } finally {
-    rmSync(work, { recursive: true, force: true });
   }
 }
 assert.equal(readFileSync(source, 'utf8'), fixtureSource,
   'negative cases must never change application or fixture source');
 console.log('AIEO GitHub artifact boundary: 1 real clean pass + ' +
-  mutations.length + ' independent tampered-copy rejections');
+  mutations.length + ' independent tampered-copy rejections and ' +
+  driftCases.length * 3 + ' independent source-drift rejections');
