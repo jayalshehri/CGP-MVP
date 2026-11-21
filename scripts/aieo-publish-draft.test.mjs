@@ -909,6 +909,62 @@ test('publisher accepts only canonical GitHub CLI post-auth credential helper', 
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
+// A basename-only whitelist such as "!/tmp/gh auth git-credential" is
+// insufficient: Git executes an arbitrary absolute helper with the scoped
+// GitHub token on a real HTTPS push. Exercise the real publisher CLI and
+// local bare Git remote to ensure the binary is bound to the GH CLI previously
+// found on the trusted runner PATH. Only fake credentials are involved.
+for (const [label, helperSelector, shouldPass] of [
+  ['the attested absolute gh path', (f) =>
+    '!' + join(f.root, 'bin', 'gh') + ' auth git-credential', true],
+  ['the attested quoted gh path', (f) =>
+    '!"' + join(f.root, 'bin', 'gh') + '" auth git-credential', true],
+  ['an unrelated executable named gh', (f) => {
+    const rogue = join(f.root, 'rogue', 'gh');
+    mkdirSync(dirname(rogue), { recursive: true });
+    writeFileSync(rogue, '#!/bin/sh\\nexit 0\\n', { mode: 0o755 });
+    return '!' + rogue + ' auth git-credential';
+  }, false]
+]) {
+  test('publisher ' + (shouldPass ? 'accepts ' : 'rejects ') + label +
+    ' after authentication', () => {
+    const f = fixture();
+    try {
+      const helper = helperSelector(f);
+      const fakeGh = join(f.root, 'bin', 'gh');
+      const existing = readFileSync(fakeGh, 'utf8');
+      const marker = "if(a[0]==='auth'||a[0]==='workflow')process.exit(0);";
+      assert.ok(existing.includes(marker));
+      const injection = "if(a[0]==='auth'&&process.env.AIEO_FAKE_RESPONSE==='auth-absolute-helper-case'){" +
+        "execFileSync('git',['config','credential.https://github.com.helper'," +
+        JSON.stringify(helper) + "]);process.exit(0);}\n";
+      writeFileSync(fakeGh, existing.replace(marker, injection + marker));
+      const mainBefore = git(f.workspace, 'rev-parse', 'main');
+      const child = spawnSync(process.execPath, [publisher], {
+        cwd: f.workspace,
+        env: { ...f.env, AIEO_FAKE_RESPONSE: 'auth-absolute-helper-case' },
+        encoding: 'utf8', timeout: 20000
+      });
+      if (shouldPass) {
+        assert.equal(child.status, 0, child.stderr);
+        assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+        assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
+        assert.match(git(f.workspace, 'ls-remote', '--heads', f.remote),
+          /refs\\/heads\\/aieo\\/model-proposal-99123-1/);
+      } else {
+        assert.notEqual(child.status, 0, 'foreign absolute helper must be rejected');
+        assert.match(child.stderr,
+          /publisher Git transport configuration unsafe after authentication/);
+        assert.equal(readFileSync(f.log, 'utf8').trim(), 'auth setup-git');
+        assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+          /refs\\/heads\\/aieo\\/model-proposal-99123-1/,
+          'candidate must never reach the remote with a foreign credential helper');
+      }
+      assert.equal(git(f.workspace, 'rev-parse', 'main'), mainBefore);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+}
+
 test('publisher rejects remote main drift before branch, push, or any GitHub CLI call', () => {
   const f = fixture();
   try {
