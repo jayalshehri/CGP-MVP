@@ -1,6 +1,7 @@
 // Trusted, fail-closed publisher. It cannot merge, approve, or deploy.
 // Call only after a manual main-branch dispatch and successful application gates.
-import { lstatSync, openSync, fstatSync, readSync, closeSync, constants } from 'node:fs';
+import { lstatSync, openSync, fstatSync, readSync, closeSync, constants, statSync, realpathSync } from 'node:fs';
+import { delimiter, isAbsolute, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
@@ -324,14 +325,40 @@ function assertTrustedOrigin(env) {
 // extra headers, URL rewrites, or executable credential helpers before push.
 // Re-attest after gh setup, not just the resolved origin URL. Only the CLI's
 // exact GitHub/gist credential helper command is permitted as a new setting.
-function assertPostAuthTransportConfiguration() {
+// Capture exactly the gh executable used by the publisher BEFORE the auth
+// subprocess gets a chance to mutate Git config. An arbitrary /tmp/gh ending
+// in the right basename must never be accepted as a credential helper: Git
+// would execute that binary with the write-scoped token during push.
+function trustedGitHubCliPath() {
+  const directories = (process.env.PATH || '').split(delimiter);
+  if (!directories.length || directories.some((path) => !path || !isAbsolute(path))) {
+    fail('publisher PATH does not identify a trusted GitHub CLI');
+  }
+  for (const directory of directories) {
+    try {
+      const candidate = join(directory, 'gh');
+      const info = statSync(candidate);
+      if (info.isFile() && (info.mode & 0o111)) return realpathSync(candidate);
+    } catch { /* Skip PATH directories without an executable gh. */ }
+  }
+  fail('publisher GitHub CLI executable not found');
+}
+
+function assertPostAuthTransportConfiguration(trustedGhPath) {
   const names = command('git', ['config', '--name-only', '--list'])
     .trim().split('\n');
   const officialHelpers = new Set([
     'credential.https://github.com.helper',
     'credential.https://gist.github.com.helper'
   ]);
-  const allowedHelper = /^!(?:(['"])(?:\/[A-Za-z0-9_.+@-]+)+\/gh\1|(?:\/[A-Za-z0-9_.+@-]+)+\/gh|gh) auth git-credential$/;
+  const absoluteHelper = /^!(?:(['"])(\/(?:[A-Za-z0-9_.+@-]+\/)*gh)\1|(\/(?:[A-Za-z0-9_.+@-]+\/)*gh)) auth git-credential$/;
+  const allowedHelper = (value) => {
+    if (value === '!gh auth git-credential') return true;
+    const match = absoluteHelper.exec(value);
+    if (!match) return false;
+    try { return realpathSync(match[2] || match[3]) === trustedGhPath; }
+    catch { return false; }
+  };
   try {
     verifyOfficialCandidateFetchConfig(names.filter((name) => !officialHelpers.has(name)));
     for (const name of new Set(names.filter((key) => /^credential\./i.test(key)))) {
@@ -342,8 +369,8 @@ function assertPostAuthTransportConfiguration() {
       // then append its scoped git-credential command. Never accept a shell
       // substitution, additional command or arbitrary helper executable.
       if (values.length < 1 || values.length > 4 ||
-          !values.some((value) => allowedHelper.test(value)) ||
-          values.some((value) => value !== '' && !allowedHelper.test(value))) {
+          !values.some((value) => allowedHelper(value)) ||
+          values.some((value) => value !== '' && !allowedHelper(value))) {
         throw new Error('untrusted credential helper');
       }
     }
@@ -471,6 +498,7 @@ export function publishDraft({ env = process.env } = {}) {
   if (!identical(assertTrustedOrigin(env), initialOrigin)) {
     fail('origin resolution changed before candidate push');
   }
+  const trustedGhPath = trustedGitHubCliPath();
   command('gh', ['auth', 'setup-git']);
   // The authentication setup itself is another subprocess boundary. If it
   // rewrites origin's pushurl or URL aliases, never send the candidate or
@@ -478,7 +506,7 @@ export function publishDraft({ env = process.env } = {}) {
   if (!identical(resolvedOrigin(), initialOrigin)) {
     fail('origin resolution changed before candidate push');
   }
-  assertPostAuthTransportConfiguration();
+  assertPostAuthTransportConfiguration(trustedGhPath);
   // Disable pre-push hooks as well: they otherwise execute with the
   // write-scoped GitHub token even though pre-commit hooks are disabled.
   command('git', ['-c', 'core.hooksPath=/dev/null', 'push',
