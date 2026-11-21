@@ -69,9 +69,18 @@ function command(binary, args, { raw = false } = {}) {
     : args;
   // Prevent local refs/replace from silently rewriting reviewed Git blobs
   // while the privileged publisher retains a scoped GitHub write token.
+  // Only the precisely scoped Git push needs a repository write token.
+  // Git's local reads, checks, branch creation and commit may execute helpers
+  // even with hook/filter guards, so do not give those processes GH_TOKEN.
+  // Retain GH_TOKEN for gh API verification and the single authorized push.
+  const env = publisherSubprocessEnvironment(process.env);
+  const authorizedPush = binary === 'git' && args.length === 5 &&
+    args[0] === '-c' && args[1] === 'core.hooksPath=/dev/null' &&
+    args[2] === 'push' && args[3] === 'origin' &&
+    /^HEAD:refs\/heads\/aieo\/(?:model-proposal|repair-feedback)-[0-9]+-[1-9][0-9]*$/.test(args[4]);
+  if (binary === 'git' && !authorizedPush) delete env.GH_TOKEN;
   return execFileSync(binary, safeArgs, {
-    encoding: raw ? undefined : 'utf8', stdio: 'pipe',
-    env: publisherSubprocessEnvironment(process.env)
+    encoding: raw ? undefined : 'utf8', stdio: 'pipe', env
   });
 }
 // Preserve immutable Git blob bytes until strict UTF-8 validation. Node's

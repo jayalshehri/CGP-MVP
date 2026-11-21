@@ -110,6 +110,56 @@ test('publisher isolates real Git and gh children from unrelated secrets', () =>
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
+// Every Git invocation is a possible execution boundary: credentialed
+// read-only commands must not have access to the write-scoped GH_TOKEN.
+test('publisher grants GH_TOKEN to the one verified Git push, never local Git reads or commits', () => {
+  const f = fixture();
+  try {
+    const realGit = process.env.PATH.split(delimiter)
+      .map((dir) => join(dir, 'git')).find((candidate) => existsSync(candidate));
+    assert.ok(realGit, 'Git executable must be available for the fixture');
+    // The fake gh stub performs its own Git inspection to model GitHub API
+    // readback. Exempt only those fake-gh implementation details so this
+    // wrapper precisely measures subprocesses launched by the publisher.
+    const fakeGh = join(f.root, 'bin', 'gh');
+    const ghCode = readFileSync(fakeGh, 'utf8');
+    const from = "const g=(...args)=>execFileSync('git',args,";
+    assert.ok(ghCode.includes(from));
+    writeFileSync(fakeGh, ghCode.replace(from,
+      'const g=(...args)=>execFileSync(' + JSON.stringify(realGit) + ',args,'));
+
+    const log = join(f.root, 'git-credential-scope.log');
+    const wrapper = join(f.root, 'bin', 'git');
+    writeFileSync(wrapper, '#!' + process.execPath + '\n' + [
+      "const {spawnSync}=require('node:child_process');",
+      "const {appendFileSync}=require('node:fs');",
+      'const args=process.argv.slice(2);',
+      "const push=args.includes('push');",
+      "const token=Boolean(process.env.GH_TOKEN);",
+      'appendFileSync(' + JSON.stringify(log) +
+        ",JSON.stringify({push,token})+'\\n');",
+      'if(push!==token)process.exit(86);',
+      'const result=spawnSync(' + JSON.stringify(realGit) +
+        ',args,{stdio:"inherit",env:process.env});',
+      'process.exit(result.status??87);'
+    ].join('\n') + '\n');
+    chmodSync(wrapper, 0o755);
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(child.status, 0, 'Git token scope must preserve the Draft publisher: ' + child.stderr);
+    assert.match(child.stdout, /draft-pr-created/);
+    const attestations = readFileSync(log, 'utf8').trim().split('\n')
+      .map((line) => JSON.parse(line));
+    assert.ok(attestations.some((entry) => entry.push && entry.token),
+      'verified Git push still receives the scoped credential');
+    assert.ok(attestations.some((entry) => !entry.push && !entry.token),
+      'local Git preflight and commit operate without a write token');
+    assert.ok(attestations.every((entry) => entry.push === entry.token),
+      'no other publisher Git subprocess may inherit GH_TOKEN');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test('publisher subprocess environment never forwards test-only knobs in Actions', () => {
   const scoped = publisherSubprocessEnvironment({
     PATH: '/usr/bin', HOME: '/tmp', GH_TOKEN: 'synthetic-not-a-secret',
