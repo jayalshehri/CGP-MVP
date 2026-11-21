@@ -90,6 +90,10 @@ const cases = [
     writeFileSync(join(output, 'developer.json'), 'x'.repeat(65537), { mode: 0o644 })],
   ['group-writable evidence directory', ({ output }) =>
     chmodSync(output, 0o770)],
+  ['group/other traversable evidence directory', ({ output }) =>
+    chmodSync(output, 0o755)],
+  ['group-readable evidence directory', ({ output }) =>
+    chmodSync(output, 0o750)],
   ['nonstandard Unicode role filename', ({ output }) =>
     writeFileSync(join(output, 'securіty.json'), 'lookalike')]
 ];
