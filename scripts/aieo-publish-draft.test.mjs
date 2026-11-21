@@ -1007,6 +1007,92 @@ test('publisher continues with pinned gh executable after PATH symlink swap duri
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
+// GitHub CLI may install a PATH-resolved "!gh" helper. Replacing the gh PATH
+// symlink after authentication must not redirect the credential-bearing push.
+// Inspect the real Git subprocess arguments and separately exercise the exact
+// pinned helper against Git's credential protocol, entirely offline.
+test('publisher resets inherited credential helpers and pins gh for the tokened push', () => {
+  const f = fixture();
+  try {
+    const realGit = (process.env.PATH || '').split(delimiter)
+      .map((dir) => join(dir, 'git')).find((entry) => existsSync(entry));
+    assert.ok(realGit, 'fixture requires real Git');
+    const pushLog = join(f.root, 'push-args.json');
+    const gitShim = join(f.root, 'bin', 'git');
+    writeFileSync(gitShim, '#!' + process.execPath + '\n' + [
+      "const {spawnSync}=require('node:child_process');",
+      "const {writeFileSync}=require('node:fs');",
+      'const args=process.argv.slice(2);',
+      "if(args.includes('push'))writeFileSync(" + JSON.stringify(pushLog) +
+        ",JSON.stringify({args,token:process.env.GH_TOKEN}));",
+      'const r=spawnSync(' + JSON.stringify(realGit) +
+        ',args,{stdio:"inherit",env:process.env});',
+      'process.exit(r.status??97);'
+    ].join('\n') + '\n', { mode: 0o755 });
+    const ghLink = join(f.root, 'bin', 'gh');
+    const trustedGh = join(f.root, 'trusted-gh');
+    const rogueGh = join(f.root, 'rogue-gh');
+    const rogueMarker = join(f.root, 'rogue-gh-executed');
+    renameSync(ghLink, trustedGh);
+    symlinkSync(trustedGh, ghLink);
+    writeFileSync(rogueGh,
+      '#!/bin/sh\nprintf invoked > ' + JSON.stringify(rogueMarker) +
+      '\nexit 96\n', { mode: 0o755 });
+    const ghSource = readFileSync(trustedGh, 'utf8');
+    const authMarker = "if(a[0]==='auth'||a[0]==='workflow')process.exit(0);";
+    assert.ok(ghSource.includes(authMarker));
+    const setup = "if(a[0]==='auth'&&a[1]==='setup-git'&&" +
+      "process.env.AIEO_FAKE_RESPONSE==='auth-bare-helper-gh-swap'){" +
+      "const fs=require('node:fs');" +
+      "execFileSync('git',['config','credential.https://github.com.helper'," +
+      JSON.stringify('!gh auth git-credential') + "]);" +
+      "fs.unlinkSync(" + JSON.stringify(ghLink) + ");" +
+      "fs.symlinkSync(" + JSON.stringify(rogueGh) + "," +
+      JSON.stringify(ghLink) + ");process.exit(0);}\n";
+    const credential = "if(a[0]==='auth'&&a[1]==='git-credential'){" +
+      "console.log('username=fixture');" +
+      "console.log('password=fixture-token-not-a-secret');process.exit(0);}\n";
+    writeFileSync(trustedGh, ghSource.replace(authMarker, setup + credential + authMarker));
+    const main = git(f.workspace, 'rev-parse', 'main');
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace,
+      env: { ...f.env, AIEO_FAKE_RESPONSE: 'auth-bare-helper-gh-swap' },
+      encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(readlinkSync(ghLink), rogueGh, 'authentication must replace gh PATH link');
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
+    assert.equal(existsSync(rogueMarker), false, 'rogue CLI must not run');
+    const push = JSON.parse(readFileSync(pushLog, 'utf8'));
+    assert.equal(push.token, 'fixture-never-live');
+    const helperReset = push.args.indexOf('credential.helper=');
+    const scopedHelper = "credential.https://github.com.helper=!'"
+      + trustedGh + "' auth git-credential";
+    assert.ok(helperReset > 0, 'push must reset previously configured helpers');
+    assert.equal(push.args[helperReset - 1], '-c');
+    assert.equal(push.args[helperReset + 1], '-c');
+    assert.equal(push.args[helperReset + 2], scopedHelper);
+    const credentialResult = spawnSync(realGit, [
+      '-c', 'credential.helper=', '-c', scopedHelper,
+      'credential', 'fill'
+    ], {
+      cwd: f.workspace,
+      env: { ...process.env, PATH: f.env.PATH, GIT_TERMINAL_PROMPT: '0',
+        AIEO_FAKE_GH_LOG: f.log },
+      input: 'protocol=https\nhost=github.com\n\n',
+      encoding: 'utf8', timeout: 5000
+    });
+    assert.equal(credentialResult.status, 0, credentialResult.stderr);
+    assert.match(credentialResult.stdout, /username=fixture/);
+    assert.match(credentialResult.stdout, /password=fixture-token-not-a-secret/);
+    assert.equal(existsSync(rogueMarker), false,
+      'real Git credential fill must invoke pinned gh rather than current PATH');
+    assert.match(git(f.workspace, 'ls-remote', '--heads', f.remote),
+      /refs\/heads\/aieo\/model-proposal-99123-1/);
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), main);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 // The write-scoped Git push must use the Git executable that was inspected
 // before gh authentication. Otherwise a PATH symlink swap at auth time can
 // redirect the push (and GH_TOKEN) to a rogue binary, even if the gh CLI
