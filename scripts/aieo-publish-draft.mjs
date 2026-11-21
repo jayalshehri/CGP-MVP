@@ -498,8 +498,13 @@ export function publishDraft({ env = process.env } = {}) {
   if (!identical(assertTrustedOrigin(env), initialOrigin)) {
     fail('origin resolution changed before candidate push');
   }
+  // Resolve the CLI once to its real executable. A subprocess may replace a
+  // writable PATH symlink during auth setup; all subsequent API operations
+  // must use the exact pre-auth executable, not resolve a new PATH entry.
   const trustedGhPath = trustedGitHubCliPath();
-  command('gh', ['auth', 'setup-git']);
+  const ghCommand = (binary, args, options) =>
+    command(binary === 'gh' ? trustedGhPath : binary, args, options);
+  ghCommand('gh', ['auth', 'setup-git']);
   // The authentication setup itself is another subprocess boundary. If it
   // rewrites origin's pushurl or URL aliases, never send the candidate or
   // GH_TOKEN to the newly selected destination.
@@ -526,19 +531,19 @@ export function publishDraft({ env = process.env } = {}) {
   }
   const body = 'Candidate scope, independent checks and build were verified before publishing. ' +
     'DRAFT only. No automatic approval, merge or production deployment.';
-  const pr = command('gh', ['pr', 'create', '--draft', '--base', 'main', '--head', branch,
+  const pr = ghCommand('gh', ['pr', 'create', '--draft', '--base', 'main', '--head', branch,
     '--title', 'AIEO: bounded ' + mode + ' proposal for review', '--body', body]).trim();
   // A printed URL is not proof: independently read back GitHub's exact Draft,
   // source/candidate commit OIDs, one-file scope, repository and official bot actor.
   // Failure stops downstream CI dispatch and success reporting; no auto-delete/merge.
   const attested = verifyRemoteDraft({ url: pr, branch, baseSha, candidateSha,
-    path, gh: command });
+    path, gh: ghCommand });
   if (mode === 'model') {
-    command('gh', ['workflow', 'run', 'cgp-required-ci.yml', '--ref', branch]);
+    ghCommand('gh', ['workflow', 'run', 'cgp-required-ci.yml', '--ref', branch]);
     // GITHUB_TOKEN-created PRs do not fire pull_request workflows. Explicitly
     // dispatch four read-only independent jobs using trusted main-branch code.
     // Dispatch is NOT evidence of successful review, merge or production readiness.
-    command('gh', ['workflow', 'run', 'aieo-model-candidate-roles.yml',
+    ghCommand('gh', ['workflow', 'run', 'aieo-model-candidate-roles.yml',
       '--ref', 'main', '-f', 'pr_number=' + attested.number]);
   }
   return { status: 'draft-pr-created', branch, pr: attested.url,
