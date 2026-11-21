@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments, pinReadOnlyGitHubCli } from './aieo-git-process-guard.mjs';
 
 test('independent read-only Git children do not inherit common CI or cloud credentials', () => {
   const input = {
@@ -104,4 +104,12 @@ test('independent read-only Git arguments disable executable hooks and transport
   assert.equal(diff.filter((v) => v === '--no-ext-diff').length, 1);
   assert.equal(diff.filter((v) => v === '--no-textconv').length, 1);
   assert.throws(() => readOnlyGitArguments([]));
+});
+
+test('read-only GH CLI pin refuses relative or empty PATH entries', () => {
+  for (const value of ['', 'bin', '/usr/bin:', ':/usr/bin', '/usr/bin:./tools']) {
+    assert.throws(() => pinReadOnlyGitHubCli({ PATH: value }),
+      /AIEO GitHub CLI PATH/, 'invalid PATH: ' + value);
+  }
+  assert.throws(() => pinReadOnlyGitHubCli({}), /AIEO GitHub CLI PATH/);
 });
