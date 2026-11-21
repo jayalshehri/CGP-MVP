@@ -12,6 +12,7 @@ const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf
 const model = read('.github/workflows/aieo-model-draft.yml');
 const developer = read('.github/workflows/aieo-developer-draft.yml');
 const foundation = read('.github/workflows/aieo-multi-agent.yml');
+const fixture = read('.github/workflows/aieo-fixture-e2e.yml');
 const publisher = read('scripts/aieo-publish-draft.mjs');
 const provider = read('aieo/lib/model-provider.mjs');
 const candidateRoles = read('.github/workflows/aieo-model-candidate-roles.yml');
@@ -265,7 +266,8 @@ test('AIEO action dependencies are pinned to reviewed immutable commits, not mov
     '.github/workflows/aieo-model-draft.yml',
     '.github/workflows/aieo-model-candidate-roles.yml',
     '.github/workflows/aieo-developer-draft.yml',
-    '.github/workflows/aieo-multi-agent.yml'
+    '.github/workflows/aieo-multi-agent.yml',
+    '.github/workflows/aieo-fixture-e2e.yml'
   ];
   for (const path of files) {
     const workflow = read(path);
@@ -665,4 +667,69 @@ test('deterministic patch build and publisher use isolated runners and exact one
     'importer must reject live credentials even with synthetic env argument');
   assert.match(importer, /JSON\.stringify\(readdirSync\(path\)\.sort\(\)\)/,
     'importer must reject unexpected artifact paths');
+});
+
+
+test('five-job synthetic GitHub fixture remains read-only, PR-scoped and pinned', () => {
+  // A pull_request job runs code from a potentially untrusted branch. This
+  // fixture must never become a privileged publish/dispatch workflow.
+  assert.match(fixture, /^on:\n  pull_request:\n/m);
+  assert.doesNotMatch(fixture,
+    /^\s*(?:push|pull_request_target|workflow_dispatch|workflow_run|repository_dispatch):/m);
+  assert.match(fixture, /^permissions:\n  contents: read\n/m);
+  assert.doesNotMatch(fixture,
+    /^\s*(?:contents|pull-requests|actions|id-token|packages|deployments): write/m);
+  assert.doesNotMatch(fixture, /GH_TOKEN:|GITHUB_TOKEN:|OPENROUTER_API_KEY:|secrets\./,
+    'synthetic roles must never receive a publishing or provider credential');
+  assert.doesNotMatch(fixture, /gh\s+(?:pr\s+create|auth|api)|git\s+push|npm\s+(?:install|ci)/,
+    'this four-agent proof must not publish, authenticate or run install scripts');
+
+  const jobIds = [...fixture.matchAll(/^  ([a-z][a-z-]+):\n    name:/gm)]
+    .map(match => match[1]);
+  assert.deepEqual(jobIds,
+    ['developer', 'qa', 'security', 'reviewer', 'handoff-rejection'],
+    'the fixture must retain four separate roles and one negative-test job');
+
+  const downloads = '      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093';
+  const jobs = new Map([
+    ['developer', []],
+    ['qa', ['developer']],
+    ['security', ['developer']],
+    ['reviewer', ['developer', 'qa', 'security']],
+    ['handoff-rejection', ['developer', 'qa', 'security']]
+  ]);
+  for (const [role, expected] of jobs) {
+    const fragments = fixture.split('\n  ' + role + ':\n');
+    assert.equal(fragments.length, 2, role + ' must have exactly one independent job');
+    const job = fragments[1].split(
+      /\n  (?:developer|qa|security|reviewer|handoff-rejection):\n/)[0];
+    assert.match(job, /runs-on: ubuntu-latest/);
+    assert.match(job, /persist-credentials: false/,
+      role + ' checkout must not retain GitHub credentials');
+    const sections = job.split(downloads).slice(1);
+    assert.equal(sections.length, expected.length,
+      role + ' must download exactly the approved evidence count');
+    for (const [i, section] of sections.entries()) {
+      const step = section.split('\n      - ')[0];
+      assert.ok(step.includes(
+        '        with:\n          name: aieo-fixture-' + expected[i] +
+        '\n          path: aieo-fixture/aieo-output\n'),
+      role + ' must pin an exact role artifact with no wildcard merge');
+      assert.doesNotMatch(step, /pattern:|merge-multiple:|run-id:/);
+    }
+    if (role === 'qa' || role === 'security' || role === 'reviewer') {
+      const imported = job.indexOf('node ../scripts/aieo-import-handoffs.mjs foundation');
+      const executed = job.indexOf('node ../scripts/aieo-role.mjs ' + role);
+      assert.ok(imported > 0 && executed > imported,
+        role + ' must inspect exact downloaded reports before independent execution');
+    }
+    if (role === 'handoff-rejection') {
+      assert.ok(job.includes('node ../scripts/aieo-import-rejection-fixture.mjs'));
+      assert.ok(job.includes('node ../scripts/aieo-handoff-rejection-fixture.mjs'));
+    }
+  }
+  assert.doesNotMatch(fixture, /merge-multiple:|pattern: aieo-/,
+    'an unexpected artifact must not be merged into verified evidence');
+  assert.match(fixture, /git diff --exit-code -- components\/FeedbackWidget\.tsx/,
+    'the synthetic fixture must assert application source has not changed');
 });
