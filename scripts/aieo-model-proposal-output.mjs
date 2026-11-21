@@ -1,7 +1,7 @@
 // A model proposal must never overwrite an existing path or follow an artifact alias.
 // Reserve an exclusive private report before contacting any optional provider.
 import {
-  mkdirSync, lstatSync, openSync, writeSync, closeSync, fstatSync, constants
+  mkdirSync, lstatSync, openSync, readSync, writeSync, closeSync, fstatSync, constants
 } from 'node:fs';
 
 const DIR = 'aieo-output';
@@ -64,7 +64,7 @@ export function writeExclusiveModelProposalReport(report, approvedDirectory) {
   try {
     // O_EXCL and O_NOFOLLOW refuse existing files and symlinks rather than
     // truncating an attacker-controlled target (including a hardlink).
-    fd = openSync(PATH, constants.O_WRONLY | constants.O_CREAT |
+    fd = openSync(PATH, constants.O_RDWR | constants.O_CREAT |
       constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     let written = 0;
     while (written < bytes.length) {
@@ -72,6 +72,17 @@ export function writeExclusiveModelProposalReport(report, approvedDirectory) {
       if (count <= 0) block();
       written += count;
     }
+    // A completed write is not proof that the provider proposal was stored
+    // unmodified. Re-read the same exclusively created inode before accepting
+    // its report (never follow a pathname after the original safe open).
+    const echoed = Buffer.alloc(bytes.length + 1);
+    let got = 0;
+    while (got < echoed.length) {
+      const count = readSync(fd, echoed, got, echoed.length - got, got);
+      if (count === 0) break;
+      got += count;
+    }
+    if (got !== bytes.length || !echoed.subarray(0, got).equals(bytes)) block();
     const file = fstatSync(fd);
     const path = lstatSync(PATH);
     const currentDirectory = lstatSync(DIR);
