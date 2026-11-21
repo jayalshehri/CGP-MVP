@@ -43,15 +43,17 @@ function readStrictGitSource(revision) {
   return source;
 }
 // The Developer's first evidence is not yet protected by a downstream
-// reader. Require an owned, non-special output directory before writing any
+// reader. Require a private 0700-style output directory before writing any
 // provenance; later roles also use this boundary for their own reports.
+// A 0755 directory exposes report names and metadata despite private files.
 function trustedReportDirectory() {
   try {
     const uid = process.getuid?.();
     if (!Number.isSafeInteger(uid)) block();
     const directory = lstatSync('aieo-output');
     if (!directory.isDirectory() || directory.isSymbolicLink() ||
-        directory.uid !== uid || (directory.mode & 0o7022)) block();
+        directory.uid !== uid || (directory.mode & 0o7077) ||
+        (directory.mode & 0o700) !== 0o700) block();
     return directory;
   } catch { block(); }
 }
@@ -159,7 +161,8 @@ function writeReport(role, report) {
         // descriptor's final timestamps, not just its size and inode.
         current.mtimeMs !== file.mtimeMs ||
         current.ctimeMs !== file.ctimeMs ||
-        directoryNow.uid !== directory.uid || (directoryNow.mode & 0o7022) ||
+        directoryNow.uid !== directory.uid || (directoryNow.mode & 0o7077) ||
+        (directoryNow.mode & 0o700) !== 0o700 ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) block();
   } catch { block(); }
   finally { if (fd !== undefined) closeSync(fd); }
