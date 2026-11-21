@@ -133,3 +133,37 @@ jobs:
           node -e "const d=require('./aieo-output/developer.json'); const r=require('./aieo-output/reviewer.json'); if(d.status !== 'proposed' || d.sourceHash === d.candidateHash || r.status !== 'draft-pr-eligible' || r.requiresHumanMerge !== true || r.handoffValidated !== true) process.exit(1)"
       - name: Confirm no application source changed
         run: git diff --exit-code -- components/FeedbackWidget.tsx
+
+  handoff-rejection:
+    name: Reject forged independently downloaded CI evidence
+    needs: [qa, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # pinned v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # pinned v4
+        with:
+          node-version: '24'
+      - run: node scripts/aieo-fixture-source.mjs
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned v4
+        with:
+          name: aieo-fixture-developer
+          path: aieo-fixture/aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned v4
+        with:
+          name: aieo-fixture-qa
+          path: aieo-fixture/aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned v4
+        with:
+          name: aieo-fixture-security
+          path: aieo-fixture/aieo-output
+      - name: Prove clean Reviewer approval then seven fail-closed tamper cases
+        run: |
+          set -euo pipefail
+          cd aieo-fixture
+          node ../scripts/aieo-import-handoffs.mjs foundation developer qa security
+          node ../scripts/aieo-handoff-rejection-fixture.mjs
+      - name: Confirm negative tests did not change application source
+        run: git diff --exit-code -- components/FeedbackWidget.tsx
