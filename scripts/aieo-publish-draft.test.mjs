@@ -57,7 +57,7 @@ function fixture() {
   }
   const log = join(root, 'fake-gh.log');
   const gh = join(bin, 'gh');
-  writeFileSync(gh, "#!/usr/bin/env node\nconst {appendFileSync}=require('node:fs');\nconst {execFileSync}=require('node:child_process');\nconst a=process.argv.slice(2);\nappendFileSync(process.env.AIEO_FAKE_GH_LOG,a.join(' ')+'\\n');\nconst g=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();\nif(a[0]==='pr'&&a[1]==='create'){\n  console.log(process.env.AIEO_FAKE_RESPONSE==='foreign-create-url'?'https://github.com/foreign/CGP-MVP/pull/123':'https://github.com/jayalshehri/CGP-MVP/pull/123');\n  process.exit(0);\n}\nif(a[0]==='pr'&&a[1]==='view'){\n  const v={\n    url:'https://github.com/jayalshehri/CGP-MVP/pull/123',state:'OPEN',isDraft:true,\n    baseRefName:'main',headRefName:'aieo/model-proposal-99123-1',\n    baseRefOid:g('rev-parse','main'),headRefOid:g('rev-parse','HEAD'),\n    headRepository:{nameWithOwner:'jayalshehri/CGP-MVP'},headRepositoryOwner:{login:'jayalshehri'},\n    files:[{path:'components/FeedbackWidget.tsx'}]\n  };\n  switch(process.env.AIEO_FAKE_RESPONSE){\n    case 'view-not-draft':v.isDraft=false;break;\n    case 'view-extra-file':v.files.push({path:'package.json'});break;\n    case 'view-wrong-head-oid':v.headRefOid='0'.repeat(40);break;\n    case 'bad-view-json':console.log('{invalid');process.exit(0);\n  }\n  console.log(JSON.stringify(v));process.exit(0);\n}\nif(a[0]==='api'&&a[1]==='repos/jayalshehri/CGP-MVP/pulls/123'){\n  const v={number:123,url:'https://github.com/jayalshehri/CGP-MVP/pull/123',\n    login:'github-actions[bot]',id:41898282,type:'Bot',\n    state:'open',draft:true,mergedAt:null,baseRef:'main',baseSha:g('rev-parse','main'),\n    baseRepo:'jayalshehri/CGP-MVP',headRef:'aieo/model-proposal-99123-1',\n    headSha:g('rev-parse','HEAD'),headRepo:'jayalshehri/CGP-MVP'};\n  if(process.env.AIEO_FAKE_RESPONSE==='actor-spoof')v.id=191056639;\n  if(process.env.AIEO_FAKE_RESPONSE==='rest-undrafted')v.draft=false;\n  if(process.env.AIEO_FAKE_RESPONSE==='rest-head-moved')v.headSha='0'.repeat(40);\n  console.log(JSON.stringify(v));process.exit(0);\n}\nif(a[0]==='auth'||a[0]==='workflow')process.exit(0);\nprocess.exit(4);\n");
+  writeFileSync(gh, "#!/usr/bin/env node\nconst {appendFileSync}=require('node:fs');\nconst {execFileSync}=require('node:child_process');\nconst a=process.argv.slice(2);\nappendFileSync(process.env.AIEO_FAKE_GH_LOG,a.join(' ')+'\\n');\nconst g=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();\nif(a[0]==='pr'&&a[1]==='create'){\n  console.log(process.env.AIEO_FAKE_RESPONSE==='foreign-create-url'?'https://github.com/foreign/CGP-MVP/pull/123':'https://github.com/jayalshehri/CGP-MVP/pull/123');\n  process.exit(0);\n}\nif(a[0]==='pr'&&a[1]==='view'){\n  const v={\n    url:'https://github.com/jayalshehri/CGP-MVP/pull/123',state:'OPEN',isDraft:true,\n    baseRefName:'main',headRefName:'aieo/model-proposal-99123-1',\n    baseRefOid:g('rev-parse','main'),headRefOid:g('rev-parse','HEAD'),\n    headRepository:{nameWithOwner:'jayalshehri/CGP-MVP'},headRepositoryOwner:{login:'jayalshehri'},\n    files:[{path:'components/FeedbackWidget.tsx'}]\n  };\n  switch(process.env.AIEO_FAKE_RESPONSE){\n    case 'view-not-draft':v.isDraft=false;break;\n    case 'view-extra-file':v.files.push({path:'package.json'});break;\n    case 'view-wrong-head-oid':v.headRefOid='0'.repeat(40);break;\n    case 'bad-view-json':console.log('{invalid');process.exit(0);\n  }\n  console.log(JSON.stringify(v));process.exit(0);\n}\nif(a[0]==='api'&&a[1]==='repos/jayalshehri/CGP-MVP/pulls/123'){\n  const v={number:123,url:'https://github.com/jayalshehri/CGP-MVP/pull/123',\n    login:'github-actions[bot]',id:41898282,type:'Bot',\n    state:'open',draft:true,mergedAt:null,baseRef:'main',baseSha:g('rev-parse','main'),\n    baseRepo:'jayalshehri/CGP-MVP',headRef:'aieo/model-proposal-99123-1',\n    headSha:g('rev-parse','HEAD'),headRepo:'jayalshehri/CGP-MVP'};\n  if(process.env.AIEO_FAKE_RESPONSE==='actor-spoof')v.id=191056639;\n  if(process.env.AIEO_FAKE_RESPONSE==='rest-undrafted')v.draft=false;\n  if(process.env.AIEO_FAKE_RESPONSE==='rest-head-moved')v.headSha='0'.repeat(40);\n  console.log(JSON.stringify(v));process.exit(0);\n}\nif(a[0]==='auth'&&process.env.AIEO_FAKE_RESPONSE==='auth-redirect-pushurl'){\nconst path=require('node:path');\nexecFileSync('git',['config','remote.origin.pushurl',path.join(path.dirname(process.env.AIEO_FAKE_GH_LOG),'trap.git')]);\nprocess.exit(0);\n}\nif(a[0]==='auth'||a[0]==='workflow')process.exit(0);\nprocess.exit(4);\n");
   chmodSync(gh, 0o755);
   const env = { ...process.env,
     PATH: bin + ':' + process.env.PATH, AIEO_FAKE_GH_LOG: log,
@@ -829,6 +829,35 @@ for (const movedRef of ['main', 'candidate']) {
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   });
 }
+
+// The gh authentication subprocess runs after the initial trusted-origin
+// check. If it unexpectedly changes origin.pushurl, never publish to that
+// alternate remote even though the candidate and earlier origin were valid.
+test('publisher blocks late pushurl rewrite by gh auth setup before token-bearing push', () => {
+  const f = fixture();
+  try {
+    const trap = join(f.root, 'trap.git');
+    git(f.root, 'init', '-q', '--bare', trap);
+    const base = git(f.workspace, 'rev-parse', 'main');
+    f.env.AIEO_FAKE_RESPONSE = 'auth-redirect-pushurl';
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
+    });
+    assert.notEqual(child.status, 0, 'late push redirection must fail closed');
+    assert.match(child.stderr, /origin resolution changed before candidate push/);
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), base);
+    assert.equal(git(f.workspace, 'remote', 'get-url', '--push', 'origin'), trap,
+      'fixture actually modified the remote push destination after preflight');
+    assert.equal(readFileSync(f.log, 'utf8').trim(), 'auth setup-git',
+      'no PR creation, workflow dispatch, merge or other GitHub write');
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', trap),
+      /refs\/heads\/aieo\/model-proposal-99123-1/,
+      'candidate must not reach the unapproved destination');
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
+      /refs\/heads\/aieo\/model-proposal-99123-1/,
+      'candidate must not be pushed anywhere');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
 
 test('publisher rejects remote main drift before branch, push, or any GitHub CLI call', () => {
   const f = fixture();
