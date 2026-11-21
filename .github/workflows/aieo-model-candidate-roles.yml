@@ -107,6 +107,19 @@ jobs:
           set -euo pipefail
           [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
           printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
+      # Do not allow GitHub artifact extraction to expose reports through a
+      # default 0755 directory, even momentarily before importer validation.
+      - name: Prepare private evidence directory before artifact extraction
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: mkdir -m 700 -- aieo-output
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
         env:
           BASH_ENV: ''
@@ -188,6 +201,19 @@ jobs:
           set -euo pipefail
           [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
           printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
+      # Do not allow GitHub artifact extraction to expose reports through a
+      # default 0755 directory, even momentarily before importer validation.
+      - name: Prepare private evidence directory before artifact extraction
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: mkdir -m 700 -- aieo-output
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
         env:
           BASH_ENV: ''
@@ -271,6 +297,19 @@ jobs:
           printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
       # Pin every handoff to its exact role artifact. Wildcard merge-multiple
       # could admit unexpected artifacts or overwrite independently verified evidence.
+      # Do not allow GitHub artifact extraction to expose reports through a
+      # default 0755 directory, even momentarily before importer validation.
+      - name: Prepare private evidence directory before artifact extraction
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: mkdir -m 700 -- aieo-output
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
         env:
           BASH_ENV: ''

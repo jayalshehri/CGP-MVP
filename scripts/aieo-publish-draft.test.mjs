@@ -29,7 +29,7 @@ function fixture() {
   git(workspace, 'config', 'user.email', 'fixture@example.invalid');
   git(workspace, 'remote', 'add', 'origin', remote);
   mkdirSync(join(workspace, 'components'));
-  mkdirSync(join(workspace, 'aieo-output'));
+  mkdirSync(join(workspace, 'aieo-output'), { mode: 0o700 });
   const source = 'function fixture() {\n' + route + '\n  const sample = 1;\n}\n';
   const candidate = source.replace('  const sample = 1;', '  const sample = 2;');
   const approvedTask = 'Improve the inert status label in this fixture.';
@@ -977,7 +977,7 @@ test('model publisher rejects writable and oversized reports or a writable hando
     writeFileSync(report, original);
     chmodSync(dir, 0o777);
     blocked('writable handoff directory');
-    chmodSync(dir, 0o755);
+    chmodSync(dir, 0o700);
     const child = spawnSync(process.execPath, [publisher], {
       cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 20000
     });

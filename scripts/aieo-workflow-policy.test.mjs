@@ -18,6 +18,24 @@ const provider = read('aieo/lib/model-provider.mjs');
 const candidateRoles = read('.github/workflows/aieo-model-candidate-roles.yml');
 const finalizer = read('scripts/aieo-candidate-finalize.mjs');
 
+test('independent role artifacts are downloaded only into precreated private directories', () => {
+  for (const [name, workflow] of [
+    ['foundation', foundation],
+    ['model-candidate', candidateRoles]
+  ]) {
+    for (const role of ['qa', 'security', 'reviewer']) {
+      const part = workflow.split('\n  ' + role + ':\n')[1]?.split(/\n  [a-z][a-z-]*:\n/)[0];
+      assert.ok(part, name + '/' + role + ': role job missing');
+      const prepare = part.indexOf('run: mkdir -m 700 -- aieo-output');
+      const firstDownload = part.indexOf('uses: actions/download-artifact@');
+      assert.ok(prepare >= 0 && firstDownload > prepare,
+        name + '/' + role + ': precreate private evidence dir BEFORE first extraction');
+      assert.match(part.slice(0, prepare), /name: (?:Create private destination|Prepare private evidence directory)/,
+        name + '/' + role + ': private preparation must be an explicit CI step');
+    }
+  }
+});
+
 test('provider-backed source sharing stays manual, explicit, and environment-scoped', () => {
   const guard = "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_external_source_sharing == true";
   assert.ok(model.includes(guard), 'model write job must require trusted manual main dispatch and opt-in');

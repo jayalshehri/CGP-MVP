@@ -26,7 +26,7 @@ test('model proposal passes three distinct CLI processes; forged handoffs fail c
     assert.ok(readFileSync(join(repositoryRoot, 'components', 'FeedbackWidget.tsx'), 'utf8').includes(route),
       'Fixture invariant must match actual CGP source');
     mkdirSync(dirname(path), { recursive: true });
-    mkdirSync(output);
+    mkdirSync(output, { mode: 0o700 });
     const original = 'function fixture() {\n' + route + '\n  const sample = 1;\n}\n';
     const actual = original.replace('  const sample = 1;', '  const sample = 2;');
     git('init', '-q');
@@ -81,7 +81,7 @@ test('independent model-role CLI refuses output aliases and pre-existing reports
       { cwd: root, timeout: 15000, encoding: 'utf8' });
     try {
       mkdirSync(dirname(target), { recursive: true });
-      mkdirSync(evidence);
+      mkdirSync(evidence, { mode: 0o700 });
       const original = ['function fixture() {', routeLine, '  const sample = 1;', '}', ''].join('\n');
       const actual = original.replace('  const sample = 1;', '  const sample = 2;');
       git('init', '-q');
@@ -128,7 +128,7 @@ test('model QA and Security CLIs reject linked candidate source without emitting
       { cwd: root, stdio: 'pipe', encoding: 'utf8' }).trim();
     try {
       mkdirSync(dirname(target));
-      mkdirSync(join(root, 'aieo-output'));
+      mkdirSync(join(root, 'aieo-output'), { mode: 0o700 });
       const original = ['function fixture() {', route,
         '  const sample = 1;', '}', ''].join('\n');
       const candidate = original.replace('  const sample = 1;', '  const sample = 2;');

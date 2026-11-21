@@ -55,7 +55,7 @@ test('mocked whole-chain independently reviews ' + scenario.name, () => {
     mkdirSync(workspace, { recursive: true });
     mkdirSync(bin);
     mkdirSync(dirname(target), { recursive: true });
-    mkdirSync(join(workspace, 'aieo-output'));
+    mkdirSync(join(workspace, 'aieo-output'), { mode: 0o700 });
     execFileSync('git', ['init', '-q', '--bare', remote], { cwd: root });
     git('init', '-q');
     git('config', 'user.name', 'Fixture');

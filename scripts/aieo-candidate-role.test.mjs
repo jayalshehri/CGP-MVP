@@ -1524,7 +1524,9 @@ test('independent roles and final attestation reject group/world-writable handof
     assert.notEqual(f.run('reviewer').status, 0, 'Reviewer cannot read evidence in writable handoff directory');
     assert.notEqual(verify().status, 0, 'post-build verifier rejects writable handoff directory');
     chmodSync(dir, 0o755);
-    assert.equal(verify().status, 0, 'safe directory permissions restore final attestation');
+    assert.notEqual(verify().status, 0, 'world-traversable evidence must not be accepted');
+    chmodSync(dir, 0o700);
+    assert.equal(verify().status, 0, 'safe private directory permissions restore final attestation');
     assert.equal(f.git('rev-parse', 'main'), f.base);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
@@ -1533,7 +1535,7 @@ test('Developer refuses a writable preexisting output before truncating its cont
   const f = setup();
   try {
     const dir = join(f.cwd, 'aieo-output');
-    mkdirSync(dir);
+    mkdirSync(dir, { mode: 0o700 });
     const output = join(dir, 'candidate-developer.json');
     const sentinel = 'PRESERVE UNTRUSTED FILE';
     writeFileSync(output, sentinel);
@@ -1591,7 +1593,7 @@ test('candidate role outputs refuse public pre-existing reports and preserve pri
   const f = setup();
   try {
     const dir = join(f.cwd, 'aieo-output');
-    mkdirSync(dir);
+    mkdirSync(dir, { mode: 0o700 });
     const output = join(dir, 'candidate-developer.json');
     const sentinel = 'DO NOT OVERWRITE READABLE EVIDENCE';
     // The old O_NOFOLLOW-only writer truncated these ordinary, readable files.

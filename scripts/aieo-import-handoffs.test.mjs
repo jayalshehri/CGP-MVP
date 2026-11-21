@@ -13,7 +13,7 @@ const report = JSON.stringify({ schemaVersion: 2, role: 'developer' }, null, 2) 
 function fixture(kind, roles) {
   const root = mkdtempSync(join(tmpdir(), 'aieo-import-evidence-'));
   const dir = join(root, 'aieo-output');
-  mkdirSync(dir);
+  mkdirSync(dir, { mode: 0o700 });
   const prefix = kind === 'candidate' ? 'candidate-' : '';
   const path = (role) => join(dir, prefix + role + '.json');
   for (const role of roles) writeFileSync(path(role), report, { mode: 0o644 });
@@ -75,7 +75,7 @@ for (const kind of ['foundation', 'candidate']) {
             'failed import must preserve every member payload');
         }
       }
-      chmodSync(f.dir, 0o755);
+      chmodSync(f.dir, 0o700);
       assert.equal(f.run().status, 0, 'safe import directory should recover');
       for (const role of roles)
         assert.equal(statSync(f.path(role)).mode & 0o777, 0o600);
@@ -95,11 +95,14 @@ for (const kind of ['foundation', 'candidate']) {
           'rejected importer must not first re-permission the inode');
       }
       chmodSync(developer, 0o644);
-      chmodSync(f.dir, 0o777);
-      assert.notEqual(f.run().status, 0, 'untrusted evidence directory must be refused');
-      assert.equal(statSync(developer).mode & 0o777, 0o644,
-        'rejected directory must not normalize evidence files');
-      chmodSync(f.dir, 0o755);
+      for (const mode of [0o777, 0o755, 0o750]) {
+        chmodSync(f.dir, mode);
+        assert.notEqual(f.run().status, 0,
+          'group/other-accessible evidence directory must be refused: ' + mode.toString(8));
+        assert.equal(statSync(developer).mode & 0o777, 0o644,
+          'rejected directory must not normalize evidence files');
+      }
+      chmodSync(f.dir, 0o700);
       chmodSync(developer, 0o644);
       writeFileSync(join(f.dir, 'unexpected.json'), report);
       assert.notEqual(f.run().status, 0, 'extra evidence is not an expected role');
@@ -165,7 +168,7 @@ test('all role evidence readers reject special file/directory bits and foreign u
       }
       chmodSync(f.dir, 0o2700);
       assert.notEqual(run().status, 0, kind + ': setgid evidence directory must be rejected');
-      chmodSync(f.dir, 0o755);
+      chmodSync(f.dir, 0o700);
       assert.equal(run().status, 0, kind + ': safe permissions should recover');
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   }
@@ -186,7 +189,7 @@ test('role report writers reject unsafe output-directory metadata before creatin
       assert.notEqual(write().status, 0, method + ': setgid output directory must fail');
       assert.equal(statSync(f.path('developer')).mode & 0o777, 0o644,
         'other evidence is never modified by a rejected writer');
-      chmodSync(f.dir, 0o755);
+      chmodSync(f.dir, 0o700);
       assert.equal(write().status, 0, method + ': ordinary output directory should work');
       assert.equal(statSync(output).mode & 0o777, 0o600);
       const original = readFileSync(output, 'utf8');
@@ -207,8 +210,8 @@ test('model proposal preflight denies unowned and special-bit evidence directori
   const dir = join(root, 'aieo-output');
   const marker = join(root, 'provider-would-run.flag');
   const output = join(dir, 'model-proposal.json');
-  mkdirSync(dir, { mode: 0o755 });
-  chmodSync(dir, 0o755);
+  mkdirSync(dir, { mode: 0o700 });
+  chmodSync(dir, 0o700);
   const run = (foreignUid = false) => {
     const source = [
       'import { writeFileSync } from "node:fs";',
@@ -231,7 +234,14 @@ test('model proposal preflight denies unowned and special-bit evidence directori
       assert.equal(existsSync(marker), false, 'provider simulation must not run');
       assert.equal(existsSync(output), false, 'no report may be written');
     }
-    chmodSync(dir, 0o755);
+    for (const mode of [0o755, 0o750]) {
+      chmodSync(dir, mode);
+      assert.notEqual(run().status, 0,
+        'public evidence directory must block before provider request: ' + mode.toString(8));
+      assert.equal(existsSync(marker), false, 'public directory must not reach provider');
+      assert.equal(existsSync(output), false, 'public directory must not create proposal');
+    }
+    chmodSync(dir, 0o700);
     assert.notEqual(run(true).status, 0, 'a foreign runner uid must block');
     assert.equal(existsSync(marker), false);
     assert.equal(existsSync(output), false);
