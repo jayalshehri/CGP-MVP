@@ -9,13 +9,15 @@
 // Lower-case custom elements (web components) and namespaced JSX/SVG tags
 // can also bind src/href or spread props. Lowercase dotted JSX member names
 // (ui.Button) are components too, even if the leading namespace is lowercase.
+// JSX identifiers may also begin with $ or _ or contain $ (e.g. <$Widget />,
+// <_widget /> and <UI.$Panel />). They are component references, not inert text.
 // Match native HTML names only when the *entire tag name* ends, so <a-custom>
 // is not accidentally parsed as an invalid <a> opening tag.
 // SVG container elements can change
 // the resolution of existing relative URLs via xmlBase / xml:base, even if
 // no href/src is added. Do not let those opening tags evade
 // full-source comparison merely because they are not native HTML tag names.
-const tagStart = /<\s*(?:(?:p|pre|nav|details|summary|dialog|textarea|select|option|optgroup|fieldset|legend|figure|figcaption|output|progress|meter|time|code|kbd|samp|b|i|u|s|mark|abbr|address|cite|dfn|sub|sup|hr|wbr|br|dl|dt|dd|thead|tbody|tfoot|col|colgroup|caption|menu|template|slot|map|param|hgroup|ruby|rt|rp|bdi|bdo|div|span|section|article|main|header|footer|aside|label|strong|em|small|h[1-6]|ul|ol|li|table|tr|td|th|blockquote|q|del|ins|body|html|picture|canvas|a|area|svg|g|defs|symbol|foreignObject|path|rect|circle|ellipse|line|polyline|polygon|text|tspan|stop|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object|animate|animateMotion|animateTransform|set|textPath|mpath|pattern|linearGradient|radialGradient|filter|mask|clipPath|marker|cursor|fontFaceUri|font-face-uri)(?=[\s/>])|[A-Z][\w.:-]*(?=[\s/>])|[a-z][\w$]*(?:\.[A-Za-z_$][\w$]*)+(?=[\s/>])|[a-z][\w.]*[-:][\w.:-]+(?=[\s/>]))/g;
+const tagStart = /<\s*(?:(?:p|pre|nav|details|summary|dialog|textarea|select|option|optgroup|fieldset|legend|figure|figcaption|output|progress|meter|time|code|kbd|samp|b|i|u|s|mark|abbr|address|cite|dfn|sub|sup|hr|wbr|br|dl|dt|dd|thead|tbody|tfoot|col|colgroup|caption|menu|template|slot|map|param|hgroup|ruby|rt|rp|bdi|bdo|div|span|section|article|main|header|footer|aside|label|strong|em|small|h[1-6]|ul|ol|li|table|tr|td|th|blockquote|q|del|ins|body|html|picture|canvas|a|area|svg|g|defs|symbol|foreignObject|path|rect|circle|ellipse|line|polyline|polygon|text|tspan|stop|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object|animate|animateMotion|animateTransform|set|textPath|mpath|pattern|linearGradient|radialGradient|filter|mask|clipPath|marker|cursor|fontFaceUri|font-face-uri)(?=[\s/>])|[A-Z_$][\w$.:-]*(?=[\s/>])|[a-z][\w$]*(?:\.[A-Za-z_$][\w$]*)+(?=[\s/>])|[a-z][\w.]*[-:][\w.:-]+(?=[\s/>]))/g;
 // JSX event handlers and callback refs can invoke pre-existing side-effecting
 // callbacks without adding fetch or navigation tokens; style can activate an
 // existing background URL. Expand native element coverage beyond layout tags
@@ -151,7 +153,8 @@ function outboundTagSignatures(source) {
     // components execute arbitrary existing code when mounted. Their presence
     // and *every* prop value must remain unchanged in a copy-only patch.
     // Unknown plain lowercase HTML tags are not recognized by this scanner.
-    const opaqueComponent = /[A-Z.$:-]/.test(tagName) && !intrinsicSvgNames.has(tagName);
+    const opaqueComponent = (/[A-Z.$:-]/.test(tagName) || tagName.startsWith('_')) &&
+      !intrinsicSvgNames.has(tagName);
     const outgoing = parseTagAttributes(tag, match[0].length, opaqueComponent);
     if (!outgoing) return null;
     // Even attribute-free <form>, <button> and <iframe> have browser
