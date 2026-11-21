@@ -319,6 +319,39 @@ function assertTrustedOrigin(env) {
   return observed;
 }
 
+// gh auth setup-git legitimately installs a GitHub-scoped credential helper.
+// It must not also introduce arbitrary Git transport settings, HTTPS proxies,
+// extra headers, URL rewrites, or executable credential helpers before push.
+// Re-attest after gh setup, not just the resolved origin URL. Only the CLI's
+// exact GitHub/gist credential helper command is permitted as a new setting.
+function assertPostAuthTransportConfiguration() {
+  const names = command('git', ['config', '--name-only', '--list'])
+    .trim().split('\n');
+  const officialHelpers = new Set([
+    'credential.https://github.com.helper',
+    'credential.https://gist.github.com.helper'
+  ]);
+  const allowedHelper = /^!(?:(['"])(?:\/[A-Za-z0-9_.+@-]+)+\/gh\1|(?:\/[A-Za-z0-9_.+@-]+)+\/gh|gh) auth git-credential$/;
+  try {
+    verifyOfficialCandidateFetchConfig(names.filter((name) => !officialHelpers.has(name)));
+    for (const name of new Set(names.filter((key) => /^credential\./i.test(key)))) {
+      if (!officialHelpers.has(name)) throw new Error('untrusted credential key');
+      const values = command('git', ['config', '--get-all', name])
+        .replace(/\n$/, '').split('\n');
+      // GitHub CLI may first clear an inherited helper with an empty value,
+      // then append its scoped git-credential command. Never accept a shell
+      // substitution, additional command or arbitrary helper executable.
+      if (values.length < 1 || values.length > 4 ||
+          !values.some((value) => allowedHelper.test(value)) ||
+          values.some((value) => value !== '' && !allowedHelper.test(value))) {
+        throw new Error('untrusted credential helper');
+      }
+    }
+  } catch {
+    fail('publisher Git transport configuration unsafe after authentication');
+  }
+}
+
 function assertTrustedCheckout(env, path) {
   const expectedSha = env.GITHUB_SHA || '';
   const checkedOutSha = command('git', ['rev-parse', '--verify', 'HEAD']).trim();
@@ -445,6 +478,7 @@ export function publishDraft({ env = process.env } = {}) {
   if (!identical(resolvedOrigin(), initialOrigin)) {
     fail('origin resolution changed before candidate push');
   }
+  assertPostAuthTransportConfiguration();
   // Disable pre-push hooks as well: they otherwise execute with the
   // write-scoped GitHub token even though pre-commit hooks are disabled.
   command('git', ['-c', 'core.hooksPath=/dev/null', 'push',
