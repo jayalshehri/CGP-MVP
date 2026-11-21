@@ -922,7 +922,7 @@ for (const [label, helperSelector, shouldPass] of [
   ['an unrelated executable named gh', (f) => {
     const rogue = join(f.root, 'rogue', 'gh');
     mkdirSync(dirname(rogue), { recursive: true });
-    writeFileSync(rogue, '#!/bin/sh\\nexit 0\\n', { mode: 0o755 });
+    writeFileSync(rogue, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
     return '!' + rogue + ' auth git-credential';
   }, false]
 ]) {
@@ -950,14 +950,14 @@ for (const [label, helperSelector, shouldPass] of [
         assert.equal(JSON.parse(child.stdout).status, 'draft-pr-created');
         assert.match(readFileSync(f.log, 'utf8'), /pr create --draft/);
         assert.match(git(f.workspace, 'ls-remote', '--heads', f.remote),
-          /refs\\/heads\\/aieo\\/model-proposal-99123-1/);
+          /refs\/heads\/aieo\/model-proposal-99123-1/);
       } else {
         assert.notEqual(child.status, 0, 'foreign absolute helper must be rejected');
         assert.match(child.stderr,
           /publisher Git transport configuration unsafe after authentication/);
         assert.equal(readFileSync(f.log, 'utf8').trim(), 'auth setup-git');
         assert.doesNotMatch(git(f.workspace, 'ls-remote', '--heads', f.remote),
-          /refs\\/heads\\/aieo\\/model-proposal-99123-1/,
+          /refs\/heads\/aieo\/model-proposal-99123-1/,
           'candidate must never reach the remote with a foreign credential helper');
       }
       assert.equal(git(f.workspace, 'rev-parse', 'main'), mainBefore);
