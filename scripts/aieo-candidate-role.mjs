@@ -8,7 +8,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
-import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitHubCliEnvironment, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitHubCliEnvironment, pinReadOnlyGitHubCli, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
 
 const SHA = /^[a-f0-9]{40}$/;
 const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
@@ -200,7 +200,7 @@ export function verifyCandidateActionsContext(env = process.env) {
         (process.env.GITHUB_ACTIONS !== 'true' || env?.GITHUB_ACTIONS !== 'true'))) block();
   return offlineFixture;
 }
-function verifiedRemoteContext(env) {
+function verifiedRemoteContext(env, ghExecutable) {
   const number = env.AIEO_PR_NUMBER;
   if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
       env.GITHUB_REF !== 'refs/heads/main' ||
@@ -210,7 +210,7 @@ function verifiedRemoteContext(env) {
   const offlineFixture = verifyCandidateActionsContext(env);
   let pr;
   try {
-    pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
+    pr = JSON.parse(execFileSync(ghExecutable, ['api', 'repos/' + REPO + '/pulls/' + number],
       { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
         env: readOnlyGitHubCliEnvironment(process.env) }));
   } catch { block(); }
@@ -278,10 +278,10 @@ function verifiedRemoteContext(env) {
 // live REST state AGAIN immediately before writing any role attestation;
 // the first response and immutable Git object alone do not authorize a
 // later evidence handoff. Never print an untrusted API response.
-function reattestRemoteDraft({ base, head, headRef, number }) {
+function reattestRemoteDraft({ base, head, headRef, number, ghExecutable }) {
   let pr;
   try {
-    pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
+    pr = JSON.parse(execFileSync(ghExecutable, ['api', 'repos/' + REPO + '/pulls/' + number],
       { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
         env: readOnlyGitHubCliEnvironment(process.env) }));
   } catch { block(); }
@@ -310,10 +310,12 @@ export function runCandidateRole(role, env = process.env) {
   verifyOfficialGitHubCliContext(env);
   verifyCandidateActionsContext(env);
   if (!ROLES.includes(role)) block();
+  let ghExecutable;
+  try { ghExecutable = pinReadOnlyGitHubCli(process.env); } catch { block(); }
   // A worktree diff may invoke an attribute-selected clean filter despite
   // --no-textconv. Reject effective filters before any Git diff or handoff.
   try { assertNoTrackedGitFilters(process.env); } catch { block(); }
-  const { base, head, headRef, number } = verifiedRemoteContext(env);
+  const { base, head, headRef, number } = verifiedRemoteContext(env, ghExecutable);
   let original, actual, changedPaths, diff;
   try {
     original = readStrictGitSource(base);
@@ -351,7 +353,7 @@ export function runCandidateRole(role, env = process.env) {
       if (report.status !== 'draft-pr-eligible') block();
     }
   }
-  reattestRemoteDraft({ base, head, headRef, number });
+  reattestRemoteDraft({ base, head, headRef, number, ghExecutable });
   writeReport(role, report);
   return { role, status: report.status, prNumber: number, baseSha: base, headSha: head };
 }
