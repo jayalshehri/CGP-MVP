@@ -713,7 +713,7 @@ test('five-job synthetic GitHub fixture remains read-only, PR-scoped and pinned'
       const step = section.split('\n      - ')[0];
       assert.ok(step.includes(
         '        with:\n          name: aieo-fixture-' + expected[i] +
-        '\n          path: aieo-fixture/aieo-output\n'),
+        '\n          path: aieo-fixture/aieo-output'),
       role + ' must pin an exact role artifact with no wildcard merge');
       assert.doesNotMatch(step, /pattern:|merge-multiple:|run-id:/);
     }
