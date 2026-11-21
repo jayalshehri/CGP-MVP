@@ -1413,7 +1413,9 @@ test('independent role output cannot overwrite external files through symlinks o
   const f = setup();
   try {
     const directory = join(f.cwd, 'aieo-output');
-    mkdirSync(directory);
+    // A successful post-alias control must also meet the private handoff
+    // directory contract; a default 0755 mkdir is now correctly rejected.
+    mkdirSync(directory, { mode: 0o700 });
     const output = join(directory, 'candidate-developer.json');
     const outside = join(f.root, 'external-report.txt');
     const sentinel = 'DO NOT MODIFY EXTERNAL CONTENT\n';
