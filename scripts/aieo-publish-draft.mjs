@@ -160,6 +160,11 @@ function readTrustedCandidate(path) {
         !(pathname.mode & 0o400) || (pathname.mode & 0o7133) ||
         pathname.dev !== opened.dev || pathname.ino !== opened.ino ||
         pathname.size !== opened.size ||
+        // A concurrent same-inode chmod or same-length rewrite after the
+        // final descriptor fstat must not borrow the earlier attestation.
+        // Match the final pathname's metadata as well as its inode identity.
+        pathname.mtimeMs !== after.mtimeMs ||
+        pathname.ctimeMs !== after.ctimeMs ||
         !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
         directoryNow.uid !== uid || (directoryNow.mode & 0o7022) ||
         directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino) {
