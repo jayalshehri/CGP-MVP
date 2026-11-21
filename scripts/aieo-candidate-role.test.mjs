@@ -2489,7 +2489,7 @@ test('all four real role CLIs and post-build check scope gh API children to GH_T
       "     'DATABASE_URL', 'ORG_SESSION_DATA', 'CUSTOM_PAT',",
       "     'AIEO_UNRELATED_SESSION'].some((name) =>",
       "       Object.hasOwn(process.env, name))) process.exit(93);"
-    ].join('\\n') + '\\n';
+    ].join('\n') + '\n';
     writeFileSync(gh, stub.replace(needle, guard + needle));
 
     const inherited = {
