@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { verifyTrustedReviewReadiness } from './aieo-review-readiness.mjs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, chmodSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, delimiter } from 'node:path';
 
 const repo = 'jayalshehri/CGP-MVP';
 const sha = 'a'.repeat(40);
@@ -140,4 +144,78 @@ test('a hidden live process credential cannot downgrade privileged readiness to 
     if (previousActions === undefined) delete process.env.GITHUB_ACTIONS;
     else process.env.GITHUB_ACTIONS = previousActions;
   }
+});
+
+
+test('real readiness subprocess keeps its pinned gh and never inherits provider or arbitrary secrets', () => {
+  const root = mkdtempSync(join(tmpdir(), 'aieo-readiness-gh-'));
+  try {
+    const bin = join(root, 'bin');
+    mkdirSync(bin);
+    const alias = join(bin, 'gh');
+    const trusted = join(bin, 'gh-trusted');
+    const malicious = join(bin, 'gh-replacement');
+    const calls = join(root, 'calls.txt');
+    const injected = join(root, 'untrusted-gh-executed');
+    // A genuine child process receives the token for ten synthetic GitHub
+    // metadata reads. The first request rewrites PATH's gh symlink. Neither
+    // that alias swap nor ambient provider secrets may reach any later API.
+    const fake = [
+      '#!/usr/bin/env node',
+      'const fs = require("node:fs");',
+      'const alias = ' + JSON.stringify(alias) + ';',
+      'const malicious = ' + JSON.stringify(malicious) + ';',
+      'const calls = ' + JSON.stringify(calls) + ';',
+      'if (process.env.GH_TOKEN !== "synthetic-readonly-gh-token" ||',
+      '    process.env.OPENROUTER_API_KEY || process.env.UNRELATED_CREDENTIAL ||',
+      '    process.env.GITHUB_TOKEN) process.exit(71);',
+      'const args = process.argv.slice(2);',
+      'if (args[0] !== "api" || args[2] !== "--jq") process.exit(72);',
+      'const target = args[1];',
+      'fs.appendFileSync(calls, target + "\\n");',
+      'if (fs.readFileSync(calls, "utf8").trim().split("\\n").length === 1) {',
+      '  fs.unlinkSync(alias); fs.symlinkSync(malicious, alias);',
+      '}',
+      'const repo = "jayalshehri/CGP-MVP";',
+      'let response;',
+      'if (target === "repos/" + repo + "/git/ref/heads/main") {',
+      '  response = { sha: "a".repeat(40), type: "commit" };',
+      '} else if (target === "repos/" + repo + "/actions/workflows/aieo-model-candidate-roles.yml") {',
+      '  response = { path: ".github/workflows/aieo-model-candidate-roles.yml", state: "active" };',
+      '} else if (target.startsWith("repos/" + repo + "/contents/")) {',
+      '  response = { path: target.split("/contents/")[1].split("?ref=")[0], type: "file" };',
+      '} else { process.exit(73); }',
+      'process.stdout.write(JSON.stringify(response));'
+    ].join('\n') + '\n';
+    writeFileSync(trusted, fake, { mode: 0o700 });
+    chmodSync(trusted, 0o700);
+    writeFileSync(malicious, '#!/usr/bin/env node\n' +
+      'require("node:fs").writeFileSync(' + JSON.stringify(injected) +
+      ', "executed"); process.exit(97);\n', { mode: 0o700 });
+    symlinkSync(trusted, alias);
+    const moduleUrl = new URL('./aieo-review-readiness.mjs', import.meta.url).href;
+    const code = 'import { verifyTrustedReviewReadiness } from ' +
+      JSON.stringify(moduleUrl) + ';\n' +
+      'console.log(JSON.stringify(verifyTrustedReviewReadiness()));\n';
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
+      encoding: 'utf8', timeout: 25000,
+      env: {
+        PATH: bin + delimiter + (process.env.PATH || '/usr/bin:/bin'),
+        HOME: root,
+        GH_TOKEN: 'synthetic-readonly-gh-token',
+        GITHUB_TOKEN: 'synthetic-ambient-token-must-not-reach-gh',
+        OPENROUTER_API_KEY: 'synthetic-provider-secret-must-not-reach-gh',
+        UNRELATED_CREDENTIAL: 'synthetic-private-value-must-not-reach-gh',
+        GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'workflow_dispatch',
+        GITHUB_REF: 'refs/heads/main', GITHUB_REPOSITORY: repo,
+        GITHUB_SHA: sha
+      }
+    });
+    assert.equal(result.status, 0, 'readiness must pass scoped GH API: ' + result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      status: 'ready', verifiedMainCommit: sha, roleFiles: 8
+    });
+    assert.equal(readFileSync(calls, 'utf8').trim().split('\n').length, 10);
+    assert.equal(existsSync(injected), false, 'swapped GH alias must never execute');
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
