@@ -2440,3 +2440,35 @@ test('independent Developer refuses evidence directory with a different runner U
     assert.equal(f.git('rev-parse', 'main'), f.base);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('real candidate Developer process refuses nonprivate evidence directories before the first handoff', () => {
+  const f = setup();
+  try {
+    const directory = join(f.cwd, 'aieo-output');
+    const report = join(directory, 'candidate-developer.json');
+    mkdirSync(directory, { mode: 0o700 });
+    for (const mode of [0o755, 0o750, 0o711, 0o705, 0o770]) {
+      chmodSync(directory, mode);
+      const blocked = f.run('developer');
+      assert.notEqual(blocked.status, 0, 'unsafe directory mode ' + mode.toString(8));
+      assert.match(blocked.stderr, /AIEO candidate role blocked/);
+      assert.equal(existsSync(report), false,
+        'no evidence file may be created in a nonprivate directory');
+    }
+
+    chmodSync(directory, 0o700);
+    const valid = f.run('developer');
+    assert.equal(valid.status, 0, 'private 0700 directory must remain supported: ' + valid.stderr);
+    assert.equal(JSON.parse(valid.stdout).status, 'proposed');
+    const original = readFileSync(report, 'utf8');
+
+    chmodSync(directory, 0o755);
+    const replay = f.run('developer');
+    assert.notEqual(replay.status, 0, 'idempotent retry must also refuse a widened directory');
+    assert.match(replay.stderr, /AIEO candidate role blocked/);
+    assert.equal(readFileSync(report, 'utf8'), original,
+      'unsafe retry must never replace an existing Developer report');
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
