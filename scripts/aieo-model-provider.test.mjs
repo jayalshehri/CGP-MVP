@@ -1651,3 +1651,41 @@ test('model freezes dollar and underscore JSX component mounts and props', () =>
     })
   }).status, 'proposed');
 });
+
+
+test('model blocks Unicode JSX component mounts and prop mutations', () => {
+  // JSX identifiers may contain Unicode letters; these names must not escape
+  // an ASCII-only structural guard and mount already-implemented side effects.
+  for (const component of ['ÉWidget', '组件', 'AÉWidget', 'ui.ÉPanel', 'é-widget']) {
+    const source = 'const view = (<div>Old copy</div>);\n';
+    const find = '<div>Old copy</div>';
+    const replacement = find + '<' + component + ' />';
+    assert.equal(validateModelPatch({
+      source,
+      response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find, replace: replacement,
+        explanation: 'Synthetic Unicode JSX mount must be denied'
+      })
+    }).status, 'rejected', component + ' mount');
+
+    const before = 'const view = (<' + component + ' title="Old copy" />);\n';
+    assert.equal(validateModelPatch({
+      source: before,
+      response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find: 'title="Old copy"',
+        replace: 'title="New copy"',
+        explanation: 'Unicode opaque component copy may be a behavioral prop'
+      })
+    }).status, 'rejected', component + ' prop change');
+  }
+
+  const native = 'const view = (<p title="État">الحالة</p>);\n';
+  assert.equal(validateModelPatch({
+    source: native,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: 'title="État"',
+      replace: 'title="Nouveau"',
+      explanation: 'Ordinary Unicode literal on intrinsic text markup remains editable'
+    })
+  }).status, 'proposed');
+});

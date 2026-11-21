@@ -1124,3 +1124,36 @@ test('independent Security freezes dollar and underscore JSX components despite 
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
   }).status, 'passed');
 });
+
+
+test('independent Security rejects Unicode JSX mounts and prop edits even with forged diff', () => {
+  for (const component of ['ÉWidget', '组件', 'AÉWidget', 'ui.ÉPanel', 'é-widget']) {
+    const original = 'const view = (<div>Old copy</div>);\n';
+    const actual = original.replace('</div>', '</div><' + component + ' />');
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+Old copy', // intentionally conceals the component mount
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', component + ' mount');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), component);
+
+    const before = 'const view = (<' + component + ' title="Old copy" />);\n';
+    const changed = before.replace('Old copy', 'New copy');
+    const reviewed = inspectModelDiff({
+      original: before, actual: changed, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+Old copy', // deliberately omits actual change to opaque prop
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(changed) }
+    });
+    assert.equal(reviewed.status, 'failed', component + ' prop change');
+    assert.ok(reviewed.findings.includes('Potentially unsafe new code'), component);
+  }
+
+  const original = 'const view = (<p title="État">الحالة</p>);\n';
+  const actual = original.replace('title="État"', 'title="Nouveau"');
+  assert.equal(inspectModelDiff({
+    original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const view = (<p title="Nouveau">الحالة</p>);',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+  }).status, 'passed');
+});
