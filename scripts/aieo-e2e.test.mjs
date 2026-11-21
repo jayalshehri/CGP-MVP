@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, symlinkSync, linkSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, symlinkSync, linkSync, chmodSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -200,5 +200,63 @@ test('model report reader refuses other-readable evidence independently of valid
     assert.equal(run().status, 0);
   } finally {
     rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('role and model exclusive writers refuse same-length corrupted writes before approval', () => {
+  // A simulated storage/write-hook fault returns the full byte count while
+  // silently changing one byte. Previous size/inode/mode checks alone cannot
+  // detect it. Test in isolated Node processes with synthetic reports only.
+  const roleUrl = new URL('./aieo-role-artifact-io.mjs', import.meta.url).href;
+  const modelUrl = new URL('./aieo-model-proposal-output.mjs', import.meta.url).href;
+  for (const kind of ['foundation', 'model']) {
+    const workspace = mkdtempSync(join(tmpdir(), 'aieo-corrupt-write-'));
+    const path = join(workspace, 'aieo-output',
+      kind === 'foundation' ? 'developer.json' : 'model-proposal.json');
+    const report = kind === 'foundation'
+      ? { schemaVersion: 2, role: 'developer', status: 'no-change' }
+      : { schemaVersion: 1, status: 'proposed', sourceShared: false };
+    const invoke = kind === 'foundation'
+      ? 'const {writeExclusiveFoundationRoleReport} = await import(' +
+          JSON.stringify(roleUrl) + '); writeExclusiveFoundationRoleReport(\'developer\', report);'
+      : 'const {assertModelProposalDestination, writeExclusiveModelProposalReport} = await import(' +
+          JSON.stringify(modelUrl) +
+          '); writeExclusiveModelProposalReport(report, assertModelProposalDestination());';
+    const tamper = [
+      "import fs from 'node:fs';",
+      "import {syncBuiltinESMExports} from 'node:module';",
+      'const nativeWrite = fs.writeSync;',
+      'fs.writeSync = (fd, bytes, offset, length, position) => {',
+      '  if (Buffer.isBuffer(bytes) && length > 0) {',
+      '    const changed = Buffer.from(bytes.subarray(offset, offset + length));',
+      '    changed[0] = changed[0] === 0x7b ? 0x5b : 0x7b;',
+      '    return nativeWrite(fd, changed, 0, changed.length, position);',
+      '  }',
+      '  return nativeWrite(fd, bytes, offset, length, position);',
+      '};',
+      'syncBuiltinESMExports();'
+    ].join('\n');
+    const run = (fault) => spawnSync(process.execPath,
+      ['--input-type=module', '--eval',
+        (fault ? tamper + '\n' : '') +
+        'const report = ' + JSON.stringify(report) + ';\n' + invoke],
+      { cwd: workspace, encoding: 'utf8', timeout: 15000,
+        env: { ...process.env, NODE_OPTIONS: '', BASH_ENV: '' } });
+    try {
+      const clean = run(false);
+      assert.equal(clean.status, 0, kind + ' clean writer: ' + clean.stderr);
+      assert.equal(readFileSync(path, 'utf8'), JSON.stringify(report, null, 2) + '\n');
+      assert.equal(statSync(path).mode & 0o777, 0o600);
+      rmSync(path);
+      const damaged = run(true);
+      assert.equal(damaged.error, undefined, kind + ': fault process did not run');
+      assert.notEqual(damaged.status, 0, kind + ': accepted changed report bytes');
+      assert.match(damaged.stderr, /AIEO .* (?:rejected|blocked):/,
+        kind + ': writer itself must reject the corruption');
+      assert.equal(readFileSync(path)[0], 0x5b,
+        kind + ': fault must really change the first JSON byte');
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
   }
 });
