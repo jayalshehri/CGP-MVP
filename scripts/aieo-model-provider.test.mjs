@@ -1608,3 +1608,46 @@ test('model rejects case-only React component and prop substitutions', () => {
     }).status, 'rejected', from + ' -> ' + to);
   }
 });
+
+test('model freezes dollar and underscore JSX component mounts and props', () => {
+  // JSX treats these identifiers as component references, even when the
+  // first character is not uppercase. A mount may invoke existing effects.
+  for (const component of ['$Telemetry', '_telemetry', 'Panel$', 'UI.$Panel', 'UI._Panel', '$ui.Widget']) {
+    const source = 'const view = (<div>Old copy</div>);\n';
+    const find = '<div>Old copy</div>';
+    const replace = find + '<' + component + ' />';
+    const verdict = validateModelPatch({
+      source,
+      response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find, replace,
+        explanation: 'Synthetic special-identifier JSX mount regression'
+      })
+    });
+    assert.equal(verdict.status, 'rejected', component + ' mount');
+
+    const before = 'const view = (<' + component + '\n  title="Old label"\n/>);\n';
+    for (const replacement of [
+      '  title="New label"\n',
+      '  title="Old label"\n  onClick={existingCallback}\n'
+    ]) {
+      assert.equal(validateModelPatch({
+        source: before,
+        response: JSON.stringify({
+          path: MODEL_ALLOWED_PATH, find: '  title="Old label"\n',
+          replace: replacement,
+          explanation: 'Synthetic special-identifier JSX prop regression'
+        })
+      }).status, 'rejected', component + ' props');
+    }
+  }
+
+  const native = 'const view = (<p title="Old label">Text</p>);\n';
+  assert.equal(validateModelPatch({
+    source: native,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH,
+      find: 'title="Old label"', replace: 'title="New label"',
+      explanation: 'Native static presentation copy stays editable'
+    })
+  }).status, 'proposed');
+});
