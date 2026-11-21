@@ -159,6 +159,11 @@ jobs:
         with:
           name: aieo-fixture-security
           path: aieo-fixture/aieo-output
+      - name: Reject eleven poisoned copies of real downloaded GitHub artifacts
+        run: |
+          set -euo pipefail
+          cd aieo-fixture
+          node ../scripts/aieo-import-rejection-fixture.mjs
       - name: Prove clean Reviewer approval then seven fail-closed tamper cases
         run: |
           set -euo pipefail
