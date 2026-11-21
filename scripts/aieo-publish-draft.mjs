@@ -63,7 +63,29 @@ function pinPublisherGitExecutable() {
   fail('publisher Git executable not found');
 }
 
-function command(binary, args, { raw = false } = {}) {
+function command(binary, args, { raw = false, credentialHelperCli = null } = {}) {
+  // Only the tightly scoped push may use a credential helper. An unqualified
+  // "!gh auth git-credential" from gh auth setup-git is PATH-dependent:
+  // a mutable PATH symlink can redirect that shell helper AFTER our gh
+  // executable has been pinned. Force a reset and the attested CLI path on
+  // the one push that receives GH_TOKEN.
+  const authorizedPush = binary === 'git' && args.length === 5 &&
+    args[0] === '-c' && args[1] === 'core.hooksPath=/dev/null' &&
+    args[2] === 'push' && args[3] === 'origin' &&
+    /^HEAD:refs\/heads\/aieo\/(?:model-proposal|repair-feedback)-[0-9]+-[1-9][0-9]*$/.test(args[4]);
+  if (authorizedPush !== (typeof credentialHelperCli === 'string')) {
+    fail('push must use exactly one attested GitHub CLI credential helper');
+  }
+  if (credentialHelperCli !== null && !isAbsolute(credentialHelperCli)) {
+    fail('push credential helper path must be absolute');
+  }
+  // POSIX single-quote the resolved path so a directory with spaces or
+  // shell metacharacters cannot change the helper command being executed.
+  const helperConfig = credentialHelperCli === null ? [] : [
+    '-c', 'credential.helper=',
+    '-c', "credential.https://github.com.helper=!'"
+      + credentialHelperCli.replaceAll("'", "'\"'\"'") + "' auth git-credential"
+  ];
   // Repository-local Git config is not a trust boundary: core.fsmonitor and
   // diff.external can run executable helpers during seemingly read-only
   // ls-files/diff calls while the publisher holds its write-scoped GH_TOKEN.
@@ -89,6 +111,7 @@ function command(binary, args, { raw = false } = {}) {
       // execute an untrusted signer during git commit while GH_TOKEN is live.
       // Draft candidates are verified by their immutable SHA, not GPG signing.
       '-c', 'commit.gpgsign=false',
+      ...helperConfig,
       ...(args[0] === 'diff'
         ? ['diff', '--no-ext-diff', '--no-textconv', ...args.slice(1)]
         : args)]
@@ -100,10 +123,6 @@ function command(binary, args, { raw = false } = {}) {
   // even with hook/filter guards, so do not give those processes GH_TOKEN.
   // Retain GH_TOKEN for gh API verification and the single authorized push.
   const env = publisherSubprocessEnvironment(process.env);
-  const authorizedPush = binary === 'git' && args.length === 5 &&
-    args[0] === '-c' && args[1] === 'core.hooksPath=/dev/null' &&
-    args[2] === 'push' && args[3] === 'origin' &&
-    /^HEAD:refs\/heads\/aieo\/(?:model-proposal|repair-feedback)-[0-9]+-[1-9][0-9]*$/.test(args[4]);
   if (binary === 'git' && !authorizedPush) delete env.GH_TOKEN;
   if (binary === 'git' && !pinnedPublisherGitExecutable) {
     fail('publisher Git executable was not attested');
@@ -541,10 +560,11 @@ export function publishDraft({ env = process.env } = {}) {
     fail('origin resolution changed before candidate push');
   }
   assertPostAuthTransportConfiguration(trustedGhPath);
-  // Disable pre-push hooks as well: they otherwise execute with the
-  // write-scoped GitHub token even though pre-commit hooks are disabled.
+  // Disable pre-push hooks and override any PATH-dependent credential helper
+  // installed by gh auth setup-git. Git's empty credential.helper resets the
+  // inherited helper list; only the pre-auth realpath CLI can serve the push.
   command('git', ['-c', 'core.hooksPath=/dev/null', 'push',
-    'origin', 'HEAD:refs/heads/' + branch]);
+    'origin', 'HEAD:refs/heads/' + branch], { credentialHelperCli: trustedGhPath });
   // Pushing a verified commit is not enough if origin/main (or the candidate
   // ref) moves during the push. Re-read both advertised refs BEFORE creating
   // a GitHub PR. This closes the push-to-PR gap but is not an atomic lock;
