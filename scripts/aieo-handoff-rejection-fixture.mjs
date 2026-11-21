@@ -3,7 +3,7 @@
 // A clean handoff MUST pass before forged claims are expected to fail closed.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync,
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync,
   rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -143,6 +143,45 @@ for (const [label, receivingRole, corruptRole, tamperBytes] of rawCases) {
   exerciseMalformedHandoff(label, receivingRole, corruptRole, tamperBytes);
 }
 
+// A canonical signed-off report is NOT safe to receive from a directory that
+// any other account can traverse. Similarly the Developer must not write fresh
+// role evidence there. Keep evidence bytes unmodified in these rejection tests.
+function exercisePublicEvidenceDirectory(role) {
+  const work = mkdtempSync(join(tmpdir(), 'aieo-public-evidence-dir-'));
+  try {
+    mkdirSync(join(work, 'components'), { mode: 0o700 });
+    mkdirSync(join(work, 'aieo-output'), { mode: 0o700 });
+    copyFileSync(source, join(work, 'components', 'FeedbackWidget.tsx'));
+    if (role === 'reviewer') {
+      for (const prior of roles) {
+        writeFileSync(join(work, 'aieo-output', prior + '.json'),
+          JSON.stringify(originals[prior], null, 2) + '\\n',
+          { mode: 0o600, flag: 'wx' });
+      }
+    }
+    chmodSync(join(work, 'aieo-output'), 0o755);
+    const checked = spawnSync(process.execPath, [roleCli, role], {
+      cwd: work,
+      env: { PATH: process.env.PATH || '/usr/bin:/bin',
+        AIEO_TASK: 'feedback-control-route-boundary' },
+      encoding: 'utf8', timeout: 10000
+    });
+    assert.equal(checked.error, undefined, role + ': public-directory test did not execute');
+    assert.notEqual(checked.status, 0, role + ': public evidence directory accepted');
+    assert.match(checked.stderr,
+      /AIEO role artifact rejected: untrusted file or changed evidence/,
+      role + ': rejection must come from the bounded role evidence I/O');
+    assert.equal(existsSync(join(work, 'aieo-output', role + '.json')), false,
+      role + ': insecure directory must not yield a new role report');
+    assert.equal(readFileSync(join(work, 'components', 'FeedbackWidget.tsx'), 'utf8'),
+      fixtureSource, role + ': rejected role cannot change the source');
+    console.log(role + ': refused public role-evidence directory');
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+for (const role of ['developer', 'reviewer']) exercisePublicEvidenceDirectory(role);
+
 // GitHub jobs are independent: a downloaded, authentic handoff from a previous
 // job must not be accepted against a changed checkout, even if nobody edits
 // the artifact itself. Test BOTH appended bytes and an equal-byte-length
@@ -199,4 +238,4 @@ assert.equal(readFileSync(source, 'utf8'), fixtureSource,
 console.log('AIEO GitHub artifact boundary: 1 real clean pass + ' +
   mutations.length + ' independent tampered-copy rejections and ' +
   driftCases.length * 3 + ' independent source-drift rejections and ' +
-  rawCases.length + ' malformed raw-handoff rejections');
+  rawCases.length + ' malformed raw-handoff rejections and 2 public-directory rejections');
