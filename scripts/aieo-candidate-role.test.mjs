@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, symlinkSync, linkSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, symlinkSync, linkSync, statSync, renameSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -2524,5 +2524,64 @@ test('all four real role CLIs and post-build check scope gh API children to GH_T
     assert.equal(final.status, 0, 'post-build gh API must be scoped: ' + final.stderr);
     assert.equal(JSON.parse(final.stdout).status, 'post-build-draft-reverified');
     assert.equal(f.git('rev-parse', 'main'), f.base, 'fixture main is never changed');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+
+test('all independent role readbacks pin gh despite a swapped PATH symlink', () => {
+  const f = setup();
+  try {
+    // The first gh API response is legitimate, but its subprocess changes
+    // the PATH entry to a malicious executable before the role's second
+    // readback. Each role must still invoke the original resolved binary.
+    const gh = join(f.root, 'bin', 'gh');
+    const trusted = join(f.root, 'bin', 'gh-trusted');
+    const malicious = join(f.root, 'bin', 'gh-replacement');
+    const marker = join(f.root, 'untrusted-gh-invoked');
+    const originalGh = readFileSync(gh, 'utf8');
+    const needle = 'const after=process.env.AIEO_FAKE_PR_SECOND;';
+    assert.ok(originalGh.includes(needle));
+    renameSync(gh, trusted);
+    const switchAlias = [
+      "const {unlinkSync,symlinkSync}=require('node:fs');",
+      'unlinkSync(' + JSON.stringify(gh) + ');',
+      'symlinkSync(' + JSON.stringify(malicious) + ',' + JSON.stringify(gh) + ');'
+    ].join('\n') + '\n';
+    writeFileSync(trusted, originalGh.replace(needle, switchAlias + needle));
+    chmodSync(trusted, 0o755);
+    writeFileSync(malicious, '#!/usr/bin/env node\n' +
+      'require("node:fs").writeFileSync(' + JSON.stringify(marker) + ', "called");\n' +
+      'process.exit(97);\n');
+    chmodSync(malicious, 0o755);
+    const resetAlias = () => {
+      if (existsSync(gh)) unlinkSync(gh);
+      symlinkSync(trusted, gh);
+    };
+
+    for (const [role, status] of [
+      ['developer', 'proposed'],
+      ['qa', 'passed'],
+      ['security', 'passed'],
+      ['reviewer', 'draft-pr-eligible']
+    ]) {
+      resetAlias();
+      const result = f.run(role);
+      assert.equal(result.status, 0,
+        role + ' must keep the pinned CLI through its second API read: ' + result.stderr);
+      assert.equal(JSON.parse(result.stdout).status, status);
+      assert.equal(existsSync(marker), false, role + ' may not execute replacement CLI');
+    }
+    // The post-build finalizer is another process with an independent pin.
+    const reviewed = execFileSync('git', ['show', f.head + ':' + path],
+      { cwd: f.cwd, encoding: 'utf8' });
+    writeFileSync(join(f.cwd, path), reviewed);
+    resetAlias();
+    const final = spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(final.status, 0, 'finalizer must still validate: ' + final.stderr);
+    assert.equal(JSON.parse(final.stdout).status, 'post-build-draft-reverified');
+    assert.equal(existsSync(marker), false);
+    assert.equal(f.git('rev-parse', 'main'), f.base);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });

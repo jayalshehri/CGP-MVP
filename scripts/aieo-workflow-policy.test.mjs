@@ -209,8 +209,14 @@ test('independent role and finalizer Git calls scrub credentials while gh retain
   for (const script of [role, finalize]) {
     assert.ok((script.match(/env: readOnlyGitEnvironment\(process.env\)/g) || []).length >= 2,
       'every Git subprocess, including raw immutable-blob reads, must scrub tokens');
-    assert.ok(script.includes("execFileSync('gh'"),
-      'only explicit GitHub API subprocesses retain the scoped read token');
+    assert.match(script, /ghExecutable = pinReadOnlyGitHubCli\(process.env\)/,
+      'the role must pin its GitHub CLI before credential-bearing API calls');
+    assert.match(script, /execFileSync\(ghExecutable, \['api'/,
+      'explicit GH API calls must use the pinned executable');
+    assert.match(script, /env: readOnlyGitHubCliEnvironment\(process.env\)/,
+      'only explicitly scoped API children may receive the GH token');
+    assert.doesNotMatch(script, /execFileSync\('gh'/,
+      'PATH must never re-resolve a credential-bearing GH executable');
   }
 });
 

@@ -9,7 +9,7 @@ import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mj
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
 import { verifyOfficialGitHubCliContext, verifyCandidateActionsContext } from './aieo-candidate-role.mjs';
-import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitHubCliEnvironment, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitHubCliEnvironment, pinReadOnlyGitHubCli, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
 const SHA = /^[a-f0-9]{40}$/;
@@ -138,6 +138,8 @@ export function verifyPostBuild(env = process.env) {
   try { verifyCandidateActionsContext(env); } catch { fail(); }
   // Git worktree diffs can execute clean filters from info/attributes or
   // global attributes even with no-textconv and a scrubbed Git environment.
+  let ghExecutable;
+  try { ghExecutable = pinReadOnlyGitHubCli(process.env); } catch { fail(); }
   try { assertNoTrackedGitFilters(process.env); } catch { fail(); }
 
   const path = MODEL_ALLOWED_PATH;
@@ -227,7 +229,7 @@ export function verifyPostBuild(env = process.env) {
   // invalidate earlier artifacts even when the local reviewed commit still exists.
   let pr;
   try {
-    pr = JSON.parse(execFileSync('gh', ['api', 'repos/' + REPO + '/pulls/' + number],
+    pr = JSON.parse(execFileSync(ghExecutable, ['api', 'repos/' + REPO + '/pulls/' + number],
       { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
         env: readOnlyGitHubCliEnvironment(process.env) }));
   } catch { fail(); }

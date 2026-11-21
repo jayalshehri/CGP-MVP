@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process';
+import { realpathSync, statSync } from 'node:fs';
+import { delimiter, isAbsolute, join } from 'node:path';
 
 // AIEO Git commands run inside role and publisher processes that may hold
 // repository-scoped GitHub tokens. Never inherit Git environment overrides
@@ -77,6 +79,30 @@ export function readOnlyGitHubCliEnvironment(env = process.env) {
     }
   }
   return scoped;
+}
+
+// Resolve gh once before any independently reviewed candidate is inspected.
+// GitHub API readback occurs twice per role; a later replacement of a PATH
+// symlink must never switch the second, GH_TOKEN-bearing read to another
+// executable. Use the resolved absolute program for *every* gh API call.
+// This pins PATH aliases, not a hostile replacement of the real file itself;
+// the runner and trusted checkout remain separate security prerequisites.
+export function pinReadOnlyGitHubCli(env = process.env) {
+  if (typeof env?.PATH !== 'string' || !env.PATH) {
+    throw new Error('AIEO GitHub CLI PATH is missing');
+  }
+  const directories = env.PATH.split(delimiter);
+  if (directories.some((directory) => !directory || !isAbsolute(directory))) {
+    throw new Error('AIEO GitHub CLI PATH must contain only absolute directories');
+  }
+  for (const directory of directories) {
+    try {
+      const resolved = realpathSync(join(directory, 'gh'));
+      const candidate = statSync(resolved);
+      if (candidate.isFile() && (candidate.mode & 0o111)) return resolved;
+    } catch { /* Continue through other trusted PATH entries. */ }
+  }
+  throw new Error('AIEO GitHub CLI executable is unavailable');
 }
 
 /**
