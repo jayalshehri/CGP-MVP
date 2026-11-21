@@ -76,6 +76,73 @@ const mutations = [
 ];
 for (const [label, mutate] of mutations) exercise(label, mutate);
 
+// GitHub artifact inputs are BYTES, not merely parsed JSON values. A valid
+// object with duplicate keys, noncanonical serialization, or invalid UTF-8
+// must fail at the inode-bounded reader before any receiving role can attest it.
+// Exercise real downloaded reports across three independently launched roles.
+function exerciseMalformedHandoff(label, receivingRole, corruptRole, tamperBytes) {
+  const work = mkdtempSync(join(tmpdir(), 'aieo-raw-handoff-rejection-'));
+  try {
+    mkdirSync(join(work, 'components'), { mode: 0o700 });
+    mkdirSync(join(work, 'aieo-output'), { mode: 0o700 });
+    copyFileSync(source, join(work, 'components', 'FeedbackWidget.tsx'));
+    const inputs = receivingRole === 'reviewer' ? roles : ['developer'];
+    assert.ok(inputs.includes(corruptRole), label + ': invalid test input role');
+    for (const prior of inputs) {
+      const canonical = Buffer.from(JSON.stringify(originals[prior], null, 2) + '\n', 'utf8');
+      const bytes = prior === corruptRole ? tamperBytes(canonical) : canonical;
+      if (prior === corruptRole) {
+        assert.ok(Buffer.isBuffer(bytes), label + ': mutation must produce bytes');
+        assert.notDeepEqual(bytes, canonical, label + ': evidence bytes must actually change');
+      }
+      writeFileSync(join(work, 'aieo-output', prior + '.json'), bytes,
+        { mode: 0o600, flag: 'wx' });
+    }
+    const checked = spawnSync(process.execPath, [roleCli, receivingRole], {
+      cwd: work,
+      env: {
+        PATH: process.env.PATH || '/usr/bin:/bin',
+        AIEO_TASK: 'feedback-control-route-boundary'
+      },
+      encoding: 'utf8', timeout: 10000
+    });
+    assert.equal(checked.error, undefined, label + ': receiving role did not execute');
+    assert.notEqual(checked.status, 0, label + ': untrusted raw evidence was approved');
+    assert.match(checked.stderr,
+      /AIEO role artifact rejected: untrusted file or changed evidence/,
+      label + ': rejection must be from the bounded evidence reader');
+    assert.equal(existsSync(join(work, 'aieo-output', receivingRole + '.json')), false,
+      label + ': failed raw evidence must not produce approval');
+    assert.equal(readFileSync(join(work, 'components', 'FeedbackWidget.tsx'), 'utf8'),
+      fixtureSource, label + ': failed input must not change source');
+    console.log(receivingRole + ': rejected ' + label + ' from downloaded ' + corruptRole);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+const rawCases = [
+  ['duplicate JSON key', 'qa', 'developer', bytes => {
+    const raw = bytes.toString('utf8');
+    const key = '"schemaVersion": 2,';
+    assert.equal(raw.split(key).length - 1, 1);
+    return Buffer.from(raw.replace(key, key + '\n  "schemaVersion": 2,'), 'utf8');
+  }],
+  ['noncanonical trailing newline', 'security', 'developer',
+    bytes => Buffer.concat([bytes, Buffer.from('\n')])],
+  ['invalid UTF-8 byte', 'reviewer', 'qa',
+    bytes => Buffer.concat([bytes.subarray(0, bytes.length - 1), Buffer.from([0xff, 0x0a])])],
+  ['UTF-8 byte-order mark', 'reviewer', 'security',
+    bytes => Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), bytes])],
+  ['oversized raw evidence', 'qa', 'developer', () => Buffer.alloc(65537, 0x20)],
+  ['noncanonical CRLF', 'reviewer', 'qa',
+    bytes => Buffer.from(bytes.toString('utf8').replaceAll('\n', '\r\n'), 'utf8')],
+  ['trailing NUL', 'security', 'developer',
+    bytes => Buffer.concat([bytes, Buffer.from([0])])]
+];
+for (const [label, receivingRole, corruptRole, tamperBytes] of rawCases) {
+  exerciseMalformedHandoff(label, receivingRole, corruptRole, tamperBytes);
+}
+
 // GitHub jobs are independent: a downloaded, authentic handoff from a previous
 // job must not be accepted against a changed checkout, even if nobody edits
 // the artifact itself. Test BOTH appended bytes and an equal-byte-length
@@ -131,4 +198,5 @@ assert.equal(readFileSync(source, 'utf8'), fixtureSource,
   'negative cases must never change application or fixture source');
 console.log('AIEO GitHub artifact boundary: 1 real clean pass + ' +
   mutations.length + ' independent tampered-copy rejections and ' +
-  driftCases.length * 3 + ' independent source-drift rejections');
+  driftCases.length * 3 + ' independent source-drift rejections and ' +
+  rawCases.length + ' malformed raw-handoff rejections');
