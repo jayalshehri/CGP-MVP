@@ -106,7 +106,7 @@ test('foundation handoff writers never truncate existing files, symlinks or hard
   });
   try {
     mkdirSync(dirname(sourceFile), { recursive: true });
-    mkdirSync(dirname(developerFile), { recursive: true });
+    mkdirSync(dirname(developerFile), { recursive: true, mode: 0o700 });
     writeFileSync(sourceFile, syntheticSource);
     writeFileSync(developerFile, 'preexisting report must not be overwritten');
     assert.notEqual(run('developer').status, 0, 'preexisting report must fail');
@@ -187,7 +187,7 @@ test('model report reader refuses other-readable evidence independently of valid
     cwd: workspace, encoding: 'utf8', timeout: 15000
   });
   try {
-    mkdirSync(dirname(report));
+    mkdirSync(dirname(report), { mode: 0o700 });
     writeFileSync(report, JSON.stringify({ schemaVersion: 1 }, null, 2) + '\n', { mode: 0o600 });
     assert.equal(run().status, 0);
     for (const mode of [0o640, 0o604, 0o644]) {
