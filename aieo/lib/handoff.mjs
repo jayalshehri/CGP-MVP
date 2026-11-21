@@ -10,6 +10,18 @@ const allowed = {
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const isHash = (s) => typeof s === 'string' && /^[a-f0-9]{64}$/.test(s);
 
+// A proposed Developer fix and a Draft-eligible Reviewer verdict must
+// correspond to a real content change. A no-change verdict must not carry
+// a different candidate hash. Check this at BOTH creation and receipt so
+// even internally generated evidence cannot silently contradict its state.
+function assertStatusHashBinding(role, status, sourceHash, candidateHash) {
+  const changed = role === 'developer' ? status === 'proposed'
+    : role === 'reviewer' ? status === 'draft-pr-eligible' : null;
+  if (changed !== null && (sourceHash !== candidateHash) !== changed) {
+    throw new Error('Inconsistent ' + role + ' handoff state and content hashes');
+  }
+}
+
 // A handoff is a deliberately small evidence record, never a transport for
 // candidate source, patches, commands, prompts, or arbitrary future fields.
 // Extra fields must fail closed (rather than being silently propagated).
@@ -69,6 +81,7 @@ export function buildHandoffArtifact({ role, task, sourceHash, candidateHash, ve
       task !== APPROVED_TASK || !isHash(sourceHash) || !isHash(candidateHash)) {
     throw new Error('Cannot construct invalid AIEO handoff');
   }
+  assertStatusHashBinding(role, verdict.status, sourceHash, candidateHash);
   // The source-bound Developer report can already contain both hashes.
   // They must match the independently computed identity passed to the builder.
   const permitted = [...ROLE_EVIDENCE_KEYS[role],
@@ -100,6 +113,7 @@ export function verifyHandoffArtifact({ artifact, role, task, sourceHash, candid
       artifact.status !== expected?.status) {
     throw new Error('Invalid, stale, or mismatched ' + role + ' handoff artifact');
   }
+  assertStatusHashBinding(role, artifact.status, sourceHash, candidateHash);
   assertEvidenceFields(artifact, role, [...IDENTITY_KEYS, ...ROLE_EVIDENCE_KEYS[role]]);
   if (role === 'developer' && artifact.bounded !== true) {
     throw new Error('Developer handoff requires bounded attestation');
