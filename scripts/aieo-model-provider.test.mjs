@@ -1723,3 +1723,32 @@ test('model denies JSX stylesheet mounts and CSS-escaped @imports while allowing
     })
   }).status, 'proposed', 'ordinary text edits remain available');
 });
+
+
+test('model denies CSS-escaped URL functions in existing stylesheet content', () => {
+  const escape = String.fromCharCode(92);
+  const source = 'const view = (<style>body { background: none; }</style>);\n';
+  const payloads = [
+    'background: u' + escape + '72l(https://assets.invalid/pixel);',
+    'background: ' + escape + '75rl(https://assets.invalid/pixel);',
+    'background: u' + escape + 'rl(https://assets.invalid/pixel);'
+  ];
+  for (const replace of payloads) {
+    const verdict = validateModelPatch({
+      source,
+      response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find: 'background: none;', replace,
+        explanation: 'Synthetic CSS escape exfiltration regression'
+      })
+    });
+    assert.equal(verdict.status, 'rejected', replace);
+  }
+  const harmless = 'const view = (<p>Old status copy</p>);\n';
+  assert.equal(validateModelPatch({
+    source: harmless,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: 'Old status copy',
+      replace: 'New status copy', explanation: 'Inert UI copy update'
+    })
+  }).status, 'proposed');
+});
