@@ -75,6 +75,13 @@ const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|m
 // @i\6dport is an @import even when the escape starts inside its identifier.
 // Only reject CSS-escaped function names or @-rules; harmless JS string escapes are not CSS.
 const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:|@\s*(?:import|[a-z_-]*\\)|[a-z_-]*\\(?:[0-9a-f]{1,6}\s?|[a-z_-])[a-z0-9_-]*\s*\(/i;
+// DOM mutations can repurpose an existing link/form/image into an outbound
+// destination without adding JSX href/src attributes. Bounded UI copy fixes
+// never need imperative attribute setters, URL-property access or generic
+// object-to-element assignment; reject these even on pre-existing elements.
+// This is a conservative source gate, not a general JS security proof.
+const domNetworkMutation = /\b(?:setAttribute(?:NS|Node)?|toggleAttribute|setProperty|insertAdjacentHTML|createContextualFragment)\s*(?:\?\.)?\s*\(|\b(?:Object\s*\.\s*assign|Reflect\s*\.\s*set)\s*\(|(?:\.|\?\.)\s*(?:href|src|srcSet|action|formAction|poster|ping|background)\b|\[\s*['"](?:href|src|srcSet|action|formAction|poster|ping|background)['"]\s*\]/i;
+
 // Model-created HTML parse/assignment sinks can execute attacker-controlled
 // markup without a fetch() call. The FeedbackWidget text-only patch scope
 // has no reason to introduce these APIs or React's srcDoc property.
@@ -211,7 +218,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
   if (containsCredentials(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) || dynamicGlobalMember.test(replace) || ambientGlobalReference.test(replace) || encodedJavaScriptEscape.test(replace) || dynamicCodeReflection.test(replace) ||
-      outboundMarkup.test(replace) || outboundCss.test(replace) || rawHtmlSink.test(replace) ||
+      outboundMarkup.test(replace) || outboundCss.test(replace) || domNetworkMutation.test(replace) || rawHtmlSink.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }

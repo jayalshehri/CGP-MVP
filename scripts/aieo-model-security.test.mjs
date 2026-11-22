@@ -1238,3 +1238,33 @@ test('independent Security rejects middle-of-identifier CSS import escapes despi
     report: { status: 'proposed', sourceHash: hash(safeBefore), proposedHash: hash(safeAfter) }
   }).status, 'passed');
 });
+
+
+test('independent Security rejects DOM URL mutations despite forged Git diff', () => {
+  const original = 'const view = (<a>Old status copy</a>);\n';
+  const attacks = [
+    "<a onClick={(event) => event.currentTarget.setAttribute(\"href\", targetUrl)}>Open</a>",
+    "<a onClick={(event) => event.currentTarget.setAttributeNS(null, \"href\", targetUrl)}>Open</a>",
+    "<a onClick={(event) => { event.currentTarget.href = targetUrl; }}>Open</a>",
+    "<a onClick={(event) => { event.currentTarget[\"href\"] = targetUrl; }}>Open</a>",
+    "<a onClick={(event) => Object.assign(event.currentTarget, { href: targetUrl })}>Open</a>",
+    "<a onClick={(event) => Reflect.set(event.currentTarget, \"href\", targetUrl)}>Open</a>",
+    "<a onClick={(event) => event.currentTarget.toggleAttribute(\"ping\")}>Open</a>"
+  ];
+  for (const replace of attacks) {
+    const actual = original.replace('<a>Old status copy</a>', replace);
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+const unrelated = "safe";', // deliberately forged diff hides the mutation
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', replace);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), replace);
+  }
+  const safeActual = original.replace('Old status copy', 'New status copy');
+  assert.equal(inspectModelDiff({
+    original, actual: safeActual, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const view = (<a>New status copy</a>);',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safeActual) }
+  }).status, 'passed');
+});
