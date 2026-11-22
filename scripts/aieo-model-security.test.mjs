@@ -1350,3 +1350,30 @@ test('independent Security rejects quoted bracket indirect calls with forged har
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed');
 });
+
+test('independent Security rejects computed-to-named method chains despite forged harmless diff', () => {
+  const original = 'const status = "Old status copy";\n';
+  const attacks = [
+    'const status = () => element[method].trigger(targetUrl);',
+    'const status = () => element[method]?.invoke(targetUrl);',
+    'const status = () => element[method].handler?.(targetUrl);',
+    'const status = () => element[method].handler.call(element, targetUrl);',
+    'const status = () => element[method]?.nested?.execute?.(targetUrl);'
+  ];
+  for (const code of attacks) {
+    const actual = code + '\n';
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+const status = "New status copy";', // deliberately hides executable candidate
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', code);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), code);
+  }
+  const safe = 'const status = items[index].label + "New status copy";\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const status = items[index].label + "New status copy";',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
