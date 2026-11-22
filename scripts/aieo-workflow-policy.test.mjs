@@ -265,7 +265,13 @@ test('independent candidate build replays an immutable, reviewed blob before npm
   assert.ok(candidateRoles.includes('node scripts/aieo-candidate-replay.mjs'));
   assert.doesNotMatch(candidateRoles, /git show "\$HEAD_SHA:/);
   assert.ok(model.includes("      - 'scripts/aieo-candidate-replay*.mjs'"));
-  assert.ok(replay.includes('readStrictReviewedGitSource(head)'));
+  assert.ok(replay.includes('readStrictReviewedGitSource(head, pinnedReplayGitExecutable)'));
+  assert.ok(replay.includes('pinnedReplayGitExecutable = pinReadOnlyGitExecutable(process.env)'));
+  assert.ok(replay.includes('assertNoTrackedGitFilters(process.env, pinnedReplayGitExecutable)'));
+  assert.ok(replay.includes("const diff = gitRaw('diff'"),
+    'raw Git diffs must use the pinned executable without trimming hash-bound bytes');
+  assert.doesNotMatch(replay, /execFileSync\\(\\s*['"]git['"]/,
+    'pre-build replay must never resolve a new Git executable from PATH');
   assert.ok(replay.includes("readBoundedRoleReport('reviewer')"));
   assert.ok(replay.includes('hasUnsafeGitEnvironment'));
   assert.ok(replay.includes('readOnlyGitArguments'));
