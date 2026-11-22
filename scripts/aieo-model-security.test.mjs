@@ -1183,3 +1183,31 @@ test('independent Security rejects CSS escaped imports and new stylesheet tags d
     report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
   }).status, 'passed');
 });
+
+
+test('independent Security rejects CSS-escaped URL functions despite forged diff', () => {
+  const escape = String.fromCharCode(92);
+  const original = 'const view = (<style>body { background: none; }</style>);\n';
+  const payloads = [
+    'background: u' + escape + '72l(https://assets.invalid/pixel);',
+    'background: ' + escape + '75rl(https://assets.invalid/pixel);',
+    'background: u' + escape + 'rl(https://assets.invalid/pixel);'
+  ];
+  for (const replace of payloads) {
+    const actual = original.replace('background: none;', replace);
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+const unrelated = "harmless";', // forged delta omits the CSS
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', replace);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), replace);
+  }
+  const before = 'const view = (<p>Old status copy</p>);\n';
+  const after = before.replace('Old status copy', 'New status copy');
+  assert.equal(inspectModelDiff({
+    original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const view = (<p>New status copy</p>);',
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+  }).status, 'passed');
+});
