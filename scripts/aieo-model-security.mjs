@@ -88,7 +88,10 @@ const domNetworkMutation = /\b(?:setAttribute(?:NS|Node)?|toggleAttribute|setPro
 // including optional chaining and template-quoted constant keys.
 // A computed method can also be invoked indirectly through .call/.apply/.bind,
 // including optional chaining; a simple `](` check would miss this.
-const computedPropertyEffects = /\]\s*(?:\?\.)?\s*\(|\]\s*(?:(?:\?\.|\.)\s*(?:call|apply|bind)|(?:\?\.)?\s*\[\s*['"\x60](?:call|apply|bind)['"\x60]\s*\])\s*(?:\?\.)?\s*\(|\]\s*(?:=(?!=)|\+=|-=|\*=|\/=|\?\?=|\|\|=|&&=)|\[\s*['"\x60][^'"\x60\]\n]{1,80}['"\x60]\s*\+\s*['"\x60]/;
+// A computed lookup must not acquire an arbitrary callable through named or
+// chained members (e.g. element[method].trigger(...)), not just call/apply/bind.
+// Bounded UI-copy proposals have no need to invoke dynamic computed members.
+const computedPropertyEffects = /\]\s*(?:(?:(?:\?\.|\.)\s*[A-Za-z_$][\w$]*)|(?:(?:\?\.)?\s*\[\s*[^\]\r\n]{1,80}\]))*\s*(?:\?\.)?\s*\(|\]\s*(?:=(?!=)|\+=|-=|\*=|\/=|\?\?=|\|\|=|&&=)|\[\s*['"\x60][^'"\x60\]\n]{1,80}['"\x60]\s*\+\s*['"\x60]/;
 
 // Model-created HTML parse/assignment sinks can execute attacker-controlled
 // markup without a fetch() call. The FeedbackWidget text-only patch scope
