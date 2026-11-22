@@ -1951,3 +1951,28 @@ test('model rejects string-executing timers and indirect aliases in bounded UI c
     explanation: 'Inert copy update without executable timer'
   }) }).status, 'proposed');
 });
+
+
+test('model rejects aliased and destructured DOM mutation capabilities before invocation', () => {
+  const source = 'const status = "Old status copy";\n';
+  const find = 'const status = "Old status copy";';
+  const attacks = [
+    'const status = () => { const setter = element.setAttribute; return setter.call(element, "href", targetUrl); };',
+    'const status = () => { const { setAttribute: write } = element; return write.call(element, "href", targetUrl); };',
+    'const status = () => { const toggle = element.toggleAttribute; return toggle.call(element, "ping"); };',
+    'const status = () => element.removeAttribute("sandbox");',
+    'const status = () => { const setter = element.setAttributeNodeNS; return setter.call(element, null, attr); };',
+    'const status = () => { const remove = element.removeAttributeNode; return remove.call(element, attr); };'
+  ];
+  for (const replace of attacks) {
+    const verdict = validateModelPatch({ source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Reject aliased DOM mutation capability'
+    }) });
+    assert.equal(verdict.status, 'rejected', replace);
+  }
+  assert.equal(validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: 'const status = "New status copy";',
+    explanation: 'Safe UI-only text update'
+  }) }).status, 'proposed');
+});

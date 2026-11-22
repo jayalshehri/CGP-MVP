@@ -84,7 +84,11 @@ const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:|@\s*(?:impor
 // never need imperative attribute setters, URL-property access or generic
 // object-to-element assignment; reject these even on pre-existing elements.
 // This is a conservative source gate, not a general JS security proof.
-const domNetworkMutation = /\b(?:setAttribute(?:NS|Node)?|toggleAttribute|setProperty|insertAdjacentHTML|createContextualFragment)\s*(?:\?\.)?\s*\(|\b(?:Object\s*\.\s*assign|Reflect\s*\.\s*set)\s*\(|(?:\.|\?\.)\s*(?:href|src|srcSet|action|formAction|poster|ping|background)\b|\[\s*['"](?:href|src|srcSet|action|formAction|poster|ping|background)['"]\s*\]/i;
+// Aliasing/destructuring a DOM mutator bypasses call-only screens:
+// const { setAttribute: write } = element; write.call(element, ...).
+// UI-copy patches have no need to reference these mutation capabilities.
+// Deny references even when not immediately called, plus attribute removal.
+const domNetworkMutation = /\b(?:setAttribute(?:NS|Node(?:NS)?)?|toggleAttribute|removeAttribute(?:NS|Node(?:NS)?)?|setProperty|insertAdjacentHTML|createContextualFragment)\b|\b(?:Object\s*\.\s*assign|Reflect\s*\.\s*set)\s*\(|(?:\.|\?\.)\s*(?:href|src|srcSet|action|formAction|poster|ping|background)\b|\[\s*['"](?:href|src|srcSet|action|formAction|poster|ping|background)['"]\s*\]/i;
 
 // Computed property calls/assignments can reconstruct effectful DOM or network
 // APIs without spelling a blocked method name (e.g. el['set'+'Attribute'](...)).
