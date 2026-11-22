@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { verifyTrustedReviewReadiness } from './aieo-review-readiness.mjs';
+import { verifyTrustedReviewReadiness, EXPECTED_ROLE_BLOBS } from './aieo-review-readiness.mjs';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, chmodSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -18,7 +18,7 @@ const env = {
   GH_TOKEN: 'fixture-never-live'
 };
 
-function fixture({ badRef, mainMoves, workflowState, missingPath, malformed, throwing } = {}) {
+function fixture({ badRef, mainMoves, workflowState, missingPath, changedBlob, malformed, throwing } = {}) {
   const calls = [];
   const gh = (args) => {
     assert.equal(args[0], 'api');
@@ -37,12 +37,15 @@ function fixture({ badRef, mainMoves, workflowState, missingPath, malformed, thr
     assert.ok(target.startsWith(prefix));
     const [path, ref] = target.slice(prefix.length).split('?ref=');
     assert.equal(ref, sha, 'all role code must be pinned to the event commit');
-    return JSON.stringify({ path, type: path === missingPath ? 'dir' : 'file' });
+    return JSON.stringify({ path, type: path === missingPath ? 'dir' : 'file',
+      sha: path === changedBlob ? '0'.repeat(40) : EXPECTED_ROLE_BLOBS[path] });
   };
   return { gh, calls };
 }
 
-test('registered ACTIVE reviewer and all pinned role files pass without a provider call', () => {
+test('registered ACTIVE reviewer and exact Git blob identities pass without a provider call', () => {
+  assert.equal(Object.keys(EXPECTED_ROLE_BLOBS).length, 13);
+  assert.equal(EXPECTED_ROLE_BLOBS[workflow], 'c9091860f10bffaa4d9b1ca34dd860c4bc260f7d');
   const f = fixture();
   assert.deepEqual(verifyTrustedReviewReadiness({ env, gh: f.gh }), {
     status: 'ready', verifiedMainCommit: sha, roleFiles: 13
@@ -86,7 +89,11 @@ test('missing or disabled workflow, stale main and missing role implementation f
     { missingPath: 'scripts/aieo-model-candidate-read.mjs' },
     { missingPath: 'scripts/aieo-model-git.mjs' },
     { missingPath: 'aieo/lib/outbound-tag-guard.mjs' },
-    { missingPath: workflow }, { malformed: true }, { throwing: true }
+    { missingPath: workflow },
+    { changedBlob: workflow },
+    { changedBlob: 'scripts/aieo-candidate-role.mjs' },
+    { changedBlob: 'scripts/aieo-git-process-guard.mjs' },
+    { malformed: true }, { throwing: true }
   ]) {
     const f = fixture(options);
     assert.throws(() => verifyTrustedReviewReadiness({ env, gh: f.gh }),
@@ -193,13 +200,15 @@ test('real readiness subprocess keeps its pinned gh and never inherits provider 
       '  fs.unlinkSync(alias); fs.symlinkSync(malicious, alias);',
       '}',
       'const repo = "jayalshehri/CGP-MVP";',
+      'const expected = ' + JSON.stringify(EXPECTED_ROLE_BLOBS) + ';',
       'let response;',
       'if (target === "repos/" + repo + "/git/ref/heads/main") {',
       '  response = { sha: "a".repeat(40), type: "commit" };',
       '} else if (target === "repos/" + repo + "/actions/workflows/aieo-model-candidate-roles.yml") {',
       '  response = { path: ".github/workflows/aieo-model-candidate-roles.yml", state: "active" };',
       '} else if (target.startsWith("repos/" + repo + "/contents/")) {',
-      '  response = { path: target.split("/contents/")[1].split("?ref=")[0], type: "file" };',
+      '  const path = target.split("/contents/")[1].split("?ref=")[0];',
+      '  response = { path, type: "file", sha: expected[path] };',
       '} else { process.exit(73); }',
       'process.stdout.write(JSON.stringify(response));'
     ].join('\n') + '\n';

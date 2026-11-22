@@ -8,25 +8,26 @@ import { verifyCandidateActionsContext, verifyOfficialGitHubCliContext } from '.
 
 const REPO = 'jayalshehri/CGP-MVP';
 const WORKFLOW = '.github/workflows/aieo-model-candidate-roles.yml';
-const REQUIRED = [
-  WORKFLOW,
-  'scripts/aieo-candidate-role.mjs',
-  'scripts/aieo-candidate-finalize.mjs',
-  'scripts/aieo-candidate-replay.mjs',
-  'scripts/aieo-role-artifact-io.mjs',
-  'scripts/aieo-model-security.mjs',
-  'aieo/lib/model-gates.mjs',
-  'aieo/lib/model-provider.mjs',
-  // These transitive dependencies are required for independent candidate
-  // replay, imported handoffs and safe source/diff inspection on main.
-  // A missing module must block consented source disclosure, not fail only
-  // after a remote model proposal was already created.
-  'scripts/aieo-import-handoffs.mjs',
-  'scripts/aieo-git-process-guard.mjs',
-  'scripts/aieo-model-candidate-read.mjs',
-  'scripts/aieo-model-git.mjs',
-  'aieo/lib/outbound-tag-guard.mjs'
-];
+// The file path alone cannot attest that trusted main contains the reviewed
+// independent-role implementation. Pin the exact Git blob identities of the
+// candidate review bundle. Any intentional update must explicitly refresh
+// these identities in a reviewed change before source disclosure is enabled.
+export const EXPECTED_ROLE_BLOBS = Object.freeze({
+  ".github/workflows/aieo-model-candidate-roles.yml": "c9091860f10bffaa4d9b1ca34dd860c4bc260f7d",
+  "scripts/aieo-candidate-role.mjs": "7d4d200593f3c711c15723d57088de563b2e990f",
+  "scripts/aieo-candidate-finalize.mjs": "75d0e44ceaa69aa67dac234c467b098c2b9895d5",
+  "scripts/aieo-candidate-replay.mjs": "c8cba0182a0c7395708aa36b86033e48b3389e24",
+  "scripts/aieo-role-artifact-io.mjs": "ae3576d971ded1bb30ace51f3f9e28e940a66c9f",
+  "scripts/aieo-model-security.mjs": "5bf262eb16a30ac43fb8ae6936cc97d3fe1cb5a8",
+  "aieo/lib/model-gates.mjs": "fbd42c7552a2cec523b68edd6005cd531640ff65",
+  "aieo/lib/model-provider.mjs": "0bed7e97b791ce328239aa20d3d8503a66db2ffe",
+  "scripts/aieo-import-handoffs.mjs": "dc6bb2930e2d4651e513d8ae948dfcefe4c7ff5a",
+  "scripts/aieo-git-process-guard.mjs": "998149ab4b0abf033ef1998e9371eb7e26ebb91d",
+  "scripts/aieo-model-candidate-read.mjs": "a242c018428877a99fc7595ac5cc1a02027815df",
+  "scripts/aieo-model-git.mjs": "32c6b73ae1c111524b6df8397f409c7198a0c1d6",
+  "aieo/lib/outbound-tag-guard.mjs": "fca5cd8b904bacde907a26664675f2fc2e4c52d6"
+});
+const REQUIRED = Object.keys(EXPECTED_ROLE_BLOBS);
 const SHA = /^[a-f0-9]{40}$/;
 const failure = () => { throw Error('AIEO blocked: trusted main reviewer workflow is not ready'); };
 function parseJson(value) {
@@ -85,12 +86,15 @@ export function verifyTrustedReviewReadiness({ env = process.env, gh = liveGithu
       '--jq', '{path:.path,state:.state}']));
     if (registered.path !== WORKFLOW || registered.state !== 'active') failure();
 
-    // Pin every required role implementation to the very same main commit.
+    // Pin every required role implementation to the very same main commit AND
+    // expected reviewed blob. A different implementation at the same path
+    // must not borrow external-source disclosure approval.
     // Query metadata only: neither file contents nor model prompts are emitted.
     for (const path of REQUIRED) {
       const item = parseJson(query(['api', 'repos/' + REPO + '/contents/' +
-        path + '?ref=' + sha, '--jq', '{path:.path,type:.type}']));
-      if (item.path !== path || item.type !== 'file') failure();
+        path + '?ref=' + sha, '--jq', '{path:.path,type:.type,sha:.sha}']));
+      if (item.path !== path || item.type !== 'file' ||
+          item.sha !== EXPECTED_ROLE_BLOBS[path]) failure();
     }
 
     // Recheck main after all remote metadata reads. Otherwise main can advance
