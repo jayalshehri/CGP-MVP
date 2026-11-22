@@ -1809,3 +1809,28 @@ test('model rejects imperative outbound mutations of existing DOM elements', () 
     explanation: 'Safe text change on an existing link'
   }) }).status, 'proposed');
 });
+
+test('model rejects computed property invocation and mutation in bounded copy patches', () => {
+  const source = 'const status = "Old status copy";\n';
+  const find = 'const status = "Old status copy";';
+  const candidates = [
+    "const status = () => element['set' + 'Attribute']('href', targetUrl);",
+    "const status = () => element['setAttribute']('href', targetUrl);",
+    "const status = () => element[method]?.('href', targetUrl);",
+    "const status = () => { element[key] = targetUrl; };",
+    "const status = () => { element['h' + 'ref'] = targetUrl; };"
+  ];
+  for (const replace of candidates) {
+    const result = validateModelPatch({ source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Computed effectful property must not be introduced'
+    }) });
+    assert.equal(result.status, 'rejected', replace);
+  }
+  assert.equal(validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find,
+    replace: 'const status = items[index] + "New status copy";',
+    explanation: 'Benign read-only array indexing and UI copy'
+  }) }).status, 'proposed');
+});
+

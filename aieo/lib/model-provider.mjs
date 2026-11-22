@@ -82,6 +82,12 @@ const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:|@\s*(?:impor
 // This is a conservative source gate, not a general JS security proof.
 const domNetworkMutation = /\b(?:setAttribute(?:NS|Node)?|toggleAttribute|setProperty|insertAdjacentHTML|createContextualFragment)\s*(?:\?\.)?\s*\(|\b(?:Object\s*\.\s*assign|Reflect\s*\.\s*set)\s*\(|(?:\.|\?\.)\s*(?:href|src|srcSet|action|formAction|poster|ping|background)\b|\[\s*['"](?:href|src|srcSet|action|formAction|poster|ping|background)['"]\s*\]/i;
 
+// Computed property calls/assignments can reconstruct effectful DOM or network
+// APIs without spelling a blocked method name (e.g. el['set'+'Attribute'](...)).
+// A narrowly scoped UI-copy patch needs neither computed calls nor mutations;
+// ordinary read-only array indexing remains allowed. This is defense-in-depth.
+const computedPropertyEffects = /\]\s*(?:\?\.)?\s*\(|\]\s*(?:=(?!=)|\+=|-=|\*=|\/=|\?\?=|\|\|=|&&=)|\[\s*['"\x60][^'"\x60\]\n]{1,80}['"\x60]\s*\+\s*['"\x60]/;
+
 // Model-created HTML parse/assignment sinks can execute attacker-controlled
 // markup without a fetch() call. The FeedbackWidget text-only patch scope
 // has no reason to introduce these APIs or React's srcDoc property.
@@ -218,7 +224,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
   if (containsCredentials(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) || dynamicGlobalMember.test(replace) || ambientGlobalReference.test(replace) || encodedJavaScriptEscape.test(replace) || dynamicCodeReflection.test(replace) ||
-      outboundMarkup.test(replace) || outboundCss.test(replace) || domNetworkMutation.test(replace) || rawHtmlSink.test(replace) ||
+      outboundMarkup.test(replace) || outboundCss.test(replace) || domNetworkMutation.test(replace) || computedPropertyEffects.test(replace) || rawHtmlSink.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
