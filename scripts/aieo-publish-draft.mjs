@@ -456,7 +456,7 @@ export function publishDraft({ env = process.env } = {}) {
   // worktree diff, before the one-file scope check. Do not attest only the
   // proposed source path: first verify every tracked path with credential-free,
   // bounded Git subprocesses. Reject before any token-bearing diff or write.
-  try { assertNoTrackedGitFilters(); }
+  try { assertNoTrackedGitFilters(process.env, pinnedPublisherGitExecutable); }
   catch { fail('Git content filter; executable clean filters are forbidden'); }
   assertTrustedCheckout(env, path);
   // Fail before token-bearing remote reads, branch creation or publication.
