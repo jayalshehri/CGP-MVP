@@ -1784,3 +1784,28 @@ test('model rejects middle-of-identifier CSS escaped imports in existing stylesh
     })
   }).status, 'proposed');
 });
+
+
+test('model rejects imperative outbound mutations of existing DOM elements', () => {
+  const original = 'const view = (<a>Old status copy</a>);\n';
+  const find = '<a>Old status copy</a>';
+  const attacks = [
+    "<a onClick={(event) => event.currentTarget.setAttribute(\"href\", targetUrl)}>Open</a>",
+    "<a onClick={(event) => event.currentTarget.setAttributeNS(null, \"href\", targetUrl)}>Open</a>",
+    "<a onClick={(event) => { event.currentTarget.href = targetUrl; }}>Open</a>",
+    "<a onClick={(event) => { event.currentTarget[\"href\"] = targetUrl; }}>Open</a>",
+    "<a onClick={(event) => Object.assign(event.currentTarget, { href: targetUrl })}>Open</a>",
+    "<a onClick={(event) => Reflect.set(event.currentTarget, \"href\", targetUrl)}>Open</a>",
+    "<a onClick={(event) => event.currentTarget.toggleAttribute(\"ping\")}>Open</a>"
+  ];
+  for (const replace of attacks) {
+    const result = validateModelPatch({ source: original, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace, explanation: 'Unsafe DOM attribute or property mutation'
+    }) });
+    assert.equal(result.status, 'rejected', replace);
+  }
+  assert.equal(validateModelPatch({ source: original, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: '<a>New status copy</a>',
+    explanation: 'Safe text change on an existing link'
+  }) }).status, 'proposed');
+});
