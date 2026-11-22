@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync, symlinkSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { modelGit, preflightModelGit } from './aieo-model-git.mjs';
@@ -104,5 +104,52 @@ test('model preflight rejects any tracked executable clean filter and hostile Gi
       assert.throws(() => preflightModelGit(env),
         /active or unverified Git content filter/);
     } finally { process.chdir(oldCwd); }
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('model source and review Git reads retain pinned executable after PATH alias swap', () => {
+  const f = fixture();
+  try {
+    const bin = join(f.root, 'bin');
+    mkdirSync(bin);
+    const alias = join(bin, 'git');
+    const original = join(bin, 'git-original');
+    const injected = join(bin, 'git-replacement');
+    const marker = join(f.root, 'untrusted-git-ran');
+    // Genuine Git runs against a disposable checkout. Its first invocation
+    // changes the PATH alias before preflight finishes: every later call
+    // must still use the pinned, trusted executable.
+    writeFileSync(original,
+      '#!/bin/sh\n' +
+      'rm -f ' + JSON.stringify(alias) + '\n' +
+      'ln -s ' + JSON.stringify(injected) + ' ' + JSON.stringify(alias) + '\n' +
+      'exec ' + JSON.stringify(rawGit) + ' "$@"\n', { mode: 0o755 });
+    chmodSync(original, 0o755);
+    writeFileSync(injected,
+      '#!/bin/sh\n' +
+      'printf untrusted > ' + JSON.stringify(marker) + '\n' +
+      'exit 96\n', { mode: 0o755 });
+    chmodSync(injected, 0o755);
+    symlinkSync(original, alias);
+    const env = {
+      ...process.env, PATH: bin + delimiter + process.env.PATH,
+      OPENROUTER_API_KEY: 'synthetic-provider-key-not-for-git',
+      GH_TOKEN: 'synthetic-gh-key-not-for-git'
+    };
+    const head = git(f.work, 'rev-parse', 'HEAD');
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(f.work);
+      preflightModelGit(env);
+      assert.equal(modelGit(['rev-parse', '--verify', 'HEAD'], { env }).trim(), head);
+      assert.equal(modelGit(['show', 'HEAD:components/FeedbackWidget.tsx'],
+        { env, encoding: null }).toString('utf8'), 'const label = "ok";\n');
+      assert.equal(modelGit(['diff', '--name-only'], { env }), '');
+      assert.equal(existsSync(marker), false, 'substituted Git must never execute');
+      env.PATH += delimiter + '/tmp/other';
+      assert.throws(() => modelGit(['status'], { env }),
+        /PATH changed after preflight/);
+      assert.equal(existsSync(marker), false);
+    } finally { process.chdir(originalCwd); }
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });

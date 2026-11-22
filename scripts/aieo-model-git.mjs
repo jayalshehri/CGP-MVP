@@ -4,26 +4,43 @@
 import { execFileSync } from 'node:child_process';
 import {
   hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitArguments,
-  assertNoTrackedGitFilters
+  assertNoTrackedGitFilters, pinReadOnlyGitExecutable
 } from './aieo-git-process-guard.mjs';
 
-function rejectOverrides(env) {
+// The first provenance preflight occurs before model source is shared. Pin
+// that exact Git binary for all subsequent source, QA and Reviewer reads in
+// the same operation. Rediscovering 'git' through PATH after a subprocess
+// (or the provider response) can execute a substituted program instead.
+const pinnedExecutables = new WeakMap();
+function trustedModelGit(env) {
+  if (!env || typeof env !== 'object') {
+    throw new Error('AIEO model Git blocked: invalid environment');
+  }
   if (hasUnsafeGitEnvironment(env)) {
     throw new Error('AIEO model Git blocked: untrusted Git or GitHub CLI environment');
   }
+  const previous = pinnedExecutables.get(env);
+  if (previous) {
+    if (env.PATH !== previous.path) {
+      throw new Error('AIEO model Git blocked: PATH changed after preflight');
+    }
+    return previous.executable;
+  }
+  const executable = pinReadOnlyGitExecutable(env);
+  pinnedExecutables.set(env, { executable, path: env.PATH });
+  return executable;
 }
 
 export function preflightModelGit(env = process.env) {
-  rejectOverrides(env);
-  // Uses its own allowlisted Git process environment and NUL-delimited paths.
-  // Reject even a clean filter assigned to a different tracked file: an
-  // unscoped worktree diff can execute that helper with provider credentials.
-  assertNoTrackedGitFilters(env);
+  const executable = trustedModelGit(env);
+  // Use the SAME trusted binary for both filter inspection and later
+  // immutable-object checks; no source disclosure on an executable swap.
+  assertNoTrackedGitFilters(env, executable);
 }
 
 export function modelGit(args, { env = process.env, encoding = 'utf8' } = {}) {
-  rejectOverrides(env);
-  return execFileSync('git', readOnlyGitArguments(args), {
+  const executable = trustedModelGit(env);
+  return execFileSync(executable, readOnlyGitArguments(args), {
     env: readOnlyGitEnvironment(env),
     encoding, stdio: 'pipe', maxBuffer: 512000
   });
