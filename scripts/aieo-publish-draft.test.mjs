@@ -1737,7 +1737,7 @@ test('publisher rejects a newly activated clean filter after branch switch, befo
       'const { writeFileSync } = require("node:fs");',
       'const args = process.argv.slice(2);',
       'const raw = ' + JSON.stringify(realGit) + ';',
-      'const result = spawnSync(raw, args, { encoding: "utf8", env: process.env });',
+      'const result = spawnSync(raw, args, { encoding: "utf8", env: process.env, stdio: ["inherit", "pipe", "pipe"] });',
       'if (result.stdout) process.stdout.write(result.stdout);',
       'if (result.stderr) process.stderr.write(result.stderr);',
       'if (result.status === 0 && args.includes("switch")) {',
