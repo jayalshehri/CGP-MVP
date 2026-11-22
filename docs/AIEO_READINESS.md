@@ -2,6 +2,17 @@
 
 Updated 2026-10-30. Development source: `aieo/multi-agent-foundation`; review: Draft PR #61.
 
+## Evidence boundary update — 2026-11-23
+
+The trusted reviewer preflight now returns `scope: trusted-reviewer-registration-and-blobs-only` and `endToEndProven: false`, even when it returns `status: ready`. Readiness means **only** that the exact reviewed independent-role bundle and its active workflow exist on the trusted default-branch commit. It never attests to a live source-approved model patch or completed GitHub review chain.
+
+Earlier **synthetic-only** milestones have real, independently checkable GitHub evidence:
+- [Synthetic OpenRouter probe run 43267212073](https://github.com/jayalshehri/CGP-MVP/actions/runs/43267212073), completed successfully on 2026-11-12. It sent a fixed synthetic example only, **not** application source.
+- [Synthetic bot Draft PR workflow run 43294763859](https://github.com/jayalshehri/CGP-MVP/actions/runs/43294763859), completed successfully on 2026-11-12. It created [Draft PR #145](https://github.com/jayalshehri/CGP-MVP/pull/145), which is now **closed, unmerged and still marked Draft**. That proof used a synthetic Markdown file, not a model candidate.
+- [Four independent fixture jobs, run 45073229419](https://github.com/jayalshehri/CGP-MVP/actions/runs/45073229419) succeeded on the stacked PR #395 commit, but processed only a deliberate fixture, not an OpenRouter-generated source fix.
+
+These are three **different** proof categories and must never be combined to imply an approved real source-sharing, model-generated fix, automated model Draft PR, and subsequent independently reviewed candidate. The real full-chain acceptance criterion remains **unmet**. Default-branch activation and specifically authorized source sharing remain human-controlled; no PR merge, production deployment or protection change is authorized by this ledger.
+
 ## Confirmed capabilities
 - Developer, QA, Security and Reviewer execute in separate GitHub Actions jobs, with source/candidate SHA-256 handoffs and independent verification for the **bounded deterministic** defect class.
 - A deliberately altered **temporary Git fixture** exercises a proposed patch through separate QA, Security and Reviewer CLI processes. Adversarial evidence and out-of-scope changes fail closed.
