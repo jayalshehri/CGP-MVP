@@ -105,7 +105,16 @@ export function verifyTrustedReviewReadiness({ env = process.env, gh = liveGithu
       '--jq', '{sha:.object.sha,type:.object.type}']));
     if (finalRef.sha !== sha || finalRef.type !== 'commit') failure();
   } catch { failure(); }
-  return { status: 'ready', verifiedMainCommit: sha, roleFiles: REQUIRED.length };
+  // This proves only the registered reviewer workflow and its exact trusted
+  // blobs. It is NOT evidence of a live provider proposal, a bot-created
+  // model Draft PR, or an independently reviewed real model candidate.
+  return {
+    status: 'ready',
+    scope: 'trusted-reviewer-registration-and-blobs-only',
+    endToEndProven: false,
+    verifiedMainCommit: sha,
+    roleFiles: REQUIRED.length
+  };
 }
 
 if (process.argv[1]?.endsWith('/aieo-review-readiness.mjs')) {
