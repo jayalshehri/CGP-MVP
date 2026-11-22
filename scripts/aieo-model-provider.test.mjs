@@ -1903,3 +1903,28 @@ test('model rejects named-method execution after computed lookup while allowing 
     explanation: 'Read-only computed lookup and inert label access'
   }) }).status, 'proposed');
 });
+
+
+test('model rejects parenthesized computed method calls without blocking grouped reads', () => {
+  const source = 'const status = "Old status copy";\n';
+  const find = 'const status = "Old status copy";';
+  const attacks = [
+    'const status = () => (element[method]).trigger(targetUrl);',
+    'const status = () => ((element[method])).trigger(targetUrl);',
+    'const status = () => (element[method].handler)?.(targetUrl);',
+    'const status = () => (element[method])["trigger"](targetUrl);',
+    'const status = () => ((element[method])[handler]).call(element, targetUrl);',
+    'const status = () => (element[method])?.trigger?.(targetUrl);'
+  ];
+  for (const replace of attacks) {
+    assert.equal(validateModelPatch({ source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Parenthesized computed calls are executable'
+    }) }).status, 'rejected', replace);
+  }
+  assert.equal(validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find,
+    replace: 'const status = ((items[index])).label + "New status copy";',
+    explanation: 'Grouped computed property read is inert'
+  }) }).status, 'proposed');
+});
