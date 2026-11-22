@@ -2685,3 +2685,91 @@ test('independent roles and post-build finalizer retain pinned Git after PATH al
     assert.equal(f.git('rev-parse', 'main'), f.base);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('late executable clean filters block role, pre-build replay and finalizer before Git status/diff', () => {
+  const replayScript = join(dirname(fileURLToPath(import.meta.url)), 'aieo-candidate-replay.mjs');
+  const realGit = pinReadOnlyGitExecutable(process.env);
+
+  for (const stage of ['developer', 'replay', 'finalizer']) {
+    const f = setup();
+    try {
+      if (stage !== 'developer') {
+        for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+          const checked = f.run(role);
+          assert.equal(checked.status, 0, role + ': ' + checked.stderr);
+        }
+      }
+      if (stage === 'finalizer') {
+        // This stage must see the approved candidate in the build workspace.
+        writeFileSync(join(f.cwd, path), candidate);
+      }
+      const marker = join(f.root, 'unsafe-clean-filter-executed');
+      const stamp = join(f.root, 'initial-check-attr-finished');
+      const helper = join(f.root, 'unsafe-clean-filter.sh');
+      const attributes = join(f.cwd, '.git/info/attributes');
+      writeFileSync(helper, [
+        '#!/bin/sh',
+        'printf "executed\\n" >> ' + JSON.stringify(marker),
+        'cat',
+        ''
+      ].join('\n'));
+      chmodSync(helper, 0o755);
+      f.git('config', 'filter.synthetic.clean', helper);
+
+      // The first attestation sees no filter. Immediately AFTER Git returns
+      // that trusted check-attr result, a separate executable changes the
+      // effective attributes and touches the source, making status/diff run
+      // the synthetic clean filter on an unguarded code path.
+      const wrapper = join(f.root, 'bin/git');
+      writeFileSync(wrapper, [
+        '#!/bin/sh',
+        JSON.stringify(realGit) + ' "$@"',
+        'result=$?',
+        'case " $* " in',
+        '  *" check-attr "*)',
+        '    if [ ! -e ' + JSON.stringify(stamp) + ' ]; then',
+        '      printf "%s\\n" ' + JSON.stringify(path + ' filter=synthetic') +
+          ' > ' + JSON.stringify(attributes),
+        '      touch ' + JSON.stringify(join(f.cwd, path)),
+        '      : > ' + JSON.stringify(stamp),
+        '    fi',
+        '    ;;',
+        'esac',
+        'exit "$result"',
+        ''
+      ].join('\n'));
+      chmodSync(wrapper, 0o755);
+
+      const result = stage === 'developer' ? f.run('developer') :
+        spawnSync(process.execPath, [stage === 'replay' ? replayScript : finalizerScript], {
+          cwd: f.cwd, encoding: 'utf8', timeout: 25000,
+          env: stage === 'replay'
+            ? { ...f.env, GH_TOKEN: '', GITHUB_TOKEN: '', OPENROUTER_API_KEY: '' }
+            : f.env
+        });
+      assert.equal(existsSync(stamp), true, stage + ': late mutation was not exercised');
+      assert.notEqual(result.status, 0, stage + ': late filter activation must block');
+      assert.match(result.stderr,
+        /candidate role blocked|pre-build replay blocked|post-build check blocked/);
+      assert.equal(existsSync(marker), false,
+        stage + ': untrusted filter must never execute during security verification');
+      assert.equal(readFileSync(join(f.cwd, path), 'utf8'),
+        stage === 'finalizer' ? candidate : original,
+        stage + ': blocked verification must not alter reviewed source');
+
+      // Positive exploit control. With the very same activated .git attributes
+      // an ordinary unguarded Git status executes the filter helper.
+      const control = spawnSync(realGit, ['status', '--porcelain=v1', '--untracked-files=no'], {
+        cwd: f.cwd, encoding: 'utf8', timeout: 20000
+      });
+      assert.equal(control.status, 0, control.stderr);
+      assert.equal(existsSync(marker), true,
+        stage + ': control must prove the late filter is executable');
+      assert.equal(f.git('rev-parse', 'main'), f.base,
+        stage + ': the disposable fixture default branch must remain unchanged');
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  }
+});
