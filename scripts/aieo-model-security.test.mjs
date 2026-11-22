@@ -1406,3 +1406,30 @@ test('independent Security rejects parenthesized computed calls even with forged
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed');
 });
+
+test('independent Security denies timer-based string execution with a forged clean diff', () => {
+  const original = 'const status = "Old status copy";\n';
+  const attacks = [
+    "const status = () => setTimeout(\"fe\" + \"tch(targetUrl)\", 0);",
+    "const status = () => setInterval(\"lo\" + \"cation=targetUrl\", 1000);",
+    "const status = () => (setTimeout).call(null, \"fe\" + \"tch(targetUrl)\", 0);",
+    "const status = () => setTimeout?.(\"fe\" + \"tch(targetUrl)\", 0);",
+    "const status = () => { const callback = setInterval; return callback(\"fe\" + \"tch(targetUrl)\", 0); };"
+  ];
+  for (const code of attacks) {
+    const actual = code + '\n';
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+const status = "New status copy";', // forged to conceal actual timer code
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', code);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), code);
+  }
+  const safe = 'const status = "New status copy";\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const status = "New status copy";',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
