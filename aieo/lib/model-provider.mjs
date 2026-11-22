@@ -72,8 +72,8 @@ const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|m
 // CSS @-rules accept escaped identifiers, e.g. @\69mport, which can
 // load an external stylesheet without spelling "import" or using url().
 // CSS hex/simple escapes reconstruct url() and related identifiers without spelling them.
-// Copy-only model edits have no need to introduce escaped CSS identifier characters.
-const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:|@\s*(?:import|\\)|\\(?:[0-9a-f]{1,6}|[a-z_-])/i;
+// Only reject CSS-escaped function names or @-rules; harmless JS string escapes are not CSS.
+const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:|@\s*(?:import|\\)|[a-z_-]*\\(?:[0-9a-f]{1,6}\s?|[a-z_-])[a-z0-9_-]*\s*\(/i;
 // Model-created HTML parse/assignment sinks can execute attacker-controlled
 // markup without a fetch() call. The FeedbackWidget text-only patch scope
 // has no reason to introduce these APIs or React's srcDoc property.
