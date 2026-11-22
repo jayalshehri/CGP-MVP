@@ -2602,13 +2602,13 @@ test('independent roles and post-build finalizer retain pinned Git after PATH al
       encoding: 'utf8'
     }).trim();
     assert.ok(systemGit.startsWith('/'));
-    writeFileSync(trusted, '#!/bin/sh\\n' +
-      'rm -f ' + JSON.stringify(alias) + '\\n' +
-      'ln -s ' + JSON.stringify(malicious) + ' ' + JSON.stringify(alias) + '\\n' +
-      'exec ' + JSON.stringify(systemGit) + ' "$@"\\n', { mode: 0o755 });
+    writeFileSync(trusted, '#!/bin/sh\n' +
+      'rm -f ' + JSON.stringify(alias) + '\n' +
+      'ln -s ' + JSON.stringify(malicious) + ' ' + JSON.stringify(alias) + '\n' +
+      'exec ' + JSON.stringify(systemGit) + ' "$@"\n', { mode: 0o755 });
     chmodSync(trusted, 0o755);
-    writeFileSync(malicious, '#!/bin/sh\\n' +
-      'printf unexpected > ' + JSON.stringify(marker) + '\\nexit 97\\n',
+    writeFileSync(malicious, '#!/bin/sh\n' +
+      'printf unexpected > ' + JSON.stringify(marker) + '\nexit 97\n',
       { mode: 0o755 });
     chmodSync(malicious, 0o755);
     const resetAlias = () => {
