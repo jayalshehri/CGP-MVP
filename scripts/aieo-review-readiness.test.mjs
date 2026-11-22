@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { verifyTrustedReviewReadiness, EXPECTED_ROLE_BLOBS } from './aieo-review-readiness.mjs';
 import { spawnSync } from 'node:child_process';
@@ -243,4 +244,16 @@ test('real readiness subprocess keeps its pinned gh and never inherits provider 
     assert.equal(readFileSync(calls, 'utf8').trim().split('\n').length, 16);
     assert.equal(existsSync(injected), false, 'swapped GH alias must never execute');
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('trusted-role blob pins match actual repository bytes, not only mocked API fixtures', () => {
+  for (const [path, expected] of Object.entries(EXPECTED_ROLE_BLOBS)) {
+    const bytes = readFileSync(new URL('../' + path, import.meta.url));
+    const computed = createHash('sha1')
+      .update('blob ' + bytes.length + '\0')
+      .update(bytes)
+      .digest('hex');
+    assert.equal(computed, expected,
+      'Stale trusted reviewer blob pin: ' + path + ' (update only after review)');
+  }
 });
