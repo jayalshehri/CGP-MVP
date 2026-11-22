@@ -116,6 +116,18 @@ function command(binary, args, { raw = false, credentialHelperCli = null } = {})
         ? ['diff', '--no-ext-diff', '--no-textconv', ...args.slice(1)]
         : args)]
     : args;
+  // Git attributes can be replaced after the publisher's initial checkout
+  // preflight (including between independent reviews and the final git add).
+  // Both worktree diffs and git add can invoke filter.<driver>.clean; switching
+  // branches can also apply checkout filters. Re-attest the effective attributes
+  // of EVERY tracked path immediately before each such Git operation. This
+  // check is credential-free and fails closed before a new helper can run.
+  const operation = args[0] === '-c' && args[1] === 'core.hooksPath=/dev/null'
+    ? args[2] : args[0];
+  if (binary === 'git' && ['diff', 'add', 'switch'].includes(operation)) {
+    try { assertNoTrackedGitFilters(process.env, pinnedPublisherGitExecutable); }
+    catch { fail('Git content filter changed before Git operation'); }
+  }
   // Prevent local refs/replace from silently rewriting reviewed Git blobs
   // while the privileged publisher retains a scoped GitHub write token.
   // Only the precisely scoped Git push needs a repository write token.
