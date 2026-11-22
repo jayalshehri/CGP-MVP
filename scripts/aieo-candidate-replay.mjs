@@ -34,6 +34,13 @@ const hasBuildCredential = (source) => Boolean(
 let pinnedReplayGitExecutable = null;
 const gitRaw = (...args) => {
   if (!pinnedReplayGitExecutable) block();
+  // Independent handoffs may be created after the initial clean-filter scan.
+  // Before any diff/status that could execute a Git clean filter, attest the
+  // current attributes again using the already pinned, credential-free Git.
+  if (args[0] === 'diff' || args[0] === 'status') {
+    try { assertNoTrackedGitFilters(process.env, pinnedReplayGitExecutable); }
+    catch { block(); }
+  }
   return execFileSync(pinnedReplayGitExecutable, readOnlyGitArguments(args), {
     encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
     env: readOnlyGitEnvironment(process.env)
