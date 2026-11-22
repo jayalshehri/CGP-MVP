@@ -1834,3 +1834,26 @@ test('model rejects computed property invocation and mutation in bounded copy pa
   }) }).status, 'proposed');
 });
 
+
+test('model rejects indirect invocation of computed members through call/apply/bind', () => {
+  const source = 'const status = "Old status copy";\n';
+  const find = 'const status = "Old status copy";';
+  const attacks = [
+    'const status = () => element[method].call(element, "href", targetUrl);',
+    'const status = () => element[method]?.apply(element, args);',
+    'const status = () => element[method].bind(element)("href", targetUrl);',
+    'const status = () => element[method]?.call?.(element, "href", targetUrl);',
+    'const status = () => element[method].apply?.(element, args);'
+  ];
+  for (const replace of attacks) {
+    assert.equal(validateModelPatch({ source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'A computed DOM method must not be invoked indirectly'
+    }) }).status, 'rejected', replace);
+  }
+  assert.equal(validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find,
+    replace: 'const status = items[index] + "New status copy";',
+    explanation: 'Read-only index and inert UI copy'
+  }) }).status, 'proposed');
+});
