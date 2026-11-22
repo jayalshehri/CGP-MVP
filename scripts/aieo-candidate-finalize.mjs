@@ -9,7 +9,7 @@ import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mj
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
 import { verifyOfficialGitHubCliContext, verifyCandidateActionsContext } from './aieo-candidate-role.mjs';
-import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitHubCliEnvironment, pinReadOnlyGitHubCli, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitHubCliEnvironment, pinReadOnlyGitHubCli, pinReadOnlyGitExecutable, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
 const SHA = /^[a-f0-9]{40}$/;
@@ -18,11 +18,13 @@ const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const fail = () => { throw new Error('AIEO post-build check blocked: candidate or remote Draft changed'); };
+let pinnedFinalizerGitExecutable = null;
 // Post-build re-attestation must not execute Git config/attribute helpers
 // under the independent workflow's GH_TOKEN, including textconv on diffs.
 const git = (...args) => {
+  if (!pinnedFinalizerGitExecutable) fail();
   const safeArgs = readOnlyGitArguments(args);
-  return execFileSync('git', safeArgs, {
+  return execFileSync(pinnedFinalizerGitExecutable, safeArgs, {
     encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
     env: readOnlyGitEnvironment(process.env)
   });
@@ -35,7 +37,8 @@ const gitTrim = (...args) => git(...args).trim();
 export function readStrictReviewedGitSource(revision) {
   try {
     if (!SHA.test(revision || '')) fail();
-    const raw = execFileSync('git', readOnlyGitArguments(['show', revision + ':' + MODEL_ALLOWED_PATH]),
+    const raw = execFileSync(pinnedFinalizerGitExecutable || pinReadOnlyGitExecutable(process.env),
+      readOnlyGitArguments(['show', revision + ':' + MODEL_ALLOWED_PATH]),
       { stdio: 'pipe', maxBuffer: 256000, env: readOnlyGitEnvironment(process.env) });
     if (!Buffer.isBuffer(raw) || raw.length < 1 ||
         raw.length > MAX_SOURCE_BYTES) fail();
@@ -139,8 +142,11 @@ export function verifyPostBuild(env = process.env) {
   // Git worktree diffs can execute clean filters from info/attributes or
   // global attributes even with no-textconv and a scrubbed Git environment.
   let ghExecutable;
-  try { ghExecutable = pinReadOnlyGitHubCli(process.env); } catch { fail(); }
-  try { assertNoTrackedGitFilters(process.env); } catch { fail(); }
+  try {
+    ghExecutable = pinReadOnlyGitHubCli(process.env);
+    pinnedFinalizerGitExecutable = pinReadOnlyGitExecutable(process.env);
+  } catch { fail(); }
+  try { assertNoTrackedGitFilters(process.env, pinnedFinalizerGitExecutable); } catch { fail(); }
 
   const path = MODEL_ALLOWED_PATH;
   const developer = report('developer');
