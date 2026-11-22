@@ -1880,3 +1880,26 @@ test('model rejects quoted bracket invocation of computed member call/apply/bind
     explanation: 'Read-only nested indexing and inert UI copy'
   }) }).status, 'proposed');
 });
+
+test('model rejects named-method execution after computed lookup while allowing inert reads', () => {
+  const source = 'const status = "Old status copy";\n';
+  const find = 'const status = "Old status copy";';
+  const attacks = [
+    'const status = () => element[method].trigger(targetUrl);',
+    'const status = () => element[method]?.invoke(targetUrl);',
+    'const status = () => element[method].handler?.(targetUrl);',
+    'const status = () => element[method].handler.call(element, targetUrl);',
+    'const status = () => element[method]?.nested?.execute?.(targetUrl);'
+  ];
+  for (const replace of attacks) {
+    assert.equal(validateModelPatch({ source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Computed members must not expose callable chains'
+    }) }).status, 'rejected', replace);
+  }
+  assert.equal(validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find,
+    replace: 'const status = items[index].label + "New status copy";',
+    explanation: 'Read-only computed lookup and inert label access'
+  }) }).status, 'proposed');
+});
