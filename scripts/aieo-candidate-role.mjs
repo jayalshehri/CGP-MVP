@@ -26,6 +26,14 @@ let pinnedRoleGitExecutable = null;
 // helpers with the role's read-scoped GH_TOKEN.
 function git(args) {
   if (!pinnedRoleGitExecutable) block();
+  // A tracked clean filter can be enabled after the initial role preflight.
+  // Both status and worktree diff may invoke its executable helper, even when
+  // the Git child environment has no credentials. Re-attest immediately before
+  // each such command, rather than trusting an earlier checkout inspection.
+  if (args[0] === 'status' || args[0] === 'diff') {
+    try { assertNoTrackedGitFilters(process.env, pinnedRoleGitExecutable); }
+    catch { block(); }
+  }
   const safeArgs = readOnlyGitArguments(args);
   return execFileSync(pinnedRoleGitExecutable, safeArgs, {
     encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
