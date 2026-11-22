@@ -1211,3 +1211,30 @@ test('independent Security rejects CSS-escaped URL functions despite forged diff
     report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
   }).status, 'passed');
 });
+
+test('independent Security rejects middle-of-identifier CSS import escapes despite forged diff', () => {
+  const slash = String.fromCharCode(92);
+  const original = 'const view = (<style>body { color: black; }</style>);\n';
+  const attacks = [
+    '@i' + slash + '6dport "https://assets.invalid/theme.css";',
+    '@im' + slash + '70ort "https://assets.invalid/theme.css";',
+    '@im' + slash + '000070ort "https://assets.invalid/theme.css";'
+  ];
+  for (const replacement of attacks) {
+    const actual = original.replace('body { color: black; }', replacement);
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+const unrelated = "harmless";', // forged: intentionally conceals the CSS at-rule
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', replacement);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), replacement);
+  }
+  const safeBefore = 'const view = (<p>Old status copy</p>);\n';
+  const safeAfter = safeBefore.replace('Old status copy', 'New status copy');
+  assert.equal(inspectModelDiff({
+    original: safeBefore, actual: safeAfter, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const view = (<p>New status copy</p>);',
+    report: { status: 'proposed', sourceHash: hash(safeBefore), proposedHash: hash(safeAfter) }
+  }).status, 'passed');
+});
