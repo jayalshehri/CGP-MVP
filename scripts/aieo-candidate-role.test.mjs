@@ -2758,8 +2758,12 @@ test('late executable clean filters block role, pre-build replay and finalizer b
         stage === 'finalizer' ? candidate : original,
         stage + ': blocked verification must not alter reviewed source');
 
-      // Positive exploit control. With the very same activated .git attributes
-      // an ordinary unguarded Git status executes the filter helper.
+      // Positive exploit control. Force an actual worktree content change:
+      // merely touching an already modified candidate can leave Git's stat
+      // cache and racily avoid clean-filter normalization on fast CI runners.
+      // With the same activated attributes, unguarded status MUST invoke it.
+      writeFileSync(join(f.cwd, path), readFileSync(join(f.cwd, path), 'utf8') +
+        '\n// synthetic post-verification control change\n');
       const control = spawnSync(realGit, ['status', '--porcelain=v1', '--untracked-files=no'], {
         cwd: f.cwd, encoding: 'utf8', timeout: 20000
       });
