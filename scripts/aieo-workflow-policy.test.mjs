@@ -270,7 +270,7 @@ test('independent candidate build replays an immutable, reviewed blob before npm
   assert.ok(replay.includes('assertNoTrackedGitFilters(process.env, pinnedReplayGitExecutable)'));
   assert.ok(replay.includes("const diff = gitRaw('diff'"),
     'raw Git diffs must use the pinned executable without trimming hash-bound bytes');
-  assert.doesNotMatch(replay, /execFileSync\\(\\s*['"]git['"]/,
+  assert.doesNotMatch(replay, /execFileSync\(\s*['"]git['"]/,
     'pre-build replay must never resolve a new Git executable from PATH');
   assert.ok(replay.includes("readBoundedRoleReport('reviewer')"));
   assert.ok(replay.includes('hasUnsafeGitEnvironment'));
