@@ -1462,3 +1462,32 @@ test('independent Security rejects aliased DOM mutators even with forged safe di
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed');
 });
+
+
+test('independent Security blocks native mutation aliases despite forged harmless diff', () => {
+  const original = 'const status = "Old status copy";\n';
+  const attacks = [
+    'const status = () => { const put = Object["assign"]; return put(anchor, { href: targetUrl }); };',
+    'const status = () => { const { assign: put } = Object; return put(anchor, { href: targetUrl }); };',
+    'const status = () => { const put = (Object)["assign"]; return put(anchor, { href: targetUrl }); };',
+    'const status = () => { const ref = Object; return ref["assign"](anchor, { href: targetUrl }); };',
+    'const status = () => { const write = Reflect["set"]; return write(anchor, "href", targetUrl); };',
+    'const status = () => { const { set: write } = Reflect; return write(anchor, "href", targetUrl); };'
+  ];
+  for (const attack of attacks) {
+    const actual = attack + '\n';
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+const status = "New status copy";', // intentionally forged clean diff
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', attack);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), attack);
+  }
+  const safe = 'const status = "New status copy";\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const status = "New status copy";',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});

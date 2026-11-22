@@ -90,6 +90,12 @@ const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:|@\s*(?:impor
 // Deny references even when not immediately called, plus attribute removal.
 const domNetworkMutation = /\b(?:setAttribute(?:NS|Node(?:NS)?)?|toggleAttribute|removeAttribute(?:NS|Node(?:NS)?)?|setProperty|insertAdjacentHTML|createContextualFragment)\b|\b(?:Object\s*\.\s*assign|Reflect\s*\.\s*set)\s*\(|(?:\.|\?\.)\s*(?:href|src|srcSet|action|formAction|poster|ping|background)\b|\[\s*['"](?:href|src|srcSet|action|formAction|poster|ping|background)['"]\s*\]/i;
 
+// Object/Reflect methods may be captured first and invoked later, avoiding
+// direct Object.assign/Reflect.set call screens (including bracket lookup,
+// destructuring and aliases). A bounded UI-copy proposal needs neither global
+// reflection namespace: reject newly introduced references, not just calls.
+const objectReflectionReference = /\b(?:Object|Reflect)\b/i;
+
 // Computed property calls/assignments can reconstruct effectful DOM or network
 // APIs without spelling a blocked method name (e.g. el['set'+'Attribute'](...)).
 // A narrowly scoped UI-copy patch needs neither computed calls nor mutations;
@@ -194,7 +200,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
       unsafeNonstandardUnicode.test(reviewedText) ||
       dynamicCodeReflection.test(reviewedText) || stringEvalTimer.test(reviewedText) ||
       outboundMarkup.test(reviewedText) || outboundCss.test(reviewedText) ||
-      domNetworkMutation.test(reviewedText) || computedPropertyEffects.test(reviewedText) ||
+      domNetworkMutation.test(reviewedText) || objectReflectionReference.test(reviewedText) || computedPropertyEffects.test(reviewedText) ||
       rawHtmlSink.test(reviewedText) ||
       introducesOutboundMarkup(original, actual) ||
       introducesOutboundTagAttribute(original, actual)) {
