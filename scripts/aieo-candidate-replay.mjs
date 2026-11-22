@@ -12,7 +12,7 @@ import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
 import { readStrictReviewedGitSource } from './aieo-candidate-finalize.mjs';
 import {
   hasUnsafeGitEnvironment, readOnlyGitArguments,
-  readOnlyGitEnvironment, assertNoTrackedGitFilters
+  readOnlyGitEnvironment, pinReadOnlyGitExecutable, assertNoTrackedGitFilters
 } from './aieo-git-process-guard.mjs';
 
 const REPO = 'jayalshehri/CGP-MVP';
@@ -27,10 +27,19 @@ const block = () => { throw new Error('AIEO pre-build replay blocked: untrusted 
 const hasBuildCredential = (source) => Boolean(
   source?.GH_TOKEN || source?.GITHUB_TOKEN || source?.OPENROUTER_API_KEY
 );
-const git = (...args) => execFileSync('git', readOnlyGitArguments(args), {
-  encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
-  env: readOnlyGitEnvironment(process.env)
-}).trimEnd();
+// Pre-build replay handles the approved candidate before npm executes it.
+// Resolve Git once, before the first subprocess, and retain that exact binary
+// for BOTH immutable blob reads and every subsequent replay check. A mutable
+// PATH entry must not be able to swap in an untrusted Git between these steps.
+let pinnedReplayGitExecutable = null;
+const gitRaw = (...args) => {
+  if (!pinnedReplayGitExecutable) block();
+  return execFileSync(pinnedReplayGitExecutable, readOnlyGitArguments(args), {
+    encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
+    env: readOnlyGitEnvironment(process.env)
+  });
+};
+const git = (...args) => gitRaw(...args).trimEnd();
 
 // Refuse foreign-owned, unreadable or special-mode workspace inputs before
 // writing approved candidate bytes for npm. Re-attest the opened inode,
@@ -130,7 +139,8 @@ export function replayReviewedCandidate(env = process.env) {
       !SHA.test(env.GITHUB_SHA || '') ||
       !/^[1-9][0-9]*$/.test(env.AIEO_PR_NUMBER || '')) block();
   try {
-    assertNoTrackedGitFilters(process.env);
+    pinnedReplayGitExecutable = pinReadOnlyGitExecutable(process.env);
+    assertNoTrackedGitFilters(process.env, pinnedReplayGitExecutable);
     const base = env.GITHUB_SHA;
     const developer = readBoundedRoleReport('developer');
     const qa = readBoundedRoleReport('qa');
@@ -169,13 +179,12 @@ export function replayReviewedCandidate(env = process.env) {
       if (!/^100644 blob [a-f0-9]{40}\tcomponents\/FeedbackWidget\.tsx$/.test(
         git('ls-tree', revision, '--', MODEL_ALLOWED_PATH))) block();
     }
-    const original = readStrictReviewedGitSource(base);
-    const candidate = readStrictReviewedGitSource(head);
+    const original = readStrictReviewedGitSource(base, pinnedReplayGitExecutable);
+    const candidate = readStrictReviewedGitSource(head, pinnedReplayGitExecutable);
     const paths = git('diff', '--name-only', base, head).split('\n').filter(Boolean);
-    const diff = execFileSync('git',
-      readOnlyGitArguments(['diff', '--unified=0', base, head, '--', MODEL_ALLOWED_PATH]),
-      { encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
-        env: readOnlyGitEnvironment(process.env) });
+    // Keep the raw diff's final newline: downstream role hashes cover these
+    // exact bytes, while ordinary Git metadata reads may trim whitespace.
+    const diff = gitRaw('diff', '--unified=0', base, head, '--', MODEL_ALLOWED_PATH);
     if (paths.length !== 1 || paths[0] !== MODEL_ALLOWED_PATH ||
         original === candidate || diff.length > 20000 ||
         candidate.length > 48000) block();
