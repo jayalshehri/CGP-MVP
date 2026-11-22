@@ -8,7 +8,7 @@ import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
 import { inspectModelQa, inspectModelReviewer } from '../aieo/lib/model-gates.mjs';
 import { inspectModelDiff } from './aieo-model-security.mjs';
 import { readBoundedRoleReport } from './aieo-role-artifact-io.mjs';
-import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitHubCliEnvironment, pinReadOnlyGitHubCli, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
+import { hasUnsafeGitEnvironment, readOnlyGitEnvironment, readOnlyGitHubCliEnvironment, pinReadOnlyGitHubCli, pinReadOnlyGitExecutable, readOnlyGitArguments, assertNoTrackedGitFilters } from './aieo-git-process-guard.mjs';
 
 const SHA = /^[a-f0-9]{40}$/;
 const BRANCH = /^aieo\/model-proposal-[0-9]+-[1-9][0-9]*$/;
@@ -20,12 +20,14 @@ const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 function block() {
   throw new Error('AIEO candidate role blocked: unverified remote Draft PR or candidate evidence');
 }
+let pinnedRoleGitExecutable = null;
 // Git attributes and local config can execute textconv and fsmonitor programs
 // even during otherwise read-only role inspection. Do not execute checkout
 // helpers with the role's read-scoped GH_TOKEN.
 function git(args) {
+  if (!pinnedRoleGitExecutable) block();
   const safeArgs = readOnlyGitArguments(args);
-  return execFileSync('git', safeArgs, {
+  return execFileSync(pinnedRoleGitExecutable, safeArgs, {
     encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
     env: readOnlyGitEnvironment(process.env)
   });
@@ -35,7 +37,7 @@ function git(args) {
 // UTF-8. Independent role attestations must bind to exactly the bytes published,
 // including when the previous trusted base or the candidate is malformed.
 function readStrictGitSource(revision) {
-  const bytes = execFileSync('git', readOnlyGitArguments(['show', revision + ':' + MODEL_ALLOWED_PATH]),
+  const bytes = execFileSync(pinnedRoleGitExecutable, readOnlyGitArguments(['show', revision + ':' + MODEL_ALLOWED_PATH]),
     { stdio: 'pipe', maxBuffer: 256000, env: readOnlyGitEnvironment(process.env) });
   if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > 48000) block();
   const source = bytes.toString('utf8');
@@ -314,7 +316,8 @@ export function runCandidateRole(role, env = process.env) {
   try { ghExecutable = pinReadOnlyGitHubCli(process.env); } catch { block(); }
   // A worktree diff may invoke an attribute-selected clean filter despite
   // --no-textconv. Reject effective filters before any Git diff or handoff.
-  try { assertNoTrackedGitFilters(process.env); } catch { block(); }
+  try { pinnedRoleGitExecutable = pinReadOnlyGitExecutable(process.env); } catch { block(); }
+  try { assertNoTrackedGitFilters(process.env, pinnedRoleGitExecutable); } catch { block(); }
   const { base, head, headRef, number } = verifiedRemoteContext(env, ghExecutable);
   let original, actual, changedPaths, diff;
   try {
