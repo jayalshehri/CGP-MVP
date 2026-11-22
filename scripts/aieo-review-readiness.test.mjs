@@ -18,7 +18,7 @@ const env = {
   GH_TOKEN: 'fixture-never-live'
 };
 
-function fixture({ badRef, workflowState, missingPath, malformed, throwing } = {}) {
+function fixture({ badRef, mainMoves, workflowState, missingPath, malformed, throwing } = {}) {
   const calls = [];
   const gh = (args) => {
     assert.equal(args[0], 'api');
@@ -28,7 +28,7 @@ function fixture({ badRef, workflowState, missingPath, malformed, throwing } = {
     if (malformed) return '<synthetic non-json>';
     const target = args[1];
     if (target === 'repos/' + repo + '/git/ref/heads/main') {
-      return JSON.stringify({ sha: badRef ? 'b'.repeat(40) : sha, type: 'commit' });
+      return JSON.stringify({ sha: badRef || (mainMoves && calls.filter((call) => call[1] === target).length > 1) ? 'b'.repeat(40) : sha, type: 'commit' });
     }
     if (target === 'repos/' + repo + '/actions/workflows/aieo-model-candidate-roles.yml') {
       return JSON.stringify({ path: workflow, state: workflowState || 'active' });
@@ -47,7 +47,7 @@ test('registered ACTIVE reviewer and all pinned role files pass without a provid
   assert.deepEqual(verifyTrustedReviewReadiness({ env, gh: f.gh }), {
     status: 'ready', verifiedMainCommit: sha, roleFiles: 8
   });
-  assert.equal(f.calls.length, 10, 'one SHA ref, one workflow registration and eight file checks');
+  assert.equal(f.calls.length, 11, 'two main-ref attestations, one workflow registration and eight file checks');
   assert.ok(f.calls.every((args) => !args.join(' ').includes('openrouter')));
 });
 
@@ -68,7 +68,7 @@ test('untrusted dispatch and absent credentials never reach GitHub', () => {
 
 test('missing or disabled workflow, stale main and missing role implementation fail closed', () => {
   for (const options of [
-    { badRef: true }, { workflowState: 'disabled_manually' },
+    { badRef: true }, { mainMoves: true }, { workflowState: 'disabled_manually' },
     { missingPath: 'scripts/aieo-candidate-role.mjs' },
     { missingPath: workflow }, { malformed: true }, { throwing: true }
   ]) {
@@ -157,7 +157,7 @@ test('real readiness subprocess keeps its pinned gh and never inherits provider 
     const malicious = join(bin, 'gh-replacement');
     const calls = join(root, 'calls.txt');
     const injected = join(root, 'untrusted-gh-executed');
-    // A genuine child process receives the token for ten synthetic GitHub
+    // A genuine child process receives the token for eleven synthetic GitHub
     // metadata reads. The first request rewrites PATH's gh symlink. Neither
     // that alias swap nor ambient provider secrets may reach any later API.
     const fake = [
@@ -215,7 +215,7 @@ test('real readiness subprocess keeps its pinned gh and never inherits provider 
     assert.deepEqual(JSON.parse(result.stdout), {
       status: 'ready', verifiedMainCommit: sha, roleFiles: 8
     });
-    assert.equal(readFileSync(calls, 'utf8').trim().split('\n').length, 10);
+    assert.equal(readFileSync(calls, 'utf8').trim().split('\n').length, 11);
     assert.equal(existsSync(injected), false, 'swapped GH alias must never execute');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

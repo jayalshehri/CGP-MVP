@@ -83,6 +83,14 @@ export function verifyTrustedReviewReadiness({ env = process.env, gh = liveGithu
         path + '?ref=' + sha, '--jq', '{path:.path,type:.type}']));
       if (item.path !== path || item.type !== 'file') failure();
     }
+
+    // Recheck main after all remote metadata reads. Otherwise main can advance
+    // between the first ref read and source disclosure, leaving the provider
+    // using a workflow commit that is no longer the trusted default-branch tip.
+    // The same pinned CLI and scoped token are used for this final read.
+    const finalRef = parseJson(query(['api', 'repos/' + REPO + '/git/ref/heads/main',
+      '--jq', '{sha:.object.sha,type:.object.type}']));
+    if (finalRef.sha !== sha || finalRef.type !== 'commit') failure();
   } catch { failure(); }
   return { status: 'ready', verifiedMainCommit: sha, roleFiles: REQUIRED.length };
 }
