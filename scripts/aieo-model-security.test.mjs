@@ -1296,3 +1296,30 @@ test('independent Security rejects computed property effects with forged Git dif
   }).status, 'passed');
 });
 
+
+test('independent Security rejects computed indirect calls even with a forged harmless diff', () => {
+  const original = 'const status = "Old status copy";\n';
+  const attacks = [
+    'const status = () => element[method].call(element, "href", targetUrl);',
+    'const status = () => element[method]?.apply(element, args);',
+    'const status = () => element[method].bind(element)("href", targetUrl);',
+    'const status = () => element[method]?.call?.(element, "href", targetUrl);',
+    'const status = () => element[method].apply?.(element, args);'
+  ];
+  for (const code of attacks) {
+    const actual = code + '\n';
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+const status = "New status copy";', // intentionally excludes the real added method call
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', code);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), code);
+  }
+  const safe = 'const status = items[index] + "New status copy";\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const status = items[index] + "New status copy";',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
