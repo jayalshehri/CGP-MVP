@@ -1857,3 +1857,26 @@ test('model rejects indirect invocation of computed members through call/apply/b
     explanation: 'Read-only index and inert UI copy'
   }) }).status, 'proposed');
 });
+
+test('model rejects quoted bracket invocation of computed member call/apply/bind', () => {
+  const source = 'const status = "Old status copy";\n';
+  const find = 'const status = "Old status copy";';
+  const attacks = [
+    'const status = () => element[method]["call"](element, "href", targetUrl);',
+    'const status = () => element[method]?.["apply"](element, args);',
+    'const status = () => element[method][`bind`](element)("href", targetUrl);',
+    'const status = () => element[method]["apply"]?.(element, args);',
+    'const status = () => element[method]?.["call"]?.(element, "href", targetUrl);'
+  ];
+  for (const replace of attacks) {
+    assert.equal(validateModelPatch({ source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Computed member indirect bracket invocation is unsafe'
+    }) }).status, 'rejected', replace);
+  }
+  assert.equal(validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find,
+    replace: 'const status = items[index]["label"] + "New status copy";',
+    explanation: 'Read-only nested indexing and inert UI copy'
+  }) }).status, 'proposed');
+});
