@@ -86,9 +86,11 @@ const domNetworkMutation = /\b(?:setAttribute(?:NS|Node)?|toggleAttribute|setPro
 // APIs without spelling a blocked method name (e.g. el['set'+'Attribute'](...)).
 // A narrowly scoped UI-copy patch needs neither computed calls nor mutations;
 // ordinary read-only array indexing remains allowed. This is defense-in-depth.
+// Quoted .call/.apply/.bind bracket access can invoke the same computed method,
+// including optional chaining and template-quoted constant keys.
 // A computed method can also be invoked indirectly through .call/.apply/.bind,
 // including optional chaining; a simple `](` check would miss this.
-const computedPropertyEffects = /\]\s*(?:\?\.)?\s*\(|\]\s*(?:\?\.|\.)\s*(?:call|apply|bind)\s*(?:\?\.)?\s*\(|\]\s*(?:=(?!=)|\+=|-=|\*=|\/=|\?\?=|\|\|=|&&=)|\[\s*['"\x60][^'"\x60\]\n]{1,80}['"\x60]\s*\+\s*['"\x60]/;
+const computedPropertyEffects = /\]\s*(?:\?\.)?\s*\(|\]\s*(?:(?:\?\.|\.)\s*(?:call|apply|bind)|(?:\?\.)?\s*\[\s*['"\x60](?:call|apply|bind)['"\x60]\s*\])\s*(?:\?\.)?\s*\(|\]\s*(?:=(?!=)|\+=|-=|\*=|\/=|\?\?=|\|\|=|&&=)|\[\s*['"\x60][^'"\x60\]\n]{1,80}['"\x60]\s*\+\s*['"\x60]/;
 
 // Model-created HTML parse/assignment sinks can execute attacker-controlled
 // markup without a fetch() call. The FeedbackWidget text-only patch scope
