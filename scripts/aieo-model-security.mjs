@@ -66,6 +66,12 @@ const unsafeNonstandardUnicode = /[\p{Co}\p{Cn}]/u;
 // without literal eval/Function. Fail closed on these names in added lines.
 const dynamicCodeReflection = /\b(?:constructor|__proto__|prototype|setPrototypeOf|getPrototypeOf|defineProperty|defineProperties)\b/i;
 
+// Browser timers accept strings as executable code. A model can construct a
+// network call from string fragments (e.g. "fe" + "tch(...)") without spelling
+// a blocked API in its patch. A bounded UI-copy fix never needs timer APIs.
+// Reject even aliased/indirect timer references, not just direct calls.
+const stringEvalTimer = /\b(?:setTimeout|setInterval)\b/i;
+
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
 // CSS @-rules accept escaped identifiers, e.g. @\69mport, which can
 // load an external stylesheet without spelling "import" or using url().
@@ -182,7 +188,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
       encodedJavaScriptEscape.test(reviewedText) ||
       unsafeInvisible.test(reviewedText) || unsafeLineControl.test(reviewedText) ||
       unsafeNonstandardUnicode.test(reviewedText) ||
-      dynamicCodeReflection.test(reviewedText) ||
+      dynamicCodeReflection.test(reviewedText) || stringEvalTimer.test(reviewedText) ||
       outboundMarkup.test(reviewedText) || outboundCss.test(reviewedText) ||
       domNetworkMutation.test(reviewedText) || computedPropertyEffects.test(reviewedText) ||
       rawHtmlSink.test(reviewedText) ||
