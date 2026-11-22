@@ -34,10 +34,13 @@ const gitTrim = (...args) => git(...args).trim();
 // The immutable base/head Git blobs must be checked as raw bytes. Decoding
 // git show as UTF-8 first can silently turn malformed data into U+FFFD; the
 // compiled worktree could then appear equal despite different committed bytes.
-export function readStrictReviewedGitSource(revision) {
+// The credential-free pre-build replay passes its own previously attested Git
+// executable; the post-build finalizer continues using its independently
+// pinned executable. Never resolve a new PATH alias between blob reads.
+export function readStrictReviewedGitSource(revision, pinnedReadExecutable = null) {
   try {
     if (!SHA.test(revision || '')) fail();
-    const raw = execFileSync(pinnedFinalizerGitExecutable || pinReadOnlyGitExecutable(process.env),
+    const raw = execFileSync(pinnedReadExecutable || pinnedFinalizerGitExecutable || pinReadOnlyGitExecutable(process.env),
       readOnlyGitArguments(['show', revision + ':' + MODEL_ALLOWED_PATH]),
       { stdio: 'pipe', maxBuffer: 256000, env: readOnlyGitEnvironment(process.env) });
     if (!Buffer.isBuffer(raw) || raw.length < 1 ||
