@@ -1928,3 +1928,26 @@ test('model rejects parenthesized computed method calls without blocking grouped
     explanation: 'Grouped computed property read is inert'
   }) }).status, 'proposed');
 });
+
+test('model rejects string-executing timers and indirect aliases in bounded UI changes', () => {
+  const source = 'const status = "Old status copy";\n';
+  const find = 'const status = "Old status copy";';
+  const attacks = [
+    "const status = () => setTimeout(\"fe\" + \"tch(targetUrl)\", 0);",
+    "const status = () => setInterval(\"lo\" + \"cation=targetUrl\", 1000);",
+    "const status = () => (setTimeout).call(null, \"fe\" + \"tch(targetUrl)\", 0);",
+    "const status = () => setTimeout?.(\"fe\" + \"tch(targetUrl)\", 0);",
+    "const status = () => { const callback = setInterval; return callback(\"fe\" + \"tch(targetUrl)\", 0); };"
+  ];
+  for (const replace of attacks) {
+    assert.equal(validateModelPatch({ source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'String timer execution bypasses direct API names'
+    }) }).status, 'rejected', replace);
+  }
+  assert.equal(validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find,
+    replace: 'const status = "New status copy";',
+    explanation: 'Inert copy update without executable timer'
+  }) }).status, 'proposed');
+});
