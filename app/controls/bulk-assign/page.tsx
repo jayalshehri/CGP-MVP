@@ -5,6 +5,7 @@ import Link from "next/link";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { WorkflowHeading, WorkflowMetric } from "@/components/WorkflowUI";
+import AccessibleDialog from "@/components/AccessibleDialog";
 import "./bulk-assign.css";
 
 type Control = {
@@ -244,9 +245,9 @@ export default function BulkAssignPage() {
       )}
 
       {confirming && (
-        <div className="bulk-assign-dialog-backdrop" role="presentation" onMouseDown={() => !saving && setConfirming(false)}>
-          <section className="bulk-assign-dialog" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
-            <h2>تأكيد التعيين الجماعي</h2>
+        <AccessibleDialog backdropClassName="bulk-assign-dialog-backdrop" className="bulk-assign-dialog" labelledBy="bulk-assign-title" busy={saving} onClose={() => setConfirming(false)}>
+            <h2 id="bulk-assign-title">تأكيد التعيين الجماعي</h2>
+            {error && <p role="alert" className="cgp-shell-error">{error}</p>}
             <p className="bulk-assign-confirm-headline">سيتم تعيين <strong>{safeToAssign.length}</strong> ضابطًا إلى <strong>{owners.find((o) => o.user_id === targetOwner)?.display_name ?? targetOwner}</strong></p>
 
             <div className="bulk-assign-breakdown">
@@ -271,8 +272,7 @@ export default function BulkAssignPage() {
                 {saving ? "جاري الحفظ…" : `تأكيد تعيين ${safeToAssign.length} ضابطًا`}
               </button>
             </div>
-          </section>
-        </div>
+        </AccessibleDialog>
       )}
     </main>
   );

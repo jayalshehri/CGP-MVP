@@ -5,6 +5,18 @@ const scriptPolicy = process.env.NODE_ENV === "development"
   : "script-src 'self' 'unsafe-inline'";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      { source: "/data-governance", destination: "/data-governance/nudee", permanent: false },
+      { source: "/data-governance/requests/:path*", destination: "/data-governance/nudee", permanent: false },
+      { source: "/data-governance/assets/:path*", destination: "/data-governance/nudee", permanent: false },
+      { source: "/data-governance/controls/:path*", destination: "/data-governance/nudee", permanent: false },
+      { source: "/data-governance/quality/:path*", destination: "/data-governance/nudee", permanent: false },
+      { source: "/data-governance/privacy/:path*", destination: "/data-governance/nudee", permanent: false },
+      { source: "/data-governance/sharing/:path*", destination: "/data-governance/nudee", permanent: false },
+      { source: "/data-governance/reports/:path*", destination: "/data-governance/nudee", permanent: false },
+    ];
+  },
   async headers() {
     return [{
       source: "/:path*",

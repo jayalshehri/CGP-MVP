@@ -1,6 +1,5 @@
 "use client";
 import { FormEvent,useEffect,useMemo,useState } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { requireProfile,type UserRole } from "@/lib/auth";
 import { WorkflowHeading,WorkflowMetric } from "@/components/WorkflowUI";
@@ -12,7 +11,7 @@ const level=(s:number)=>s<=3?"منخفض جدًا":s<=6?"منخفض":s<=10?"مت
 const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"});
 const statusLabel=(s:Risk["risk_status"])=>({open:"مفتوح",treatment_in_progress:"قيد المعالجة",accepted:"مقبول",closed:"مغلق"}[s]);
 export default function RisksPage(){
- const router=useRouter(),[items,setItems]=useState<Risk[]>([]),[assets,setAssets]=useState<Asset[]>([]),[role,setRole]=useState<UserRole>("control_owner"),[loading,setLoading]=useState(true),[open,setOpen]=useState(false),[error,setError]=useState(""),[saving,setSaving]=useState(false);
+ const [items,setItems]=useState<Risk[]>([]),[assets,setAssets]=useState<Asset[]>([]),[role,setRole]=useState<UserRole>("control_owner"),[loading,setLoading]=useState(true),[open,setOpen]=useState(false),[error,setError]=useState(""),[saving,setSaving]=useState(false);
  const [f,setF]=useState({risk_code:"",risk_scope:"business_operations",asset_id:"",risk_owner:"",risk_description:"",threat:"",inherent_likelihood:"3",inherent_impact:"3",treatment_type:"mitigate",treatment_owner:"",action_due_date:"",residual_likelihood:"2",residual_impact:"3",next_steps:""});
  async function load(canReadAssets=true){const [{data,error},assetResult]=await Promise.all([supabase.from("cyber_risks").select("*").order("residual_score",{ascending:false}),canReadAssets?supabase.from("assets").select("id,asset_code,name_ar").order("name_ar"):Promise.resolve({data:[],error:null})]);if(error||assetResult.error)throw error||assetResult.error;setItems((data??[]) as Risk[]);setAssets((assetResult.data??[]) as Asset[])}
  useEffect(()=>{let live=true;(async()=>{try{const {profile}=await requireProfile();if(!live)return;setRole(profile.role);await load(profile.role!=="control_owner")}catch(e){if(live)setError(e instanceof Error?e.message:"تعذر تحميل سجل المخاطر")}finally{if(live)setLoading(false)}})();return()=>{live=false}},[]);

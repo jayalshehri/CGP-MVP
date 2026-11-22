@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
+import { roleHomePath } from "@/lib/workspaces";
 import { supabase } from "@/lib/supabase";
 import { WorkflowMetric } from "@/components/WorkflowUI";
 import { EVIDENCE_PRESENT, frameworkOf, isApplicable, isImplemented, isVerified, percentage } from "@/lib/compliance";
@@ -37,6 +38,8 @@ export default function Home() {
         const { profile } = await requireProfile();
         if (!mounted) return;
 
+        const homePath = roleHomePath(profile.role);
+        if (homePath !== "/") { router.replace(homePath); return; }
         setUserRole(profile.role);
 
         setAuthReady(true);
