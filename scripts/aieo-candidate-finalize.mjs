@@ -23,6 +23,13 @@ let pinnedFinalizerGitExecutable = null;
 // under the independent workflow's GH_TOKEN, including textconv on diffs.
 const git = (...args) => {
   if (!pinnedFinalizerGitExecutable) fail();
+  // Build tools can change .git/info/attributes after the initial filter
+  // scan. A late worktree diff or status must not execute an injected clean
+  // filter under the post-build verification process.
+  if (args[0] === 'diff' || args[0] === 'status') {
+    try { assertNoTrackedGitFilters(process.env, pinnedFinalizerGitExecutable); }
+    catch { fail(); }
+  }
   const safeArgs = readOnlyGitArguments(args);
   return execFileSync(pinnedFinalizerGitExecutable, safeArgs, {
     encoding: 'utf8', stdio: 'pipe', maxBuffer: 256000,
