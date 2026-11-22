@@ -1752,3 +1752,35 @@ test('model denies CSS-escaped URL functions in existing stylesheet content', ()
     })
   }).status, 'proposed');
 });
+
+test('model rejects middle-of-identifier CSS escaped imports in existing stylesheets', () => {
+  const slash = String.fromCharCode(92);
+  const source = 'const view = (<style>body { color: black; }</style>);\n';
+  const attacks = [
+    '@i' + slash + '6dport "https://assets.invalid/theme.css";',
+    '@im' + slash + '70ort "https://assets.invalid/theme.css";',
+    '@im' + slash + '000070ort "https://assets.invalid/theme.css";'
+  ];
+  for (const replace of attacks) {
+    const verdict = validateModelPatch({
+      source,
+      response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH,
+        find: 'body { color: black; }',
+        replace,
+        explanation: 'Reject an escaped CSS at-rule in a model edit'
+      })
+    });
+    assert.equal(verdict.status, 'rejected', replace);
+  }
+  const cleanSource = 'const view = (<p>Old status copy</p>);\n';
+  assert.equal(validateModelPatch({
+    source: cleanSource,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH,
+      find: 'Old status copy',
+      replace: 'New status copy',
+      explanation: 'A safe text-only edit'
+    })
+  }).status, 'proposed');
+});
