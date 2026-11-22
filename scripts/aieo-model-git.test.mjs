@@ -153,3 +153,38 @@ test('model source and review Git reads retain pinned executable after PATH alia
     } finally { process.chdir(originalCwd); }
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test('model Git re-attests tracked clean filters before each later diff', () => {
+  const f = fixture();
+  try {
+    const helper = join(f.root, 'synthetic-clean.sh');
+    const marker = join(f.root, 'untrusted-clean-executed');
+    writeFileSync(helper,
+      '#!/bin/sh\\n' +
+      'printf unsafe > ' + JSON.stringify(marker) + '\\n' +
+      'cat\\n', { mode: 0o755 });
+    chmodSync(helper, 0o755);
+    git(f.work, 'config', 'filter.synthetic-clean.clean', helper);
+    const env = { ...process.env, OPENROUTER_API_KEY: 'synthetic-only' };
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(f.work);
+      // The original source preflight passes while attributes are clean.
+      preflightModelGit(env);
+      // A change during provider wait or a later role stage must be caught
+      // before a worktree diff can launch the newly configured helper.
+      writeFileSync('.gitattributes',
+        'components/FeedbackWidget.tsx filter=synthetic-clean\\n');
+      writeFileSync('components/FeedbackWidget.tsx', 'const label = "changed";\\n');
+      assert.throws(() => modelGit(['diff', '--name-only'], { env }),
+        /active or unverified Git content filter/);
+      assert.equal(existsSync(marker), false,
+        'no executable clean filter may run after preflight');
+      rmSync('.gitattributes');
+      assert.match(modelGit(['diff', '--name-only'], { env }),
+        /components\\/FeedbackWidget\\.tsx/,
+        'a normal credential-free diff must still work when attributes are safe');
+      assert.equal(existsSync(marker), false);
+    } finally { process.chdir(previousCwd); }
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
