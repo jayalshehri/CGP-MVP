@@ -16,7 +16,16 @@ const REQUIRED = [
   'scripts/aieo-role-artifact-io.mjs',
   'scripts/aieo-model-security.mjs',
   'aieo/lib/model-gates.mjs',
-  'aieo/lib/model-provider.mjs'
+  'aieo/lib/model-provider.mjs',
+  // These transitive dependencies are required for independent candidate
+  // replay, imported handoffs and safe source/diff inspection on main.
+  // A missing module must block consented source disclosure, not fail only
+  // after a remote model proposal was already created.
+  'scripts/aieo-import-handoffs.mjs',
+  'scripts/aieo-git-process-guard.mjs',
+  'scripts/aieo-model-candidate-read.mjs',
+  'scripts/aieo-model-git.mjs',
+  'aieo/lib/outbound-tag-guard.mjs'
 ];
 const SHA = /^[a-f0-9]{40}$/;
 const failure = () => { throw Error('AIEO blocked: trusted main reviewer workflow is not ready'); };
