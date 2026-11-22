@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -52,8 +52,10 @@ export default function NDMOControlsPage() {
       }
     })();
   }, [r]);
-  const domainName = (id: number) =>
-    domains.find((d) => d.id === id)?.name_ar || "—";
+  const domainName = useCallback(
+    (id: number) => domains.find((d) => d.id === id)?.name_ar || "—",
+    [domains],
+  );
   const rows = useMemo(
     () =>
       controls.filter(
@@ -63,7 +65,7 @@ export default function NDMOControlsPage() {
             .toLowerCase()
             .includes(query.toLowerCase()),
       ),
-    [controls, domain, query, domains],
+    [controls, domain, query, domainName],
   );
   return (
     <main className="dg-page" dir="rtl">

@@ -1,6 +1,5 @@
 "use client";
-import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import "../data-governance.css";
@@ -25,12 +24,16 @@ const statuses: Record<string, string> = {
   closed: "مغلق",
 };
 export default function SharingPage() {
-  const r = useRouter();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [rows, setRows] = useState<Request[]>([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [refreshError, setRefreshError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
+  const savingLock = useRef(false);
   const [form, setForm] = useState({
     asset_id: "",
     requester_name: "",
@@ -40,8 +43,9 @@ export default function SharingPage() {
     legal_basis: "",
     sharing_method: "",
   });
-  async function load() {
-    const [{ data: a }, { data: s, error }] = await Promise.all([
+  const load = useCallback(async () => {
+    await requireProfile(["admin", "data_governance_team"]);
+    const [{ data: a, error: assetError }, { data: s, error }] = await Promise.all([
       supabase.from("data_assets").select("id,name_ar").order("name_ar"),
       supabase
         .from("data_sharing_requests")
@@ -50,44 +54,63 @@ export default function SharingPage() {
         )
         .order("created_at", { ascending: false }),
     ]);
-    if (error) throw error;
+    if (assetError || error) throw assetError || error;
     setAssets((a ?? []) as Asset[]);
     setRows((s ?? []) as Request[]);
-  }
+    setReady(true);
+    setRefreshError("");
+  }, []);
   useEffect(() => {
-    requireProfile(["admin", "data_governance_team"])
-      .then(load)
-      .catch(() => r.replace("/"));
-  }, [r]);
+    let active = true;
+    void Promise.resolve().then(() => load()).catch(() => {
+      if (active) setRefreshError("تعذر تحميل السجل. تحقق من الاتصال وصلاحية حسابك ثم أعد المحاولة.");
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [load]);
+
+  async function refresh() {
+    if (savingLock.current) return;
+    setLoading(true);
+    try { await load(); }
+    catch { setRefreshError("تعذر تحديث السجل. تحقق من الاتصال ثم أعد المحاولة."); }
+    finally { setLoading(false); }
+  }
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    setError("");
-    const { error } = await supabase
-      .from("data_sharing_requests")
-      .insert({
-        ...form,
-        request_code: "DS-" + Date.now(),
-        asset_id: form.asset_id ? Number(form.asset_id) : null,
+    if (savingLock.current || !ready || refreshError) return;
+    savingLock.current = true;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      await requireProfile(["admin", "data_governance_team"]);
+      const { error } = await supabase
+        .from("data_sharing_requests")
+        .insert({
+          ...form,
+          request_code: "DS-" + Date.now(),
+          asset_id: form.asset_id ? Number(form.asset_id) : null,
+        });
+      if (error) throw error;
+      setNotice("تم حفظ طلب المشاركة بنجاح.");
+      setOpen(false);
+      setForm({
+        asset_id: "",
+        requester_name: "",
+        recipient_entity: "",
+        sharing_purpose: "",
+        data_categories: "",
+        legal_basis: "",
+        sharing_method: "",
       });
-    if (error) {
-      setError("تعذر حفظ طلب المشاركة. تأكد من الحقول المطلوبة.");
+      try { await load(); }
+      catch { setRefreshError("تم الحفظ، لكن تعذر تحديث السجل. حدّث البيانات لعرض النتيجة."); }
+    } catch {
+      setError("تعذر تأكيد الحفظ. احتفظنا بالحقول؛ حدّث السجل للتحقق من وصوله قبل إعادة المحاولة.");
+    } finally {
+      savingLock.current = false;
       setSaving(false);
-      return;
     }
-    setOpen(false);
-    setForm({
-      asset_id: "",
-      requester_name: "",
-      recipient_entity: "",
-      sharing_purpose: "",
-      data_categories: "",
-      legal_basis: "",
-      sharing_method: "",
-    });
-    await load();
-    setSaving(false);
   }
+
   return (
     <main className="dg-page" dir="rtl">
       <div className="workflow-heading">
@@ -101,14 +124,19 @@ export default function SharingPage() {
         </div>
         <button
           className="workflow-button workflow-primary"
+          disabled={!ready || loading || saving || !!refreshError}
           onClick={() => setOpen((v) => !v)}
         >
           + طلب مشاركة
         </button>
       </div>
+      {error && <p role="alert">{error}</p>}
+      {notice && <p role="status">{notice}</p>}
+      {refreshError && <p role="status">{refreshError}</p>}
+      {(error || refreshError) && <button type="button" disabled={loading || saving} onClick={refresh}>تحديث السجل</button>}
       {open && (
-        <form className="asset-form" onSubmit={submit}>
-          <div className="asset-fields">
+        <form className="asset-form" onSubmit={submit} aria-busy={saving}>
+          <fieldset className="asset-fields" disabled={saving} style={{border:0,padding:0,margin:0}}>
             <label>
               مقدم الطلب
               <input
@@ -183,11 +211,10 @@ export default function SharingPage() {
                 }
               />
             </label>
-          </div>
-          {error && <p role="alert">{error}</p>}
+          </fieldset>
           <footer>
             <button
-              disabled={saving}
+              disabled={saving || !!refreshError}
               className="workflow-button workflow-primary"
             >
               {saving ? "جاري الحفظ…" : "إرسال للمراجعة"}
@@ -195,7 +222,7 @@ export default function SharingPage() {
           </footer>
         </form>
       )}
-      <section className="assets-table-wrap">
+      <section className="assets-table-wrap" aria-busy={loading}>
         <table className="assets-table">
           <thead>
             <tr>
@@ -207,7 +234,7 @@ export default function SharingPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.length ? (
+            {loading ? <tr><td colSpan={5}>جاري تحميل السجل…</td></tr> : rows.length ? (
               rows.map((x) => (
                 <tr key={x.id}>
                   <td>
@@ -226,7 +253,7 @@ export default function SharingPage() {
               ))
             ) : (
               <tr>
-                <td colSpan={5}>لا توجد طلبات مشاركة مسجلة.</td>
+                <td colSpan={5}>{refreshError ? "لم تتوفر بيانات السجل بعد." : "لا توجد طلبات مشاركة مسجلة."}</td>
               </tr>
             )}
           </tbody>

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { requireProfile, type UserRole } from "@/lib/auth";
+import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { WorkflowHeading, WorkflowMetric } from "@/components/WorkflowUI";
 import "./assets.css";
@@ -17,9 +17,9 @@ const dateToday=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh
 const defaultForm={asset_code:"",name_ar:"",description:"",asset_type:"application",business_owner:"",technical_owner:"",environment:"production",data_classification:"internal",criticality:"medium",status:"active",location:"",last_review_date:"",next_review_date:""};
 
 export default function AssetsPage(){
- const router=useRouter(); const [role,setRole]=useState<UserRole>("control_owner"); const [assets,setAssets]=useState<Asset[]>([]); const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [message,setMessage]=useState(""); const [saving,setSaving]=useState(false); const [showForm,setShowForm]=useState(false); const [editing,setEditing]=useState<Asset|null>(null); const [selected,setSelected]=useState<Asset|null>(null); const [search,setSearch]=useState(""); const [criticality,setCriticality]=useState("all"); const [form,setForm]=useState(defaultForm);
+ const router=useRouter(); const [assets,setAssets]=useState<Asset[]>([]); const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [message,setMessage]=useState(""); const [saving,setSaving]=useState(false); const [showForm,setShowForm]=useState(false); const [editing,setEditing]=useState<Asset|null>(null); const [selected,setSelected]=useState<Asset|null>(null); const [search,setSearch]=useState(""); const [criticality,setCriticality]=useState("all"); const [form,setForm]=useState(defaultForm);
  async function load(){const {data,error}=await supabase.from("assets").select("*").order("criticality",{ascending:false}).order("name_ar");if(error)throw error;setAssets((data??[]) as Asset[])}
- useEffect(()=>{let live=true;(async()=>{try{const {profile}=await requireProfile(["admin","cybersecurity_team"]);if(!live)return;setRole(profile.role);await load()}catch(e){if(!live)return;const text=e instanceof Error?e.message:"";if(text.includes("تسجيل الدخول"))router.replace("/login");else if(text.includes("الصلاحية"))router.replace("/");else setError("تعذر تحميل سجل الأصول. تحقق من الاتصال ثم أعد المحاولة.")}finally{if(live)setLoading(false)}})();return()=>{live=false}},[router]);
+ useEffect(()=>{let live=true;(async()=>{try{await requireProfile(["admin","cybersecurity_team"]);if(!live)return;await load()}catch(e){if(!live)return;const text=e instanceof Error?e.message:"";if(text.includes("تسجيل الدخول"))router.replace("/login");else if(text.includes("الصلاحية"))router.replace("/");else setError("تعذر تحميل سجل الأصول. تحقق من الاتصال ثم أعد المحاولة.")}finally{if(live)setLoading(false)}})();return()=>{live=false}},[router]);
  const visible=useMemo(()=>assets.filter(asset=>{const q=search.trim().toLowerCase();return (!q||[asset.asset_code,asset.name_ar,asset.business_owner,asset.technical_owner,asset.location].filter(Boolean).join(" ").toLowerCase().includes(q))&&(criticality==="all"||asset.criticality===criticality)}),[assets,search,criticality]);
  const due=assets.filter(a=>a.next_review_date&&a.next_review_date<dateToday()&&a.status==="active").length;
  function openCreate(){setEditing(null);setForm(defaultForm);setShowForm(true)}

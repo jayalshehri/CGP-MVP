@@ -1,7 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import "../data-governance.css";
@@ -27,12 +26,16 @@ const score = (row: Assessment) =>
       100,
   );
 export default function DataQualityPage() {
-  const router = useRouter();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [rows, setRows] = useState<Assessment[]>([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [refreshError, setRefreshError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
+  const savingLock = useRef(false);
   const [form, setForm] = useState({
     asset_id: "",
     assessor_name: "",
@@ -42,7 +45,8 @@ export default function DataQualityPage() {
     timeliness_score: "3",
     notes: "",
   });
-  async function load() {
+  const load = useCallback(async () => {
+    await requireProfile(["admin", "data_governance_team"]);
     const [{ data: a, error: ae }, { data: q, error: qe }] = await Promise.all([
       supabase
         .from("data_assets")
@@ -58,44 +62,63 @@ export default function DataQualityPage() {
     if (ae || qe) throw ae || qe;
     setAssets((a ?? []) as Asset[]);
     setRows((q ?? []) as Assessment[]);
-  }
+    setReady(true);
+    setRefreshError("");
+  }, []);
   useEffect(() => {
-    requireProfile(["admin", "data_governance_team"])
-      .then(load)
-      .catch(() => router.replace("/"));
-  }, [router]);
+    let active = true;
+    void Promise.resolve().then(() => load()).catch(() => {
+      if (active) setRefreshError("تعذر تحميل السجل. تحقق من الاتصال وصلاحية حسابك ثم أعد المحاولة.");
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [load]);
+
+  async function refresh() {
+    if (savingLock.current) return;
+    setLoading(true);
+    try { await load(); }
+    catch { setRefreshError("تعذر تحديث السجل. تحقق من الاتصال ثم أعد المحاولة."); }
+    finally { setLoading(false); }
+  }
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    setError("");
-    const { error } = await supabase
-      .from("data_quality_assessments")
-      .insert({
-        ...form,
-        asset_id: Number(form.asset_id),
-        completeness_score: Number(form.completeness_score),
-        accuracy_score: Number(form.accuracy_score),
-        consistency_score: Number(form.consistency_score),
-        timeliness_score: Number(form.timeliness_score),
+    if (savingLock.current || !ready || refreshError) return;
+    savingLock.current = true;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      await requireProfile(["admin", "data_governance_team"]);
+      const { error } = await supabase
+        .from("data_quality_assessments")
+        .insert({
+          ...form,
+          asset_id: Number(form.asset_id),
+          completeness_score: Number(form.completeness_score),
+          accuracy_score: Number(form.accuracy_score),
+          consistency_score: Number(form.consistency_score),
+          timeliness_score: Number(form.timeliness_score),
+        });
+      if (error) throw error;
+      setNotice("تم حفظ تقييم الجودة بنجاح.");
+      setOpen(false);
+      setForm({
+        asset_id: "",
+        assessor_name: "",
+        completeness_score: "3",
+        accuracy_score: "3",
+        consistency_score: "3",
+        timeliness_score: "3",
+        notes: "",
       });
-    if (error) {
-      setError("تعذر حفظ التقييم. تأكد من اختيار أصل البيانات.");
+      try { await load(); }
+      catch { setRefreshError("تم الحفظ، لكن تعذر تحديث السجل. حدّث البيانات لعرض النتيجة."); }
+    } catch {
+      setError("تعذر تأكيد الحفظ. احتفظنا بالحقول؛ حدّث السجل للتحقق من وصوله قبل إعادة المحاولة.");
+    } finally {
+      savingLock.current = false;
       setSaving(false);
-      return;
     }
-    setOpen(false);
-    setForm({
-      asset_id: "",
-      assessor_name: "",
-      completeness_score: "3",
-      accuracy_score: "3",
-      consistency_score: "3",
-      timeliness_score: "3",
-      notes: "",
-    });
-    await load();
-    setSaving(false);
   }
+
   return (
     <main className="dg-page" dir="rtl">
       <div className="workflow-heading">
@@ -109,14 +132,19 @@ export default function DataQualityPage() {
         </div>
         <button
           className="workflow-button workflow-primary"
+          disabled={!ready || loading || saving || !!refreshError}
           onClick={() => setOpen((v) => !v)}
         >
           + تقييم جديد
         </button>
       </div>
+      {error && <p role="alert">{error}</p>}
+      {notice && <p role="status">{notice}</p>}
+      {refreshError && <p role="status">{refreshError}</p>}
+      {(error || refreshError) && <button type="button" disabled={loading || saving} onClick={refresh}>تحديث السجل</button>}
       {open && (
-        <form className="asset-form" onSubmit={submit}>
-          <div className="asset-fields">
+        <form className="asset-form" onSubmit={submit} aria-busy={saving}>
+          <fieldset className="asset-fields" disabled={saving} style={{border:0,padding:0,margin:0}}>
             <label>
               أصل البيانات
               <select
@@ -174,11 +202,10 @@ export default function DataQualityPage() {
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
               />
             </label>
-          </div>
-          {error && <p role="alert">{error}</p>}
+          </fieldset>
           <footer>
             <button
-              disabled={saving}
+              disabled={saving || !!refreshError}
               className="workflow-button workflow-primary"
             >
               {saving ? "جاري الحفظ…" : "حفظ التقييم"}
@@ -186,7 +213,7 @@ export default function DataQualityPage() {
           </footer>
         </form>
       )}
-      <section className="assets-table-wrap">
+      <section className="assets-table-wrap" aria-busy={loading}>
         <table className="assets-table">
           <thead>
             <tr>
@@ -197,7 +224,7 @@ export default function DataQualityPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.length ? (
+            {loading ? <tr><td colSpan={4}>جاري تحميل السجل…</td></tr> : rows.length ? (
               rows.map((row) => (
                 <tr key={row.id}>
                   <td>
@@ -226,7 +253,7 @@ export default function DataQualityPage() {
             ) : (
               <tr>
                 <td colSpan={4}>
-                  لا توجد تقييمات جودة. أضف أصل بيانات ثم سجّل أول تقييم.
+                  {refreshError ? "لم تتوفر بيانات السجل بعد." : "لا توجد تقييمات جودة. أضف أصل بيانات ثم سجّل أول تقييم."}
                 </td>
               </tr>
             )}
