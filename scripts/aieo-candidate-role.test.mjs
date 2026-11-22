@@ -3,11 +3,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, symlinkSync, linkSync, statSync, renameSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, symlinkSync, linkSync, statSync, renameSync, unlinkSync, readlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyOfficialCandidateFetchOrigin, verifyOfficialCandidateFetchConfig } from './aieo-candidate-role.mjs';
+import { pinReadOnlyGitExecutable } from './aieo-git-process-guard.mjs';
 
 const roleScript = join(dirname(fileURLToPath(import.meta.url)), 'aieo-candidate-role.mjs');
 const finalizerScript = join(dirname(fileURLToPath(import.meta.url)), 'aieo-candidate-finalize.mjs');
@@ -1066,6 +1067,54 @@ test('pre-build replay rejects live process credentials concealed by injected co
         name + ': no Git executable may run before credential rejection');
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('pre-build replay pins Git across attestation, immutable reads and diff despite PATH alias replacement', () => {
+  const f = setup();
+  const replayScript = join(dirname(fileURLToPath(import.meta.url)), 'aieo-candidate-replay.mjs');
+  try {
+    for (const role of ['developer', 'qa', 'security', 'reviewer']) {
+      const checked = f.run(role);
+      assert.equal(checked.status, 0, role + ': ' + checked.stderr);
+    }
+    const bin = join(f.root, 'bin');
+    const alias = join(bin, 'git');
+    const trusted = join(f.root, 'trusted-git');
+    const evil = join(f.root, 'untrusted-git');
+    const marker = join(f.root, 'untrusted-git-executed');
+    const realGit = pinReadOnlyGitExecutable(process.env);
+    writeFileSync(evil, [
+      '#!/bin/sh',
+      'printf "unexpected git execution\\n" > ' + JSON.stringify(marker),
+      'exit 91',
+      ''
+    ].join('\\n'));
+    chmodSync(evil, 0o755);
+    writeFileSync(trusted, [
+      '#!/bin/sh',
+      // Switch the PATH symlink during the first credential-free Git call.
+      // This was previously exploitable by the later bare execFileSync('git').
+      'rm -f -- ' + JSON.stringify(alias),
+      'ln -s -- ' + JSON.stringify(evil) + ' ' + JSON.stringify(alias),
+      'exec ' + JSON.stringify(realGit) + ' "$@"',
+      ''
+    ].join('\\n'));
+    chmodSync(trusted, 0o755);
+    symlinkSync(trusted, alias);
+    const replay = spawnSync(process.execPath, [replayScript], {
+      cwd: f.cwd, encoding: 'utf8', timeout: 25000,
+      env: { ...f.env, GH_TOKEN: '', GITHUB_TOKEN: '', OPENROUTER_API_KEY: '' }
+    });
+    assert.equal(readlinkSync(alias), evil,
+      'the PATH alias must actually be replaced after the first Git operation');
+    assert.equal(existsSync(marker), false,
+      'candidate replay must never invoke the swapped untrusted Git executable');
+    assert.equal(replay.status, 0, replay.stderr);
+    assert.equal(JSON.parse(replay.stdout).status, 'verified-candidate-replayed-for-build');
+    assert.equal(readFileSync(join(f.cwd, path), 'utf8'), candidate);
+    assert.equal(f.git('rev-parse', 'main'), f.base,
+      'successful isolated replay leaves the trusted main commit unchanged');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
 test('pre-build replay accepts only four verified role handoffs and a credential-free Git blob', () => {
