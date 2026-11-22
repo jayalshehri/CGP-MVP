@@ -49,7 +49,8 @@ test('registered ACTIVE reviewer and exact Git blob identities pass without a pr
   assert.equal(EXPECTED_ROLE_BLOBS[workflow], 'c9091860f10bffaa4d9b1ca34dd860c4bc260f7d');
   const f = fixture();
   assert.deepEqual(verifyTrustedReviewReadiness({ env, gh: f.gh }), {
-    status: 'ready', verifiedMainCommit: sha, roleFiles: 13
+    status: 'ready', scope: 'trusted-reviewer-registration-and-blobs-only',
+    endToEndProven: false, verifiedMainCommit: sha, roleFiles: 13
   });
   assert.equal(f.calls.length, 16, 'two main-ref attestations, one workflow registration and thirteen file checks');
   for (const dependency of [
@@ -239,7 +240,8 @@ test('real readiness subprocess keeps its pinned gh and never inherits provider 
     });
     assert.equal(result.status, 0, 'readiness must pass scoped GH API: ' + result.stderr);
     assert.deepEqual(JSON.parse(result.stdout), {
-      status: 'ready', verifiedMainCommit: sha, roleFiles: 13
+      status: 'ready', scope: 'trusted-reviewer-registration-and-blobs-only',
+    endToEndProven: false, verifiedMainCommit: sha, roleFiles: 13
     });
     assert.equal(readFileSync(calls, 'utf8').trim().split('\n').length, 16);
     assert.equal(existsSync(injected), false, 'swapped GH alias must never execute');
