@@ -67,7 +67,9 @@ const unsafeNonstandardUnicode = /[\p{Co}\p{Cn}]/u;
 const dynamicCodeReflection = /\b(?:constructor|__proto__|prototype|setPrototypeOf|getPrototypeOf|defineProperty|defineProperties)\b/i;
 
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
-const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:/i;
+// CSS @-rules accept escaped identifiers, e.g. @\69mport, which can
+// load an external stylesheet without spelling "import" or using url().
+const outboundCss = /\b(?:url|image-set)\s*\(|\bbackgroundImage\s*:|@\s*(?:import|\\)/i;
 // Model-created HTML parse/assignment sinks can execute attacker-controlled
 // markup without a fetch() call. The FeedbackWidget text-only patch scope
 // has no reason to introduce these APIs or React's srcDoc property.

@@ -1689,3 +1689,37 @@ test('model blocks Unicode JSX component mounts and prop mutations', () => {
     })
   }).status, 'proposed');
 });
+
+test('model denies JSX stylesheet mounts and CSS-escaped @imports while allowing inert copy', () => {
+  const source = 'const view = (<p>Old status copy</p>);\n';
+  const find = '<p>Old status copy</p>';
+  const escape = String.fromCharCode(92);
+  const escapedImport = '@' + escape + '69mport "https://assets.invalid/theme.css";';
+  for (const inject of [
+    find + '<style>body { color: red; }</style>',
+    find + '<style>' + escapedImport + '</style>'
+  ]) {
+    const verdict = validateModelPatch({
+      source, response: JSON.stringify({
+        path: MODEL_ALLOWED_PATH, find, replace: inject,
+        explanation: 'Synthetic untrusted stylesheet insertion'
+      })
+    });
+    assert.equal(verdict.status, 'rejected', 'new stylesheet tag must not pass');
+  }
+  const existing = 'const view = (<style>body { color: black; }</style>);\n';
+  assert.equal(validateModelPatch({
+    source: existing,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH,
+      find: 'body { color: black; }', replace: escapedImport,
+      explanation: 'Synthetic CSS escaped import in existing style element'
+    })
+  }).status, 'rejected', 'escaped CSS @import must fail even with an existing tag');
+  assert.equal(validateModelPatch({
+    source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find: 'Old status copy',
+      replace: 'New status copy', explanation: 'Inert UI copy'
+    })
+  }).status, 'proposed', 'ordinary text edits remain available');
+});
