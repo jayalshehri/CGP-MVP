@@ -18,14 +18,14 @@ export const EXPECTED_ROLE_BLOBS = Object.freeze({
   "scripts/aieo-candidate-finalize.mjs": "75d0e44ceaa69aa67dac234c467b098c2b9895d5",
   "scripts/aieo-candidate-replay.mjs": "c8cba0182a0c7395708aa36b86033e48b3389e24",
   "scripts/aieo-role-artifact-io.mjs": "ae3576d971ded1bb30ace51f3f9e28e940a66c9f",
-  "scripts/aieo-model-security.mjs": "5bf262eb16a30ac43fb8ae6936cc97d3fe1cb5a8",
+  "scripts/aieo-model-security.mjs": "9946b3266fb59f2979737c8344419a269d42d737",
   "aieo/lib/model-gates.mjs": "fbd42c7552a2cec523b68edd6005cd531640ff65",
-  "aieo/lib/model-provider.mjs": "0bed7e97b791ce328239aa20d3d8503a66db2ffe",
+  "aieo/lib/model-provider.mjs": "e1324d75a3689482678da6f19ec2c53d950ed707",
   "scripts/aieo-import-handoffs.mjs": "dc6bb2930e2d4651e513d8ae948dfcefe4c7ff5a",
   "scripts/aieo-git-process-guard.mjs": "998149ab4b0abf033ef1998e9371eb7e26ebb91d",
   "scripts/aieo-model-candidate-read.mjs": "a242c018428877a99fc7595ac5cc1a02027815df",
   "scripts/aieo-model-git.mjs": "32c6b73ae1c111524b6df8397f409c7198a0c1d6",
-  "aieo/lib/outbound-tag-guard.mjs": "fca5cd8b904bacde907a26664675f2fc2e4c52d6"
+  "aieo/lib/outbound-tag-guard.mjs": "b32c88c45310a3323b2da6ae3984a970ebe5c970"
 });
 const REQUIRED = Object.keys(EXPECTED_ROLE_BLOBS);
 const SHA = /^[a-f0-9]{40}$/;
