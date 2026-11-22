@@ -35,6 +35,13 @@ export function readApprovedModelSource(env = process.env) {
     if (!/^100644 [a-f0-9]{40} 0\tcomponents\/FeedbackWidget\.tsx$/.test(entry)) block();
     if (git(env, 'diff', '--cached', '--name-only').trim() ||
         git(env, 'diff', '--name-only').trim()) block();
+    // A clean Git status and ordinary untracked scan hide ignored files such
+    // as .env.local, credential material and build overrides. This is the
+    // pre-disclosure runner, before npm/build: refuse ALL ignored worktree
+    // inputs instead of giving a source-sharing approval to an altered workspace.
+    const ignored = git(env, 'ls-files', '--others', '--ignored',
+      '--exclude-standard', '--directory', '-z').split('\0').filter(Boolean);
+    if (ignored.length) block();
     const extra = git(env, 'ls-files', '--others', '--exclude-standard', '-z')
       .split('\0').filter(Boolean);
     if (extra.some((path) => !path.startsWith('aieo-output/'))) block();
