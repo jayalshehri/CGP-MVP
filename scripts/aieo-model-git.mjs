@@ -40,6 +40,14 @@ export function preflightModelGit(env = process.env) {
 
 export function modelGit(args, { env = process.env, encoding = 'utf8' } = {}) {
   const executable = trustedModelGit(env);
+  // Attributes can change after the first source preflight (including while
+  // the external model is responding). Git worktree diff may execute a newly
+  // enabled filter.<driver>.clean even with --no-ext-diff/--no-textconv.
+  // Re-attest tracked paths immediately before EVERY diff, using the already
+  // pinned Git executable and a credential-free subprocess environment.
+  if (Array.isArray(args) && args[0] === 'diff') {
+    assertNoTrackedGitFilters(env, executable);
+  }
   return execFileSync(executable, readOnlyGitArguments(args), {
     env: readOnlyGitEnvironment(env),
     encoding, stdio: 'pipe', maxBuffer: 512000
