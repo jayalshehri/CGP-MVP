@@ -84,6 +84,12 @@ const cases = [
   ['setgid parent directory', (f) => { chmodSync(dirname(f.target), 0o2755); }],
   ['sticky-bit parent directory', (f) => { chmodSync(dirname(f.target), 0o1755); }],
   ['untracked unexpected file', (f) => { writeFileSync(join(f.workspace, 'new-source.txt'), 'unexpected'); }],
+  ['ignored local configuration', (f) => {
+    // A fixture-only exclude file makes this invisible to the ordinary
+    // --exclude-standard untracked scan, but not to the explicit ignored scan.
+    appendFileSync(join(f.workspace, '.git', 'info', 'exclude'), '\n.env.local\n');
+    writeFileSync(join(f.workspace, '.env.local'), 'SYNTHETIC_OVERRIDE=inactive\n');
+  }],
   ['symlink parent directory', (f) => {
     const external = join(f.root, 'external-components');
     renameSync(join(f.workspace, 'components'), external);
