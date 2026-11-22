@@ -241,7 +241,7 @@ test('real readiness subprocess keeps its pinned gh and never inherits provider 
     assert.equal(result.status, 0, 'readiness must pass scoped GH API: ' + result.stderr);
     assert.deepEqual(JSON.parse(result.stdout), {
       status: 'ready', scope: 'trusted-reviewer-registration-and-blobs-only',
-    endToEndProven: false, verifiedMainCommit: sha, roleFiles: 13
+      endToEndProven: false, verifiedMainCommit: sha, roleFiles: 13
     });
     assert.equal(readFileSync(calls, 'utf8').trim().split('\n').length, 16);
     assert.equal(existsSync(injected), false, 'swapped GH alias must never execute');
