@@ -1157,3 +1157,29 @@ test('independent Security rejects Unicode JSX mounts and prop edits even with f
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
   }).status, 'passed');
 });
+
+test('independent Security rejects CSS escaped imports and new stylesheet tags despite forged diffs', () => {
+  const escape = String.fromCharCode(92);
+  const escapedImport = '@' + escape + '69mport "https://assets.invalid/theme.css";';
+  for (const [before, after] of [
+    ['const view = (<p>Old status copy</p>);\n',
+      'const view = (<p>Old status copy</p><style>body { color: red; }</style>);\n'],
+    ['const view = (<style>body { color: black; }</style>);\n',
+      'const view = (<style>' + escapedImport + '</style>);\n']
+  ]) {
+    const verdict = inspectModelDiff({
+      original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+Old status copy', // deliberately omits actual stylesheet delta
+      report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+    });
+    assert.equal(verdict.status, 'failed', 'stylesheet capability must not pass');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  const before = 'const view = (<p>Old status copy</p>);\n';
+  const after = before.replace('Old status copy', 'New status copy');
+  assert.equal(inspectModelDiff({
+    original: before, actual: after, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const view = (<p>New status copy</p>);',
+    report: { status: 'proposed', sourceHash: hash(before), proposedHash: hash(after) }
+  }).status, 'passed');
+});

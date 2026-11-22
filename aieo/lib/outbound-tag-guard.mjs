@@ -22,7 +22,7 @@
 // the resolution of existing relative URLs via xmlBase / xml:base, even if
 // no href/src is added. Do not let those opening tags evade
 // full-source comparison merely because they are not native HTML tag names.
-const tagStart = /<\s*(?:(?:p|pre|nav|details|summary|dialog|textarea|select|option|optgroup|fieldset|legend|figure|figcaption|output|progress|meter|time|code|kbd|samp|b|i|u|s|mark|abbr|address|cite|dfn|sub|sup|hr|wbr|br|dl|dt|dd|thead|tbody|tfoot|col|colgroup|caption|menu|template|slot|map|param|hgroup|ruby|rt|rp|bdi|bdo|div|span|section|article|main|header|footer|aside|label|strong|em|small|h[1-6]|ul|ol|li|table|tr|td|th|blockquote|q|del|ins|body|html|picture|canvas|a|area|svg|g|defs|symbol|foreignObject|path|rect|circle|ellipse|line|polyline|polygon|text|tspan|stop|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object|animate|animateMotion|animateTransform|set|textPath|mpath|pattern|linearGradient|radialGradient|filter|mask|clipPath|marker|cursor|fontFaceUri|font-face-uri)(?=[\s/>])|[A-Z_$][\w$.:-]*(?=[\s/>])|[a-z][\w$]*(?:\.[A-Za-z_$][\w$]*)+(?=[\s/>])|[a-z][\w.]*[-:][\w.:-]+(?=[\s/>])|(?=[^\s/>]*[^\x00-\x7F])[\p{ID_Start}$_][\p{ID_Continue}$_.:-]*(?=[\s/>]))/gu;
+const tagStart = /<\s*(?:(?:p|pre|nav|details|summary|dialog|textarea|select|option|optgroup|fieldset|legend|figure|figcaption|output|progress|meter|time|code|kbd|samp|b|i|u|s|mark|abbr|address|cite|dfn|sub|sup|hr|wbr|br|dl|dt|dd|thead|tbody|tfoot|col|colgroup|caption|menu|template|slot|map|param|hgroup|ruby|rt|rp|bdi|bdo|div|span|section|article|main|header|footer|aside|label|strong|em|small|h[1-6]|ul|ol|li|table|tr|td|th|blockquote|q|del|ins|body|html|picture|canvas|a|area|svg|g|defs|symbol|foreignObject|path|rect|circle|ellipse|line|polyline|polygon|text|tspan|stop|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object|animate|animateMotion|animateTransform|set|textPath|mpath|pattern|linearGradient|radialGradient|filter|mask|clipPath|marker|cursor|fontFaceUri|font-face-uri|style)(?=[\s/>])|[A-Z_$][\w$.:-]*(?=[\s/>])|[a-z][\w$]*(?:\.[A-Za-z_$][\w$]*)+(?=[\s/>])|[a-z][\w.]*[-:][\w.:-]+(?=[\s/>])|(?=[^\s/>]*[^\x00-\x7F])[\p{ID_Start}$_][\p{ID_Continue}$_.:-]*(?=[\s/>]))/gu;
 // JSX event handlers and callback refs can invoke pre-existing side-effecting
 // callbacks without adding fetch or navigation tokens; style can activate an
 // existing background URL. Expand native element coverage beyond layout tags
@@ -47,10 +47,12 @@ const intrinsicSvgNames = new Set([
   'textPath', 'linearGradient', 'radialGradient', 'clipPath', 'fontFaceUri',
   'font-face-uri'
 ]);
+// JSX <style> can run CSS imports and other behavior even without props;
+// its presence/count is not an inert text edit.
 const structuralEffectTags = new Set([
   'a', 'area', 'audio', 'base', 'button', 'details', 'dialog', 'embed',
   'form', 'iframe', 'input', 'link', 'meta', 'object', 'option', 'script',
-  'select', 'source', 'summary', 'textarea', 'track', 'video'
+  'select', 'source', 'style', 'summary', 'textarea', 'track', 'video'
 ]);
 // Parse attributes sequentially instead of regex-matching arbitrary text in
 // quoted values or JSX expressions. All bare boolean props are behavior-bearing
