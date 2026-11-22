@@ -1088,7 +1088,7 @@ test('pre-build replay pins Git across attestation, immutable reads and diff des
       'printf "unexpected git execution\\n" > ' + JSON.stringify(marker),
       'exit 91',
       ''
-    ].join('\\n'));
+    ].join('\n'));
     chmodSync(evil, 0o755);
     writeFileSync(trusted, [
       '#!/bin/sh',
@@ -1098,7 +1098,7 @@ test('pre-build replay pins Git across attestation, immutable reads and diff des
       'ln -s -- ' + JSON.stringify(evil) + ' ' + JSON.stringify(alias),
       'exec ' + JSON.stringify(realGit) + ' "$@"',
       ''
-    ].join('\\n'));
+    ].join('\n'));
     chmodSync(trusted, 0o755);
     symlinkSync(trusted, alias);
     const replay = spawnSync(process.execPath, [replayScript], {
