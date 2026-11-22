@@ -2000,3 +2000,27 @@ test('model blocks deferred Object and Reflect mutation aliases before a network
     explanation: 'Inert UI label copy'
   }) }).status, 'proposed');
 });
+
+
+test('model rejects indirect DOM attribute-node mutation of an existing destination', () => {
+  const source = 'const status = "Old status copy";\n';
+  const find = 'const status = "Old status copy";';
+  const attacks = [
+    'const status = () => { anchor.attributes[0].value = targetUrl; };',
+    'const status = () => { anchor.getAttributeNode("href").value = targetUrl; };',
+    'const status = () => { anchor["attributes"].item(0).nodeValue = targetUrl; };',
+    'const status = () => { const { attributes: attrs } = anchor; attrs[0].value = targetUrl; };',
+    'const status = () => { const attr = anchor.getAttributeNodeNS(null, "href"); attr.value = targetUrl; };',
+    'const status = () => { const node = anchor.attributes.getNamedItem("href"); node.value = targetUrl; };'
+  ];
+  for (const replace of attacks) {
+    assert.equal(validateModelPatch({ source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic attribute-node bypass fixture'
+    }) }).status, 'rejected', replace);
+  }
+  assert.equal(validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: 'const status = "New status copy";',
+    explanation: 'Inert UI label change'
+  }) }).status, 'proposed');
+});
