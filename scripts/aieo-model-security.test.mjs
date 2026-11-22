@@ -1268,3 +1268,31 @@ test('independent Security rejects DOM URL mutations despite forged Git diff', (
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safeActual) }
   }).status, 'passed');
 });
+
+test('independent Security rejects computed property effects with forged Git diff', () => {
+  const original = 'const status = "Old status copy";\n';
+  const candidates = [
+    "const status = () => element['set' + 'Attribute']('href', targetUrl);",
+    "const status = () => element['setAttribute']('href', targetUrl);",
+    "const status = () => element[method]?.('href', targetUrl);",
+    "const status = () => { element[key] = targetUrl; };",
+    "const status = () => { element['h' + 'ref'] = targetUrl; };"
+  ];
+  for (const code of candidates) {
+    const actual = code + '\n';
+    const result = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+const status = "Nothing unsafe here";', // intentionally forged
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(result.status, 'failed', code);
+    assert.ok(result.findings.includes('Potentially unsafe new code'), code);
+  }
+  const safe = 'const status = items[index] + "New status copy";\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const status = items[index] + "New status copy";',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
+
