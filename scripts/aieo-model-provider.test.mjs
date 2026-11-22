@@ -1976,3 +1976,27 @@ test('model rejects aliased and destructured DOM mutation capabilities before in
     explanation: 'Safe UI-only text update'
   }) }).status, 'proposed');
 });
+
+
+test('model blocks deferred Object and Reflect mutation aliases before a network attribute write', () => {
+  const source = 'const status = "Old status copy";\n';
+  const find = 'const status = "Old status copy";';
+  const attacks = [
+    'const status = () => { const put = Object["assign"]; return put(anchor, { href: targetUrl }); };',
+    'const status = () => { const { assign: put } = Object; return put(anchor, { href: targetUrl }); };',
+    'const status = () => { const put = (Object)["assign"]; return put(anchor, { href: targetUrl }); };',
+    'const status = () => { const ref = Object; return ref["assign"](anchor, { href: targetUrl }); };',
+    'const status = () => { const write = Reflect["set"]; return write(anchor, "href", targetUrl); };',
+    'const status = () => { const { set: write } = Reflect; return write(anchor, "href", targetUrl); };'
+  ];
+  for (const replace of attacks) {
+    assert.equal(validateModelPatch({ source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Indirect native mutation aliases are outside bounded UI scope'
+    }) }).status, 'rejected', replace);
+  }
+  assert.equal(validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: 'const status = "New status copy";',
+    explanation: 'Inert UI label copy'
+  }) }).status, 'proposed');
+});
