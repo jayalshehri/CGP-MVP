@@ -1491,3 +1491,32 @@ test('independent Security blocks native mutation aliases despite forged harmles
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed');
 });
+
+
+test('independent Security rejects attribute-node changes even with forged harmless Git diff', () => {
+  const original = 'const status = "Old status copy";\n';
+  const attacks = [
+    'const status = () => { anchor.attributes[0].value = targetUrl; };',
+    'const status = () => { anchor.getAttributeNode("href").value = targetUrl; };',
+    'const status = () => { anchor["attributes"].item(0).nodeValue = targetUrl; };',
+    'const status = () => { const { attributes: attrs } = anchor; attrs[0].value = targetUrl; };',
+    'const status = () => { const attr = anchor.getAttributeNodeNS(null, "href"); attr.value = targetUrl; };',
+    'const status = () => { const node = anchor.attributes.getNamedItem("href"); node.value = targetUrl; };'
+  ];
+  for (const attack of attacks) {
+    const actual = attack + '\n';
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+const status = "New status copy";', // deliberately forged clean diff
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', attack);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), attack);
+  }
+  const safe = 'const status = "New status copy";\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const status = "New status copy";',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});

@@ -97,6 +97,13 @@ const domNetworkMutation = /\b(?:setAttribute(?:NS|Node(?:NS)?)?|toggleAttribute
 // destructuring and aliases). A bounded UI-copy proposal needs neither global
 // reflection namespace: reject newly introduced references, not just calls.
 const objectReflectionReference = /\b(?:Object|Reflect)\b/i;
+// Attribute-node access can retarget an existing link without setAttribute or
+// direct href assignment: anchor.attributes[0].value = url, or an Attr obtained
+// via getAttributeNode(...).value = url. A bounded UI-copy fix never needs DOM
+// attribute nodes or NamedNodeMap operations; fail closed on references even
+// when a method is captured or destructured. This is not a general JS proof.
+const domAttributeNodeAccess = /\b(?:attributes|getAttributeNode(?:NS)?|getNamedItem(?:NS)?|setNamedItem(?:NS)?|removeNamedItem(?:NS)?|NamedNodeMap)\b/i;
+
 
 // Computed property calls/assignments can reconstruct effectful DOM or network
 // APIs without spelling a blocked method name (e.g. el['set'+'Attribute'](...)).
@@ -249,7 +256,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
   if (containsCredentials(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) || dynamicGlobalMember.test(replace) || ambientGlobalReference.test(replace) || encodedJavaScriptEscape.test(replace) || dynamicCodeReflection.test(replace) || stringEvalTimer.test(replace) ||
-      outboundMarkup.test(replace) || outboundCss.test(replace) || domNetworkMutation.test(replace) || objectReflectionReference.test(replace) || computedPropertyEffects.test(replace) || rawHtmlSink.test(replace) ||
+      outboundMarkup.test(replace) || outboundCss.test(replace) || domNetworkMutation.test(replace) || objectReflectionReference.test(replace) || domAttributeNodeAccess.test(replace) || computedPropertyEffects.test(replace) || rawHtmlSink.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
