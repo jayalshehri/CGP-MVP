@@ -1,5 +1,6 @@
 name: CGP Required CI
 on:
+  workflow_dispatch:
   push:
     branches: [aieo/feedback-boundary-fix]
   pull_request:
