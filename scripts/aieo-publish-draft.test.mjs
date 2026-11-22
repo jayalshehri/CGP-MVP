@@ -1712,3 +1712,55 @@ test('publisher refuses semantically identical but noncanonical or shadowed mode
     rmSync(f.root, { recursive: true, force: true });
   }
 });
+
+
+test('publisher rejects a newly activated clean filter after branch switch, before git add', () => {
+  const f = fixture();
+  try {
+    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+    const marker = join(f.root, 'untrusted-publisher-clean-executed');
+    const filter = join(f.root, 'synthetic-clean-helper.sh');
+    writeFileSync(filter,
+      '#!/bin/sh\n' +
+      'printf executed > ' + JSON.stringify(marker) + '\n' +
+      'cat\n', { mode: 0o755 });
+    chmodSync(filter, 0o755);
+    // The publisher initially attests an ordinary checkout. After all
+    // preflight/review work, a synthetic Git executable injects a new
+    // .gitattributes rule immediately after branch creation and before add.
+    // The subsequent add must reject the changed attribute BEFORE invoking
+    // the helper. Nothing contacts a live provider or GitHub here.
+    const wrapper = join(f.root, 'bin', 'git');
+    writeFileSync(wrapper, [
+      '#!/usr/bin/env node',
+      'const { spawnSync, execFileSync } = require("node:child_process");',
+      'const { writeFileSync } = require("node:fs");',
+      'const args = process.argv.slice(2);',
+      'const raw = ' + JSON.stringify(realGit) + ';',
+      'const result = spawnSync(raw, args, { encoding: "utf8", env: process.env, stdio: ["inherit", "pipe", "pipe"] });',
+      'if (result.stdout) process.stdout.write(result.stdout);',
+      'if (result.stderr) process.stderr.write(result.stderr);',
+      'if (result.status === 0 && args.includes("switch")) {',
+      '  writeFileSync(".gitattributes", ' +
+        JSON.stringify('components/FeedbackWidget.tsx filter=synthetic-clean\n') + ');',
+      '  execFileSync(raw, ["config", "filter.synthetic-clean.clean", ' +
+        JSON.stringify(filter) + ']);',
+      '}',
+      'process.exit(result.status ?? 91);',
+      ''
+    ].join('\n'));
+    chmodSync(wrapper, 0o755);
+    const child = spawnSync(process.execPath, [publisher], {
+      cwd: f.workspace, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    assert.notEqual(child.status, 0, 'late filter activation must block Draft publishing');
+    assert.match(child.stderr, /Git content filter changed before Git operation/);
+    assert.equal(existsSync(marker), false, 'git add must not invoke the new clean helper');
+    assert.equal(existsSync(f.log), false, 'publisher must not reach any gh write operation');
+    assert.equal(git(f.workspace, 'rev-parse', 'main'), f.env.GITHUB_SHA,
+      'the trusted main commit must remain unchanged');
+    assert.doesNotMatch(git(f.workspace, 'ls-remote', f.remote),
+      /refs\/heads\/aieo\/model-proposal-99123-1/,
+      'no remote candidate branch may be created');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
