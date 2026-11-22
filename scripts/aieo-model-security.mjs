@@ -95,6 +95,13 @@ const domNetworkMutation = /\b(?:setAttribute(?:NS|Node(?:NS)?)?|toggleAttribute
 // destructuring and aliases). A bounded UI-copy proposal needs neither global
 // reflection namespace: reject newly introduced references, not just calls.
 const objectReflectionReference = /\b(?:Object|Reflect)\b/i;
+// Attribute-node access can retarget an existing link without setAttribute or
+// direct href assignment: anchor.attributes[0].value = url, or an Attr obtained
+// via getAttributeNode(...).value = url. A bounded UI-copy fix never needs DOM
+// attribute nodes or NamedNodeMap operations; fail closed on references even
+// when a method is captured or destructured. This is not a general JS proof.
+const domAttributeNodeAccess = /\b(?:attributes|getAttributeNode(?:NS)?|getNamedItem(?:NS)?|setNamedItem(?:NS)?|removeNamedItem(?:NS)?|NamedNodeMap)\b/i;
+
 
 // Computed property calls/assignments can reconstruct effectful DOM or network
 // APIs without spelling a blocked method name (e.g. el['set'+'Attribute'](...)).
@@ -200,7 +207,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
       unsafeNonstandardUnicode.test(reviewedText) ||
       dynamicCodeReflection.test(reviewedText) || stringEvalTimer.test(reviewedText) ||
       outboundMarkup.test(reviewedText) || outboundCss.test(reviewedText) ||
-      domNetworkMutation.test(reviewedText) || objectReflectionReference.test(reviewedText) || computedPropertyEffects.test(reviewedText) ||
+      domNetworkMutation.test(reviewedText) || objectReflectionReference.test(reviewedText) || domAttributeNodeAccess.test(reviewedText) || computedPropertyEffects.test(reviewedText) ||
       rawHtmlSink.test(reviewedText) ||
       introducesOutboundMarkup(original, actual) ||
       introducesOutboundTagAttribute(original, actual)) {
