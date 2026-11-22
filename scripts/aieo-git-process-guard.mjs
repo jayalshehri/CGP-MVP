@@ -81,6 +81,27 @@ export function readOnlyGitHubCliEnvironment(env = process.env) {
   return scoped;
 }
 
+// Resolve Git just once before role or finalizer inspection. An earlier
+// subprocess can replace a PATH git symlink; subsequent immutable-object
+// reads must not execute a different program and accept forged evidence.
+export function pinReadOnlyGitExecutable(env = process.env) {
+  if (typeof env?.PATH !== 'string' || !env.PATH) {
+    throw new Error('AIEO read-only Git PATH is missing');
+  }
+  const directories = env.PATH.split(delimiter);
+  if (directories.some((directory) => !directory || !isAbsolute(directory))) {
+    throw new Error('AIEO read-only Git PATH must contain only absolute directories');
+  }
+  for (const directory of directories) {
+    try {
+      const resolved = realpathSync(join(directory, 'git'));
+      const candidate = statSync(resolved);
+      if (candidate.isFile() && (candidate.mode & 0o111)) return resolved;
+    } catch { /* Continue through trusted PATH entries. */ }
+  }
+  throw new Error('AIEO read-only Git executable is unavailable');
+}
+
 // Resolve gh once before any independently reviewed candidate is inspected.
 // GitHub API readback occurs twice per role; a later replacement of a PATH
 // symlink must never switch the second, GH_TOKEN-bearing read to another
@@ -138,11 +159,12 @@ export function readOnlyGitArguments(args) {
 // even with --no-ext-diff/--no-textconv. Attest every tracked path BEFORE any
 // role/finalizer worktree diff; checking only the proposed file misses changes
 // to another tracked path. Neither ls-files nor check-attr runs clean filters.
-export function assertNoTrackedGitFilters(env = process.env) {
+export function assertNoTrackedGitFilters(env = process.env, executable = pinReadOnlyGitExecutable(env)) {
+  if (!isAbsolute(executable)) throw new Error('AIEO tracked-file Git executable must be pinned');
   const options = {
     env: readOnlyGitEnvironment(env), stdio: 'pipe', maxBuffer: 512000
   };
-  const trackedBytes = execFileSync('git', readOnlyGitArguments(['ls-files', '-z']), options);
+  const trackedBytes = execFileSync(executable, readOnlyGitArguments(['ls-files', '-z']), options);
   const tracked = trackedBytes.toString('utf8');
   if (!Buffer.from(tracked, 'utf8').equals(trackedBytes) ||
       !tracked.endsWith('\0') || trackedBytes.length > 250000) {
@@ -153,7 +175,7 @@ export function assertNoTrackedGitFilters(env = process.env) {
       new Set(paths).size !== paths.length) {
     throw new Error('AIEO tracked index is not a normal checkout');
   }
-  const responseBytes = execFileSync('git',
+  const responseBytes = execFileSync(executable,
     readOnlyGitArguments(['check-attr', '-z', '--stdin', 'filter']),
     { ...options, input: trackedBytes });
   const response = responseBytes.toString('utf8');

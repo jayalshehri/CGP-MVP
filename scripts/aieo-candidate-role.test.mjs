@@ -2585,3 +2585,54 @@ test('all independent role readbacks pin gh despite a swapped PATH symlink', () 
     assert.equal(f.git('rev-parse', 'main'), f.base);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+
+test('independent roles and post-build finalizer retain pinned Git after PATH alias swap', () => {
+  const f = setup();
+  try {
+    const bin = join(f.root, 'bin');
+    const alias = join(bin, 'git');
+    const trusted = join(bin, 'git-trusted');
+    const malicious = join(bin, 'git-replacement');
+    const marker = join(f.root, 'untrusted-git-executed');
+    // The first safe Git invocation deliberately swaps the PATH alias to an
+    // adversarial executable. Later Git operations must use the original
+    // resolved executable even when they inspect a valid local fixture.
+    const systemGit = execFileSync('sh', ['-c', 'command -v git'], {
+      encoding: 'utf8'
+    }).trim();
+    assert.ok(systemGit.startsWith('/'));
+    writeFileSync(trusted, '#!/bin/sh\n' +
+      'rm -f ' + JSON.stringify(alias) + '\n' +
+      'ln -s ' + JSON.stringify(malicious) + ' ' + JSON.stringify(alias) + '\n' +
+      'exec ' + JSON.stringify(systemGit) + ' "$@"\n', { mode: 0o755 });
+    chmodSync(trusted, 0o755);
+    writeFileSync(malicious, '#!/bin/sh\n' +
+      'printf unexpected > ' + JSON.stringify(marker) + '\nexit 97\n',
+      { mode: 0o755 });
+    chmodSync(malicious, 0o755);
+    const resetAlias = () => {
+      if (existsSync(alias)) unlinkSync(alias);
+      symlinkSync(trusted, alias);
+    };
+    for (const [role, status] of [
+      ['developer', 'proposed'], ['qa', 'passed'],
+      ['security', 'passed'], ['reviewer', 'draft-pr-eligible']
+    ]) {
+      resetAlias();
+      const result = f.run(role);
+      assert.equal(result.status, 0, role + ' must use pinned Git: ' + result.stderr);
+      assert.equal(JSON.parse(result.stdout).status, status);
+      assert.equal(existsSync(marker), false, role + ' invoked replaced Git executable');
+    }
+    writeFileSync(join(f.cwd, path), candidate);
+    resetAlias();
+    const final = spawnSync(process.execPath, [finalizerScript], {
+      cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 25000
+    });
+    assert.equal(final.status, 0, 'post-build finalizer must use pinned Git: ' + final.stderr);
+    assert.equal(JSON.parse(final.stdout).status, 'post-build-draft-reverified');
+    assert.equal(existsSync(marker), false, 'post-build executed substituted Git');
+    assert.equal(f.git('rev-parse', 'main'), f.base);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
