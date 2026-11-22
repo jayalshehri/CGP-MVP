@@ -68,6 +68,12 @@ const encodedJavaScriptEscape = /\\(?:u(?:[0-9a-f]{4}|\{[0-9a-f]{1,6}\})|x[0-9a-
 // This bounded UI-text proposal path has no legitimate need for these APIs.
 const dynamicCodeReflection = /\b(?:constructor|__proto__|prototype|setPrototypeOf|getPrototypeOf|defineProperty|defineProperties)\b/i;
 
+// Browser timers accept strings as executable code. A model can construct a
+// network call from string fragments (e.g. "fe" + "tch(...)") without spelling
+// a blocked API in its patch. A bounded UI-copy fix never needs timer APIs.
+// Reject even aliased/indirect timer references, not just direct calls.
+const stringEvalTimer = /\b(?:setTimeout|setInterval)\b/i;
+
 const outboundMarkup = /<\s*(?:a|area|img|image|feImage|use|iframe|script|link|meta|base|form|input|button|video|audio|source|track|embed|object)\b[\s\S]{0,4096}?(?:\b(?:href|xlinkHref|src|srcSet|imageSrcSet|action|formAction|data|poster|content)\s*=|\{\s*\.\.\.)/i;
 // CSS @-rules accept escaped identifiers, e.g. @\69mport, which can
 // load an external stylesheet without spelling "import" or using url().
@@ -232,7 +238,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
     return { status: 'rejected', reason: 'Proposed edit outside bounded size limits' };
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
-  if (containsCredentials(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) || dynamicGlobalMember.test(replace) || ambientGlobalReference.test(replace) || encodedJavaScriptEscape.test(replace) || dynamicCodeReflection.test(replace) ||
+  if (containsCredentials(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) || dynamicGlobalMember.test(replace) || ambientGlobalReference.test(replace) || encodedJavaScriptEscape.test(replace) || dynamicCodeReflection.test(replace) || stringEvalTimer.test(replace) ||
       outboundMarkup.test(replace) || outboundCss.test(replace) || domNetworkMutation.test(replace) || computedPropertyEffects.test(replace) || rawHtmlSink.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
