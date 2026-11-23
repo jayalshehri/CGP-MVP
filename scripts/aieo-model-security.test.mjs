@@ -1626,3 +1626,30 @@ test('independent Security rejects private-key markers in actual source despite 
   }
   assert.equal(inspectModelDiff(input).status, 'passed', 'safe candidate remains eligible');
 });
+
+test('independent Security refuses quoted config secrets despite forged clean diff', () => {
+  const markers = [
+    '{"client_secret":"synthetic-long-secret-value-123"}',
+    '{"password":"synthetic-long-password-123"}',
+    "{'aws_secret_access_key': 'synthetic-long-value-123'}",
+    '{"accountkey": "synthetic-long-value-123"}',
+    '{"service_role":"synthetic-long-value-123"}',
+    '{"api-key":"synthetic-long-value-123"}'
+  ];
+  for (const marker of markers) {
+    const candidate = 'const items = 2; // ' + marker + '\n';
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n', // deliberately omit secret
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed', marker);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), marker);
+  }
+  const safe = 'const items = 2; // {"copy":"Public labels only"}\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const items = 2; // {"copy":"Public labels only"}',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
