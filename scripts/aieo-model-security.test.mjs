@@ -11,6 +11,33 @@ const report = { status: 'proposed', sourceHash: hash(original), proposedHash: h
 const diff = '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n';
 const input = { original, actual, changedPaths: [MODEL_ALLOWED_PATH], diff, report };
 
+test('independent Security re-reads actual changed bytes and rejects NFKC-disguised credentials', () => {
+  const markers = [
+    '"ａｐｉ＿ｋｅｙ": "synthetic_value_987654321"',
+    '"ｃｌｉｅｎｔ．ｓｅｃｒｅｔ": "synthetic_value_987654321"',
+    'Ｂｅａｒｅｒ synthetic_value_987654321'
+  ];
+  for (const marker of markers) {
+    const candidate = 'const items = 2; // ' + marker + '\n';
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      // Untrusted diff is forged clean: the reviewer must use actual candidate.
+      diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n',
+      report: { status: 'proposed', sourceHash: hash(original),
+        proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  const safe = 'const items = 2; // تحسين الواجهة\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2; // تحسين الواجهة\n',
+    report: { status: 'proposed', sourceHash: hash(original),
+      proposedHash: hash(safe) }
+  }).status, 'passed');
+});
+
 test('independent Security rejects private-use and unassigned Unicode in actual diff', () => {
   for (const marker of ['\uE000', '\uFDD0', '\uFFFF']) {
     const candidate = 'const items = 2; // status ' + marker + '\n';

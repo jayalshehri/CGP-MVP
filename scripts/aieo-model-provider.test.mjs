@@ -21,6 +21,55 @@ const env = {
 };
 const task = 'Correct the sample constant in a bounded manner.';
 
+test('NFKC compatibility disguises cannot conceal credential keys before disclosure or proposal review', async () => {
+  const disguised = [
+    '"ａｐｉ＿ｋｅｙ": "synthetic_value_987654321"',
+    '"ｃｌｉｅｎｔ．ｓｅｃｒｅｔ": "synthetic_value_987654321"',
+    '"ｒｅｆｒｅｓｈ．ｔｏｋｅｎ": "synthetic_value_987654321"',
+    'Ｂｅａｒｅｒ synthetic_value_987654321'
+  ];
+  let outbound = 0;
+  const transport = async () => {
+    outbound++;
+    throw new Error('compatibility-obfuscated credentials must never be transmitted');
+  };
+  for (const marker of disguised) {
+    const hiddenSource = source.replace(find, find + ' // ' + marker);
+    assert.throws(() => buildModelRequest({
+      source: hiddenSource, task, model: env.OPENROUTER_MODEL_ID,
+      shareApproved: true
+    }));
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID,
+      shareApproved: true
+    }));
+    assert.equal((await requestModelPatch({
+      source: hiddenSource, task, env, transport
+    })).status, 'blocked');
+    for (const fields of [
+      { find: find + ' // ' + marker, replace: replacement, source: hiddenSource },
+      { find, replace: replacement + ' // ' + marker, source },
+      { find, replace: replacement, source, explanation: 'Synthetic ' + marker }
+    ]) {
+      assert.equal(validateModelPatch({
+        source: fields.source,
+        response: JSON.stringify({
+          path: MODEL_ALLOWED_PATH, find: fields.find, replace: fields.replace,
+          explanation: fields.explanation || 'Synthetic review'
+        })
+      }).status, 'rejected');
+    }
+  }
+  assert.equal(outbound, 0, 'no outbound provider calls are allowed for disguised secrets');
+  assert.equal(validateModelPatch({
+    source,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace: replacement + ' // نسخة عربية',
+      explanation: 'تعديل عرض الواجهة'
+    })
+  }).status, 'proposed', 'safe ordinary Arabic text must remain allowed');
+});
+
 test('private-use and unassigned Unicode fail closed at disclosure and proposal boundaries', async () => {
   const unsupported = ['\uE000', '\uFDD0', '\uFFFF'];
   let outbound = 0;
