@@ -21,6 +21,67 @@ const env = {
 };
 const task = 'Correct the sample constant in a bounded manner.';
 
+
+test('JavaScript hex and Unicode escaped identifiers fail closed before model disclosure', async () => {
+  const disguised = [
+    '\\u0070assword = createValue()',
+    "\\x70assword: 'x'",
+    '\\u0061piKey = createValue()',
+    'client\\u{53}ecret = createValue()',
+    '%5Cu0070assword = createValue()'
+  ];
+  let outbound = 0;
+  const transport = async () => { outbound++; throw Error('unsafe bytes must remain local'); };
+  for (const marker of disguised) {
+    assert.equal(containsCredentials(marker), true, 'escaped key must be blocked');
+    const unsafeSource = source + '// ' + marker + '\n';
+    assert.throws(() => buildModelRequest({
+      source: unsafeSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker,
+      model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    for (const [src, instruction] of [[unsafeSource, task], [source, task + ' ' + marker]]) {
+      assert.equal((await requestModelPatch({
+        source: src, task: instruction, env, transport
+      })).status, 'blocked');
+    }
+    for (const field of ['find', 'replace', 'explanation']) {
+      const fields = { path: MODEL_ALLOWED_PATH, find, replace: replacement, explanation: 'Public copy' };
+      fields[field] += ' // ' + marker;
+      const verdict = validateModelPatch({ source, response: JSON.stringify(fields) });
+      assert.equal(verdict.status, 'rejected');
+      assert.equal(JSON.stringify(verdict).includes(marker), false, 'do not echo sensitive source');
+    }
+  }
+  assert.equal(outbound, 0, 'consent does not override source screening');
+  assert.equal(containsCredentials('public\\annotation'), false);
+  assert.equal(containsCredentials('Public label — تحسين الواجهة'), false);
+});
+
+test('CR-only line comments cannot conceal explicit credential assignments', async () => {
+  const disguised = [
+    'password // note\r = short',
+    'config["apiKey"] // note\r= short',
+    'clientSecret // note\r\n = makeValue()'
+  ];
+  let outbound = 0;
+  const transport = async () => { outbound++; throw Error('must remain local'); };
+  for (const marker of disguised) {
+    assert.equal(containsCredentials(marker), true);
+    const unsafeSource = source + '// ' + marker + '\n';
+    assert.throws(() => buildModelRequest({
+      source: unsafeSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.equal((await requestModelPatch({
+      source: unsafeSource, task, env, transport
+    })).status, 'blocked');
+  }
+  assert.equal(outbound, 0);
+  assert.equal(containsCredentials('password // public read only\r const value = 1;'), false);
+});
+
 test('computed bracket credential fields never cross the model boundary', async () => {
   const disguised = [
     'config["password"] = createSecret()',
