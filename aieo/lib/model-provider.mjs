@@ -48,7 +48,39 @@ const dottedCredentialAssignment = /\b(?:client\.secret|api\.key|private\.key|se
 // after // must not conceal the assignment from the pre-disclosure gate or
 // the independently executed Security candidate inspection. Bound each
 // comment to the maximum consented source budget (12 KB); scan only.
-const sensitiveFieldAssignment = /\b(?:service[._-]?role|password|api[._-]?key|apikey|client[._-]?secret|aws[._-]?secret[._-]?access[._-]?key|private[._-]?key|secret[._-]?key|signing[._-]?key|encryption[._-]?key|webhook[._-]?secret|account[._-]?key|(?:access|refresh|id|session|auth)[._-]?token|(?:db|database)[._-]?password|token)["']?(?:\s|\/\*[\s\S]{0,12000}?\*\/|\/\/[^\r\n]{0,12000}(?:\r?\n))*[:=]/i;
+const sensitiveFieldName = /\b(?:service[._-]?role|password|api[._-]?key|apikey|client[._-]?secret|aws[._-]?secret[._-]?access[._-]?key|private[._-]?key|secret[._-]?key|signing[._-]?key|encryption[._-]?key|webhook[._-]?secret|account[._-]?key|(?:access|refresh|id|session|auth)[._-]?token|(?:db|database)[._-]?password|token)["']?/gi;
+// A repeated regex group over both whitespace and comments can catastrophically
+// backtrack on many block comments. Walk the separators deterministically.
+// This scanner is deliberately conservative: on a long/ambiguous comment
+// corridor after a sensitive field, block disclosure rather than time out.
+function hasSensitiveFieldAssignment(value) {
+  sensitiveFieldName.lastIndex = 0;
+  let match;
+  let work = 0;
+  while ((match = sensitiveFieldName.exec(value))) {
+    let cursor = match.index + match[0].length;
+    while (cursor < value.length) {
+      if (++work > 24000 || cursor - match.index > 12000) return true;
+      const character = value[cursor];
+      if (/\\s/u.test(character)) { cursor++; continue; }
+      if (value.startsWith('/*', cursor)) {
+        const close = value.indexOf('*/', cursor + 2);
+        if (close < 0) break;
+        cursor = close + 2;
+        continue;
+      }
+      if (value.startsWith('//', cursor)) {
+        const close = value.indexOf('\\n', cursor + 2);
+        if (close < 0) break;
+        cursor = close + 1;
+        continue;
+      }
+      break;
+    }
+    if (value[cursor] === ':' || value[cursor] === '=') return true;
+  }
+  return false;
+}
 // Compatibility glyphs and ASCII percent-encoded key names can disguise
 // sensitive fields in source comments, tasks, URL query strings or JSON.
 // Decode only printable ASCII percent escapes for scanning, not for output or
@@ -87,7 +119,7 @@ export const containsCredentials = (value) => {
     opaqueTokenCredentials.test(candidate) ||
     dottedCredentialAssignment.test(candidate) ||
     templateCredentialAssignment.test(candidate) ||
-    sensitiveFieldAssignment.test(candidate));
+    hasSensitiveFieldAssignment(candidate));
 };
 const forbidden = /(?:\beval\s*\(|\bFunction\s*\(|\bchild_process\b|\bprocess\.env\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bimport\s+|\brequire\s*\()/i;
 
