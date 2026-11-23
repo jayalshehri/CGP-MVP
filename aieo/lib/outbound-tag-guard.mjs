@@ -194,15 +194,15 @@ function jsxStructureTimeline(source) {
     if (end < 0) return null;
     const tag = source.slice(match.index, end);
     events.push([match.index, 'open:' + match[0].slice(1).trim() +
-      (/\\/\\s*>$/.test(tag) ? ':self' : '')]);
+      (/\/\s*>$/.test(tag) ? ':self' : '')]);
   }
   // Closing tags are behaviorally significant even with no attributes:
   // </div><button ...> and <button ...></div> have different ancestry.
-  for (const match of source.matchAll(/<\\s*\\/\\s*([\\p{ID_Start}$_][\\p{ID_Continue}$_.:-]*)\\s*>/gu)) {
+  for (const match of source.matchAll(/<\s*\/\s*([\p{ID_Start}$_][\p{ID_Continue}$_.:-]*)\s*>/gu)) {
     events.push([match.index, 'close:' + match[1]]);
   }
   // JSX fragments also change tree boundaries despite carrying no props.
-  for (const match of source.matchAll(/<\\s*\\/?>/g)) {
+  for (const match of source.matchAll(/<\s*\/?>/g)) {
     events.push([match.index, match[0].includes('/') ? 'fragment-close' : 'fragment-open']);
   }
   events.sort((a, b) => a[0] - b[0]);
