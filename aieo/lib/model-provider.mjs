@@ -18,7 +18,8 @@ const credentials = /gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-
 // before disclosure and on every model response field. These are heuristics,
 // not a guarantee that arbitrary secrets are discoverable.
 const opaqueTokenCredentials = /(?:[?&#](?:access[_-]?token|refresh[_-]?token|id[_-]?token|session[_-]?token|auth[_-]?token|api[_-]?key|apikey|token|key)=[a-z0-9._~%+/-]{12,}|\b["']?(?:access[_-]?token|refresh[_-]?token|id[_-]?token|session[_-]?token|auth[_-]?token|api[_-]?key|apikey|token)["']?\s*[:=]\s*(?:["'][a-z0-9._~%+/-]{12,}["']|[a-z0-9._~%+/-]{12,})|\bAuthorization\s*:\s*(?:Token|ApiKey)\s+[a-z0-9._~+/-]{12,})/i;
-// Private/signing/encryption key assignments are sensitive even without PEM headers.\n// Shared conservative credential gate: the provider and separately executed Security
+// Private/signing/encryption key assignments are sensitive even without PEM headers.
+// Shared conservative credential gate: the provider and separately executed Security
 // reviewer must reject the same known sensitive formats before source or candidate
 // bytes can become reviewed artifacts. This is heuristic, not a guarantee.
 export const containsCredentials = (value) => credentials.test(value) || opaqueTokenCredentials.test(value);
