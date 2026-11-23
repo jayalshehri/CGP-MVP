@@ -1,0 +1,198 @@
+name: AIEO Guarded Developer Draft
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/aieo-developer-draft.yml'
+      - 'aieo/**'
+      - 'scripts/aieo-*.mjs'
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Bounded defect class to repair
+        required: true
+        type: choice
+        options: [feedback-control-route-boundary]
+concurrency:
+  group: aieo-guarded-draft-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  preflight:
+    name: Read-only AIEO policy preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      - run: node --test scripts/aieo-agent.test.mjs scripts/aieo-candidate-report-race.test.mjs scripts/aieo-handoff.test.mjs scripts/aieo-e2e.test.mjs scripts/aieo-model-provider.test.mjs scripts/aieo-publish-draft.test.mjs scripts/aieo-git-process-guard.test.mjs scripts/aieo-workflow-policy.test.mjs scripts/aieo-import-handoffs.test.mjs scripts/aieo-stage-reviewed-developer.test.mjs
+      - run: node scripts/aieo-runner.mjs
+      - run: git diff --exit-code -- components/FeedbackWidget.tsx
+  create-draft:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: preflight
+    outputs:
+      changed: ${{ steps.proposal.outputs.changed }}
+    name: Prepare and verify bounded patch without write credentials
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      - name: Capture trusted PATH before candidate and build steps
+        id: trusted-path
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+        run: |
+          set -euo pipefail
+          [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
+          printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
+      - name: Prepare trusted one-file patch
+        id: proposal
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+          AIEO_APPLY: '1'
+          AIEO_TRUSTED_WORKFLOW: '1'
+          AIEO_TASK: ${{ inputs.task }}
+        run: |
+          set -euo pipefail
+          node scripts/aieo-runner.mjs
+          git diff --check
+          if git diff --quiet -- components/FeedbackWidget.tsx; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo 'No approved defect remains; no branch or PR created.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            test "$(git diff --name-only)" = 'components/FeedbackWidget.tsx'
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run application gates on candidate
+        if: steps.proposal.outputs.changed == 'true'
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npx next typegen
+          npx tsc --noEmit
+          npm run build
+      # npm lifecycle code and the candidate never run on the write-token runner.
+      - name: Handoff bounded developer candidate without write credentials
+        if: steps.proposal.outputs.changed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-reviewed-developer-source
+          path: components/FeedbackWidget.tsx
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-draft:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.create-draft.outputs.changed == 'true'
+    needs: create-draft
+    name: Isolated, independently reproduced deterministic Draft publication
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      - name: Capture isolated developer publisher PATH
+        id: trusted-path
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+        run: |
+          set -euo pipefail
+          [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
+          printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
+      - name: Download only the approved developer source artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-reviewed-developer-source
+          path: aieo-staging/components
+      - name: Import bounded source before granting GitHub write credential
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: node scripts/aieo-stage-reviewed-developer.mjs
+      - name: Publish verified bounded fix as Draft PR only
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+          GH_TOKEN: ${{ github.token }}
+          AIEO_PUBLISH_MODE: deterministic
+        run: node scripts/aieo-publish-draft.mjs

@@ -1,0 +1,174 @@
+# Read-only, synthetic CI proof: unlike the production source's no-change
+# result, this fixture forces an actual deterministic proposal through four
+# separate GitHub-hosted jobs with downloaded and independently reverified
+# Developer, QA, Security and Reviewer evidence. It is not a live model test.
+name: AIEO Four-Job Proposed-Fix Fixture
+on:
+  pull_request:
+    paths:
+      - 'aieo/**'
+      - 'scripts/aieo-*.mjs'
+      - '.github/workflows/aieo-fixture-e2e.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  developer:
+    name: Synthetic Developer proposes a change
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # pinned v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # pinned v4
+        with:
+          node-version: '24'
+      - run: node scripts/aieo-fixture-source.mjs
+      - name: Run proposed-fix Developer in isolated synthetic workspace
+        run: |
+          set -euo pipefail
+          cd aieo-fixture
+          node ../scripts/aieo-role.mjs developer
+          node -e "const d=require('./aieo-output/developer.json'); if(d.status !== 'proposed' || d.sourceHash === d.candidateHash) process.exit(1)"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # pinned v4
+        with:
+          name: aieo-fixture-developer
+          path: aieo-fixture/aieo-output/developer.json
+          if-no-files-found: error
+          retention-days: 3
+
+  qa:
+    name: Synthetic QA independently verifies proposed change
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # pinned v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # pinned v4
+        with:
+          node-version: '24'
+      - run: node scripts/aieo-fixture-source.mjs
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned v4
+        with:
+          name: aieo-fixture-developer
+          path: aieo-fixture/aieo-output
+      - name: Reattest downloaded Developer evidence then run QA
+        run: |
+          set -euo pipefail
+          cd aieo-fixture
+          node ../scripts/aieo-import-handoffs.mjs foundation developer
+          node ../scripts/aieo-role.mjs qa
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # pinned v4
+        with:
+          name: aieo-fixture-qa
+          path: aieo-fixture/aieo-output/qa.json
+          if-no-files-found: error
+          retention-days: 3
+
+  security:
+    name: Synthetic Security independently verifies proposed change
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # pinned v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # pinned v4
+        with:
+          node-version: '24'
+      - run: node scripts/aieo-fixture-source.mjs
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned v4
+        with:
+          name: aieo-fixture-developer
+          path: aieo-fixture/aieo-output
+      - name: Reattest downloaded Developer evidence then run Security
+        run: |
+          set -euo pipefail
+          cd aieo-fixture
+          node ../scripts/aieo-import-handoffs.mjs foundation developer
+          node ../scripts/aieo-role.mjs security
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # pinned v4
+        with:
+          name: aieo-fixture-security
+          path: aieo-fixture/aieo-output/security.json
+          if-no-files-found: error
+          retention-days: 3
+
+  reviewer:
+    name: Synthetic Reviewer independently recomputes all approvals
+    needs: [qa, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # pinned v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # pinned v4
+        with:
+          node-version: '24'
+      - run: node scripts/aieo-fixture-source.mjs
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned v4
+        with:
+          name: aieo-fixture-developer
+          path: aieo-fixture/aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned v4
+        with:
+          name: aieo-fixture-qa
+          path: aieo-fixture/aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned v4
+        with:
+          name: aieo-fixture-security
+          path: aieo-fixture/aieo-output
+      - name: Reattest the complete handoff and assert draft eligibility
+        run: |
+          set -euo pipefail
+          cd aieo-fixture
+          node ../scripts/aieo-import-handoffs.mjs foundation developer qa security
+          node ../scripts/aieo-role.mjs reviewer
+          node -e "const d=require('./aieo-output/developer.json'); const r=require('./aieo-output/reviewer.json'); if(d.status !== 'proposed' || d.sourceHash === d.candidateHash || r.status !== 'draft-pr-eligible' || r.requiresHumanMerge !== true || r.handoffValidated !== true) process.exit(1)"
+      - name: Confirm no application source changed
+        run: git diff --exit-code -- components/FeedbackWidget.tsx
+
+  handoff-rejection:
+    name: Reject forged independently downloaded CI evidence
+    needs: [qa, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # pinned v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # pinned v4
+        with:
+          node-version: '24'
+      - run: node scripts/aieo-fixture-source.mjs
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned v4
+        with:
+          name: aieo-fixture-developer
+          path: aieo-fixture/aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned v4
+        with:
+          name: aieo-fixture-qa
+          path: aieo-fixture/aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned v4
+        with:
+          name: aieo-fixture-security
+          path: aieo-fixture/aieo-output
+      - name: Reject eleven poisoned copies of real downloaded GitHub artifacts
+        run: |
+          set -euo pipefail
+          cd aieo-fixture
+          node ../scripts/aieo-import-rejection-fixture.mjs
+      - name: Prove clean Reviewer approval then seven fail-closed tamper cases
+        run: |
+          set -euo pipefail
+          cd aieo-fixture
+          node ../scripts/aieo-import-handoffs.mjs foundation developer qa security
+          node ../scripts/aieo-handoff-rejection-fixture.mjs
+      - name: Confirm negative tests did not change application source
+        run: git diff --exit-code -- components/FeedbackWidget.tsx

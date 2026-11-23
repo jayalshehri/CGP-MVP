@@ -1,0 +1,424 @@
+name: AIEO Independent Model PR Roles
+
+# A bot-created PR using GITHUB_TOKEN does not trigger a new pull_request workflow.
+# The guarded publisher explicitly dispatches this read-only workflow on main.
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Exact bot-created model Draft PR number to independently inspect
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: aieo-model-roles-${{ inputs.pr_number }}
+  cancel-in-progress: false
+
+env:
+  AIEO_PR_NUMBER: ${{ inputs.pr_number }}
+
+jobs:
+  developer:
+    name: Independent Developer candidate provenance
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      - name: Capture trusted PATH before candidate and build steps
+        id: trusted-path
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+        run: |
+          set -euo pipefail
+          [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
+          printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
+      - name: Verify bounded candidate using trusted code
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-role.mjs developer
+      # JavaScript action: isolate the action runtime as well as shell run steps.
+      # A previous candidate/build step may append startup hooks to GITHUB_ENV.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-candidate-developer
+          path: aieo-output/candidate-developer.json
+          retention-days: 7
+
+  qa:
+    name: Independent QA review of candidate commit
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      - name: Capture trusted PATH before candidate and build steps
+        id: trusted-path
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+        run: |
+          set -euo pipefail
+          [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
+          printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
+      # Do not allow GitHub artifact extraction to expose reports through a
+      # default 0755 directory, even momentarily before importer validation.
+      - name: Prepare private evidence directory before artifact extraction
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: mkdir -m 700 -- aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-candidate-developer
+          path: aieo-output
+      - name: Re-private exact downloaded role artifacts without trusting their claims
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: node scripts/aieo-import-handoffs.mjs candidate developer
+      - name: Verify bounded candidate using trusted code
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-role.mjs qa
+      # JavaScript action: isolate the action runtime as well as shell run steps.
+      # A previous candidate/build step may append startup hooks to GITHUB_ENV.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-candidate-qa
+          path: aieo-output/candidate-qa.json
+          retention-days: 7
+
+  security:
+    name: Independent Security review of candidate diff
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      - name: Capture trusted PATH before candidate and build steps
+        id: trusted-path
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+        run: |
+          set -euo pipefail
+          [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
+          printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
+      # Do not allow GitHub artifact extraction to expose reports through a
+      # default 0755 directory, even momentarily before importer validation.
+      - name: Prepare private evidence directory before artifact extraction
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: mkdir -m 700 -- aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-candidate-developer
+          path: aieo-output
+      - name: Re-private exact downloaded role artifacts without trusting their claims
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: node scripts/aieo-import-handoffs.mjs candidate developer
+      - name: Verify bounded candidate using trusted code
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-role.mjs security
+      # JavaScript action: isolate the action runtime as well as shell run steps.
+      # A previous candidate/build step may append startup hooks to GITHUB_ENV.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-candidate-security
+          path: aieo-output/candidate-security.json
+          retention-days: 7
+
+  reviewer:
+    name: Independent Reviewer and candidate build
+    needs: [qa, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      - name: Capture trusted PATH before candidate and build steps
+        id: trusted-path
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+        run: |
+          set -euo pipefail
+          [[ -n "$PATH" && "$PATH" != *$'\n'* && "$PATH" != *$'\r'* ]]
+          printf 'path=%s\n' "$PATH" >> "$GITHUB_OUTPUT"
+      # Pin every handoff to its exact role artifact. Wildcard merge-multiple
+      # could admit unexpected artifacts or overwrite independently verified evidence.
+      # Do not allow GitHub artifact extraction to expose reports through a
+      # default 0755 directory, even momentarily before importer validation.
+      - name: Prepare private evidence directory before artifact extraction
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: mkdir -m 700 -- aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-candidate-developer
+          path: aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-candidate-qa
+          path: aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-candidate-security
+          path: aieo-output
+      - name: Re-private exact downloaded role artifacts without trusting their claims
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        run: node scripts/aieo-import-handoffs.mjs candidate developer qa security
+      - name: Verify bounded candidate using trusted code
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-role.mjs reviewer
+      # Only after independent QA+Security+Reviewer approve the one-file diff,
+      # compile candidate source with trusted main-branch build tools.
+      - name: Independently lint, typecheck and build approved candidate
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
+        run: |
+          set -euo pipefail
+          node scripts/aieo-candidate-replay.mjs
+          npm ci
+          npm run lint
+          npx next typegen
+          npx tsc --noEmit
+          npm run build
+      - name: Re-attest independently reviewed candidate and remote Draft after build
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/aieo-candidate-finalize.mjs
+      # JavaScript action: isolate the action runtime as well as shell run steps.
+      # A previous candidate/build step may append startup hooks to GITHUB_ENV.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        env:
+          BASH_ENV: ''
+          NODE_OPTIONS: ''
+          LD_PRELOAD: ''
+          LD_AUDIT: ''
+          LD_LIBRARY_PATH: ''
+          LD_DEBUG: ''
+          LD_DEBUG_OUTPUT: ''
+          PATH: ${{ steps.trusted-path.outputs.path }}
+        with:
+          name: aieo-candidate-reviewer
+          path: aieo-output/candidate-reviewer.json
+          retention-days: 7
