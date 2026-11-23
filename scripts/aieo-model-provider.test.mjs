@@ -2050,3 +2050,19 @@ test('model rejects newly introduced event wiring that can execute existing call
     explanation: 'Inert UI label change'
   }) }).status, 'proposed');
 });
+
+test('model blocks JSX prop reordering that changes spread/callback precedence', () => {
+  const source = 'const view = (<div onClick={safeAction} {...overrideProps}>Old copy</div>);\n';
+  const find = 'onClick={safeAction} {...overrideProps}';
+  const replace = '{...overrideProps} onClick={safeAction}';
+  const verdict = validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace,
+    explanation: 'Reordering spread and callback can change the effective handler'
+  }) });
+  assert.equal(verdict.status, 'rejected', 'same JSX props in another order are not equivalent');
+
+  assert.equal(validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find: 'Old copy</div>', replace: 'New copy</div>',
+    explanation: 'Changing inert copy does not reorder existing attributes'
+  }) }).status, 'proposed');
+});
