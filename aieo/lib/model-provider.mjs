@@ -44,13 +44,19 @@ const decodeAsciiPercentEscapes = (value) =>
 export const containsCredentials = (value) => {
   if (typeof value !== 'string') return false;
   const candidates = new Set();
-  let current = value;
-  for (let pass = 0; pass < 3; pass++) {
+  // Decode up to three complete layers, including the result of the third
+  // decode. Normalize first as well: fullwidth '%' and hex digits otherwise
+  // hide the escape sequence itself from the ASCII-only decoder.
+  for (const seed of [value, value.normalize('NFKC')]) {
+    let current = seed;
     candidates.add(current);
-    candidates.add(current.normalize('NFKC'));
-    const decoded = decodeAsciiPercentEscapes(current);
-    if (decoded === current) break;
-    current = decoded;
+    for (let pass = 0; pass < 3; pass++) {
+      const decoded = decodeAsciiPercentEscapes(current);
+      if (decoded === current) break;
+      current = decoded;
+      candidates.add(current);
+      candidates.add(current.normalize('NFKC'));
+    }
   }
   return [...candidates].some((candidate) =>
     credentials.test(candidate) ||
