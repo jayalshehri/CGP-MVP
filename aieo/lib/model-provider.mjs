@@ -8,6 +8,8 @@ const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 // a closing key quote before the colon must not bypass disclosure screening.
 // Conservative scan before sending source or task text to an external provider.
 // Pattern matching cannot guarantee that all secret formats have been detected.
+// Encoded JavaScript identifier escapes can conceal sensitive key names from
+// regex screening; the scoped UI-copy source/task must not contain them at all.
 // Also refuse JWT-shaped credentials even without an explicit Bearer prefix.
 // HTTP Basic credentials, URI userinfo (including database DSNs), and encrypted/
 // PGP private-key headers must not bypass disclosure checks merely because
@@ -248,7 +250,8 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
       Buffer.byteLength(parsed.explanation, 'utf8') > 1200 ||
       containsCredentials(parsed.explanation) || /[\u0000-\u001F\u007F]/.test(parsed.explanation) ||
       unsafeInvisible.test(parsed.explanation) || unsafeLineControl.test(parsed.explanation) ||
-      unsafeNonstandardUnicode.test(parsed.explanation)) {
+      unsafeNonstandardUnicode.test(parsed.explanation) ||
+       encodedJavaScriptEscape.test(parsed.explanation)) {
     return { status: 'rejected', reason: 'Unsafe model explanation' };
   }
   const { find, replace } = parsed;
@@ -257,7 +260,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   const findBytes = Buffer.byteLength(find, 'utf8');
   const replaceBytes = Buffer.byteLength(replace, 'utf8');
   if (!exactUtf8(find) || !exactUtf8(replace) ||
-      containsCredentials(find) ||
+      containsCredentials(find) || encodedJavaScriptEscape.test(find) ||
       unsafeInvisible.test(find) || unsafeInvisible.test(replace) ||
       unsafeLineControl.test(find) || unsafeLineControl.test(replace) ||
       unsafeNonstandardUnicode.test(find) || unsafeNonstandardUnicode.test(replace) ||
@@ -291,7 +294,8 @@ export function buildModelRequest({ source, path = MODEL_ALLOWED_PATH, task, mod
   if (shareApproved !== true) throw new Error('External source sharing must be explicitly approved');
   if (path !== MODEL_ALLOWED_PATH || typeof source !== 'string' ||
       Buffer.byteLength(source, 'utf8') > 12000 || !exactUtf8(source) ||
-      containsCredentials(source) || promptBoundaryMarker.test(source) ||
+      containsCredentials(source) || encodedJavaScriptEscape.test(source) ||
+       promptBoundaryMarker.test(source) ||
       unsafeInvisible.test(source) || unsafeLineControl.test(source) ||
       unsafeNonstandardUnicode.test(source) ||
       /(?:\.env|secrets\/|service_role)/i.test(path)) {
@@ -299,7 +303,8 @@ export function buildModelRequest({ source, path = MODEL_ALLOWED_PATH, task, mod
   }
   if (typeof task !== 'string' || task.length < 12 ||
       Buffer.byteLength(task, 'utf8') > 500 || !exactUtf8(task) ||
-      containsCredentials(task) || promptBoundaryMarker.test(task) ||
+      containsCredentials(task) || encodedJavaScriptEscape.test(task) ||
+       promptBoundaryMarker.test(task) ||
       unsafeTaskControl.test(task) || unsafeInvisible.test(task) || unsafeLineControl.test(task) ||
       unsafeNonstandardUnicode.test(task) ||
       typeof model !== 'string' || !/^[a-z0-9_.-]+\/[a-z0-9_.:-]+$/i.test(model)) {
