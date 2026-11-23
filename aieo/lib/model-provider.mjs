@@ -31,8 +31,18 @@ const opaqueTokenCredentials = /(?:[?&#](?:access[_-]?token|refresh[_-]?token|id
 // separately executed candidate Security review. Values remain synthetic
 // in tests; this heuristic is not a complete secrets detector.
 const dottedCredentialAssignment = /\b(?:client\.secret|api\.key|private\.key|secret\.key|signing\.key|encryption\.key|account\.key|webhook\.secret|service\.role|aws\.secret\.access\.key|(?:access|refresh|session|auth|id)\.token|(?:db|database)\.password)\s*["']?\s*[:=]\s*(?:["'][^"'\r\n]{8,}["']?|[a-z0-9_+/=-]{12,})/i;
-export const containsCredentials = (value) =>
-  credentials.test(value) || opaqueTokenCredentials.test(value) || dottedCredentialAssignment.test(value);
+// Compatibility glyphs (fullwidth letters, mathematical alphabets and
+// fullwidth punctuation) can disguise sensitive keys without using invisible
+// characters. Check both the exact bytes and their Unicode NFKC equivalent;
+// normalization is for detection only, never a change to transmitted source.
+export const containsCredentials = (value) => {
+  if (typeof value !== 'string') return false;
+  const canonical = value.normalize('NFKC');
+  return [value, canonical].some((candidate) =>
+    credentials.test(candidate) ||
+    opaqueTokenCredentials.test(candidate) ||
+    dottedCredentialAssignment.test(candidate));
+};
 const forbidden = /(?:\beval\s*\(|\bFunction\s*\(|\bchild_process\b|\bprocess\.env\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bimport\s+|\brequire\s*\()/i;
 
 // Block browser navigation and side-channel transports in even a one-line UI patch.
