@@ -39,7 +39,7 @@ const dottedCredentialAssignment = /\b(?:client\.secret|api\.key|private\.key|se
 // A named secret assignment is itself sensitive even when its right-hand side
 // is an expression, tagged template, function call or a comment-separated
 // value. Earlier checks only accepted quoted, bare-token or raw-backtick
-// values, which could miss e.g. password: String.raw`fixture` or
+// values, which could miss e.g. password: (buildValue()) or
 // clientSecret /*note*/ = buildValue(). For this bounded copy-only workflow
 // fail closed on the field assignment regardless of its value. This is a
 // conservative name-based heuristic, not a general secrets scanner.
