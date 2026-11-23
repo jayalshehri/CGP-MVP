@@ -2566,3 +2566,65 @@ test('template-literal credential values fail closed before provider transport a
   }));
   assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed');
 });
+
+test('expression-valued and comment-separated credential assignments fail closed before provider disclosure', async () => {
+  // Synthetic examples whose value starts with punctuation, not a bare token.
+  const markers = [
+    'password: (loadFixture())',
+    'clientSecret /* synthetic note */ = (makeFixture())',
+    '"api.key": ({ value: "synthetic-only" })',
+    'accessToken: [fixtureValue]',
+    'privateKey = () => "not-a-real-key"',
+    'db.password /* comment */ : { fixture: true }',
+    'webhook_secret = (fixture || "fallback")'
+  ];
+  let attemptedTransport = 0;
+  const transport = async () => {
+    attemptedTransport++;
+    throw new Error('disclosure was not blocked');
+  };
+  for (const marker of markers) {
+    assert.equal(containsCredentials(marker), true, marker);
+    const dirtySource = source.replace(find, find + ' // ' + marker);
+    assert.throws(() => buildModelRequest({
+      source: dirtySource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }), marker);
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }), marker);
+    assert.equal((await requestModelPatch({
+      source: dirtySource, task, env, transport
+    })).status, 'blocked', marker);
+    assert.equal((await requestModelPatch({
+      source, task: task + ' ' + marker, env, transport
+    })).status, 'blocked', marker);
+    for (const fields of [
+      { source: dirtySource, find: find + ' // ' + marker, replace: replacement },
+      { source, find, replace: replacement + ' // ' + marker },
+      { source, find, replace: replacement, explanation: 'Unsafe ' + marker }
+    ]) {
+      const outcome = validateModelPatch({
+        source: fields.source,
+        response: JSON.stringify({
+          path: MODEL_ALLOWED_PATH,
+          find: fields.find,
+          replace: fields.replace,
+          explanation: fields.explanation || 'Fixture only'
+        })
+      });
+      assert.equal(outcome.status, 'rejected', marker);
+      assert.equal(JSON.stringify(outcome).includes(marker), false, 'no marker echo');
+    }
+  }
+  assert.equal(attemptedTransport, 0, 'no model transport with a named credential assignment');
+  for (const safe of ['passwordless = true', 'apiKeypress: false', 'const caption = "ملاحظة عامة"']) {
+    assert.equal(containsCredentials(safe), false, safe);
+  }
+  assert.equal(validateModelPatch({
+    source,
+    response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace: replacement + ' // ملاحظة عامة',
+      explanation: 'تعديل نص آمن'
+    })
+  }).status, 'proposed', 'safe Arabic text-only proposal is still allowed');
+});
