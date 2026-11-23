@@ -193,8 +193,18 @@ function jsxStructureTimeline(source) {
       Math.min(source.length, match.index + 4096));
     if (end < 0) return null;
     const tag = source.slice(match.index, end);
-    events.push([match.index, 'open:' + match[0].slice(1).trim() +
-      (/\/\s*>$/.test(tag) ? ':self' : '')]);
+    const tagName = match[0].slice(1).trim();
+    const opaqueComponent = (/[A-Z.$:-]/.test(tagName) || tagName.startsWith('_') ||
+      /[^\x00-\x7F]/.test(tagName)) && !intrinsicSvgNames.has(tagName);
+    const props = parseTagAttributes(tag, match[0].length, opaqueComponent);
+    if (!props) return null;
+    // Ignore self-closing, inert markup-shaped text in comments (e.g.
+    // <img alt="decorative" />); the existing behavior-bearing tag guard
+    // already defines which opening tags are capability-sensitive.
+    if (props.length || structuralEffectTags.has(tagName.toLowerCase()) || opaqueComponent) {
+      events.push([match.index, 'open:' + tagName +
+        (/\/\s*>$/.test(tag) ? ':self' : '')]);
+    }
   }
   // Closing tags are behaviorally significant even with no attributes:
   // </div><button ...> and <button ...></div> have different ancestry.
