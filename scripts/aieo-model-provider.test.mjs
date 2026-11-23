@@ -21,6 +21,61 @@ const env = {
 };
 const task = 'Correct the sample constant in a bounded manner.';
 
+test('short explicit credential assignments and query tokens fail closed at all provider boundaries', async () => {
+  const shortSecrets = [
+    '{"password":"1234"}',
+    '{"client_secret":"abc123"}',
+    '{"privateKey":"k"}',
+    '{"api.key":"x"}',
+    '?access_token=abc',
+    '{"sessionToken":"xy"}'
+  ];
+  let outbound = 0;
+  const transport = async () => {
+    outbound++;
+    throw new Error('short explicit credential must not be sent');
+  };
+  for (const marker of shortSecrets) {
+    const dirtySource = source.replace(find, find + ' // ' + marker);
+    assert.throws(() => buildModelRequest({
+      source: dirtySource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    for (const [candidateSource, candidateTask] of [[dirtySource, task], [source, task + ' ' + marker]]) {
+      assert.equal((await requestModelPatch({
+        source: candidateSource, task: candidateTask, env, transport
+      })).status, 'blocked');
+    }
+    for (const proposalFields of [
+      { source: dirtySource, find: find + ' // ' + marker, replace: replacement },
+      { source, find, replace: replacement + ' // ' + marker },
+      { source, find, replace: replacement, explanation: 'Synthetic ' + marker }
+    ]) {
+      const result = validateModelPatch({
+        source: proposalFields.source,
+        response: JSON.stringify({
+          path: MODEL_ALLOWED_PATH,
+          find: proposalFields.find,
+          replace: proposalFields.replace,
+          explanation: proposalFields.explanation || 'Bounded test'
+        })
+      });
+      assert.equal(result.status, 'rejected');
+      assert.equal(JSON.stringify(result).includes(marker), false, 'no credential echo');
+    }
+  }
+  assert.equal(outbound, 0, 'no external transport for short explicit secrets');
+  const safe = validateModelPatch({
+    source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace: replacement + ' // تحديث',
+      explanation: 'تعديل تسمية عامة'
+    })
+  });
+  assert.equal(safe.status, 'proposed', 'safe Arabic UI copy remains allowed');
+});
+
 test('percent-encoded credential names fail closed before provider calls and candidate review', async () => {
   const disguised = [
     '?access%5Ftoken=syntheticvalue123456',
