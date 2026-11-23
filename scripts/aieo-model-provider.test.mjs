@@ -2024,3 +2024,29 @@ test('model rejects indirect DOM attribute-node mutation of an existing destinat
     explanation: 'Inert UI label change'
   }) }).status, 'proposed');
 });
+
+
+test('model rejects newly introduced event wiring that can execute existing callbacks', () => {
+  const source = 'const status = "Old status copy";\n';
+  const find = 'const status = "Old status copy";';
+  const attacks = [
+    "const status = <button onClick={existingAction}>New status</button>;",
+    "const status = <img onError={existingAction} />;",
+    "const status = () => { button.onclick = existingAction; };",
+    "const status = () => { button.addEventListener(\"click\", existingAction); };",
+    "const status = () => { button.dispatchEvent(new Event(\"click\")); };",
+    "const status = () => { const { onClick: existing } = buttonProps; existing(); };",
+    "const status = () => { button.onmouseover = existingAction; };"
+];
+  for (const replace of attacks) {
+    const verdict = validateModelPatch({ source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace,
+      explanation: 'Synthetic event-wire bypass fixture'
+    }) });
+    assert.equal(verdict.status, 'rejected', replace);
+  }
+  assert.equal(validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace: 'const status = "New status copy";',
+    explanation: 'Inert UI label change'
+  }) }).status, 'proposed');
+});
