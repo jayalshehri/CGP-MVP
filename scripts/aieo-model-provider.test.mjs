@@ -2315,3 +2315,47 @@ test('encoded JavaScript key names cannot bypass source/task disclosure or patch
   }));
   assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed');
 });
+
+test('dotted credential field names fail closed before disclosure and in every proposal field', async () => {
+  // All values are deliberately synthetic. Dotted keys are common in
+  // configuration exports and must not bypass the source-sharing gate.
+  const markers = [
+    '{"client.secret":"synthetic-long-credential-123"}',
+    "api.key = 'synthetic-long-credential-123'",
+    'aws.secret.access.key: syntheticlongcredential123',
+    '{"refresh.token":"synthetic-long-credential-123"}',
+    'db.password = "synthetic-long-credential-123"'
+  ];
+  let transports = 0;
+  const transport = async () => { transports++; throw Error('dotted credential must never be sent'); };
+  for (const marker of markers) {
+    const dirtySource = source + '// ' + marker + '\n';
+    assert.throws(() => buildModelRequest({
+      source: dirtySource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.equal((await requestModelPatch({ source: dirtySource, task, env, transport })).status, 'blocked');
+    assert.equal((await requestModelPatch({ source, task: task + ' ' + marker, env, transport })).status, 'blocked');
+    const sourceWithMatch = source.replace(find, find + ' // ' + marker);
+    for (const [candidateSource, patch] of [
+      [sourceWithMatch, { find: find + ' // ' + marker, replace: replacement, explanation: 'fixture' }],
+      [source, { find, replace: replacement + ' // ' + marker, explanation: 'fixture' }],
+      [source, { find, replace: replacement, explanation: 'Synthetic ' + marker }]
+    ]) {
+      const verdict = validateModelPatch({
+        source: candidateSource,
+        response: JSON.stringify({ path: MODEL_ALLOWED_PATH, ...patch })
+      });
+      assert.equal(verdict.status, 'rejected', 'reject dotted credential in every proposal field');
+      assert.equal(JSON.stringify(verdict).includes(marker), false, 'do not echo credential values');
+    }
+  }
+  assert.equal(transports, 0, 'no external transport on rejected source or task');
+  assert.doesNotThrow(() => buildModelRequest({
+    source: source + '// {"public.key":"Visible copy only"}',
+    task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+  }));
+  assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed');
+});

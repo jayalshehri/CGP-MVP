@@ -24,7 +24,15 @@ const opaqueTokenCredentials = /(?:[?&#](?:access[_-]?token|refresh[_-]?token|id
 // Shared conservative credential gate: the provider and separately executed Security
 // reviewer must reject the same known sensitive formats before source or candidate
 // bytes can become reviewed artifacts. This is heuristic, not a guarantee.
-export const containsCredentials = (value) => credentials.test(value) || opaqueTokenCredentials.test(value);
+// Dotted secret keys occur in exported configuration and JSON (e.g.
+// "client.secret": "value"). They are still credentials even though the
+// existing snake_case/camelCase rules do not match a literal dot. Reject
+// these sensitive assignments in both the pre-disclosure gate and the
+// separately executed candidate Security review. Values remain synthetic
+// in tests; this heuristic is not a complete secrets detector.
+const dottedCredentialAssignment = /\b(?:client\.secret|api\.key|private\.key|secret\.key|signing\.key|encryption\.key|account\.key|webhook\.secret|service\.role|aws\.secret\.access\.key|(?:access|refresh|session|auth|id)\.token|(?:db|database)\.password)\s*["']?\s*[:=]\s*(?:["'][^"'\r\n]{8,}["']?|[a-z0-9_+/=-]{12,})/i;
+export const containsCredentials = (value) =>
+  credentials.test(value) || opaqueTokenCredentials.test(value) || dottedCredentialAssignment.test(value);
 const forbidden = /(?:\beval\s*\(|\bFunction\s*\(|\bchild_process\b|\bprocess\.env\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bimport\s+|\brequire\s*\()/i;
 
 // Block browser navigation and side-channel transports in even a one-line UI patch.
