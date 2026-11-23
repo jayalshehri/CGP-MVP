@@ -41,6 +41,12 @@ const dottedCredentialAssignment = /\b(?:client\.secret|api\.key|private\.key|se
 // Decode only printable ASCII percent escapes for scanning, not for output or
 // source modification. Bound decoding to three passes to catch double encoding
 // without a potentially unbounded expansion or network-side effects.
+// JS/TS configuration can use template literals for sensitive field values.
+// Match the opening backtick alone: the literal may be short, interpolated,
+// or multiline. Previously these assignments bypassed quoted/unquoted scans.
+// This fail-closed check only screens named sensitive fields; public copy
+// templates remain allowed. Source and model outputs are never rewritten.
+const templateCredentialAssignment = /\b(?:service[_-]?role|password|api[._-]?key|client[._-]?secret|aws[._-]?secret[._-]?access[._-]?key|private[._-]?key|secret[._-]?key|signing[._-]?key|encryption[._-]?key|webhook[._-]?secret|account[._-]?key|(?:access|refresh|id|session|auth)[._-]?token|(?:db|database)\.password|apikey|token)\s*["']?\s*[:=]\s*\x60/i;
 const decodeAsciiPercentEscapes = (value) =>
   value.replace(/%([0-7][0-9a-f])/gi, (sequence, hex) => {
     const code = Number.parseInt(hex, 16);
@@ -66,7 +72,8 @@ export const containsCredentials = (value) => {
   return [...candidates].some((candidate) =>
     credentials.test(candidate) ||
     opaqueTokenCredentials.test(candidate) ||
-    dottedCredentialAssignment.test(candidate));
+    dottedCredentialAssignment.test(candidate) ||
+    templateCredentialAssignment.test(candidate));
 };
 const forbidden = /(?:\beval\s*\(|\bFunction\s*\(|\bchild_process\b|\bprocess\.env\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bimport\s+|\brequire\s*\()/i;
 
