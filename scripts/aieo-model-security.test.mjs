@@ -11,6 +11,39 @@ const report = { status: 'proposed', sourceHash: hash(original), proposedHash: h
 const diff = '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n';
 const input = { original, actual, changedPaths: [MODEL_ALLOWED_PATH], diff, report };
 
+test('independent Security finds comment-separated sensitive assignments in actual candidate, not a forged diff', () => {
+  const disguised = [
+    'password // audit comment\n = short',
+    '"api.key" // audit comment\n: "x"',
+    'clientSecret /* first */ /* second */ = makeValue()',
+    'session_token /* ' + 'x'.repeat(320) + ' */ = createToken()',
+    'privateKey /* note */ // second note\n = getValue()'
+  ];
+  for (const marker of disguised) {
+    const candidate = 'const items = 2; // harmless\n' + marker + '\n';
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      // The diff is intentionally misleading; Security must inspect actual file bytes.
+      diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n',
+      report: {
+        status: 'proposed', sourceHash: hash(original),
+        proposedHash: hash(candidate)
+      }
+    });
+    assert.equal(verdict.status, 'failed');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+    assert.equal(JSON.stringify(verdict).includes(marker), false, 'never echo credentials');
+  }
+  const safe = 'const items = 2; // تحديث عام\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2; // تحديث عام\n',
+    report: {
+      status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe)
+    }
+  }).status, 'passed');
+});
+
 test('independent Security rejects short explicit secrets from actual bytes despite forged diff', () => {
   const markers = [
     '{"password":"1234"}',

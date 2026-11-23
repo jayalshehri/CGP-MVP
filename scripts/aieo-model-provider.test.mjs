@@ -21,6 +21,53 @@ const env = {
 };
 const task = 'Correct the sample constant in a bounded manner.';
 
+test('credential trivia scanner handles dense block comments without regex backtracking', () => {
+  const dense = '/* synthetic annotation */'.repeat(360);
+  assert.equal(containsCredentials('password ' + dense + ' = synthetic'), true);
+  assert.equal(containsCredentials('password ' + dense + ' trailing public copy'), false);
+  assert.equal(containsCredentials('Public documentation without credential assignments'), false);
+});
+
+test('line-comment and lengthy annotation trivia cannot conceal named credential assignments', async () => {
+  const disguised = [
+    'password // audit comment\n = short',
+    '"api.key" // audit comment\n: "x"',
+    'clientSecret /* first */ /* second */ = makeValue()',
+    'session_token /* ' + 'x'.repeat(320) + ' */ = createToken()',
+    'privateKey /* note */ // second note\n = getValue()'
+  ];
+  let outbound = 0;
+  const transport = async () => { outbound++; throw Error('no source should be transmitted'); };
+  for (const marker of disguised) {
+    assert.equal(containsCredentials(marker), true, 'sensitive marker must be detected');
+    const unsafeSource = source.replace(find, find + ' // ' + marker);
+    assert.throws(() => buildModelRequest({
+      source: unsafeSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.equal((await requestModelPatch({
+      source: unsafeSource, task, env, transport
+    })).status, 'blocked');
+    for (const field of ['find', 'replace', 'explanation']) {
+      const fields = {
+        path: MODEL_ALLOWED_PATH, find, replace: replacement,
+        explanation: 'Public UI text'
+      };
+      fields[field] += ' // ' + marker;
+      const verdict = validateModelPatch({ source, response: JSON.stringify(fields) });
+      assert.equal(verdict.status, 'rejected');
+      assert.equal(JSON.stringify(verdict).includes(marker), false, 'no credential echo');
+    }
+  }
+  assert.equal(outbound, 0, 'even explicit consent must never transmit unsafe source');
+  const safe = validateModelPatch({
+    source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find, replace: replacement + ' // نص عام',
+      explanation: 'تحسين رسالة عامة'
+    })
+  });
+  assert.equal(safe.status, 'proposed');
+});
+
 test('short explicit credential assignments and query tokens fail closed at all provider boundaries', async () => {
   const shortSecrets = [
     '{"password":"1234"}',
