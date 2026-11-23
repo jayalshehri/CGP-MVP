@@ -2273,3 +2273,45 @@ test('private signing and encryption key fields fail closed before disclosure an
   }));
   assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed');
 });
+
+test('encoded JavaScript key names cannot bypass source/task disclosure or patch-field guards', async () => {
+  // Synthetic credentials only. Escaped names are meaningful after JS/JSON decoding,
+  // even when the literal substring "clientSecret" is absent from raw input.
+  const slash = String.fromCharCode(92);
+  const markers = [
+    '{"cl' + slash + 'u0069entSecret":"synthetic-long-credential-123"}',
+    "{'private" + slash + "u004Bey':'synthetic-long-credential-123'}",
+    'api' + slash + 'x4Bey = "synthetic-long-credential-123"'
+  ];
+  let transports = 0;
+  const transport = async () => { transports++; throw Error('escaped secret must not leave preflight'); };
+  for (const marker of markers) {
+    const dirtySource = source + '// ' + marker + '\n';
+    assert.throws(() => buildModelRequest({
+      source: dirtySource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.equal((await requestModelPatch({ source: dirtySource, task, env, transport })).status, 'blocked');
+    assert.equal((await requestModelPatch({ source, task: task + ' ' + marker, env, transport })).status, 'blocked');
+    const sourceWithMatch = source.replace(find, find + ' // ' + marker);
+    for (const [candidateSource, patch] of [
+      [sourceWithMatch, { find: find + ' // ' + marker, replace: replacement, explanation: 'fixture' }],
+      [source, { find, replace: replacement + ' // ' + marker, explanation: 'fixture' }],
+      [source, { find, replace: replacement, explanation: 'Synthetic ' + marker }]
+    ]) {
+      const result = validateModelPatch({
+        response: JSON.stringify({ path: MODEL_ALLOWED_PATH, ...patch }),
+        source: candidateSource
+      });
+      assert.equal(result.status, 'rejected', 'all proposal fields reject encoded secret names');
+      assert.equal(JSON.stringify(result).includes(marker), false, 'reject without echoing synthetic credential');
+    }
+  }
+  assert.equal(transports, 0, 'blocked source/task never reaches the external transport');
+  assert.doesNotThrow(() => buildModelRequest({
+    source, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+  }));
+  assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed');
+});
