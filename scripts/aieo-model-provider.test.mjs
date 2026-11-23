@@ -21,6 +21,56 @@ const env = {
 };
 const task = 'Correct the sample constant in a bounded manner.';
 
+test('computed bracket credential fields never cross the model boundary', async () => {
+  const disguised = [
+    'config["password"] = createSecret()',
+    "settings['clientSecret' /* reviewed */ ] = short",
+    "config[\x60apiKey\x60] = 'x'",
+    'const cfg = { ["privateKey"]: "x" }',
+    'config[session_token] /* reviewed */ = makeValue()',
+    'config["db.password"] = "x"',
+    'cfg["access_token" /* audit */ ] = "short"'
+  ];
+  let outbound = 0;
+  const transport = async () => { outbound++; throw Error('computed secrets must not be transmitted'); };
+  for (const marker of disguised) {
+    assert.equal(containsCredentials(marker), true, 'computed secret assignment detected');
+    const dirtySource = source + '// ' + marker + '\n';
+    assert.throws(() => buildModelRequest({
+      source: dirtySource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker,
+      model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.equal((await requestModelPatch({
+      source: dirtySource, task, env, transport
+    })).status, 'blocked');
+    for (const field of ['find', 'replace', 'explanation']) {
+      const fields = { path: MODEL_ALLOWED_PATH, find, replace: replacement,
+        explanation: 'Synthetic display copy' };
+      fields[field] += ' // ' + marker;
+      const verdict = validateModelPatch({
+        source, response: JSON.stringify(fields)
+      });
+      assert.equal(verdict.status, 'rejected');
+      assert.equal(JSON.stringify(verdict).includes(marker), false, 'no secret echo');
+    }
+  }
+  assert.equal(outbound, 0);
+  for (const safe of [
+    'const words = ["password"];',
+    'const label = config["password"];',
+    'Public label update — تحسين واجهة'
+  ]) assert.equal(containsCredentials(safe), false, 'do not deny unrelated copy or reads');
+  assert.equal(validateModelPatch({
+    source, response: JSON.stringify({
+      path: MODEL_ALLOWED_PATH, find,
+      replace: replacement + ' // تحديث عام', explanation: 'نص ظاهر للمستخدم'
+    })
+  }).status, 'proposed');
+});
+
 test('credential trivia scanner handles dense block comments without regex backtracking', () => {
   const dense = '/* synthetic annotation */'.repeat(360);
   assert.equal(containsCredentials('password ' + dense + ' = synthetic'), true);

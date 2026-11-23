@@ -48,7 +48,7 @@ const dottedCredentialAssignment = /\b(?:client\.secret|api\.key|private\.key|se
 // after // must not conceal the assignment from the pre-disclosure gate or
 // the independently executed Security candidate inspection. Bound each
 // comment to the maximum consented source budget (12 KB); scan only.
-const sensitiveFieldName = /\b(?:service[._-]?role|password|api[._-]?key|apikey|client[._-]?secret|aws[._-]?secret[._-]?access[._-]?key|private[._-]?key|secret[._-]?key|signing[._-]?key|encryption[._-]?key|webhook[._-]?secret|account[._-]?key|(?:access|refresh|id|session|auth)[._-]?token|(?:db|database)[._-]?password|token)["']?/gi;
+const sensitiveFieldName = /\b(?:service[._-]?role|password|api[._-]?key|apikey|client[._-]?secret|aws[._-]?secret[._-]?access[._-]?key|private[._-]?key|secret[._-]?key|signing[._-]?key|encryption[._-]?key|webhook[._-]?secret|account[._-]?key|(?:access|refresh|id|session|auth)[._-]?token|(?:db|database)[._-]?password|token)["'\x60]?/gi;
 // A repeated regex group over both whitespace and comments can catastrophically
 // backtrack on many block comments. Walk the separators deterministically.
 // This scanner is deliberately conservative: on a long/ambiguous comment
@@ -59,6 +59,8 @@ function hasSensitiveFieldAssignment(value) {
   let work = 0;
   while ((match = sensitiveFieldName.exec(value))) {
     let cursor = match.index + match[0].length;
+    // JS computed keys may close with ] after quotes/backticks and comments.
+    let closedComputedKey = false;
     while (cursor < value.length) {
       if (++work > 24000 || cursor - match.index > 12000) return true;
       const character = value[cursor];
@@ -73,6 +75,14 @@ function hasSensitiveFieldAssignment(value) {
         const close = value.indexOf('\n', cursor + 2);
         if (close < 0) break;
         cursor = close + 1;
+        continue;
+      }
+      // A key such as config["password"] = value is an explicit credential
+      // assignment too. Permit one closing computed-key bracket, even when
+      // whitespace or comments precede it, then continue scanning for =/:.
+      if (character === ']' && !closedComputedKey) {
+        closedComputedKey = true;
+        cursor++;
         continue;
       }
       break;
