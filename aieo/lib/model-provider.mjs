@@ -72,8 +72,15 @@ function hasSensitiveFieldAssignment(value) {
         continue;
       }
       if (value.startsWith('//', cursor)) {
-        const close = value.indexOf('\n', cursor + 2);
-        if (close < 0) break;
+        // JavaScript ends // comments at CR, LF, LS and PS. A CR-only
+        // source must not bypass a credential assignment. Scan with a bounded
+        // work budget rather than allocating substrings for every comment.
+        let close = cursor + 2;
+        while (close < value.length && !/[\r\n\u2028\u2029]/u.test(value[close])) {
+          if (++work > 24000 || close - cursor > 12000) return true;
+          close++;
+        }
+        if (close === value.length) break;
         cursor = close + 1;
         continue;
       }
@@ -124,7 +131,11 @@ export const containsCredentials = (value) => {
       candidates.add(current.normalize('NFKC'));
     }
   }
+  // A JS escaped identifier in source/task can hide a key name (e.g. a
+  // Unicode escape spelling of password). These are disallowed in this
+  // bounded UI-copy workflow even if a name-based secret regex misses them.
   return [...candidates].some((candidate) =>
+    encodedJavaScriptEscape.test(candidate) ||
     credentials.test(candidate) ||
     opaqueTokenCredentials.test(candidate) ||
     dottedCredentialAssignment.test(candidate) ||
