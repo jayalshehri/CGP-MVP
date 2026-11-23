@@ -14,12 +14,17 @@ const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 // HTTP Basic credentials, URI userinfo (including database DSNs), and encrypted/
 // PGP private-key headers must not bypass disclosure checks merely because
 // their secret values lack known provider-specific token prefixes.
-const credentials = /gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-[a-z0-9]{20,}|(?:sk-proj-|sk-live-|sb_secret_)[a-z0-9_-]{20,}|(?:AKIA|ASIA)[0-9A-Z]{16}|-----BEGIN (?:[A-Z0-9-]+ )?PRIVATE KEY-----|-----BEGIN PGP PRIVATE KEY BLOCK-----|(?:service[_-]?role|password|api[_-]?key|client[_-]?secret|aws[_-]?secret[_-]?access[_-]?key|private[_-]?key|secret[_-]?key|signing[_-]?key|encryption[_-]?key|webhook[_-]?secret|account[_-]?key)["']?\s*[:=]\s*(?:["'][^"'\r\n]{8,}["']?|[a-z0-9_+/=-]{12,})|\bBearer\s+[a-z0-9._~+/-]{16,}|\bBasic\s+[a-z0-9+/]{12,}={0,2}|\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s/?#@"'<>]{1,256}@|(?:[?&](?:x-amz-(?:signature|credential|security-token)|sig)=)[a-z0-9%+/_=-]{20,}|\bxox[baprs]-[a-z0-9-]{20,}|\bAIza[a-z0-9_-]{35}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{16,}/i;
+// Explicitly named credentials are sensitive even when their value is short.
+// Four-digit passwords, single-character test keys and short session tokens
+// must never be disclosed merely because they fail an entropy/length heuristic.
+// Only named assignment/query contexts are broadened; opaque token prefixes
+// without a sensitive key retain their existing length thresholds.
+const credentials = /gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-[a-z0-9]{20,}|(?:sk-proj-|sk-live-|sb_secret_)[a-z0-9_-]{20,}|(?:AKIA|ASIA)[0-9A-Z]{16}|-----BEGIN (?:[A-Z0-9-]+ )?PRIVATE KEY-----|-----BEGIN PGP PRIVATE KEY BLOCK-----|(?:service[_-]?role|password|api[_-]?key|client[_-]?secret|aws[_-]?secret[_-]?access[_-]?key|private[_-]?key|secret[_-]?key|signing[_-]?key|encryption[_-]?key|webhook[_-]?secret|account[_-]?key)["']?\s*[:=]\s*(?:["'][^"'\r\n]{1,}["']?|[a-z0-9_+/=-]{1,})|\bBearer\s+[a-z0-9._~+/-]{16,}|\bBasic\s+[a-z0-9+/]{1,}={0,2}|\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s/?#@"'<>]{1,256}@|(?:[?&](?:x-amz-(?:signature|credential|security-token)|sig)=)[a-z0-9%+/_=-]{20,}|\bxox[baprs]-[a-z0-9-]{20,}|\bAIza[a-z0-9_-]{35}|\beyJ[A-Za-z0-9_-]{1,}\.[A-Za-z0-9_-]{1,}\.[A-Za-z0-9_-]{16,}/i;
 // Opaque OAuth/session tokens and API keys often appear in a URL query, OAuth fragment, or a
 // quoted JSON/config field rather than with a known vendor prefix. Fail closed
 // before disclosure and on every model response field. These are heuristics,
 // not a guarantee that arbitrary secrets are discoverable.
-const opaqueTokenCredentials = /(?:[?&#](?:access[_-]?token|refresh[_-]?token|id[_-]?token|session[_-]?token|auth[_-]?token|api[_-]?key|apikey|token|key)=[a-z0-9._~%+/-]{12,}|\b["']?(?:access[_-]?token|refresh[_-]?token|id[_-]?token|session[_-]?token|auth[_-]?token|api[_-]?key|apikey|token)["']?\s*[:=]\s*(?:["'][a-z0-9._~%+/-]{12,}["']|[a-z0-9._~%+/-]{12,})|\bAuthorization\s*:\s*(?:Token|ApiKey)\s+[a-z0-9._~+/-]{12,})/i;
+const opaqueTokenCredentials = /(?:[?&#](?:access[_-]?token|refresh[_-]?token|id[_-]?token|session[_-]?token|auth[_-]?token|api[_-]?key|apikey|token|key)=[a-z0-9._~%+/-]{1,}|\b["']?(?:access[_-]?token|refresh[_-]?token|id[_-]?token|session[_-]?token|auth[_-]?token|api[_-]?key|apikey|token)["']?\s*[:=]\s*(?:["'][a-z0-9._~%+/-]{1,}["']|[a-z0-9._~%+/-]{1,})|\bAuthorization\s*:\s*(?:Token|ApiKey)\s+[a-z0-9._~+/-]{1,})/i;
 // Private/signing/encryption key assignments are sensitive even without PEM headers.
 // Shared conservative credential gate: the provider and separately executed Security
 // reviewer must reject the same known sensitive formats before source or candidate
@@ -30,7 +35,7 @@ const opaqueTokenCredentials = /(?:[?&#](?:access[_-]?token|refresh[_-]?token|id
 // these sensitive assignments in both the pre-disclosure gate and the
 // separately executed candidate Security review. Values remain synthetic
 // in tests; this heuristic is not a complete secrets detector.
-const dottedCredentialAssignment = /\b(?:client\.secret|api\.key|private\.key|secret\.key|signing\.key|encryption\.key|account\.key|webhook\.secret|service\.role|aws\.secret\.access\.key|(?:access|refresh|session|auth|id)\.token|(?:db|database)\.password)\s*["']?\s*[:=]\s*(?:["'][^"'\r\n]{8,}["']?|[a-z0-9_+/=-]{12,})/i;
+const dottedCredentialAssignment = /\b(?:client\.secret|api\.key|private\.key|secret\.key|signing\.key|encryption\.key|account\.key|webhook\.secret|service\.role|aws\.secret\.access\.key|(?:access|refresh|session|auth|id)\.token|(?:db|database)\.password)\s*["']?\s*[:=]\s*(?:["'][^"'\r\n]{1,}["']?|[a-z0-9_+/=-]{1,})/i;
 // Compatibility glyphs and ASCII percent-encoded key names can disguise
 // sensitive fields in source comments, tasks, URL query strings or JSON.
 // Decode only printable ASCII percent escapes for scanning, not for output or
