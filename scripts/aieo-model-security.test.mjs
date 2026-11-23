@@ -1681,3 +1681,30 @@ test('independent Security rejects camelCase secret fields in actual candidate d
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed');
 });
+
+test('Security independently rejects private/signing key assignments from actual bytes despite forged diff', () => {
+  const markers = [
+    '{"privateKey":"synthetic-private-key-value-123"}',
+    "private_key = 'synthetic-private-key-value-123'",
+    '{"signingKey":"synthetic-signing-key-value-123"}',
+    '{"secret_key":"synthetic-secret-key-value-123"}',
+    '{"encryption-key":"synthetic-encryption-key-value-123"}',
+    '{"webhookSecret":"synthetic-webhook-secret-value-123"}'
+  ];
+  for (const marker of markers) {
+    const candidate = 'const items = 2; // ' + marker + '\n';
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n',
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed', marker);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), marker);
+  }
+  const safe = 'const items = 2; // {"publicKey":"Visible public copy label"}\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const items = 2; // {"publicKey":"Visible public copy label"}',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});

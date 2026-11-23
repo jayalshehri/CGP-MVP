@@ -2230,3 +2230,46 @@ test('camelCase secret fields are rejected before external disclosure and in eve
   }));
   assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed');
 });
+
+test('private signing and encryption key fields fail closed before disclosure and in proposal fields', async () => {
+  // All values are deliberately artificial and not usable secrets.
+  const markers = [
+    '{"privateKey":"synthetic-private-key-value-123"}',
+    "private_key = 'synthetic-private-key-value-123'",
+    '{"signingKey":"synthetic-signing-key-value-123"}',
+    '{"secret_key":"synthetic-secret-key-value-123"}',
+    '{"encryption-key":"synthetic-encryption-key-value-123"}',
+    '{"webhookSecret":"synthetic-webhook-secret-value-123"}'
+  ];
+  let transports = 0;
+  const transport = async () => { transports++; throw Error('no provider call allowed'); };
+  for (const marker of markers) {
+    const dangerousSource = source + '\n// ' + marker;
+    assert.throws(() => buildModelRequest({
+      source: dangerousSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.equal((await requestModelPatch({ source: dangerousSource, task, env, transport })).status, 'blocked');
+    assert.equal((await requestModelPatch({ source, task: task + ' ' + marker, env, transport })).status, 'blocked');
+    for (const fields of [
+      { find: '// ' + marker, replace: replacement, explanation: 'Remove synthetic value' },
+      { find, replace: replacement + ' // ' + marker, explanation: 'Synthetic fixture' },
+      { find, replace: replacement, explanation: 'Synthetic ' + marker }
+    ]) {
+      const candidateSource = fields.find === find ? source : dangerousSource;
+      const verdict = validateModelPatch({
+        source: candidateSource, response: JSON.stringify({ path: MODEL_ALLOWED_PATH, ...fields })
+      });
+      assert.equal(verdict.status, 'rejected');
+      assert.equal(JSON.stringify(verdict).includes(marker), false, 'rejection must not echo secret');
+    }
+  }
+  assert.equal(transports, 0, 'source/task screening happens before transport');
+  assert.doesNotThrow(() => buildModelRequest({
+    source: source + '\n// {"publicKey":"Visible public copy label"}',
+    task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+  }));
+  assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed');
+});
