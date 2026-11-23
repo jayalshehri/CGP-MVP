@@ -180,11 +180,54 @@ function outboundTagSignatures(source) {
   return signatures;
 }
 
+// Comparing only behavior-bearing *opening* tags misses moving a closing
+// boundary across an existing interactive child. That can reparent an unchanged
+// handler, form or button without editing a single event prop. In this bounded
+// copy-only workflow, preserve the entire JSX tag timeline (including inert
+// wrappers and closing tags) while still allowing their descriptive text and
+// literal labels to change. This deliberately does not claim to parse TSX.
+function jsxStructureTimeline(source) {
+  const events = [];
+  for (const match of source.matchAll(tagStart)) {
+    const end = scanEnd(source, match.index + match[0].length, '>',
+      Math.min(source.length, match.index + 4096));
+    if (end < 0) return null;
+    const tag = source.slice(match.index, end);
+    const tagName = match[0].slice(1).trim();
+    const opaqueComponent = (/[A-Z.$:-]/.test(tagName) || tagName.startsWith('_') ||
+      /[^\x00-\x7F]/.test(tagName)) && !intrinsicSvgNames.has(tagName);
+    const props = parseTagAttributes(tag, match[0].length, opaqueComponent);
+    if (!props) return null;
+    // Ignore self-closing, inert markup-shaped text in comments (e.g.
+    // <img alt="decorative" />); the existing behavior-bearing tag guard
+    // already defines which opening tags are capability-sensitive.
+    if (props.length || structuralEffectTags.has(tagName.toLowerCase()) || opaqueComponent) {
+      events.push([match.index, 'open:' + tagName +
+        (/\/\s*>$/.test(tag) ? ':self' : '')]);
+    }
+  }
+  // Closing tags are behaviorally significant even with no attributes:
+  // </div><button ...> and <button ...></div> have different ancestry.
+  for (const match of source.matchAll(/<\s*\/\s*([\p{ID_Start}$_][\p{ID_Continue}$_.:-]*)\s*>/gu)) {
+    events.push([match.index, 'close:' + match[1]]);
+  }
+  // JSX fragments also change tree boundaries despite carrying no props.
+  for (const match of source.matchAll(/<\s*\/?>/g)) {
+    events.push([match.index, match[0].includes('/') ? 'fragment-close' : 'fragment-open']);
+  }
+  events.sort((a, b) => a[0] - b[0]);
+  return events.map((event) => event[1]);
+}
+
 export function introducesOutboundTagAttribute(original, candidate) {
   if (typeof original !== 'string' || typeof candidate !== 'string') return true;
   const before = outboundTagSignatures(original);
   const after = outboundTagSignatures(candidate);
   if (!before || !after) return true; // malformed or ambiguous markup: fail closed
+  const originalShape = jsxStructureTimeline(original);
+  const candidateShape = jsxStructureTimeline(candidate);
+  if (!originalShape || !candidateShape || originalShape.length !== candidateShape.length ||
+      originalShape.some((entry, index) => entry !== candidateShape[index])) return true;
   // Ordered signatures are necessary: a multiset would accept moving the
   // same two buttons/links/components past each other, changing which action
   // the user reaches first while preserving each tag's individual props.

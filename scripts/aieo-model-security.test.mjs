@@ -1592,3 +1592,22 @@ test('independent Security rejects swapped JSX action tag order despite forged h
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed');
 });
+
+test('independent Security catches JSX closing-boundary reparenting despite forged diff', () => {
+  const original = 'const view = (<div onClick={first}>First</div><div onClick={second}>Second</div>);\n';
+  const actual = original.replace('First</div><div onClick={second}>Second',
+    'First<div onClick={second}>Second</div>');
+  const verdict = inspectModelDiff({
+    original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const uiLabel = "Updated copy";', // intentionally hides the actual reparenting
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+  });
+  assert.equal(verdict.status, 'failed');
+  assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  const safe = original.replace('First</div>', 'Updated first</div>');
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const view = (<div onClick={first}>Updated first</div>);',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
