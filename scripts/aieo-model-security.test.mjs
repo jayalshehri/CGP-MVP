@@ -1550,3 +1550,25 @@ test('independent Security rejects event-wiring mutations despite forged benign 
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed');
 });
+
+test('independent Security blocks JSX prop-order change despite forged benign diff', () => {
+  const original = 'const view = (<div onClick={safeAction} {...overrideProps}>Old copy</div>);\n';
+  const actual = original.replace(
+    'onClick={safeAction} {...overrideProps}',
+    '{...overrideProps} onClick={safeAction}'
+  );
+  const verdict = inspectModelDiff({
+    original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const label = "New copy";', // forged to conceal a real callback precedence change
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+  });
+  assert.equal(verdict.status, 'failed');
+  assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+
+  const safe = original.replace('Old copy', 'New copy');
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const view = (<div onClick={safeAction} {...overrideProps}>New copy</div>);',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
