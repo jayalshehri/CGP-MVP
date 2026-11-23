@@ -2111,3 +2111,32 @@ test('model freezes JSX closing boundaries that reparent existing callbacks', ()
   }) });
   assert.equal(accepted.status, 'proposed');
 });
+
+test('nonstandard PEM private keys fail closed before model disclosure or artifact approval', async () => {
+  let sent = 0;
+  const transport = async () => { sent++; throw Error('private key must not leave trusted runner'); };
+  for (const label of ['DSA PRIVATE KEY', 'X25519 PRIVATE KEY', 'PRIVATE KEY']) {
+    const marker = '-----BEGIN ' + label + '-----';
+    const privateSource = source + '// synthetic ' + marker + '\n';
+    assert.throws(() => buildModelRequest({
+      source: privateSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.equal((await requestModelPatch({
+      source: privateSource, task, env, transport
+    })).status, 'blocked');
+    for (const patch of [
+      { find, replace: replacement + ' // ' + marker, explanation: 'fixture' },
+      { find, replace: replacement, explanation: marker }
+    ]) {
+      assert.equal(validateModelPatch({
+        response: JSON.stringify({ path: MODEL_ALLOWED_PATH, ...patch }), source
+      }).status, 'rejected');
+    }
+  }
+  assert.equal(sent, 0);
+  assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed',
+    'ordinary synthetic copy proposal must remain available');
+});
