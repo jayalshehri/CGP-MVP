@@ -43,7 +43,12 @@ const dottedCredentialAssignment = /\b(?:client\.secret|api\.key|private\.key|se
 // clientSecret /*note*/ = buildValue(). For this bounded copy-only workflow
 // fail closed on the field assignment regardless of its value. This is a
 // conservative name-based heuristic, not a general secrets scanner.
-const sensitiveFieldAssignment = /\b(?:service[._-]?role|password|api[._-]?key|apikey|client[._-]?secret|aws[._-]?secret[._-]?access[._-]?key|private[._-]?key|secret[._-]?key|signing[._-]?key|encryption[._-]?key|webhook[._-]?secret|account[._-]?key|(?:access|refresh|id|session|auth)[._-]?token|(?:db|database)[._-]?password|token)["']?\s*(?:\/\*[\s\S]{0,256}?\*\/\s*)?[:=]/i;
+// Line comments and repeated block comments between a named sensitive field
+// and its assignment are valid JavaScript/TypeScript trivia. Even a newline
+// after // must not conceal the assignment from the pre-disclosure gate or
+// the independently executed Security candidate inspection. Bound each
+// comment to the maximum consented source budget (12 KB); scan only.
+const sensitiveFieldAssignment = /\b(?:service[._-]?role|password|api[._-]?key|apikey|client[._-]?secret|aws[._-]?secret[._-]?access[._-]?key|private[._-]?key|secret[._-]?key|signing[._-]?key|encryption[._-]?key|webhook[._-]?secret|account[._-]?key|(?:access|refresh|id|session|auth)[._-]?token|(?:db|database)[._-]?password|token)["']?(?:\s|\/\*[\s\S]{0,12000}?\*\/|\/\/[^\r\n]{0,12000}(?:\r?\n))*[:=]/i;
 // Compatibility glyphs and ASCII percent-encoded key names can disguise
 // sensitive fields in source comments, tasks, URL query strings or JSON.
 // Decode only printable ASCII percent escapes for scanning, not for output or
