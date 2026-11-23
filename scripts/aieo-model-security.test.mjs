@@ -1728,3 +1728,30 @@ test('independent Security blocks encoded credential names in actual candidate d
   }
   assert.equal(inspectModelDiff(input).status, 'passed', 'safe fixture remains eligible');
 });
+
+test('Security independently rejects dotted credential assignments in actual candidate despite forged Git diff', () => {
+  const markers = [
+    '{"client.secret":"synthetic-long-credential-123"}',
+    "api.key = 'synthetic-long-credential-123'",
+    'aws.secret.access.key: syntheticlongcredential123',
+    '{"refresh.token":"synthetic-long-credential-123"}',
+    'db.password = "synthetic-long-credential-123"'
+  ];
+  for (const marker of markers) {
+    const candidate = 'const items = 2; // ' + marker + '\n';
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      // Diff is deliberately clean but inconsistent with actual candidate.
+      diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n',
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed', 'Security inspects actual candidate bytes');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  const safe = 'const items = 2; // {"public.key":"Visible copy only"}\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const items = 2; // {"public.key":"Visible copy only"}',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed', 'ordinary public display copy stays allowed');
+});
