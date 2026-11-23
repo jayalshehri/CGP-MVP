@@ -957,13 +957,13 @@ test('four independent real-Git roles accept actual widget copy and reject refac
 });
 
 
-test('independent roles reject a real feedback network-error handler fix outside model copy-only scope', () => {
-  // A legitimate application repair (review/feedback-network-error) must NOT
-  // be automatically certified by the bounded display-copy model workflow.
-  // Source here is the real trusted widget; no application file is changed.
+test('independent roles reject a historical feedback network-error handler fixture outside model copy-only scope', () => {
+  // A realistic behavioral repair must NOT be certified by the bounded
+  // display-copy model workflow. Freeze the historical handler as a synthetic
+  // fixture: the current app widget may evolve independently of AIEO tests.
+  // No application file is read or changed during this test.
   const f = setup();
   try {
-    const source = readFileSync(new URL('../components/FeedbackWidget.tsx', import.meta.url), 'utf8');
     const before = [
       '    const { data: auth } = await supabase.auth.getUser();',
       '    if (!auth.user) { setError("انتهت جلسة الدخول. سجّل الدخول ثم حاول مرة أخرى."); setState("error"); return; }',
@@ -971,6 +971,7 @@ test('independent roles reject a real feedback network-error handler fix outside
       '    if (insertError) { setError("تعذر حفظ الملاحظة. حاول مرة أخرى."); setState("error"); return; }',
       '    setMessage(""); setState("success");'
     ].join('\n');
+    const source = before;
     const after = [
       '    try {',
       '      const { data: auth, error: authError } = await supabase.auth.getUser();',
@@ -983,7 +984,7 @@ test('independent roles reject a real feedback network-error handler fix outside
       '      setState("error");',
       '    }'
     ].join('\n');
-    assert.ok(source.includes(before), 'source baseline must still match real original handler');
+    assert.equal(source, before, 'historical fixture is an exact original handler snapshot');
     const repaired = source.replace(before, after);
     assert.notEqual(repaired, source);
 
