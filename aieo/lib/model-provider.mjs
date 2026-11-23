@@ -62,7 +62,7 @@ function hasSensitiveFieldAssignment(value) {
     while (cursor < value.length) {
       if (++work > 24000 || cursor - match.index > 12000) return true;
       const character = value[cursor];
-      if (/\\s/u.test(character)) { cursor++; continue; }
+      if (/\s/u.test(character)) { cursor++; continue; }
       if (value.startsWith('/*', cursor)) {
         const close = value.indexOf('*/', cursor + 2);
         if (close < 0) break;
@@ -70,7 +70,7 @@ function hasSensitiveFieldAssignment(value) {
         continue;
       }
       if (value.startsWith('//', cursor)) {
-        const close = value.indexOf('\\n', cursor + 2);
+        const close = value.indexOf('\n', cursor + 2);
         if (close < 0) break;
         cursor = close + 1;
         continue;
