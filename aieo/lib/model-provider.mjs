@@ -4,14 +4,15 @@ import { introducesOutboundTagAttribute } from './outbound-tag-guard.mjs';
 
 export const MODEL_ALLOWED_PATH = 'components/FeedbackWidget.tsx';
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
-// Unquoted cloud/API credential assignments are sensitive too; never rely on quotes.
+// Unquoted assignments and JSON/YAML quoted sensitive keys are both credentials;
+// a closing key quote before the colon must not bypass disclosure screening.
 // Conservative scan before sending source or task text to an external provider.
 // Pattern matching cannot guarantee that all secret formats have been detected.
 // Also refuse JWT-shaped credentials even without an explicit Bearer prefix.
 // HTTP Basic credentials, URI userinfo (including database DSNs), and encrypted/
 // PGP private-key headers must not bypass disclosure checks merely because
 // their secret values lack known provider-specific token prefixes.
-const credentials = /gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-[a-z0-9]{20,}|(?:sk-proj-|sk-live-|sb_secret_)[a-z0-9_-]{20,}|(?:AKIA|ASIA)[0-9A-Z]{16}|-----BEGIN (?:[A-Z0-9-]+ )?PRIVATE KEY-----|-----BEGIN PGP PRIVATE KEY BLOCK-----|(?:service_role|password|api[_-]?key|client_secret|aws_secret_access_key|accountkey)\s*[:=]\s*(?:["'][^"'\r\n]{8,}|[a-z0-9_+/=-]{12,})|\bBearer\s+[a-z0-9._~+/-]{16,}|\bBasic\s+[a-z0-9+/]{12,}={0,2}|\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s/?#@"'<>]{1,256}@|(?:[?&](?:x-amz-(?:signature|credential|security-token)|sig)=)[a-z0-9%+/_=-]{20,}|\bxox[baprs]-[a-z0-9-]{20,}|\bAIza[a-z0-9_-]{35}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{16,}/i;
+const credentials = /gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{30,}|sk-or-v1-[a-z0-9]{20,}|(?:sk-proj-|sk-live-|sb_secret_)[a-z0-9_-]{20,}|(?:AKIA|ASIA)[0-9A-Z]{16}|-----BEGIN (?:[A-Z0-9-]+ )?PRIVATE KEY-----|-----BEGIN PGP PRIVATE KEY BLOCK-----|(?:service_role|password|api[_-]?key|client_secret|aws_secret_access_key|accountkey)["']?\s*[:=]\s*(?:["'][^"'\r\n]{8,}["']?|[a-z0-9_+/=-]{12,})|\bBearer\s+[a-z0-9._~+/-]{16,}|\bBasic\s+[a-z0-9+/]{12,}={0,2}|\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s/?#@"'<>]{1,256}@|(?:[?&](?:x-amz-(?:signature|credential|security-token)|sig)=)[a-z0-9%+/_=-]{20,}|\bxox[baprs]-[a-z0-9-]{20,}|\bAIza[a-z0-9_-]{35}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{16,}/i;
 // Opaque OAuth/session tokens and API keys often appear in a URL query, OAuth fragment, or a
 // quoted JSON/config field rather than with a known vendor prefix. Fail closed
 // before disclosure and on every model response field. These are heuristics,
