@@ -2087,3 +2087,27 @@ test('model refuses reordering behavior-bearing JSX tags with unchanged props', 
     explanation: 'Update descriptive button label only'
   }) }).status, 'proposed');
 });
+
+test('model freezes JSX closing boundaries that reparent existing callbacks', () => {
+  const source = 'const view = (<div onClick={first}>First</div><div onClick={second}>Second</div>);\n';
+  const find = 'First</div><div onClick={second}>Second';
+  const replace = 'First<div onClick={second}>Second</div>';
+  const nested = source.replace(find, replace);
+  // Identical opening tags and handler props, but the second action is now
+  // inside the first click target; a tag-open-only signature would miss this.
+  assert.equal(introducesOutboundTagAttribute(source, nested), true);
+  const denied = validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find, replace,
+    explanation: 'Move a closing div to alter inherited click behavior'
+  }) });
+  assert.equal(denied.status, 'rejected');
+
+  const safe = source.replace('First</div>', 'Updated first</div>');
+  assert.equal(introducesOutboundTagAttribute(source, safe), false);
+  const accepted = validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find: 'First</div><div',
+    replace: 'Updated first</div><div',
+    explanation: 'Change visible copy without changing markup structure'
+  }) });
+  assert.equal(accepted.status, 'proposed');
+});
