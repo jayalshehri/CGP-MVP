@@ -1520,3 +1520,33 @@ test('independent Security rejects attribute-node changes even with forged harml
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed');
 });
+
+
+test('independent Security rejects event-wiring mutations despite forged benign diff', () => {
+  const original = 'const status = "Old status copy";\n';
+  const attacks = [
+    "const status = <button onClick={existingAction}>New status</button>;",
+    "const status = <img onError={existingAction} />;",
+    "const status = () => { button.onclick = existingAction; };",
+    "const status = () => { button.addEventListener(\"click\", existingAction); };",
+    "const status = () => { button.dispatchEvent(new Event(\"click\")); };",
+    "const status = () => { const { onClick: existing } = buttonProps; existing(); };",
+    "const status = () => { button.onmouseover = existingAction; };"
+];
+  for (const attack of attacks) {
+    const actual = attack + '\n';
+    const verdict = inspectModelDiff({
+      original, actual, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+const status = "New status copy";', // deliberately forged
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(actual) }
+    });
+    assert.equal(verdict.status, 'failed', attack);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), attack);
+  }
+  const safe = 'const status = "New status copy";\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const status = "New status copy";',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
