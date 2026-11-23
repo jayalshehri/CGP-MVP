@@ -21,6 +21,13 @@ const env = {
 };
 const task = 'Correct the sample constant in a bounded manner.';
 
+test('credential trivia scanner handles dense block comments without regex backtracking', () => {
+  const dense = '/* synthetic annotation */'.repeat(360);
+  assert.equal(containsCredentials('password ' + dense + ' = synthetic'), true);
+  assert.equal(containsCredentials('password ' + dense + ' trailing public copy'), false);
+  assert.equal(containsCredentials('Public documentation without credential assignments'), false);
+});
+
 test('line-comment and lengthy annotation trivia cannot conceal named credential assignments', async () => {
   const disguised = [
     'password // audit comment\n = short',
