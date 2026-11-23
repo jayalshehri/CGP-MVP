@@ -2185,3 +2185,48 @@ test('quoted sensitive JSON/YAML fields never reach provider or candidate artifa
   }));
   assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed');
 });
+
+test('camelCase secret fields are rejected before external disclosure and in every model response field', async () => {
+  // Synthetic markers only; no live account material is used in this test.
+  const markers = [
+    '{"clientSecret":"synthetic-long-secret-value-123"}',
+    "clientSecret = 'synthetic-long-secret-value-123'",
+    '{"awsSecretAccessKey":"synthetic-long-secret-value-123"}',
+    "awsSecretAccessKey: 'synthetic-long-secret-value-123'",
+    '{"serviceRole":"synthetic-long-secret-value-123"}',
+    '{"accountKey":"synthetic-long-secret-value-123"}',
+    '{"client-secret":"synthetic-long-secret-value-123"}'
+  ];
+  let sent = 0;
+  const transport = async () => { sent++; throw Error('secret must not leave the process'); };
+  for (const marker of markers) {
+    const unsafeSource = source + '\n// ' + marker;
+    assert.throws(() => buildModelRequest({
+      source: unsafeSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }), 'source: ' + marker);
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }), 'task: ' + marker);
+    assert.equal((await requestModelPatch({ source: unsafeSource, task, env, transport })).status, 'blocked');
+    assert.equal((await requestModelPatch({ source, task: task + ' ' + marker, env, transport })).status, 'blocked');
+    for (const item of [
+      { source: unsafeSource, find: '// ' + marker, replace: replacement,
+        explanation: 'Remove synthetic marker' },
+      { source, find, replace: replacement + ' // ' + marker, explanation: 'Synthetic fixture' },
+      { source, find, replace: replacement, explanation: 'Synthetic ' + marker }
+    ]) {
+      const { source: testSource, ...fields } = item;
+      const verdict = validateModelPatch({
+        source: testSource, response: JSON.stringify({ path: MODEL_ALLOWED_PATH, ...fields })
+      });
+      assert.equal(verdict.status, 'rejected', marker);
+      assert.equal(JSON.stringify(verdict).includes(marker), false, 'no sensitive values in rejection');
+    }
+  }
+  assert.equal(sent, 0, 'provider transport must not receive synthetic credential markers');
+  assert.doesNotThrow(() => buildModelRequest({
+    source: source + '\n// {"clientStatus":"Public label only"}',
+    task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+  }));
+  assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed');
+});

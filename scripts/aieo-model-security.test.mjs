@@ -1653,3 +1653,31 @@ test('independent Security refuses quoted config secrets despite forged clean di
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed');
 });
+
+test('independent Security rejects camelCase secret fields in actual candidate despite forged diff', () => {
+  const markers = [
+    '{"clientSecret":"synthetic-long-secret-value-123"}',
+    "clientSecret = 'synthetic-long-secret-value-123'",
+    '{"awsSecretAccessKey":"synthetic-long-secret-value-123"}',
+    "awsSecretAccessKey: 'synthetic-long-secret-value-123'",
+    '{"serviceRole":"synthetic-long-secret-value-123"}',
+    '{"accountKey":"synthetic-long-secret-value-123"}',
+    '{"client-secret":"synthetic-long-secret-value-123"}'
+  ];
+  for (const marker of markers) {
+    const candidate = 'const items = 2; // ' + marker + '\n';
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n', // forged clean diff
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed', marker);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), marker);
+  }
+  const safe = 'const items = 2; // {"clientStatus":"Public label only"}\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const items = 2; // {"clientStatus":"Public label only"}',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
