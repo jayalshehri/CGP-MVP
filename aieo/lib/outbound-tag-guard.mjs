@@ -169,7 +169,10 @@ function outboundTagSignatures(source) {
     // semantics. Do not let a UI-copy-only patch add, remove or replace them.
     // Keep the earlier behavior-prop signatures for all recognized JSX tags.
     if (outgoing.length || structuralEffectTags.has(tagName.toLowerCase()) || opaqueComponent) {
-      // Preserve prop order: JSX spreads and explicit props apply left-to-right,\n      // so sorting would hide callback/URL precedence changes.\n      // Preserve casing: React component names and prop keys are case-sensitive.\n      // Lowercasing the signature could hide an effectful component swap.
+      // Preserve prop order: JSX spreads and explicit props apply left-to-right,
+      // so sorting would hide callback/URL precedence changes.
+      // Preserve casing: React component names and prop keys are case-sensitive.
+      // Lowercasing the signature could hide an effectful component swap.
       signatures.push(match[0].replace(/\s+/g, '') +
         ':' + JSON.stringify(outgoing));
     }
