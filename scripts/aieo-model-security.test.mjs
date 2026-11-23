@@ -1611,3 +1611,18 @@ test('independent Security catches JSX closing-boundary reparenting despite forg
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed');
 });
+
+test('independent Security rejects private-key markers in actual source despite forged diff', () => {
+  for (const label of ['DSA PRIVATE KEY', 'X25519 PRIVATE KEY', 'PRIVATE KEY']) {
+    const marker = '-----BEGIN ' + label + '-----';
+    const candidate = 'const items = 2; // ' + marker + '\n';
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n',
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  assert.equal(inspectModelDiff(input).status, 'passed', 'safe candidate remains eligible');
+});
