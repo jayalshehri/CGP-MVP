@@ -1871,3 +1871,35 @@ test('independent Security rejects template-valued credential fields even with f
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed');
 });
+
+test('independent Security rejects expression-valued secrets despite a forged harmless Git diff', () => {
+  const markers = [
+    'password: (readFixture())',
+    'clientSecret /* artificial */ = (constructFixture())',
+    '"api.key": ({ fixture: true })',
+    'accessToken: [fixtureValue]',
+    'privateKey = () => "dummy"',
+    'db.password /* explanatory */ : { fixture: true }'
+  ];
+  for (const marker of markers) {
+    const base = 'const label = "Old copy";\n';
+    const changed = base.replace('Old copy', 'Old copy"; // ' + marker);
+    const verdict = inspectModelDiff({
+      original: base,
+      actual: changed,
+      changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '+const label = "Harmless copy";', // deliberately hides the actual secret field
+      report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(changed) }
+    });
+    assert.equal(verdict.status, 'failed', marker);
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'), marker);
+  }
+  const base = 'const label = "Old copy";\n';
+  const changed = base.replace('Old copy', 'نص عربي آمن');
+  const safe = inspectModelDiff({
+    original: base, actual: changed, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const label = "نص عربي آمن";',
+    report: { status: 'proposed', sourceHash: hash(base), proposedHash: hash(changed) }
+  });
+  assert.equal(safe.status, 'passed', 'safe text must not be rejected');
+});

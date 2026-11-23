@@ -36,6 +36,14 @@ const opaqueTokenCredentials = /(?:[?&#](?:access[_-]?token|refresh[_-]?token|id
 // separately executed candidate Security review. Values remain synthetic
 // in tests; this heuristic is not a complete secrets detector.
 const dottedCredentialAssignment = /\b(?:client\.secret|api\.key|private\.key|secret\.key|signing\.key|encryption\.key|account\.key|webhook\.secret|service\.role|aws\.secret\.access\.key|(?:access|refresh|session|auth|id)\.token|(?:db|database)\.password)\s*["']?\s*[:=]\s*(?:["'][^"'\r\n]{1,}["']?|[a-z0-9_+/=-]{1,})/i;
+// A named secret assignment is itself sensitive even when its right-hand side
+// is an expression, tagged template, function call or a comment-separated
+// value. Earlier checks only accepted quoted, bare-token or raw-backtick
+// values, which could miss e.g. password: (buildValue()) or
+// clientSecret /*note*/ = buildValue(). For this bounded copy-only workflow
+// fail closed on the field assignment regardless of its value. This is a
+// conservative name-based heuristic, not a general secrets scanner.
+const sensitiveFieldAssignment = /\b(?:service[._-]?role|password|api[._-]?key|apikey|client[._-]?secret|aws[._-]?secret[._-]?access[._-]?key|private[._-]?key|secret[._-]?key|signing[._-]?key|encryption[._-]?key|webhook[._-]?secret|account[._-]?key|(?:access|refresh|id|session|auth)[._-]?token|(?:db|database)[._-]?password|token)["']?\s*(?:\/\*[\s\S]{0,256}?\*\/\s*)?[:=]/i;
 // Compatibility glyphs and ASCII percent-encoded key names can disguise
 // sensitive fields in source comments, tasks, URL query strings or JSON.
 // Decode only printable ASCII percent escapes for scanning, not for output or
@@ -73,7 +81,8 @@ export const containsCredentials = (value) => {
     credentials.test(candidate) ||
     opaqueTokenCredentials.test(candidate) ||
     dottedCredentialAssignment.test(candidate) ||
-    templateCredentialAssignment.test(candidate));
+    templateCredentialAssignment.test(candidate) ||
+    sensitiveFieldAssignment.test(candidate));
 };
 const forbidden = /(?:\beval\s*\(|\bFunction\s*\(|\bchild_process\b|\bprocess\.env\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bimport\s+|\brequire\s*\()/i;
 
