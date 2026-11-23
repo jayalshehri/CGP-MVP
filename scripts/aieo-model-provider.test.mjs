@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { introducesOutboundTagAttribute } from '../aieo/lib/outbound-tag-guard.mjs';
 import assert from 'node:assert/strict';
 import { MODEL_ALLOWED_PATH, validateModelPatch, buildModelRequest, requestModelPatch } from '../aieo/lib/model-provider.mjs';
 
@@ -2064,5 +2065,25 @@ test('model blocks JSX prop reordering that changes spread/callback precedence',
   assert.equal(validateModelPatch({ source, response: JSON.stringify({
     path: MODEL_ALLOWED_PATH, find: 'Old copy</div>', replace: 'New copy</div>',
     explanation: 'Changing inert copy does not reorder existing attributes'
+  }) }).status, 'proposed');
+});
+
+test('model refuses reordering behavior-bearing JSX tags with unchanged props', () => {
+  const first = '<button onClick={approve}>Approve</button>';
+  const second = '<button onClick={reject}>Reject</button>';
+  const source = 'const view = (<>' + first + second + '</>);\\n'.replace('\\n', '\n');
+  const swapped = source.replace(first + second, second + first);
+  const safe = source.replace('Approve</button>', 'Confirm</button>');
+  // Regression for the previous unordered signature multiset.
+  assert.equal(introducesOutboundTagAttribute(source, swapped), true);
+  assert.equal(introducesOutboundTagAttribute(source, safe), false);
+  const verdict = validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find: first + second, replace: second + first,
+    explanation: 'Swap two existing button actions without changing their props'
+  }) });
+  assert.equal(verdict.status, 'rejected');
+  assert.equal(validateModelPatch({ source, response: JSON.stringify({
+    path: MODEL_ALLOWED_PATH, find: 'Approve</button>', replace: 'Confirm</button>',
+    explanation: 'Update descriptive button label only'
   }) }).status, 'proposed');
 });

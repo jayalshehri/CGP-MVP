@@ -185,17 +185,11 @@ export function introducesOutboundTagAttribute(original, candidate) {
   const before = outboundTagSignatures(original);
   const after = outboundTagSignatures(candidate);
   if (!before || !after) return true; // malformed or ambiguous markup: fail closed
-  const counts = new Map();
-  for (const entry of before) counts.set(entry, (counts.get(entry) || 0) + 1);
-  for (const entry of after) {
-    const remaining = counts.get(entry) || 0;
-    if (!remaining) return true;
-    counts.set(entry, remaining - 1);
-  }
-  // This is a UI-copy-only model task. Removing a pre-existing capability
-  // can itself enable unsafe behavior (for example, dropping an iframe sandbox,
-  // a disabled state or a restrictive form attribute). Reject missing signed
-  // tags as well as newly introduced/changed ones. Literal descriptive copy
-  // attributes are excluded above and may still be edited.
-  return [...counts.values()].some((remaining) => remaining !== 0);
+  // Ordered signatures are necessary: a multiset would accept moving the
+  // same two buttons/links/components past each other, changing which action
+  // the user reaches first while preserving each tag's individual props.
+  // Bounded copy edits must not reorder any behavior-bearing tag. Descriptive
+  // text and inert literal copy attributes remain outside these signatures.
+  if (before.length !== after.length) return true;
+  return before.some((entry, index) => entry !== after[index]);
 }
