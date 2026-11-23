@@ -25,7 +25,7 @@ export const EXPECTED_ROLE_BLOBS = Object.freeze({
   "scripts/aieo-git-process-guard.mjs": "998149ab4b0abf033ef1998e9371eb7e26ebb91d",
   "scripts/aieo-model-candidate-read.mjs": "a242c018428877a99fc7595ac5cc1a02027815df",
   "scripts/aieo-model-git.mjs": "32c6b73ae1c111524b6df8397f409c7198a0c1d6",
-  "aieo/lib/outbound-tag-guard.mjs": "57ed30bbff41398cda205f122ee03bd006a68806"
+  "aieo/lib/outbound-tag-guard.mjs": "27518bbbc4a15abe21f54cda7f6cf806d9d98ccc"
 });
 const REQUIRED = Object.keys(EXPECTED_ROLE_BLOBS);
 const SHA = /^[a-f0-9]{40}$/;
