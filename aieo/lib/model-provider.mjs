@@ -105,9 +105,13 @@ const objectReflectionReference = /\b(?:Object|Reflect)\b/i;
 const domAttributeNodeAccess = /\b(?:attributes|getAttributeNode(?:NS)?|getNamedItem(?:NS)?|setNamedItem(?:NS)?|removeNamedItem(?:NS)?|NamedNodeMap)\b/i;
 // UI-only proposals must not introduce event wiring that can execute pre-existing
 // side-effectful callbacks. New JSX onClick/onError and imperative listeners are
-// active behavior, even when the callback body is unchanged elsewhere in source.
-// Reject references conservatively; this is not a general JavaScript proof.
-const eventCapabilityReference = /\b(?:on[A-Z][A-Za-z0-9]*|on(?:click|error|load|submit|change|input|focus|blur|mouseover|mouseenter|pointerenter|pointerover|keydown|keyup)|addEventListener|removeEventListener|dispatchEvent)\b/;
+// active behavior even when the callback exists elsewhere. Existing React
+// onClick/onSubmit attributes in the original TSX may share a line with an
+// approved text-copy edit, so JSX attribute changes remain enforced by the
+// independent outbound-tag attribute comparator. This gate additionally denies
+// imperative DOM listeners/dispatch and event-handler alias destructuring.
+// This is conservative defense-in-depth, not a general JavaScript proof.
+const eventCapabilityReference = /\bon[A-Z][A-Za-z0-9]*\s*:|\b(?:onclick|onerror|onload|onsubmit|onchange|oninput|onfocus|onblur|onmouseover|onmouseenter|onpointerenter|onpointerover|onkeydown|onkeyup|addEventListener|removeEventListener|dispatchEvent)\b/;
 
 
 
