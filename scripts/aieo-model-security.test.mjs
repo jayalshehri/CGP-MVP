@@ -1842,3 +1842,32 @@ test('Security independently rejects dotted credential assignments in actual can
     report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
   }).status, 'passed', 'ordinary public display copy stays allowed');
 });
+
+
+test('independent Security rejects template-valued credential fields even with forged clean diff', () => {
+  const tick = String.fromCharCode(96);
+  const markers = [
+    'password = ' + tick + 'x' + tick,
+    'clientSecret: ' + tick + 'short' + tick,
+    'accessToken: ' + tick + 'abc' + tick,
+    'db.password: ' + tick + 'x' + tick,
+    'privateKey: ' + tick + '$' + '{synthetic}' + tick,
+    'secretKey: ' + tick + 'line 1\nline 2' + tick
+  ];
+  for (const marker of markers) {
+    const candidate = 'const items = 2; // ' + marker + '\n';
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n',
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed', 'actual candidate bytes override forged diff');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+  }
+  const safe = 'const items = 2; // publicLabel: ' + tick + 'Safe public copy' + tick + '\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const items = 2; // publicLabel: ' + tick + 'Safe public copy' + tick,
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
