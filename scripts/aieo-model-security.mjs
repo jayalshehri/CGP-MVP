@@ -101,6 +101,12 @@ const objectReflectionReference = /\b(?:Object|Reflect)\b/i;
 // attribute nodes or NamedNodeMap operations; fail closed on references even
 // when a method is captured or destructured. This is not a general JS proof.
 const domAttributeNodeAccess = /\b(?:attributes|getAttributeNode(?:NS)?|getNamedItem(?:NS)?|setNamedItem(?:NS)?|removeNamedItem(?:NS)?|NamedNodeMap)\b/i;
+// UI-only proposals must not introduce event wiring that can execute pre-existing
+// side-effectful callbacks. New JSX onClick/onError and imperative listeners are
+// active behavior, even when the callback body is unchanged elsewhere in source.
+// Reject references conservatively; this is not a general JavaScript proof.
+const eventCapabilityReference = /\b(?:on[A-Z][A-Za-z0-9]*|on(?:click|error|load|submit|change|input|focus|blur|mouseover|mouseenter|pointerenter|pointerover|keydown|keyup)|addEventListener|removeEventListener|dispatchEvent)\b/;
+
 
 
 // Computed property calls/assignments can reconstruct effectful DOM or network
@@ -207,7 +213,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
       unsafeNonstandardUnicode.test(reviewedText) ||
       dynamicCodeReflection.test(reviewedText) || stringEvalTimer.test(reviewedText) ||
       outboundMarkup.test(reviewedText) || outboundCss.test(reviewedText) ||
-      domNetworkMutation.test(reviewedText) || objectReflectionReference.test(reviewedText) || domAttributeNodeAccess.test(reviewedText) || computedPropertyEffects.test(reviewedText) ||
+      domNetworkMutation.test(reviewedText) || objectReflectionReference.test(reviewedText) || domAttributeNodeAccess.test(reviewedText) || eventCapabilityReference.test(reviewedText) || computedPropertyEffects.test(reviewedText) ||
       rawHtmlSink.test(reviewedText) ||
       introducesOutboundMarkup(original, actual) ||
       introducesOutboundTagAttribute(original, actual)) {
