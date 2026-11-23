@@ -101,6 +101,16 @@ const objectReflectionReference = /\b(?:Object|Reflect)\b/i;
 // attribute nodes or NamedNodeMap operations; fail closed on references even
 // when a method is captured or destructured. This is not a general JS proof.
 const domAttributeNodeAccess = /\b(?:attributes|getAttributeNode(?:NS)?|getNamedItem(?:NS)?|setNamedItem(?:NS)?|removeNamedItem(?:NS)?|NamedNodeMap)\b/i;
+// UI-only proposals must not introduce event wiring that can execute pre-existing
+// side-effectful callbacks. New JSX onClick/onError and imperative listeners are
+// active behavior even when the callback exists elsewhere. Existing React
+// onClick/onSubmit attributes in the original TSX may share a line with an
+// approved text-copy edit, so JSX attribute changes remain enforced by the
+// independent outbound-tag attribute comparator. This gate additionally denies
+// imperative DOM listeners/dispatch and event-handler alias destructuring.
+// This is conservative defense-in-depth, not a general JavaScript proof.
+const eventCapabilityReference = /\bon[A-Z][A-Za-z0-9]*\s*:|\b(?:onclick|onerror|onload|onsubmit|onchange|oninput|onfocus|onblur|onmouseover|onmouseenter|onpointerenter|onpointerover|onkeydown|onkeyup|addEventListener|removeEventListener|dispatchEvent)\b/;
+
 
 
 // Computed property calls/assignments can reconstruct effectful DOM or network
@@ -207,7 +217,7 @@ export function inspectModelDiff({ original, actual, changedPaths, diff, report 
       unsafeNonstandardUnicode.test(reviewedText) ||
       dynamicCodeReflection.test(reviewedText) || stringEvalTimer.test(reviewedText) ||
       outboundMarkup.test(reviewedText) || outboundCss.test(reviewedText) ||
-      domNetworkMutation.test(reviewedText) || objectReflectionReference.test(reviewedText) || domAttributeNodeAccess.test(reviewedText) || computedPropertyEffects.test(reviewedText) ||
+      domNetworkMutation.test(reviewedText) || objectReflectionReference.test(reviewedText) || domAttributeNodeAccess.test(reviewedText) || eventCapabilityReference.test(reviewedText) || computedPropertyEffects.test(reviewedText) ||
       rawHtmlSink.test(reviewedText) ||
       introducesOutboundMarkup(original, actual) ||
       introducesOutboundTagAttribute(original, actual)) {

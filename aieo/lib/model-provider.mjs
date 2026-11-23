@@ -103,6 +103,16 @@ const objectReflectionReference = /\b(?:Object|Reflect)\b/i;
 // attribute nodes or NamedNodeMap operations; fail closed on references even
 // when a method is captured or destructured. This is not a general JS proof.
 const domAttributeNodeAccess = /\b(?:attributes|getAttributeNode(?:NS)?|getNamedItem(?:NS)?|setNamedItem(?:NS)?|removeNamedItem(?:NS)?|NamedNodeMap)\b/i;
+// UI-only proposals must not introduce event wiring that can execute pre-existing
+// side-effectful callbacks. New JSX onClick/onError and imperative listeners are
+// active behavior even when the callback exists elsewhere. Existing React
+// onClick/onSubmit attributes in the original TSX may share a line with an
+// approved text-copy edit, so JSX attribute changes remain enforced by the
+// independent outbound-tag attribute comparator. This gate additionally denies
+// imperative DOM listeners/dispatch and event-handler alias destructuring.
+// This is conservative defense-in-depth, not a general JavaScript proof.
+const eventCapabilityReference = /\bon[A-Z][A-Za-z0-9]*\s*:|\b(?:onclick|onerror|onload|onsubmit|onchange|oninput|onfocus|onblur|onmouseover|onmouseenter|onpointerenter|onpointerover|onkeydown|onkeyup|addEventListener|removeEventListener|dispatchEvent)\b/;
+
 
 
 // Computed property calls/assignments can reconstruct effectful DOM or network
@@ -256,7 +266,7 @@ export function validateModelPatch({ response, source, path = MODEL_ALLOWED_PATH
   }
   if (source.split(find).length !== 2) return { status: 'rejected', reason: 'Expected one exact source match' };
   if (containsCredentials(replace) || forbidden.test(replace) || browserExfil.test(replace) || browserLocation.test(replace) || optionalNetworkCall.test(replace) || indirectNetworkCall.test(replace) || networkCapabilityReference.test(replace) || dynamicGlobalMember.test(replace) || ambientGlobalReference.test(replace) || encodedJavaScriptEscape.test(replace) || dynamicCodeReflection.test(replace) || stringEvalTimer.test(replace) ||
-      outboundMarkup.test(replace) || outboundCss.test(replace) || domNetworkMutation.test(replace) || objectReflectionReference.test(replace) || domAttributeNodeAccess.test(replace) || computedPropertyEffects.test(replace) || rawHtmlSink.test(replace) ||
+      outboundMarkup.test(replace) || outboundCss.test(replace) || domNetworkMutation.test(replace) || objectReflectionReference.test(replace) || domAttributeNodeAccess.test(replace) || eventCapabilityReference.test(replace) || computedPropertyEffects.test(replace) || rawHtmlSink.test(replace) ||
       replace.includes('/*') || replace.includes('*/')) {
     return { status: 'rejected', reason: 'Potentially unsafe replacement content' };
   }
