@@ -23,11 +23,11 @@ const task = 'Correct the sample constant in a bounded manner.';
 
 test('line-comment and lengthy annotation trivia cannot conceal named credential assignments', async () => {
   const disguised = [
-    'password // audit comment\\n = short',
-    '"api.key" // audit comment\\n: "x"',
+    'password // audit comment\n = short',
+    '"api.key" // audit comment\n: "x"',
     'clientSecret /* first */ /* second */ = makeValue()',
     'session_token /* ' + 'x'.repeat(320) + ' */ = createToken()',
-    'privateKey /* note */ // second note\\n = getValue()'
+    'privateKey /* note */ // second note\n = getValue()'
   ];
   let outbound = 0;
   const transport = async () => { outbound++; throw Error('no source should be transmitted'); };
