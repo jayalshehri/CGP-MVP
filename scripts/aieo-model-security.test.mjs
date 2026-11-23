@@ -16,7 +16,9 @@ test('independent Security catches percent-encoded secrets in actual candidate d
     '?access%5Ftoken=syntheticvalue123456',
     '"client%2Esecret": "synthetic_value_987654321"',
     '?%61pi_key=syntheticvalue123456',
-    '?access%255Ftoken=syntheticvalue123456'
+    '?access%255Ftoken=syntheticvalue123456',
+    '?access%25255Ftoken=syntheticvalue123456',
+    '"ｃｌｉｅｎｔ％２Ｅｓｅｃｒｅｔ": "synthetic_value_987654321"'
   ]) {
     const candidate = 'const items = 2; // ' + marker + '\n';
     const verdict = inspectModelDiff({

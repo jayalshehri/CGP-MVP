@@ -27,7 +27,10 @@ test('percent-encoded credential names fail closed before provider calls and can
     'https://example.invalid/path?refresh%54oken=syntheticvalue123456',
     '"client%2Esecret": "synthetic_value_987654321"',
     '?%61pi_key=syntheticvalue123456',
-    '?access%255Ftoken=syntheticvalue123456'
+    '?access%255Ftoken=syntheticvalue123456',
+    // Three percent layers and NFKC-hidden percent delimiters formerly escaped screening.
+    '?access%25255Ftoken=syntheticvalue123456',
+    '"ｃｌｉｅｎｔ％２Ｅｓｅｃｒｅｔ": "synthetic_value_987654321"'
   ];
   let outbound = 0;
   const transport = async () => {
