@@ -2140,3 +2140,48 @@ test('nonstandard PEM private keys fail closed before model disclosure or artifa
   assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed',
     'ordinary synthetic copy proposal must remain available');
 });
+
+test('quoted sensitive JSON/YAML fields never reach provider or candidate artifacts', async () => {
+  // Deliberately fake markers; these are not usable credentials.
+  const markers = [
+    '{"client_secret":"synthetic-long-secret-value-123"}',
+    '{"password":"synthetic-long-password-123"}',
+    "{'aws_secret_access_key': 'synthetic-long-value-123'}",
+    '{"accountkey": "synthetic-long-value-123"}',
+    '{"service_role":"synthetic-long-value-123"}',
+    '{"api-key":"synthetic-long-value-123"}'
+  ];
+  let requests = 0;
+  const transport = async () => { requests++; throw Error('credential must not leave runner'); };
+  for (const marker of markers) {
+    const sensitiveSource = source + '\n// ' + marker;
+    assert.throws(() => buildModelRequest({
+      source: sensitiveSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }), 'disclosure of source containing ' + marker);
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }), 'disclosure of task containing ' + marker);
+    assert.equal((await requestModelPatch({ source: sensitiveSource, task, env, transport })).status, 'blocked');
+    assert.equal((await requestModelPatch({ source, task: task + ' ' + marker, env, transport })).status, 'blocked');
+    for (const scenario of [
+      { source: sensitiveSource, find: '// ' + marker,
+        replace: replacement, explanation: 'Remove synthetic secret' },
+      { source, find, replace: replacement + ' // ' + marker,
+        explanation: 'Synthetic test' },
+      { source, find, replace: replacement, explanation: 'Synthetic ' + marker }
+    ]) {
+      const { source: testSource, ...fields } = scenario;
+      const verdict = validateModelPatch({
+        source: testSource, response: JSON.stringify({ path: MODEL_ALLOWED_PATH, ...fields })
+      });
+      assert.equal(verdict.status, 'rejected', 'model output with ' + marker);
+      assert.equal(JSON.stringify(verdict).includes(marker), false, 'rejection must never echo fake secret');
+    }
+  }
+  assert.equal(requests, 0, 'even an explicitly opted-in provider transport must not be invoked');
+  assert.doesNotThrow(() => buildModelRequest({
+    source: source + '\n// {"copy":"Public labels only"}',
+    task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+  }));
+  assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed');
+});
