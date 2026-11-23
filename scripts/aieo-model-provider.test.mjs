@@ -2062,7 +2062,7 @@ test('model blocks JSX prop reordering that changes spread/callback precedence',
   assert.equal(verdict.status, 'rejected', 'same JSX props in another order are not equivalent');
 
   assert.equal(validateModelPatch({ source, response: JSON.stringify({
-    path: MODEL_ALLOWED_PATH, find: 'Old copy', replace: 'New copy',
+    path: MODEL_ALLOWED_PATH, find: 'Old copy</div>', replace: 'New copy</div>',
     explanation: 'Changing inert copy does not reorder existing attributes'
   }) }).status, 'proposed');
 });
