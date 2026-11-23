@@ -1,0 +1,189 @@
+// Read a trusted, unchanged source inode BEFORE any optional external-model request.
+// Recheck file mode at pathname as well as opened descriptor after reads;
+// a concurrent chmod on the SAME inode must invalidate source consent.
+// The publisher's later checkout check is too late to prevent source disclosure.
+import { modelGit, preflightModelGit } from './aieo-model-git.mjs';
+import { lstatSync, openSync, fstatSync, readSync, writeSync, ftruncateSync, closeSync, constants } from 'node:fs';
+import { MODEL_ALLOWED_PATH } from '../aieo/lib/model-provider.mjs';
+
+const MAX_BYTES = 48000;
+const EXPECTED_REPOSITORY = 'jayalshehri/CGP-MVP';
+const SHA = /^[a-f0-9]{40}$/;
+function block() {
+  throw new Error('AIEO model source blocked: untrusted checkout or source provenance');
+}
+function git(env, ...args) {
+  return modelGit(args, { env });
+}
+
+export function readApprovedModelSource(env = process.env) {
+  let fd;
+  try {
+    // Source approval is evaluated before even inspecting the file for sharing.
+    if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
+        env.GITHUB_REF !== 'refs/heads/main' ||
+        env.GITHUB_REPOSITORY !== EXPECTED_REPOSITORY ||
+        env.AIEO_MODEL_ENABLED !== 'true' ||
+        env.AIEO_SOURCE_SHARING_APPROVED !== 'true' ||
+        !SHA.test(env.GITHUB_SHA || '')) block();
+    preflightModelGit(env);
+    if (git(env, 'rev-parse', '--verify', 'HEAD').trim() !== env.GITHUB_SHA) block();
+
+    const index = git(env, 'ls-files', '-v', '-z').split('\0').filter(Boolean);
+    if (!index.length || index.some((entry) => !entry.startsWith('H '))) block();
+    const entry = git(env, 'ls-files', '-s', '--', MODEL_ALLOWED_PATH).trim();
+    if (!/^100644 [a-f0-9]{40} 0\tcomponents\/FeedbackWidget\.tsx$/.test(entry)) block();
+    if (git(env, 'diff', '--cached', '--name-only').trim() ||
+        git(env, 'diff', '--name-only').trim()) block();
+    // A clean Git status and ordinary untracked scan hide ignored files such
+    // as .env.local, credential material and build overrides. This is the
+    // pre-disclosure runner, before npm/build: refuse ALL ignored worktree
+    // inputs instead of giving a source-sharing approval to an altered workspace.
+    const ignored = git(env, 'ls-files', '--others', '--ignored',
+      '--exclude-standard', '--directory', '-z').split('\0').filter(Boolean);
+    if (ignored.length) block();
+    const extra = git(env, 'ls-files', '--others', '--exclude-standard', '-z')
+      .split('\0').filter(Boolean);
+    if (extra.some((path) => !path.startsWith('aieo-output/'))) block();
+
+    // Never share from a source/parent owned by another uid or carrying
+    // unexpected setuid/setgid/sticky bits, even if Git reports clean bytes.
+    const uid = process.getuid?.();
+    if (!Number.isSafeInteger(uid)) block();
+    // Disallow both linked source aliases and a replaced parent directory.
+    const directory = lstatSync('components');
+    if (!directory.isDirectory() || directory.isSymbolicLink() ||
+        directory.uid !== uid || (directory.mode & 0o7022)) block();
+    const prior = lstatSync(MODEL_ALLOWED_PATH);
+    if (!prior.isFile() || prior.isSymbolicLink() || prior.nlink !== 1 ||
+        prior.uid !== uid || !(prior.mode & 0o400) ||
+        (prior.mode & 0o7133) || prior.size < 1 || prior.size > MAX_BYTES) block();
+
+    // Open exactly one regular inode and cap reads; O_NOFOLLOW protects against
+    // a final-component symlink swap, O_NONBLOCK against a substituted FIFO.
+    fd = openSync(MODEL_ALLOWED_PATH,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.nlink !== 1 || opened.uid !== uid ||
+        !(opened.mode & 0o400) || (opened.mode & 0o7133) ||
+        opened.dev !== prior.dev || opened.ino !== prior.ino ||
+        opened.size !== prior.size ||
+        opened.mtimeMs !== prior.mtimeMs ||
+        opened.ctimeMs !== prior.ctimeMs) block();
+    const buffer = Buffer.alloc(opened.size + 1);
+    let used = 0;
+    while (used < buffer.length) {
+      const n = readSync(fd, buffer, used, buffer.length - used, null);
+      if (n === 0) break;
+      used += n;
+    }
+    const after = fstatSync(fd);
+    const pathNow = lstatSync(MODEL_ALLOWED_PATH);
+    const dirNow = lstatSync('components');
+    if (used !== opened.size || after.size !== opened.size ||
+        after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs ||
+        after.nlink !== 1 || after.uid !== uid ||
+        !(after.mode & 0o400) || (after.mode & 0o7133) ||
+        !pathNow.isFile() || pathNow.isSymbolicLink() ||
+        pathNow.uid !== uid || !(pathNow.mode & 0o400) ||
+        (pathNow.mode & 0o7133) || pathNow.nlink !== 1 ||
+        pathNow.size !== opened.size ||
+        pathNow.dev !== opened.dev || pathNow.ino !== opened.ino ||
+        // An in-place metadata rewrite between fstat and final pathname
+        // attestation must not inherit source-sharing or edit authorization.
+        pathNow.mtimeMs !== after.mtimeMs ||
+        pathNow.ctimeMs !== after.ctimeMs ||
+        dirNow.dev !== directory.dev || dirNow.ino !== directory.ino ||
+        !dirNow.isDirectory() || dirNow.isSymbolicLink() ||
+        dirNow.uid !== uid || (dirNow.mode & 0o7022)) block();
+
+    // Compare the exact bytes before any source can reach the provider.
+    // Node's implicit UTF-8 decoder silently replaces malformed sequences
+    // with U+FFFD, so two different Git/worktree byte streams could appear
+    // equal as strings. Consent is bound to the immutable Git blob's bytes.
+    const raw = buffer.subarray(0, used);
+    const source = raw.toString('utf8');
+    if (!Buffer.from(source, 'utf8').equals(raw)) block();
+    const pinned = modelGit(['show', env.GITHUB_SHA + ':' + MODEL_ALLOWED_PATH],
+      { env, encoding: null });
+    if (!Buffer.isBuffer(pinned) || pinned.length < 1 ||
+        pinned.length > MAX_BYTES || !pinned.equals(raw)) block();
+    return source;
+  } catch {
+    block();
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+// The network can be in flight while the checkout changes. Re-attest after
+// receiving the model response, then edit ONLY the opened, verified source
+// inode; a late symlink swap must never redirect a write outside the checkout.
+export function applyApprovedModelPatch({ original, candidate, env = process.env }) {
+  if (typeof original !== 'string' || typeof candidate !== 'string' ||
+      original === candidate || Buffer.byteLength(candidate, 'utf8') > MAX_BYTES ||
+      readApprovedModelSource(env) !== original) block();
+
+  let fd;
+  try {
+    const uid = process.getuid?.();
+    if (!Number.isSafeInteger(uid)) block();
+    const directory = lstatSync('components');
+    const before = lstatSync(MODEL_ALLOWED_PATH);
+    if (!directory.isDirectory() || directory.isSymbolicLink() ||
+        directory.uid !== uid || (directory.mode & 0o7022) ||
+        !before.isFile() || before.isSymbolicLink() || before.nlink !== 1 ||
+        before.uid !== uid || !(before.mode & 0o400) ||
+        (before.mode & 0o7133) || before.size < 1 || before.size > MAX_BYTES) block();
+
+    fd = openSync(MODEL_ALLOWED_PATH,
+      constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.nlink !== 1 || opened.uid !== uid ||
+        !(opened.mode & 0o400) || (opened.mode & 0o7133) ||
+        opened.dev !== before.dev || opened.ino !== before.ino ||
+        opened.size !== before.size ||
+        opened.mtimeMs !== before.mtimeMs ||
+        opened.ctimeMs !== before.ctimeMs) block();
+
+    const buffer = Buffer.alloc(opened.size);
+    let used = 0;
+    while (used < buffer.length) {
+      const n = readSync(fd, buffer, used, buffer.length - used, used);
+      if (n === 0) break;
+      used += n;
+    }
+    const after = fstatSync(fd);
+    const pathNow = lstatSync(MODEL_ALLOWED_PATH);
+    const directoryNow = lstatSync('components');
+    if (used !== opened.size || !buffer.equals(Buffer.from(original, 'utf8')) ||
+        after.size !== opened.size || after.mtimeMs !== opened.mtimeMs ||
+        after.ctimeMs !== opened.ctimeMs || after.nlink !== 1 ||
+        after.uid !== uid || !(after.mode & 0o400) ||
+        (after.mode & 0o7133) || !pathNow.isFile() ||
+        pathNow.isSymbolicLink() || pathNow.uid !== uid ||
+        !(pathNow.mode & 0o400) || (pathNow.mode & 0o7133) ||
+        pathNow.nlink !== 1 || pathNow.size !== opened.size ||
+        pathNow.dev !== opened.dev || pathNow.ino !== opened.ino ||
+        // An in-place metadata rewrite between fstat and final pathname
+        // attestation must not inherit source-sharing or edit authorization.
+        pathNow.mtimeMs !== after.mtimeMs ||
+        pathNow.ctimeMs !== after.ctimeMs ||
+        directoryNow.dev !== directory.dev || directoryNow.ino !== directory.ino ||
+        !directoryNow.isDirectory() || directoryNow.isSymbolicLink() ||
+        directoryNow.uid !== uid || (directoryNow.mode & 0o7022)) block();
+
+    const output = Buffer.from(candidate, 'utf8');
+    let written = 0;
+    while (written < output.length) {
+      const n = writeSync(fd, output, written, output.length - written, written);
+      if (n <= 0) block();
+      written += n;
+    }
+    ftruncateSync(fd, output.length);
+  } catch {
+    block();
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}

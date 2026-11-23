@@ -1,0 +1,158 @@
+name: AIEO Multi-Agent Foundation
+on:
+  workflow_dispatch:
+  push:
+    branches: [aieo/multi-agent-foundation]
+    paths:
+      - 'aieo/**'
+      - 'scripts/aieo-*.mjs'
+      - '.github/workflows/aieo-multi-agent.yml'
+  pull_request:
+    paths:
+      - 'aieo/**'
+      - 'scripts/aieo-*.mjs'
+      - '.github/workflows/aieo-multi-agent.yml'
+permissions:
+  contents: read
+
+jobs:
+  orchestrator-preflight:
+    name: AIEO orchestrator preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      - name: Run negative, safety and handoff tests
+        run: node --test scripts/aieo-agent.test.mjs scripts/aieo-handoff.test.mjs scripts/aieo-e2e.test.mjs scripts/aieo-model-provider.test.mjs scripts/aieo-remote-draft.test.mjs scripts/aieo-candidate-role.test.mjs scripts/aieo-candidate-report-race.test.mjs scripts/aieo-git-process-guard.test.mjs scripts/aieo-workflow-policy.test.mjs scripts/aieo-import-handoffs.test.mjs
+      - name: Verify real source in read-only mode
+        run: node scripts/aieo-runner.mjs
+      - name: Ensure source unchanged
+        run: git diff --exit-code -- components/FeedbackWidget.tsx
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        if: always()
+        with:
+          name: aieo-orchestrator-report
+          path: aieo-output/multi-agent-report.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  developer:
+    name: AIEO Developer Agent
+    needs: orchestrator-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      - run: node scripts/aieo-role.mjs developer
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        with:
+          name: aieo-developer
+          path: aieo-output/developer.json
+          retention-days: 7
+
+  qa:
+    name: AIEO QA Agent
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      # GitHub extraction resets file modes; the directory must already be
+      # private BEFORE download so no report is ever exposed by path traversal.
+      - name: Create private destination before artifact download
+        run: mkdir -m 700 -- aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        with:
+          name: aieo-developer
+          path: aieo-output
+      - name: Re-private downloaded, strictly named evidence before qa review
+        run: node scripts/aieo-import-handoffs.mjs foundation developer
+      - run: node scripts/aieo-role.mjs qa
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        with:
+          name: aieo-qa
+          path: aieo-output/qa.json
+          retention-days: 7
+
+  security:
+    name: AIEO Security Agent
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      # GitHub extraction resets file modes; the directory must already be
+      # private BEFORE download so no report is ever exposed by path traversal.
+      - name: Create private destination before artifact download
+        run: mkdir -m 700 -- aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        with:
+          name: aieo-developer
+          path: aieo-output
+      - name: Re-private downloaded, strictly named evidence before security review
+        run: node scripts/aieo-import-handoffs.mjs foundation developer
+      - run: node scripts/aieo-role.mjs security
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        with:
+          name: aieo-security
+          path: aieo-output/security.json
+          retention-days: 7
+
+  reviewer:
+    name: AIEO Reviewer Agent
+    needs: [qa, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, audited pin
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, audited pin
+        with:
+          node-version: '24'
+      # Each handoff is identified explicitly; do not merge unrelated artifacts
+      # such as the orchestrator report into independently checked role evidence.
+      # GitHub extraction resets file modes; the directory must already be
+      # private BEFORE download so no report is ever exposed by path traversal.
+      - name: Create private destination before artifact download
+        run: mkdir -m 700 -- aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        with:
+          name: aieo-developer
+          path: aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        with:
+          name: aieo-qa
+          path: aieo-output
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4, audited pin
+        with:
+          name: aieo-security
+          path: aieo-output
+      - name: Re-private downloaded, strictly named evidence before reviewer review
+        run: node scripts/aieo-import-handoffs.mjs foundation developer qa security
+      - run: node scripts/aieo-role.mjs reviewer
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, audited pin
+        with:
+          name: aieo-reviewer
+          path: aieo-output/reviewer.json
+          retention-days: 7

@@ -1,0 +1,146 @@
+// Credential-free independent candidate-read regressions. Every candidate
+// lives in a disposable workspace; no provider or GitHub API is contacted.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync,
+  symlinkSync, linkSync, renameSync, rmSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const script = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)),
+  'aieo-model-candidate-read.mjs')).href;
+const original = 'function syntheticCandidate() { return 3; }\n';
+function fixture() {
+  const root = mkdtempSync(join(tmpdir(), 'aieo-independent-candidate-'));
+  const source = join(root, 'components', 'FeedbackWidget.tsx');
+  mkdirSync(dirname(source));
+  writeFileSync(source, original);
+  return { root, source };
+}
+function run(f, { foreignUid = false } = {}) {
+  const source = 'import { readVerifiedModelCandidate } from ' +
+    JSON.stringify(script) + ';\n' +
+    (foreignUid
+      ? 'const uid = process.getuid(); process.getuid = () => uid + 1;\n'
+      : '') +
+    'process.stdout.write(readVerifiedModelCandidate());';
+  return spawnSync(process.execPath, ['--input-type=module', '-e', source], {
+    cwd: f.root, encoding: 'utf8', timeout: 15000
+  });
+}
+
+test('ordinary private bounded candidate is read identically by independent roles', () => {
+  const f = fixture();
+  try {
+    const result = run(f);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, original);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+const rejectionCases = [
+  ['oversized candidate', (f) => writeFileSync(f.source, 'x'.repeat(48001))],
+  ['empty candidate', (f) => writeFileSync(f.source, '')],
+  ['malformed UTF-8 candidate', (f) => writeFileSync(f.source, Buffer.from([0xff, 0xfe]))],
+  ['world-writable candidate', (f) => chmodSync(f.source, 0o666)],
+  ['owner-unreadable candidate', (f) => chmodSync(f.source, 0o244)],
+  ['setuid candidate', (f) => chmodSync(f.source, 0o4644)],
+  ['setgid candidate', (f) => chmodSync(f.source, 0o2644)],
+  ['sticky-bit candidate', (f) => chmodSync(f.source, 0o1644)],
+  ['group-writable parent directory', (f) => chmodSync(dirname(f.source), 0o777)],
+  ['setgid parent directory', (f) => chmodSync(dirname(f.source), 0o2755)],
+  ['sticky-bit parent directory', (f) => chmodSync(dirname(f.source), 0o1755)],
+  ['symlinked source inode', (f) => {
+    const outside = join(f.root, 'external-source.tsx');
+    writeFileSync(outside, original);
+    unlinkSync(f.source);
+    symlinkSync(outside, f.source);
+  }],
+  ['hardlinked source inode', (f) => {
+    const outside = join(f.root, 'external-source.tsx');
+    writeFileSync(outside, original);
+    unlinkSync(f.source);
+    linkSync(outside, f.source);
+  }],
+  ['symlinked parent directory', (f) => {
+    const external = join(f.root, 'external-components');
+    renameSync(dirname(f.source), external);
+    symlinkSync(external, dirname(f.source));
+  }]
+];
+for (const [name, mutate] of rejectionCases) {
+  test('independent candidate reader rejects ' + name, () => {
+    const f = fixture();
+    try {
+      mutate(f);
+      const result = run(f);
+      assert.notEqual(result.status, 0, 'untrusted candidate must not reach role review');
+      assert.match(result.stderr, /AIEO independent model review blocked/);
+      assert.doesNotMatch(result.stderr, /syntheticCandidate/,
+        'the rejection must not print candidate source');
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+}
+
+test('independent candidate reader rejects a foreign uid before emitting source', () => {
+  const f = fixture();
+  try {
+    const result = run(f, { foreignUid: true });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /AIEO independent model review blocked/);
+    assert.equal(result.stdout, '');
+    assert.equal(readFileSync(f.source, 'utf8'), original,
+      'foreign ownership denial must not modify candidate bytes');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('rejecting a hardlinked candidate never changes the external inode', () => {
+  const f = fixture();
+  try {
+    const outside = join(f.root, 'external-sentinel.tsx');
+    writeFileSync(outside, original);
+    unlinkSync(f.source);
+    linkSync(outside, f.source);
+    assert.notEqual(run(f).status, 0);
+    assert.equal(readFileSync(outside, 'utf8'), original);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+
+test('independent candidate reader rejects a final-path same-inode timestamp race', () => {
+  const f = fixture();
+  try {
+    const marker = join(f.root, 'metadata-mutated');
+    const shim = join(f.root, 'mutate-final-path.mjs');
+    writeFileSync(shim, [
+      "import fs from 'node:fs';",
+      "import { syncBuiltinESMExports } from 'node:module';",
+      "const originalLstat = fs.lstatSync;",
+      "let targetStats = 0;",
+      "fs.lstatSync = (path, ...args) => {",
+      "  if (path === 'components/FeedbackWidget.tsx' && ++targetStats === 2) {",
+      "    fs.utimesSync(path, new Date('2020-01-01'), new Date('2020-01-01'));",
+      "    fs.writeFileSync(" + JSON.stringify(marker) + ", 'changed');",
+      "  }",
+      "  return originalLstat(path, ...args);",
+      "};",
+      "syncBuiltinESMExports();",
+      ''
+    ].join('\n'));
+    const result = spawnSync(process.execPath, ['--import', shim,
+      '--input-type=module', '-e',
+      'import { readVerifiedModelCandidate } from ' + JSON.stringify(script) +
+      '; process.stdout.write(readVerifiedModelCandidate());'], {
+      cwd: f.root, encoding: 'utf8', timeout: 15000
+    });
+    assert.equal(readFileSync(marker, 'utf8'), 'changed',
+      'the race must occur between the last fd stat and pathname stat');
+    assert.notEqual(result.status, 0, 'a same-inode timestamp race must fail closed');
+    assert.match(result.stderr, /AIEO independent model review blocked/);
+    assert.equal(result.stdout, '', 'no candidate source may be returned');
+    assert.equal(readFileSync(f.source, 'utf8'), original,
+      'the mutation changes metadata only, not source bytes');
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
