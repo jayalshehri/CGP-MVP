@@ -1,7 +1,7 @@
 import test from 'node:test';
 import { introducesOutboundTagAttribute } from '../aieo/lib/outbound-tag-guard.mjs';
 import assert from 'node:assert/strict';
-import { MODEL_ALLOWED_PATH, validateModelPatch, buildModelRequest, requestModelPatch } from '../aieo/lib/model-provider.mjs';
+import { MODEL_ALLOWED_PATH, validateModelPatch, buildModelRequest, requestModelPatch, containsCredentials } from '../aieo/lib/model-provider.mjs';
 
 const source = 'function demo() {\n  const sample = 100;\n}\n';
 const find = '  const sample = 100;';
@@ -2512,6 +2512,56 @@ test('dotted credential field names fail closed before disclosure and in every p
   assert.equal(transports, 0, 'no external transport on rejected source or task');
   assert.doesNotThrow(() => buildModelRequest({
     source: source + '// {"public.key":"Visible copy only"}',
+    task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+  }));
+  assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed');
+});
+
+
+test('template-literal credential values fail closed before provider transport and in proposal fields', async () => {
+  const tick = String.fromCharCode(96);
+  // Deliberately synthetic markers; include short, interpolated and multiline
+  // values because matching only a closing quote or a minimum length is unsafe.
+  const markers = [
+    'password = ' + tick + 'x' + tick,
+    'clientSecret: ' + tick + 's' + tick,
+    'accessToken: ' + tick + 'abc' + tick,
+    'db.password: ' + tick + 'y' + tick,
+    'privateKey: ' + tick + '$' + '{synthetic}' + tick,
+    'secretKey: ' + tick + 'line 1\nline 2' + tick
+  ];
+  let outboundCalls = 0;
+  const transport = async () => { outboundCalls++; throw Error('no outbound source sharing'); };
+  for (const marker of markers) {
+    assert.equal(containsCredentials(marker), true, 'must detect raw synthetic marker');
+    const unsafeSource = source + '\n// ' + marker;
+    assert.throws(() => buildModelRequest({
+      source: unsafeSource, task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.throws(() => buildModelRequest({
+      source, task: task + ' ' + marker, model: env.OPENROUTER_MODEL_ID, shareApproved: true
+    }));
+    assert.equal((await requestModelPatch({ source: unsafeSource, task, env, transport })).status, 'blocked');
+    assert.equal((await requestModelPatch({ source, task: task + ' ' + marker, env, transport })).status, 'blocked');
+    for (const [candidateSource, fields] of [
+      [source.replace(find, find + ' // ' + marker), {
+        find: find + ' // ' + marker, replace: replacement, explanation: 'Synthetic fixture'
+      }],
+      [source, { find, replace: replacement + ' // ' + marker, explanation: 'Synthetic fixture' }],
+      [source, { find, replace: replacement, explanation: 'Synthetic ' + marker }]
+    ]) {
+      const verdict = validateModelPatch({
+        source: candidateSource,
+        response: JSON.stringify({ path: MODEL_ALLOWED_PATH, ...fields })
+      });
+      assert.equal(verdict.status, 'rejected', 'reject sensitive template in any field');
+      assert.equal(JSON.stringify(verdict).includes(marker), false, 'never echo credential');
+    }
+  }
+  assert.equal(outboundCalls, 0, 'blocked before provider transport');
+  assert.equal(containsCredentials('publicLabel: ' + tick + 'Safe public UI copy' + tick), false);
+  assert.doesNotThrow(() => buildModelRequest({
+    source: source + '\n// publicLabel: ' + tick + 'Safe public UI copy' + tick,
     task, model: env.OPENROUTER_MODEL_ID, shareApproved: true
   }));
   assert.equal(validateModelPatch({ response: proposal, source }).status, 'proposed');
