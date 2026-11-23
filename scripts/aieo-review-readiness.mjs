@@ -20,7 +20,7 @@ export const EXPECTED_ROLE_BLOBS = Object.freeze({
   "scripts/aieo-role-artifact-io.mjs": "ae3576d971ded1bb30ace51f3f9e28e940a66c9f",
   "scripts/aieo-model-security.mjs": "e7b2f5c2b81d9afd2b4655f083d5134c12a97709",
   "aieo/lib/model-gates.mjs": "fbd42c7552a2cec523b68edd6005cd531640ff65",
-  "aieo/lib/model-provider.mjs": "196058ef15c0dce6b48aaa15acec1dfa84cf21b5",
+  "aieo/lib/model-provider.mjs": "4e732fc87214db2941a38ba40e1256b4d55755d8",
   "scripts/aieo-import-handoffs.mjs": "dc6bb2930e2d4651e513d8ae948dfcefe4c7ff5a",
   "scripts/aieo-git-process-guard.mjs": "998149ab4b0abf033ef1998e9371eb7e26ebb91d",
   "scripts/aieo-model-candidate-read.mjs": "a242c018428877a99fc7595ac5cc1a02027815df",
