@@ -11,6 +11,35 @@ const report = { status: 'proposed', sourceHash: hash(original), proposedHash: h
 const diff = '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n';
 const input = { original, actual, changedPaths: [MODEL_ALLOWED_PATH], diff, report };
 
+test('independent Security rejects short explicit secrets from actual bytes despite forged diff', () => {
+  const markers = [
+    '{"password":"1234"}',
+    '{"client_secret":"abc123"}',
+    '{"privateKey":"k"}',
+    '{"api.key":"x"}',
+    '?access_token=abc',
+    '{"sessionToken":"xy"}'
+  ];
+  for (const marker of markers) {
+    const candidate = 'const items = 2; // ' + marker + '\n';
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      // Intentionally unrelated Git diff: actual candidate content is authoritative.
+      diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n',
+      report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(candidate) }
+    });
+    assert.equal(verdict.status, 'failed');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+    assert.equal(JSON.stringify(verdict).includes(marker), false, 'redacted finding only');
+  }
+  const safe = 'const items = 2; // public label\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '+const items = 2; // public label',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
+
 test('independent Security catches percent-encoded secrets in actual candidate despite forged diff', () => {
   for (const marker of [
     '?access%5Ftoken=syntheticvalue123456',
