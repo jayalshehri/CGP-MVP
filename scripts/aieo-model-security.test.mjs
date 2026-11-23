@@ -11,6 +11,36 @@ const report = { status: 'proposed', sourceHash: hash(original), proposedHash: h
 const diff = '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n';
 const input = { original, actual, changedPaths: [MODEL_ALLOWED_PATH], diff, report };
 
+test('independent Security rejects computed secret keys in actual bytes with forged clean diff', () => {
+  for (const marker of [
+    'config["password"] = createSecret()',
+    "settings['clientSecret' /* note */ ] = short",
+    "config[\x60apiKey\x60] = 'x'",
+    'const cfg = { ["privateKey"]: "x" }',
+    'config[session_token] /* note */ = makeValue()',
+    'cfg["access_token" /* note */ ] = "short"'
+  ]) {
+    const candidate = 'const items = 2;\n' + marker + '\n';
+    const verdict = inspectModelDiff({
+      original, actual: candidate, changedPaths: [MODEL_ALLOWED_PATH],
+      diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2;\n',
+      report: {
+        status: 'proposed', sourceHash: hash(original),
+        proposedHash: hash(candidate)
+      }
+    });
+    assert.equal(verdict.status, 'failed');
+    assert.ok(verdict.findings.includes('Potentially unsafe new code'));
+    assert.equal(JSON.stringify(verdict).includes(marker), false, 'never echo credentials');
+  }
+  const safe = 'const items = 2; // تحسين الواجهة\n';
+  assert.equal(inspectModelDiff({
+    original, actual: safe, changedPaths: [MODEL_ALLOWED_PATH],
+    diff: '@@ -1 +1 @@\n-const items = 1;\n+const items = 2; // تحسين الواجهة\n',
+    report: { status: 'proposed', sourceHash: hash(original), proposedHash: hash(safe) }
+  }).status, 'passed');
+});
+
 test('independent Security finds comment-separated sensitive assignments in actual candidate, not a forged diff', () => {
   const disguised = [
     'password // audit comment\n = short',
