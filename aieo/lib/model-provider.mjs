@@ -31,14 +31,28 @@ const opaqueTokenCredentials = /(?:[?&#](?:access[_-]?token|refresh[_-]?token|id
 // separately executed candidate Security review. Values remain synthetic
 // in tests; this heuristic is not a complete secrets detector.
 const dottedCredentialAssignment = /\b(?:client\.secret|api\.key|private\.key|secret\.key|signing\.key|encryption\.key|account\.key|webhook\.secret|service\.role|aws\.secret\.access\.key|(?:access|refresh|session|auth|id)\.token|(?:db|database)\.password)\s*["']?\s*[:=]\s*(?:["'][^"'\r\n]{8,}["']?|[a-z0-9_+/=-]{12,})/i;
-// Compatibility glyphs (fullwidth letters, mathematical alphabets and
-// fullwidth punctuation) can disguise sensitive keys without using invisible
-// characters. Check both the exact bytes and their Unicode NFKC equivalent;
-// normalization is for detection only, never a change to transmitted source.
+// Compatibility glyphs and ASCII percent-encoded key names can disguise
+// sensitive fields in source comments, tasks, URL query strings or JSON.
+// Decode only printable ASCII percent escapes for scanning, not for output or
+// source modification. Bound decoding to three passes to catch double encoding
+// without a potentially unbounded expansion or network-side effects.
+const decodeAsciiPercentEscapes = (value) =>
+  value.replace(/%([0-7][0-9a-f])/gi, (sequence, hex) => {
+    const code = Number.parseInt(hex, 16);
+    return code >= 0x20 && code <= 0x7e ? String.fromCharCode(code) : sequence;
+  });
 export const containsCredentials = (value) => {
   if (typeof value !== 'string') return false;
-  const canonical = value.normalize('NFKC');
-  return [value, canonical].some((candidate) =>
+  const candidates = new Set();
+  let current = value;
+  for (let pass = 0; pass < 3; pass++) {
+    candidates.add(current);
+    candidates.add(current.normalize('NFKC'));
+    const decoded = decodeAsciiPercentEscapes(current);
+    if (decoded === current) break;
+    current = decoded;
+  }
+  return [...candidates].some((candidate) =>
     credentials.test(candidate) ||
     opaqueTokenCredentials.test(candidate) ||
     dottedCredentialAssignment.test(candidate));
