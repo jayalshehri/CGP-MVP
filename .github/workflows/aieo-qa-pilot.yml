@@ -1,0 +1,79 @@
+# Read-only AIEO QA pilot. No OpenRouter, no deploy or write token.
+name: AIEO QA Pilot Independent Gates
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'qa-fixtures/**'
+      - '.github/workflows/aieo-qa-pilot.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  developer:
+    name: Developer provenance replay (synthetic only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: node --test --test-name-pattern='replays the exact historical' qa-fixtures/aieo-control-route.test.mjs
+
+  qa:
+    name: Independent QA route regression
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: node --test --test-name-pattern='route boundary rejects' qa-fixtures/aieo-control-route.test.mjs
+
+  security:
+    name: Independent Security isolation check
+    needs: developer
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: node --test --test-name-pattern='Security pilot keeps' qa-fixtures/aieo-control-route.test.mjs
+
+  reviewer:
+    name: Independent Reviewer and final source-scope attestation
+    needs: [qa, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: node --test qa-fixtures/aieo-control-route.test.mjs
+      - name: Reject application changes and verify no production deployment
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          changed="$(git diff --name-only origin/main...HEAD)"
+          echo "$changed"
+          if [ -z "$changed" ]; then exit 1; fi
+          if echo "$changed" | grep -Ev '^(qa-fixtures/aieo-control-route(\.test)?\.mjs|\.github/workflows/aieo-qa-pilot\.yml)$'; then
+            echo 'Out-of-scope change detected'; exit 1
+          fi
+          git diff --check
