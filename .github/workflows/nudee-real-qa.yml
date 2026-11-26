@@ -1,0 +1,48 @@
+name: Nudee real-account local integration
+on:
+  push:
+    branches: [qa-nudee-real-account-20261126]
+permissions:
+  contents: read
+jobs:
+  auth-storage-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.54.11
+      - name: Start disposable Auth, REST, Postgres and Storage
+        run: |
+          set -euo pipefail
+          stack="$RUNNER_TEMP/nudee-local-qa"
+          mkdir -p "$stack/supabase/migrations"
+          echo 'project_id = "nudee-local-qa"' > "$stack/supabase/config.toml"
+          cp supabase/migrations/{20260903000000_cgp_baseline_schema,20260903222239_secure_cgp_workflow,20260903222506_restrict_role_helper,20260914020000_add_external_nca_auditor_role,20260914021000_grant_authenticated_policy_helpers}.sql "$stack/supabase/migrations/"
+          cp supabase/migrations/*_nudee_*.sql "$stack/supabase/migrations/"
+          supabase start --workdir "$stack" --exclude studio,imgproxy,inbucket,logflare,vector,realtime,edge-runtime,postgres-meta,supavisor > /dev/null
+      - run: npm ci
+      - run: python -m pip install playwright==1.56.0
+      - run: python -m playwright install --with-deps chromium --only-shell
+      - name: Login, assign, upload, return, resubmit, approve and verify bytes
+        run: node tests/nudee_real_qa.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nudee-real-account-evidence
+          path: nudee-real-qa-evidence/
+          if-no-files-found: ignore
+          retention-days: 14
+      - if: always()
+        run: supabase stop --workdir "$RUNNER_TEMP/nudee-local-qa" --no-backup
