@@ -9,6 +9,7 @@ import GrcAttention from "@/components/GrcAttention";
 import StatusBadge from "@/components/StatusBadge";
 import { ResultSummary } from "@/components/WorkflowUI";
 import { frameworkOf } from "@/lib/compliance";
+import { evidenceReviewHref } from "@/lib/evidence-review";
 import { getEccCatalogLabel } from "@/lib/ecc-catalog-labels";
 import { isExpired } from "@/lib/grc";
 import { supabase } from "@/lib/supabase";
@@ -248,7 +249,7 @@ function EvidenceDrawer({ row, canReview, onClose }: { row: EvidenceRow; canRevi
       <EvidenceDownload path={row.file_path} name={row.file_name}/>
       <Link className="evidence-button" href={`/controls/${row.control_id}`}>فتح الضابط <span aria-hidden="true">←</span></Link>
       {canReview && row.is_current && reviewStatuses.has(row.status ?? "") &&
-        <Link className="evidence-button evidence-review-link" href={`/review#evidence-${row.id}`}>فتح في مراجعة الأدلة</Link>}
+        <Link className="evidence-button evidence-review-link" href={evidenceReviewHref(row)}>فتح في مراجعة الأدلة</Link>}
     </footer>
   </AccessibleDialog>;
 }
