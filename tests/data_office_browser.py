@@ -15,16 +15,22 @@ HOME = REGISTER + "-dashboard"
 SIZES = {"desktop": (1440, 900), "tablet": (820, 1180), "phone": (390, 844)}
 
 
-def login(browser, fixture, role, width, height):
+def login(browser, fixture, role, width, height, revision):
     context = browser.new_context(viewport={"width": width, "height": height},
                                   locale="ar-SA", timezone_id="Asia/Riyadh", service_workers="block")
     fixture.install(context, role)
     page = context.new_page()
     page.set_default_timeout(15000)
-    page.goto(APP + "/login")
+    page.goto(APP + ("/" if revision == "after" else "/login"))
+    if revision == "after" or page.url.rstrip("/") == APP:
+        page.get_by_role("link", name="مكتب إدارة البيانات", exact=True).click()
+        expect(page).to_have_url(APP + "/login/data")
+        submit_label = "تسجيل الدخول"
+    else:
+        submit_label = "دخول إلى CGP"
     page.get_by_label("البريد الإلكتروني").fill(f"{role}@example.test")
     page.get_by_label("كلمة المرور").fill("fixture-only")
-    page.get_by_role("button", name="دخول إلى CGP").click()
+    page.get_by_role("button", name=submit_label, exact=True).click()
     expect(page).to_have_url(re.compile(r"/data-governance/nudee(?:-dashboard)?$"), timeout=20000)
     return page
 
@@ -42,7 +48,7 @@ def check_layout(browser, revision, size, target):
     fixture = Fixture()
     width, height = SIZES[size]
     after = revision == "after"
-    office = login(browser, fixture, "office", width, height)
+    office = login(browser, fixture, "office", width, height, revision)
     if after:
         expect(office).to_have_url(APP + HOME)
     else:
@@ -121,7 +127,7 @@ def check_layout(browser, revision, size, target):
         office.keyboard.press("Escape")
         expect(dialog).to_have_count(0)
         expect(button).to_be_focused()
-    owner = login(browser, fixture, "owner", width, height)
+    owner = login(browser, fixture, "owner", width, height, revision)
     expect(owner).to_have_url(APP + REGISTER)
     owner.locator("#nudee-filter").wait_for()
     snap(owner, target / f"{size}-owner-tasks.png", after)
@@ -142,14 +148,14 @@ def check_layout(browser, revision, size, target):
 
 def lifecycle(browser, target):
     fixture = Fixture()
-    office = login(browser, fixture, "office", *SIZES["desktop"])
+    office = login(browser, fixture, "office", *SIZES["desktop"], revision="after")
     office.get_by_role("link", name=re.compile("إسناد المتطلبات")).click()
     expect(office.locator("#nudee-view")).to_have_value("unassigned")
     office.get_by_role("button", name=NAMES[2], exact=True).click()
     office.get_by_label("المسؤول عن رفع الدليل").select_option(OWNER)
     office.get_by_role("button", name="حفظ التكليف").click()
     office.get_by_text("تم إنشاء التكليف", exact=True).wait_for()
-    owner = login(browser, fixture, "owner", *SIZES["phone"])
+    owner = login(browser, fixture, "owner", *SIZES["phone"], revision="after")
     for index, decision in enumerate(["changes_requested", "approved"]):
         if index:
             owner.reload()
