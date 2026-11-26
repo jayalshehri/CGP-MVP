@@ -172,10 +172,10 @@ export default function NudeeReport({assignments}:{assignments:Assignment[]}){
   <button type="button" onClick={()=>{setLoading(true);setError("");setAttempt(i=>i+1)}}>إعادة المحاولة</button></div>;
  return <>
    <section className={styles.filters} aria-label="تصفية بيانات المؤشر">
-    <label>مستوى النضج<select value={filter.level} onChange={e=>field("level",e.target.value)}>{[ALL,...LEVELS].map(v=><option key={v}>{v}</option>)}</select></label>
-    <label>المجال<select value={filter.domain} onChange={e=>field("domain",e.target.value)}>{[ALL,...domains].map(v=><option key={v}>{v}</option>)}</select></label>
-    <label>حالة الامتثال<select value={filter.compliance} onChange={e=>field("compliance",e.target.value)}>{[ALL,...SOURCE_COMPLIANCE].map(v=><option key={v}>{v}</option>)}</select></label>
-    <label>حالة المراجعة<select value={filter.review} onChange={e=>field("review",e.target.value)}>{[ALL,...reviews].map(v=><option key={v}>{v}</option>)}</select></label>
+    <label><span id="nudee-report-level">مستوى النضج</span><select aria-labelledby="nudee-report-level" value={filter.level} onChange={e=>field("level",e.target.value)}>{[ALL,...LEVELS].map(v=><option key={v}>{v}</option>)}</select></label>
+    <label><span id="nudee-report-domain">المجال</span><select aria-labelledby="nudee-report-domain" value={filter.domain} onChange={e=>field("domain",e.target.value)}>{[ALL,...domains].map(v=><option key={v}>{v}</option>)}</select></label>
+    <label><span id="nudee-report-compliance">حالة الامتثال</span><select aria-labelledby="nudee-report-compliance" value={filter.compliance} onChange={e=>field("compliance",e.target.value)}>{[ALL,...SOURCE_COMPLIANCE].map(v=><option key={v}>{v}</option>)}</select></label>
+    <label><span id="nudee-report-review">حالة المراجعة</span><select aria-labelledby="nudee-report-review" value={filter.review} onChange={e=>field("review",e.target.value)}>{[ALL,...reviews].map(v=><option key={v}>{v}</option>)}</select></label>
     <div className={styles.filterBottom}><span>المعروض: {stats.total.toLocaleString("ar-SA")} من أصل {records.length.toLocaleString("ar-SA")} دليل</span><button disabled={!hasFilters} onClick={()=>setFilter({domain:ALL,level:ALL,compliance:ALL,review:ALL})}>مسح التصفية</button></div>
    </section>
    <section className={styles.metrics} aria-label="مؤشرات الامتثال">

@@ -64,7 +64,7 @@ def check_layout(browser, revision, size, target):
         initial_counts = counts.all_text_contents()
         assert not any("nudee_final_review" in path for _, _, path in fixture.requests)
         summary.click()
-        field = office.get_by_label("المجال", exact=True)
+        field = office.get_by_role("combobox", name="المجال", exact=True)
         field.select_option(label="جودة البيانات")
         expect(counts).to_have_text(initial_counts)
         update = office.get_by_role("button", name="تحديث المراجعة الشاملة", exact=True)
@@ -205,7 +205,14 @@ if __name__ == "__main__":
     with sync_playwright() as runner:
         browser = runner.chromium.launch()
         for size in SIZES:
-            check_layout(browser, args.revision, size, args.output)
+            try:
+                check_layout(browser, args.revision, size, args.output)
+            except Exception:
+                for index, ctx in enumerate(browser.contexts):
+                    for page in ctx.pages:
+                        print(page.locator("body").aria_snapshot()[:8000], flush=True)
+                        page.screenshot(path=args.output / f"{size}-failure-{index}.png")
+                raise
             results[size] = {"viewport": SIZES[size], "office": "passed", "owner": "passed"}
             print(f"PASS {args.revision} desktop/tablet/mobile layout: {size}", flush=True)
         if args.revision == "after":
