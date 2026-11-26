@@ -1,0 +1,74 @@
+name: Data Office browser QA
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/data-office-browser.yml'
+      - 'tests/data_office_browser*.py'
+      - 'app/data-governance/**'
+      - 'app/login/page.tsx'
+      - 'app/globals.css'
+      - 'app/layout.tsx'
+      - 'components/AppShell.tsx'
+      - 'components/AccessibleDialog.tsx'
+      - 'components/accessible-dialog.css'
+      - 'lib/auth.ts'
+      - 'lib/strategy-read.ts'
+      - 'lib/workspaces.ts'
+      - 'next.config.ts'
+permissions:
+  contents: read
+jobs:
+  browser:
+    name: Browser / ${{ matrix.revision }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        revision: [before, after]
+    steps:
+      - name: Check out browser tests
+        uses: actions/checkout@v4
+        with:
+          path: qa
+          persist-credentials: false
+          sparse-checkout: tests
+      - name: Check out app revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.revision == 'before' && github.event.pull_request.base.sha || github.sha }}
+          path: app-under-test
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install playwright==1.56.0
+      - run: python -m playwright install --with-deps chromium --only-shell
+      - run: npm ci
+        working-directory: app-under-test
+      - run: npm run build
+        working-directory: app-under-test
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: fixture-only-public-key
+      - name: Run authenticated UI with intercepted synthetic responses
+        env:
+          REVISION: ${{ matrix.revision }}
+        run: |
+          (cd app-under-test && exec npm run start -- --hostname 127.0.0.1 --port 3847) > server.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          curl --silent --show-error --fail --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:3847/login > /dev/null
+          python qa/tests/data_office_browser.py "$REVISION" evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: data-office-${{ matrix.revision }}
+          path: |
+            evidence/
+            server.log
+          retention-days: 14

@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AccessibleDialog from "@/components/AccessibleDialog";
 import { requireProfile } from "@/lib/auth";
+import { readStrategyRows } from "@/lib/strategy-read";
 import { supabase } from "@/lib/supabase";
 import styles from "./nudee-dashboard.module.css";
 
@@ -12,6 +13,7 @@ export type Requirement = {
  actual_end:string|null; evidence_name:string; review_phase:string|null;
 };
 export type Assignment = { id:number; requirement_id:number; status:string; due_date:string|null };
+const requirementColumns="id,source_row,domain_name,standard_code,maturity_level,source_compliance,source_review_status,source_progress,schedule_indicator,planned_start,planned_end,actual_end,evidence_name,review_phase";
 type Filter = {domain:string;level:string;compliance:string;review:string};
 const ALL="الكل";
 const LEVELS=["المستوى 1: البناء","المستوى 2: التعريف","المستوى 3: التفعيل"];
@@ -43,7 +45,8 @@ function evidenceProgress(r:Requirement,assignment?:Assignment){
 function percent(n:number,d:number){return d?Math.round(1000*n/d)/10:0;}
 function fmtPct(n:number,d:number){return percent(n,d).toLocaleString("ar-SA",{maximumFractionDigits:1})+"%";}
 function shortDate(date:string|null){return date?dateFormat.format(new Date(date+"T12:00:00Z")):"—";}
-export default function NudeeReport({records,assignments}:{records:Requirement[];assignments:Assignment[]}){
+export default function NudeeReport({assignments}:{assignments:Assignment[]}){
+ const [records,setRecords]=useState<Requirement[]>([]);
  const [filter,setFilter]=useState<Filter>({domain:ALL,level:ALL,compliance:ALL,review:ALL});
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
@@ -56,9 +59,14 @@ export default function NudeeReport({records,assignments}:{records:Requirement[]
  const finalReviewPending=useRef(false);
  const [attempt,setAttempt]=useState(0);
  useEffect(()=>{let active=true;void Promise.resolve().then(async()=>{
-  const f=await supabase.from("nudee_final_review").select("progress").eq("id",1).single();
-  if(f.error)throw f.error;
+  const [requirements,f]=await Promise.all([
+   readStrategyRows<Requirement>((from,to)=>supabase.from("nudee_requirements").select(requirementColumns,{count:"exact"})
+    .order("source_row").order("id").range(from,to),r=>r.id),
+   supabase.from("nudee_final_review").select("progress").eq("id",1).single(),
+  ]);
+  if(requirements.error||f.error)throw new Error("تعذر تحميل بيانات التقرير.");
   if(active){
+   setRecords(requirements.data);
    const currentProgress=Number(f.data?.progress??0);
    setFinalReviewProgress(currentProgress);
    setFinalReviewInput(String(Math.round(currentProgress*100)));

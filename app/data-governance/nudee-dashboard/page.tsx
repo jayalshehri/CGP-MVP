@@ -20,9 +20,9 @@ const auditLabels: Record<string, string> = {
   assigned: "إسناد متطلب", submitted: "تقديم دليل للمراجعة",
   changes_requested: "طلب تعديل الدليل", approved: "اعتماد دليل",
 };
-const requirementColumns = "id,source_row,domain_name,standard_code,maturity_level,source_compliance,source_review_status,source_progress,schedule_indicator,planned_start,planned_end,actual_end,evidence_name,review_phase";
 type AuditEvent = { id: number; assignment_id: number; action: string; created_at: string };
-type OfficeData = { records: Requirement[]; assignments: Assignment[] };
+type HomeRequirement = Pick<Requirement, "id" | "evidence_name">;
+type OfficeData = { records: HomeRequirement[]; assignments: Assignment[] };
 
 function RecentActivity({ names }: { names: Map<number, string> }) {
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
@@ -109,7 +109,7 @@ function OfficeSummary({ records, assignments }: OfficeData) {
       if (event.currentTarget.open) setReportStarted(true);
     }}>
       <summary>تقرير نُضيء التفصيلي</summary>
-      {reportStarted && <div className={styles.reportBody}><NudeeReport records={records} assignments={assignments} /></div>}
+      {reportStarted && <div className={styles.reportBody}><NudeeReport assignments={assignments} /></div>}
     </details>}
   </>;
 }
@@ -125,8 +125,8 @@ export default function NudeeDashboard() {
         await requireProfile(["admin", "data_governance_team"]);
         if (!active) return;
         const [requirements, assignments] = await Promise.all([
-          readStrategyRows<Requirement>((from, to) => supabase.from("nudee_requirements")
-            .select(requirementColumns, { count: "exact" }).order("source_row").order("id").range(from, to), r => r.id),
+          readStrategyRows<HomeRequirement>((from, to) => supabase.from("nudee_requirements")
+            .select("id,evidence_name", { count: "exact" }).order("id").range(from, to), r => r.id),
           readStrategyRows<Assignment>((from, to) => supabase.from("nudee_assignments")
             .select("id,requirement_id,status,due_date", { count: "exact" }).order("id").range(from, to), a => a.id),
         ]);
