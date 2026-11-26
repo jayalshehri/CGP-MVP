@@ -88,7 +88,7 @@
 .gate:hover .enter, .gate:focus-visible .enter { background: #f0d9ad; }
 @media (max-width: 650px) {
   .mast { width: calc(100% - 40px); padding: 17px 0 8px; }
-  .center { max-width: 460px; padding: 12px 20px 30px; }
+  .center { max-width: 460px; margin-block-start: clamp(16px, 5svh, 42px); padding: 12px 20px 30px; }
   .heading h1 { font-size: clamp(35px, 9vw, 45px); line-height: 1.5; }
   .gates { grid-template-columns: 1fr; gap: 15px; margin-top: 15px; }
   .gate {
