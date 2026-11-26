@@ -38,8 +38,8 @@ async function propose() {
   if (!key || !model) throw Error('Provider credentials/model not configured in protected environment');
   // The only permitted provider task is a byte-for-byte substitution in
   // a synthetic fixture; explicit instructions remove model ambiguity.
-  const oldLine = fixtureSource.split('\\n')[1];
-  const newLine = expected.patchedSource.split('\\n')[1];
+  const oldLine = fixtureSource.split('\n')[1];
+  const newLine = expected.patchedSource.split('\n')[1];
   const task = 'In the synthetic source, replace exactly this existing line: ' +
     JSON.stringify(oldLine) + ' with: ' + JSON.stringify(newLine) +
     '. Keep every other byte unchanged. Return exactly four JSON string fields: path, find, replace, explanation. No Markdown.';
