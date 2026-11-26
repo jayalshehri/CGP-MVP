@@ -1,0 +1,177 @@
+# Isolated, bounded live test on an intentionally synthetic 1-line fixture.
+# The provider never receives production source. Only the final publisher has GitHub write.
+name: AIEO Live Synthetic One-Shot E2E
+on:
+  push:
+    branches: [aieo/synthetic-live-e2e-proof-20261126]
+    paths:
+      - 'scripts/aieo-live-synthetic-proof.mjs'
+      - '.github/workflows/aieo-live-synthetic-e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aieo-synthetic-live-single
+  cancel-in-progress: false
+
+jobs:
+  developer:
+    if: github.ref == 'refs/heads/aieo/synthetic-live-e2e-proof-20261126'
+    name: Live OpenRouter developer (synthetic source only)
+    environment: aieo-ai
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Prove source fixture is synthetic and request one real model patch
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          AIEO_MODEL_ID: ${{ vars.AIEO_MODEL_ID }}
+        run: node scripts/aieo-live-synthetic-proof.mjs developer
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aieo-live-developer
+          path: aieo-live-proof/developer.json
+          retention-days: 1
+          if-no-files-found: error
+
+  qa:
+    needs: developer
+    name: Independent QA on same provider candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-live-developer
+          path: aieo-live-proof
+      - run: node scripts/aieo-live-synthetic-proof.mjs qa
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aieo-live-qa
+          path: aieo-live-proof/qa.json
+          retention-days: 1
+          if-no-files-found: error
+
+  security:
+    needs: developer
+    name: Independent Security on same provider candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-live-developer
+          path: aieo-live-proof
+      - run: node scripts/aieo-live-synthetic-proof.mjs security
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aieo-live-security
+          path: aieo-live-proof/security.json
+          retention-days: 1
+          if-no-files-found: error
+
+  reviewer:
+    needs: [qa, security]
+    name: Independent Reviewer binds all exact hashes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-live-developer
+          path: aieo-live-proof
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-live-qa
+          path: aieo-live-proof
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-live-security
+          path: aieo-live-proof
+      - run: node scripts/aieo-live-synthetic-proof.mjs reviewer
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aieo-live-reviewer
+          path: aieo-live-proof/reviewer.json
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    needs: reviewer
+    name: Draft-only proof PR publisher
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-live-developer
+          path: aieo-live-proof
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-live-qa
+          path: aieo-live-proof
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-live-security
+          path: aieo-live-proof
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-live-reviewer
+          path: aieo-live-proof
+      - name: Verify exact provenance and prepare metadata-only proof
+        run: node scripts/aieo-live-synthetic-proof.mjs publish
+      - name: Create isolated Draft PR without changing main or deploying
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/aieo/synthetic-live-e2e-proof-20261126
+          branch="aieo/model-synthetic-proof-$GITHUB_RUN_ID"
+          git -c core.hooksPath=/dev/null fetch origin main
+          git -c core.hooksPath=/dev/null switch -c "$branch" origin/main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -c core.hooksPath=/dev/null add -- aieo-live-synthetic-proof.json
+          test "$(git diff --cached --name-only)" = 'aieo-live-synthetic-proof.json'
+          git -c core.hooksPath=/dev/null commit -m 'test(aieo): attested synthetic provider and independent review proof'
+          gh auth setup-git
+          git -c core.hooksPath=/dev/null push origin "HEAD:refs/heads/$branch"
+          gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --draft \
+            --title "AIEO synthetic live provider & four-agent proof (run $GITHUB_RUN_ID)" \
+            --body "Metadata-only proof of a bounded, live OpenRouter patch on a synthetic fixture. Developer, QA, Security and Reviewer ran in independent jobs against the same hashes. No application source shared or changed, and no production deployment authorized. Human review/merge required."
