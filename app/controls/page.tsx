@@ -78,6 +78,7 @@ function ControlsContent() {
   const rawAssignment = params.get("assignment") || "all";
   const assignment = ["all", "assigned", "unassigned"].includes(rawAssignment) ? rawAssignment : "all";
   const evidenceFilter = params.get("evidence") === "needed";
+  const overdueFilter = params.get("due") === "overdue";
   const view: View = params.get("view") === "structure" ? "structure" : "followup";
 
   const [search, setSearch] = useState("");
@@ -120,17 +121,26 @@ function ControlsContent() {
   const domains = useMemo(() => Map.groupBy(scoped, c => c.domain_ar || "غير مصنف"), [scoped]);
   const domain = domains.has(requestedDomain) ? requestedDomain : [...domains.keys()][0] ?? "";
   const domainControls = domains.get(domain) ?? [];
+  const today = riyadhDate.format(new Date());
+  const nextWeek = new Date(Date.parse(`${today}T00:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
+  const isOverdue = (control: Control) => dueAttention(control, today, nextWeek) === "متأخر";
+  // Counters describe the selected scope, not the subset after search/filtering.
+  const quickCounts = {
+    all: domainControls.length,
+    evidence: domainControls.filter(needsEvidence).length,
+    unassigned: domainControls.filter(control => !control.control_owner_id).length,
+    overdue: domainControls.filter(isOverdue).length,
+  };
   const query = normalize(search);
   const filtered = domainControls.filter(c => {
     const searchMatch = normalize(`${c.control_code} ${c.title_ar} ${c.official_text_ar ?? ""} ${framework} ${c.control_owner ?? ""}`).includes(query);
     const statusMatch = status === "all" || (status === "implemented" ? good(c.implementation_status) : c.implementation_status === status);
     const assignmentMatch = assignment === "all" || (assignment === "assigned" ? !!c.control_owner_id : !c.control_owner_id);
-    return searchMatch && statusMatch && assignmentMatch && (!evidenceFilter || needsEvidence(c));
+    return searchMatch && statusMatch && assignmentMatch
+      && (!evidenceFilter || needsEvidence(c)) && (!overdueFilter || isOverdue(c));
   }).sort(byCode);
-  const filtering = !!search.trim() || status !== "all" || assignment !== "all" || evidenceFilter;
+  const filtering = !!search.trim() || status !== "all" || assignment !== "all" || evidenceFilter || overdueFilter;
   const primaryCount = scoped.filter(c => c.hierarchy_level !== "sub_control").length;
-  const today = riyadhDate.format(new Date());
-  const nextWeek = new Date(Date.parse(`${today}T00:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
 
   function updateParams(values: Record<string, string | null>) {
     const next = new URLSearchParams(params.toString());
@@ -139,6 +149,11 @@ function ControlsContent() {
       else next.delete(key);
     }
     router.replace(next.size ? `/controls?${next.toString()}` : "/controls", { scroll: false });
+  }
+
+  function clearFilters() {
+    setSearch("");
+    updateParams({ status: null, assignment: null, evidence: null, due: null });
   }
 
   if (loading) return <main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>;
@@ -170,7 +185,7 @@ function ControlsContent() {
           <label className="catalog-field"><span>الإطار</span>
             <select value={framework} onChange={e => {
               setSearch(""); setCloudScope("all");
-              updateParams({ framework: e.target.value, domain: null, status: null, assignment: null, evidence: null });
+              updateParams({ framework: e.target.value, domain: null, status: null, assignment: null, evidence: null, due: null });
             }}>
               {frameworks.map(f => <option key={f.id} value={f.code}>{f.code}</option>)}
             </select>
@@ -213,13 +228,21 @@ function ControlsContent() {
 
       <section className="catalog-results" aria-label="نتائج الضوابط">
         <div className="catalog-results-bar">
-          <div className="catalog-quick-filters" role="group" aria-label="فلاتر المتابعة السريعة">
-            <button type="button" aria-pressed={assignment === "unassigned"} onClick={() => updateParams({ assignment: assignment === "unassigned" ? null : "unassigned" })}>بلا مالك</button>
-            <button type="button" aria-pressed={evidenceFilter} onClick={() => updateParams({ evidence: evidenceFilter ? null : "needed" })}>يحتاج دليلًا</button>
+          <div className="catalog-quick-filters" role="group" aria-label="فلاتر المتابعة السريعة وأعداد الضوابط ضمن المجال">
+            <button type="button" aria-pressed={!filtering} onClick={clearFilters}>
+              الكل <span className="catalog-quick-count">{quickCounts.all}</span>
+            </button>
+            <button type="button" aria-pressed={evidenceFilter} onClick={() => updateParams({ evidence: evidenceFilter ? null : "needed" })}>
+              يحتاج دليلًا <span className={`catalog-quick-count ${quickCounts.evidence ? "is-attention" : ""}`}>{quickCounts.evidence}</span>
+            </button>
+            <button type="button" aria-pressed={assignment === "unassigned"} onClick={() => updateParams({ assignment: assignment === "unassigned" ? null : "unassigned" })}>
+              بلا مالك <span className="catalog-quick-count">{quickCounts.unassigned}</span>
+            </button>
+            <button type="button" aria-pressed={overdueFilter} onClick={() => updateParams({ due: overdueFilter ? null : "overdue" })}>
+              متأخر <span className={`catalog-quick-count ${quickCounts.overdue ? "is-overdue" : ""}`}>{quickCounts.overdue}</span>
+            </button>
           </div>
-          <ResultSummary count={filtered.length} total={domainControls.length} active={filtering} reset={() => {
-            setSearch(""); updateParams({ status: null, assignment: null, evidence: null });
-          }}/>
+          <ResultSummary count={filtered.length} total={domainControls.length} active={filtering} reset={clearFilters}/>
         </div>
         {!filtered.length ? <p className="catalog-empty">لا توجد ضوابط مطابقة داخل هذا المجال.</p>
         : view === "structure" ? <StructureList rows={filtered} domainControls={domainControls} framework={framework} filtering={filtering}/>

@@ -149,8 +149,11 @@
 }
 .catalog-quick-filters { display: flex; flex-wrap: wrap; gap: 7px; }
 .catalog-page .catalog-quick-filters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   min-height: 34px;
-  padding: 3px 12px;
+  padding: 3px 10px;
   background: white;
   border: 1px solid var(--catalog-line);
   border-radius: 999px;
@@ -165,6 +168,21 @@
   border-color: #9ccac3;
   background: var(--catalog-accent-soft);
 }
+.catalog-quick-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 21px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #edf2f4;
+  color: var(--catalog-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+.catalog-quick-filters button[aria-pressed="true"] .catalog-quick-count { background: #d2ebe4; color: #07544f; }
+.catalog-quick-filters button .catalog-quick-count.is-attention { background: #fff2d8; color: #76510c; }
+.catalog-quick-filters button .catalog-quick-count.is-overdue { background: #ffece7; color: #94352d; }
 .catalog-results-bar .workflow-results {
   width: auto;
   margin: 0;
