@@ -1,160 +1,335 @@
 "use client";
-import { WorkflowHeading, WorkflowMetric, ResultSummary } from "@/components/WorkflowUI";
-import StatusBadge from "@/components/StatusBadge";
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { requireProfile } from "@/lib/auth";
+
 import Link from "next/link";
-import "./catalog.css";
-import { supabase } from "@/lib/supabase";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import StatusBadge from "@/components/StatusBadge";
+import { ResultSummary } from "@/components/WorkflowUI";
+import { requireProfile } from "@/lib/auth";
 import { getEccOfficialTitle } from "@/lib/ecc-strategy-example";
+import { supabase } from "@/lib/supabase";
+import "./catalog.css";
 
-type Control={id:number;framework_id:number;control_code:string;title_ar:string;description_ar:string|null;official_text_ar:string|null;hierarchy_level:string;parent_control_id:number|null;applicability:string|null;domain_ar:string;implementation_status:string;evidence_status:string;verification_status:string;due_date:string|null;control_owner:string|null;control_owner_id:string|null};
-type Framework={id:number;code:string;name_ar:string;version:string};
-type ViewMode="structure"|"followup";
-const good=(value:string)=>["implemented","compliant"].includes(value);
-const cleanTitle=(value:string)=>value.replace(/\s*[-–]\s*[\d-]+\s*$/,"").trim();
-const domainNumber=(rows:Control[])=>rows[0]?.control_code.split("-")[0]||"—";
-// control_code is the canonical LTR identifier; search must match against
-// it directly, never against visually-rendered (possibly BiDi-reordered)
-// text. Normalizes Arabic-Indic digits and dash-variant characters (from
-// keyboards/locales/paste sources that don't produce a plain ASCII "-")
-// so a code like "١-٩-٣-١" or "1–9–3–1" still matches "1-9-3-1".
-const normalizeCode=(value:string)=>value
- .replace(/[٠-٩]/g,d=>String(d.charCodeAt(0)-0x0660))
- .replace(/[۰-۹]/g,d=>String(d.charCodeAt(0)-0x06F0))
- .replace(/[‐-―−]/g,"-")
- .toLowerCase().trim();
-const hasArabic=(value:string|null)=>!!value&&/[\u0600-\u06ff]/.test(value);
-// The concise navigation label. official_text_ar (the validated NCA
-// regulatory text) is shown separately wherever a row is expanded — this
-// function never substitutes for it, it only picks the best short label.
-const displayTitle=(control:Control,frameworkCode:string)=>{
- if(control.official_text_ar)return control.official_text_ar;
- if(frameworkCode==="ECC")return getEccOfficialTitle(control.control_code)||control.description_ar||cleanTitle(control.title_ar);
- if(frameworkCode==="CCC")return hasArabic(control.description_ar)?control.description_ar:cleanTitle(control.title_ar);
- return control.description_ar||cleanTitle(control.title_ar);
+type Control = {
+  id: number;
+  framework_id: number;
+  control_code: string;
+  title_ar: string;
+  description_ar: string | null;
+  official_text_ar: string | null;
+  hierarchy_level: string;
+  parent_control_id: number | null;
+  applicability: string | null;
+  domain_ar: string;
+  implementation_status: string;
+  evidence_status: string;
+  verification_status: string;
+  due_date: string | null;
+  control_owner: string | null;
+  control_owner_id: string | null;
 };
-const applicabilityLabel=(value:string|null)=>value==="CSP"?"مقدم الخدمة CSP":value==="CST"?"المشترك CST":null;
+type Framework = { id: number; code: string; name_ar: string; version: string };
+type EvidencePreview = { id: number; link_id: number | null; evidence_name: string | null; file_name: string | null; status: string | null };
+type View = "structure" | "followup";
 
-export default function ControlsPage(){
- return <Suspense fallback={<main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>}><ControlsContent/></Suspense>;
+const good = (value: string) => ["implemented", "compliant"].includes(value);
+const needsEvidence = (control: Control) => control.implementation_status !== "not_applicable"
+  && !["uploaded", "pending_review", "under_review", "accepted", "approved", "verified"].includes(control.evidence_status);
+const cleanTitle = (value: string) => value.replace(/\s*[-–]\s*[\d-]+\s*$/, "").trim();
+// Match canonical LTR codes, including Arabic/Indic digits and copied dashes.
+const normalize = (value: string) => value
+  .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+  .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06f0))
+  .replace(/[‐-―−]/g, "-").toLowerCase().trim();
+const byCode = (a: Control, b: Control) => a.control_code.localeCompare(b.control_code, "en", { numeric: true });
+const applicabilityLabel = (value: string | null) => value === "CSP" ? "مقدم الخدمة CSP" : value === "CST" ? "المشترك CST" : null;
+const shortLabel = (control: Control, framework: string) =>
+  (framework === "ECC" ? getEccOfficialTitle(control.control_code) : undefined)
+  || control.official_text_ar || control.description_ar || cleanTitle(control.title_ar) || "ضابط بدون عنوان";
+
+const riyadhDate = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" });
+function dueAttention(control: Control, today: string, soon: string) {
+  if (!control.due_date || control.implementation_status === "not_applicable"
+      || (good(control.implementation_status) && ["verified", "approved"].includes(control.verification_status))) return null;
+  if (control.due_date < today) return "متأخر";
+  return control.due_date <= soon ? "يستحق قريبًا" : null;
 }
 
-function ControlsContent(){
- const router=useRouter();
- const searchParams=useSearchParams();
- const rawStatus=searchParams.get("status")??"all";
- const status=["all","implemented","in_progress","not_started","not_applicable"].includes(rawStatus)?rawStatus:"all";
- const rawAssignment=searchParams.get("assignment")??"all";
- const assignment=["all","assigned","unassigned"].includes(rawAssignment)?rawAssignment:"all";
- const requestedFramework=searchParams.get("framework")??"ECC";
- const requestedDomain=searchParams.get("domain")??"";
- const [search,setSearch]=useState(""),[framework,setFramework]=useState(requestedFramework);
- const [activeDomain,setActiveDomain]=useState(requestedDomain),[scope,setScope]=useState("all"),[view,setView]=useState<ViewMode>("structure");
- const [controls,setControls]=useState<Control[]>([]),[frameworks,setFrameworks]=useState<Framework[]>([]),[canManage,setCanManage]=useState(false);
- const [error,setError]=useState<Error|null>(null),[loading,setLoading]=useState(true);
- useEffect(()=>{let active=true;(async()=>{try{
-  const {user,profile}=await requireProfile();if(!active)return;
-  setCanManage(profile.role==="admin"||profile.role==="cybersecurity_team");
-  let query=supabase.from("controls").select("id,framework_id,control_code,title_ar,description_ar,official_text_ar,hierarchy_level,parent_control_id,applicability,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner,control_owner_id").order("id");
-  if(profile.role==="control_owner")query=query.eq("control_owner_id",user.id);
-  const [{data,error},{data:frameworkData,error:frameworkError}]=await Promise.all([query,supabase.from("frameworks").select("id,code,name_ar,version").eq("is_active",true).order("id")]);
-  if(error||frameworkError)throw error||frameworkError;
-  if(active){setControls((data??[]) as Control[]);setFrameworks((frameworkData??[]) as Framework[]);}
- }catch(e){if(active)setError(new Error(e instanceof Error?e.message:"تعذر تحميل الضوابط"));const {data}=await supabase.auth.getSession();if(!data.session)router.replace("/login");}
- finally{if(active)setLoading(false);}})();return()=>{active=false;};},[router]);
+export default function ControlsPage() {
+  return <Suspense fallback={<main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>}><ControlsContent/></Suspense>;
+}
 
- const selectedFramework=frameworks.find(item=>item.code===framework);
- const frameworkControls=useMemo(()=>selectedFramework?controls.filter(c=>c.framework_id===selectedFramework.id):[],[controls,selectedFramework]);
- const scoped=useMemo(()=>framework!=="CCC"||scope==="all"?frameworkControls:frameworkControls.filter(c=>c.control_code.includes(scope==="provider"?"-P-":"-T-")),[framework,frameworkControls,scope]);
- const domains=useMemo(()=>Map.groupBy(scoped,c=>c.domain_ar||"غير مصنف"),[scoped]);
- const selectedDomain=activeDomain&&domains.has(activeDomain)?activeDomain:[...domains.keys()][0]||"";
- const domainControls=domains.get(selectedDomain)??[];
- const normalizedQuery=normalizeCode(search);
- const filtered=domainControls.filter(c=>{
-  const searchMatch=normalizeCode(`${c.control_code} ${c.title_ar} ${c.official_text_ar||""} ${framework} ${c.control_owner||""}`).includes(normalizedQuery);
-  const statusMatch=status==="all"||(status==="implemented"?good(c.implementation_status):c.implementation_status===status);
-  const assignmentMatch=assignment==="all"||(assignment==="assigned"?!!c.control_owner_id:!c.control_owner_id);
-  return searchMatch&&statusMatch&&assignmentMatch;
- });
- const sorted=[...filtered].sort((a,b)=>a.control_code.localeCompare(b.control_code,"en",{numeric:true}));
- const searching=!!search.trim()||status!=="all"||assignment!=="all";
- // A sub-control's own code/text can match the search even when its parent's
- // does not (e.g. searching the exact code "1-9-3-1" never matches parent
- // "1-9-3"). The structure view renders sub-controls nested under their
- // parent row, so without the parent present the matching child would be
- // silently unreachable. Back-fill any such parent -- present so the child
- // can render, but not counted as a match (it's excluded from `filtered`/
- // `sorted`, which drive the result count and the follow-up table).
- const filteredIds=new Set(filtered.map(c=>c.id));
- const structureRows=searching
-  ?[...sorted,...domainControls.filter(c=>c.hierarchy_level!=="sub_control"&&!filteredIds.has(c.id)&&filtered.some(f=>f.parent_control_id===c.id))].sort((a,b)=>a.control_code.localeCompare(b.control_code,"en",{numeric:true}))
-  :sorted;
- const subdomains=Map.groupBy(structureRows,c=>c.control_code.split("-").slice(0,2).join("-"));
- function setFilter(key:"status"|"assignment",value:string){const params=new URLSearchParams(searchParams.toString());if(value==="all")params.delete(key);else params.set(key,value);router.replace(params.size?`/controls?${params.toString()}`:"/controls",{scroll:false});}
- function resetFilters(){setSearch("");router.replace("/controls",{scroll:false});}
- function chooseFramework(code:string){setFramework(code);setActiveDomain("");setScope("all");setSearch("");router.replace("/controls",{scroll:false});}
+function ControlsContent() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const requestedFramework = params.get("framework") || "ECC";
+  const requestedDomain = params.get("domain") || "";
+  const rawStatus = params.get("status") || "all";
+  const status = ["all", "implemented", "in_progress", "not_started", "not_applicable"].includes(rawStatus) ? rawStatus : "all";
+  const rawAssignment = params.get("assignment") || "all";
+  const assignment = ["all", "assigned", "unassigned"].includes(rawAssignment) ? rawAssignment : "all";
+  const evidenceFilter = params.get("evidence") === "needed";
+  const view: View = params.get("view") === "structure" ? "structure" : "followup";
 
- if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>;
- if(error)return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل الضوابط</h1><p className="catalog-error">{error.message}</p><Link href="/cybersecurity">العودة إلى لوحة المتابعة</Link></main>;
- return <main className="workflow-page catalog-page" dir="rtl">
-  <WorkflowHeading title="مكتبة الضوابط" description="اختر الإطار، ثم المجال الرئيسي والمجال الفرعي للوصول إلى الضابط ومتابعة تنفيذه." action={canManage?<Link className="workflow-button" href="/controls/bulk-assign">تعيين المالكين جماعيًا ←</Link>:undefined}/>
-  <section aria-labelledby="framework-heading">
-   <div className="catalog-section-heading"><div><span>الخطوة 1</span><h2 id="framework-heading">اختر الإطار التنظيمي</h2></div><small>{frameworks.length} إطارات متاحة</small></div>
-   <div className="framework-grid">{frameworks.map(item=>{const rows=controls.filter(c=>c.framework_id===item.id);const done=rows.filter(c=>good(c.implementation_status)).length;return <button key={item.id} className={`framework-card ${framework===item.code?"active":""}`} onClick={()=>chooseFramework(item.code)} aria-pressed={framework===item.code}><strong dir="ltr">{item.code}</strong><span>{item.name_ar}</span><small>{item.version} · {rows.length} ضابط</small><progress max={Math.max(rows.length,1)} value={done}/></button>})}</div>
-  </section>
-  {selectedFramework&&<>
-   <section className="framework-summary"><div><span className="catalog-kicker">{selectedFramework.code} · الإصدار {selectedFramework.version}</span><h2>{selectedFramework.name_ar}</h2><p>اختر مجالًا لعرض مكوناته وضوابطه بصورة مستقلة.</p></div><div className="view-switch" role="group" aria-label="طريقة العرض"><button className={view==="structure"?"active":""} onClick={()=>setView("structure")}>عرض الهيكل</button><button className={view==="followup"?"active":""} onClick={()=>setView("followup")}>عرض المتابعة</button></div></section>
-   {framework==="CCC"&&<div className="scope-switch" role="group" aria-label="نطاق ضوابط الحوسبة السحابية"><button className={scope==="all"?"active":""} onClick={()=>{setScope("all");setActiveDomain("")}}>الكل</button><button className={scope==="provider"?"active":""} onClick={()=>{setScope("provider");setActiveDomain("")}}>مقدم الخدمة CSP</button><button className={scope==="tenant"?"active":""} onClick={()=>{setScope("tenant");setActiveDomain("")}}>المشترك CST</button></div>}
-   <div className="workflow-metrics"><WorkflowMetric label="إجمالي الضوابط" value={scoped.length}/><WorkflowMetric label="مطبق كليًا" value={scoped.filter(c=>good(c.implementation_status)).length} tone="success"/><WorkflowMetric label="مطبق جزئيًا" value={scoped.filter(c=>c.implementation_status==="in_progress").length} tone="warning"/><WorkflowMetric label="غير مطبق" value={scoped.filter(c=>c.implementation_status==="not_started").length}/></div>
-   <section aria-labelledby="domain-heading">
-    <div className="catalog-section-heading"><div><span>الخطوة 2</span><h2 id="domain-heading">اختر المجال الرئيسي</h2></div><small>{domains.size} مجالات</small></div>
-    <div className="domain-grid">{[...domains].map(([name,rows])=>{const done=rows.filter(c=>good(c.implementation_status)).length;const percent=rows.length?Math.round(done/rows.length*100):0;const parentCount=rows.filter(c=>c.hierarchy_level!=="sub_control").length;const subCount=rows.filter(c=>c.hierarchy_level==="sub_control").length;const stats=[parentCount>0?`${parentCount} ضابط أساسي`:null,subCount>0?`${subCount} ضابط فرعي`:null].filter(Boolean).join(" · ");return <button key={name} className={`domain-card ${selectedDomain===name?"active":""}`} onClick={()=>setActiveDomain(name)} aria-pressed={selectedDomain===name}><span className="domain-index">{domainNumber(rows)}</span><span><strong>{name}</strong><small>{stats}</small></span><b>{percent}%</b></button>})}</div>
-   </section>
-   <section className="catalog-workspace" aria-labelledby="selected-domain-heading">
-    <div className="catalog-workspace-head"><div><span>الخطوة 3</span><h2 id="selected-domain-heading"><b dir="ltr">{domainNumber(domainControls)}</b> {selectedDomain}</h2><p>{domainControls.length} ضابط ضمن المجال المحدد</p></div></div>
-    <div className="workflow-filter workflow-filter-grid catalog-filters"><div><label htmlFor="control-search" className="cgp-field-label">البحث داخل المجال</label><input id="control-search" dir="auto" value={search} onChange={e=>setSearch(e.target.value)} placeholder="رقم الضابط أو اسمه أو المالك"/></div><div><label htmlFor="control-status" className="cgp-field-label">حالة التنفيذ</label><select id="control-status" value={status} onChange={e=>setFilter("status",e.target.value)}><option value="all">كل الحالات</option><option value="implemented">مطبق كليًا</option><option value="in_progress">مطبق جزئيًا</option><option value="not_started">غير مطبق</option><option value="not_applicable">لا ينطبق</option></select></div><div><label htmlFor="control-assignment" className="cgp-field-label">الإسناد</label><select id="control-assignment" value={assignment} onChange={e=>setFilter("assignment",e.target.value)}><option value="all">الكل</option><option value="assigned">معيّن</option><option value="unassigned">غير معيّن</option></select></div></div>
-    <ResultSummary count={filtered.length} total={domainControls.length} active={searching} reset={resetFilters}/>
-    {view==="structure"?<div className="subdomain-list">{[...subdomains].map(([code,rows],index)=>{const parents=rows.filter(c=>c.hierarchy_level!=="sub_control");const byParent=Map.groupBy(rows.filter(c=>c.hierarchy_level==="sub_control"),c=>c.parent_control_id??-1);return <details className="subdomain-card" key={code} open={searching||index===0}><summary><span><b dir="ltr">{code}</b><strong>{code==="1-1"&&framework==="ECC"?"استراتيجية الأمن السيبراني":cleanTitle(rows[0].title_ar)}</strong><small>{rows.length} ضابط وبند فرعي</small></span><span className="catalog-chevron" aria-hidden="true">‹</span></summary><ul>{parents.map(c=>{const subs=byParent.get(c.id)??[];const appl=applicabilityLabel(c.applicability);return <li key={c.id}><Link className="catalog-row" href={`/controls/${c.id}`}><span className="catalog-code" dir="ltr">{c.control_code}</span><span className="catalog-title" title={c.official_text_ar??undefined}>{displayTitle(c,framework)}</span>{appl&&<span className="catalog-applicability">{appl}</span>}<StatusBadge status={c.implementation_status}/><span aria-hidden="true">←</span></Link>{subs.length>0&&<ul className="catalog-subrows">{subs.map(s=>{const sAppl=applicabilityLabel(s.applicability);return <li key={s.id}><Link className="catalog-row catalog-subrow" href={`/controls/${s.id}`}><span className="catalog-code" dir="ltr">{s.control_code}</span><span className="catalog-title" title={s.official_text_ar??undefined}>{displayTitle(s,framework)}</span>{sAppl&&<span className="catalog-applicability">{sAppl}</span>}<StatusBadge status={s.implementation_status}/><span aria-hidden="true">←</span></Link></li>})}</ul>}</li>})}</ul></details>})}</div>:<div className="followup-table-wrap" tabIndex={0} role="region" aria-label="جدول متابعة الضوابط">
-     <table className="followup-table">
-      <colgroup>
-       <col className="followup-code-col" />
-       <col />
-       <col className="followup-owner-col" />
-       <col className="followup-execution-col" />
-       <col className="followup-evidence-col" />
-       <col className="followup-due-col" />
-       <col className="followup-action-col" />
-      </colgroup>
-      <thead>
-       <tr>
-        <th scope="col">الضابط</th>
-        <th scope="col">الوصف</th>
-        <th scope="col">المالك</th>
-        <th scope="col">التنفيذ</th>
-        <th scope="col">الدليل</th>
-        <th scope="col">الاستحقاق</th>
-        <th scope="col">الإجراء</th>
-       </tr>
-      </thead>
-      <tbody>{sorted.map(c=>{
-       const description=displayTitle(c,framework);
-       const owner=c.control_owner||"غير معيّن";
-       return <tr key={c.id}>
-        <td dir="ltr">{c.control_code}</td>
-        <td><span className="followup-description" title={description??undefined}>{description}</span></td>
-        <td><bdi className="followup-owner" title={owner}>{owner}</bdi></td>
-        <td><StatusBadge status={c.implementation_status}/></td>
-        <td><StatusBadge status={c.evidence_status}/></td>
-        <td>{c.due_date?<bdi className="followup-date" dir="ltr">{c.due_date}</bdi>:"غير محدد"}</td>
-        <td><Link href={`/controls/${c.id}`}>فتح ←</Link></td>
-       </tr>;
-      })}</tbody>
-     </table>
-    </div>}
-    {!filtered.length&&<div className="workflow-empty">لا توجد ضوابط مطابقة داخل هذا المجال.</div>}
-   </section>
-  </>}
- </main>;
+  const [search, setSearch] = useState("");
+  const [cloudScope, setCloudScope] = useState("all");
+  const [controls, setControls] = useState<Control[]>([]);
+  const [frameworks, setFrameworks] = useState<Framework[]>([]);
+  const [canManage, setCanManage] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedControl, setSelectedControl] = useState<Control | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const { user, profile } = await requireProfile();
+        if (!active) return;
+        setCanManage(profile.role === "admin" || profile.role === "cybersecurity_team");
+        let query = supabase.from("controls").select("id,framework_id,control_code,title_ar,description_ar,official_text_ar,hierarchy_level,parent_control_id,applicability,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner,control_owner_id").order("id");
+        if (profile.role === "control_owner") query = query.eq("control_owner_id", user.id);
+        const [{ data, error }, { data: frameworkData, error: frameworkError }] = await Promise.all([
+          query, supabase.from("frameworks").select("id,code,name_ar,version").eq("is_active", true).order("id"),
+        ]);
+        if (error || frameworkError) throw error || frameworkError;
+        if (active) { setControls((data ?? []) as Control[]); setFrameworks((frameworkData ?? []) as Framework[]); }
+      } catch (e) {
+        if (active) setError(new Error(e instanceof Error ? e.message : "تعذر تحميل الضوابط"));
+        const { data } = await supabase.auth.getSession();
+        if (active && !data.session) router.replace("/login");
+      } finally { if (active) setLoading(false); }
+    })();
+    return () => { active = false; };
+  }, [router]);
+
+  const selectedFramework = frameworks.find(item => item.code === requestedFramework) ?? frameworks.find(item => item.code === "ECC") ?? frameworks[0];
+  const framework = selectedFramework?.code ?? "";
+  const scoped = useMemo(() => controls.filter(c => c.framework_id === selectedFramework?.id &&
+    (framework !== "CCC" || cloudScope === "all" || c.control_code.includes(cloudScope === "provider" ? "-P-" : "-T-"))),
+    [controls, selectedFramework, framework, cloudScope]);
+  const domains = useMemo(() => Map.groupBy(scoped, c => c.domain_ar || "غير مصنف"), [scoped]);
+  const domain = domains.has(requestedDomain) ? requestedDomain : [...domains.keys()][0] ?? "";
+  const domainControls = domains.get(domain) ?? [];
+  const query = normalize(search);
+  const filtered = domainControls.filter(c => {
+    const searchMatch = normalize(`${c.control_code} ${c.title_ar} ${c.official_text_ar ?? ""} ${framework} ${c.control_owner ?? ""}`).includes(query);
+    const statusMatch = status === "all" || (status === "implemented" ? good(c.implementation_status) : c.implementation_status === status);
+    const assignmentMatch = assignment === "all" || (assignment === "assigned" ? !!c.control_owner_id : !c.control_owner_id);
+    return searchMatch && statusMatch && assignmentMatch && (!evidenceFilter || needsEvidence(c));
+  }).sort(byCode);
+  const filtering = !!search.trim() || status !== "all" || assignment !== "all" || evidenceFilter;
+  const primaryCount = scoped.filter(c => c.hierarchy_level !== "sub_control").length;
+  const today = riyadhDate.format(new Date());
+  const nextWeek = new Date(Date.parse(`${today}T00:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
+
+  function updateParams(values: Record<string, string | null>) {
+    const next = new URLSearchParams(params.toString());
+    for (const [key, value] of Object.entries(values)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    router.replace(next.size ? `/controls?${next.toString()}` : "/controls", { scroll: false });
+  }
+
+  if (loading) return <main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>;
+  if (error) return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل الضوابط</h1><p className="catalog-error">{error.message}</p><Link href="/cybersecurity">العودة إلى لوحة المتابعة</Link></main>;
+
+  return <main className="workflow-page catalog-page" dir="rtl">
+    <header className="catalog-header">
+      <div>
+        <h1>الضوابط</h1>
+        <p>تابع حالة التنفيذ والأدلة حسب الإطار والمجال.</p>
+      </div>
+      <div className="catalog-header-actions">
+        <div className="catalog-views" role="group" aria-label="طريقة العرض">
+          <button type="button" aria-pressed={view === "followup"} onClick={() => updateParams({ view: null })}>المتابعة</button>
+          <button type="button" aria-pressed={view === "structure"} onClick={() => updateParams({ view: "structure" })}>عرض الهيكل</button>
+        </div>
+        {canManage && <details className="catalog-menu">
+          <summary>الإجراءات</summary>
+          <div className="catalog-menu-panel catalog-actions-panel">
+            <Link href="/controls/bulk-assign">تعيين المالكين جماعيًا</Link>
+          </div>
+        </details>}
+      </div>
+    </header>
+
+    {!selectedFramework ? <p className="catalog-empty" role="status">لا توجد أطر تنظيمية متاحة ضمن نطاقك.</p> : <>
+      <section className="catalog-scope" aria-label="نطاق الضوابط وتصفية القائمة">
+        <div className="catalog-toolbar">
+          <label className="catalog-field"><span>الإطار</span>
+            <select value={framework} onChange={e => {
+              setSearch(""); setCloudScope("all");
+              updateParams({ framework: e.target.value, domain: null, status: null, assignment: null, evidence: null });
+            }}>
+              {frameworks.map(f => <option key={f.id} value={f.code}>{f.code}</option>)}
+            </select>
+          </label>
+          {framework === "CCC" && <label className="catalog-field"><span>نطاق الحوسبة السحابية</span>
+            <select value={cloudScope} onChange={e => { setCloudScope(e.target.value); updateParams({ domain: null }); }}>
+              <option value="all">الكل</option><option value="provider">مقدم الخدمة CSP</option><option value="tenant">المشترك CST</option>
+            </select>
+          </label>}
+          <label className="catalog-field catalog-domain"><span>المجال</span>
+            <select value={domain} disabled={!domains.size} onChange={e => updateParams({ domain: e.target.value })}>
+              {!domains.size && <option value="">لا توجد مجالات</option>}
+              {[...domains.keys()].map(name => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </label>
+          <label className="catalog-field catalog-search"><span>البحث داخل المجال</span>
+            <input type="search" dir="auto" value={search} onChange={e => setSearch(e.target.value)} placeholder="رقم الضابط أو النص أو المالك"/>
+          </label>
+          <details className="catalog-menu catalog-filter">
+            <summary>التصفية{(status !== "all" || assignment !== "all") && <span className="catalog-filter-dot" aria-label="تصفية نشطة"/>}</summary>
+            <div className="catalog-menu-panel catalog-filter-panel">
+              <label className="catalog-field"><span>حالة التنفيذ</span>
+                <select value={status} onChange={e => updateParams({ status: e.target.value === "all" ? null : e.target.value })}>
+                  <option value="all">كل الحالات</option><option value="implemented">مطبق كليًا</option><option value="in_progress">مطبق جزئيًا</option><option value="not_started">غير مطبق</option><option value="not_applicable">لا ينطبق</option>
+                </select>
+              </label>
+              <label className="catalog-field"><span>الإسناد</span>
+                <select value={assignment} onChange={e => updateParams({ assignment: e.target.value === "all" ? null : e.target.value })}>
+                  <option value="all">الكل</option><option value="assigned">معيّن</option><option value="unassigned">غير معيّن</option>
+                </select>
+              </label>
+            </div>
+          </details>
+        </div>
+        <div className="catalog-scope-note">
+          <span>{selectedFramework.name_ar}{selectedFramework.version && <> · إصدار <bdi>{selectedFramework.version}</bdi></>}</span>
+          <span><strong>{primaryCount}</strong> ضابط أساسي <span aria-hidden="true">·</span> <strong>{scoped.length - primaryCount}</strong> بند فرعي</span>
+        </div>
+      </section>
+
+      <section className="catalog-results" aria-label="نتائج الضوابط">
+        <div className="catalog-results-bar">
+          <div className="catalog-quick-filters" role="group" aria-label="فلاتر المتابعة السريعة">
+            <button type="button" aria-pressed={assignment === "unassigned"} onClick={() => updateParams({ assignment: assignment === "unassigned" ? null : "unassigned" })}>بلا مالك</button>
+            <button type="button" aria-pressed={evidenceFilter} onClick={() => updateParams({ evidence: evidenceFilter ? null : "needed" })}>يحتاج دليلًا</button>
+          </div>
+          <ResultSummary count={filtered.length} total={domainControls.length} active={filtering} reset={() => {
+            setSearch(""); updateParams({ status: null, assignment: null, evidence: null });
+          }}/>
+        </div>
+        {!filtered.length ? <p className="catalog-empty">لا توجد ضوابط مطابقة داخل هذا المجال.</p>
+        : view === "structure" ? <StructureList rows={filtered} domainControls={domainControls} framework={framework} filtering={filtering}/>
+        : <table className="catalog-table" aria-label="متابعة الضوابط" role="table">
+          <colgroup><col/><col className="catalog-owner-col"/><col className="catalog-status-col"/><col className="catalog-status-col"/></colgroup>
+          <thead role="rowgroup"><tr role="row">
+            <th scope="col" role="columnheader">الضابط</th><th scope="col" role="columnheader">المالك</th><th scope="col" role="columnheader">التنفيذ</th><th scope="col" role="columnheader">الدليل</th>
+          </tr></thead>
+          <tbody role="rowgroup">{filtered.map(control => {
+            const label = shortLabel(control, framework);
+            const attention = dueAttention(control, today, nextWeek);
+            return <tr key={control.id} role="row">
+              <th scope="row" role="rowheader">
+                <Link className="catalog-control-link" href={`/controls/${control.id}`} prefetch={false} onNavigate={event => {
+                  if (!window.matchMedia("(min-width: 761px)").matches) return;
+                  event.preventDefault(); setSelectedControl(control);
+                }}>
+                  <span className="catalog-control-line">
+                    <bdi className="catalog-code" dir="ltr">{control.control_code}</bdi>
+                    <span className="catalog-control-label" title={label}>{label}</span>
+                  </span>
+                  {attention && <span className={`catalog-deadline ${attention === "متأخر" ? "is-overdue" : ""}`}>{attention}</span>}
+                </Link>
+              </th>
+              <td role="cell"><span className="catalog-mobile-label" aria-hidden="true">المالك</span><bdi className="catalog-owner" title={control.control_owner ?? undefined}>{control.control_owner || "غير معيّن"}</bdi></td>
+              <td role="cell"><span className="catalog-mobile-label" aria-hidden="true">التنفيذ</span><StatusBadge status={control.implementation_status}/></td>
+              <td role="cell"><span className="catalog-mobile-label" aria-hidden="true">الدليل</span><StatusBadge status={control.evidence_status}/></td>
+            </tr>;
+          })}</tbody>
+        </table>}
+      </section>
+      {selectedControl && <ControlDrawer key={selectedControl.id} control={selectedControl} framework={selectedFramework} onClose={() => setSelectedControl(null)}/>}
+    </>}
+  </main>;
+}
+
+function StructureList({ rows, domainControls, framework, filtering }: { rows: Control[]; domainControls: Control[]; framework: string; filtering: boolean }) {
+  // Keep a matching child reachable even when the search excludes its parent.
+  const shown = new Set(rows.map(row => row.id));
+  const parents = new Set(rows.flatMap(row => row.parent_control_id == null ? [] : [row.parent_control_id]));
+  const withParents = [...rows, ...domainControls.filter(row => parents.has(row.id) && !shown.has(row.id))].sort(byCode);
+  const groups = Map.groupBy(withParents, row => row.control_code.split("-").slice(0, 2).join("-"));
+  function item(row: Control) {
+    const applicability = applicabilityLabel(row.applicability);
+    return <Link className="catalog-structure-link" href={`/controls/${row.id}`} prefetch={false}>
+      <bdi className="catalog-code" dir="ltr">{row.control_code}</bdi><span>{shortLabel(row, framework)}</span>
+      {applicability && <small>{applicability}</small>}<StatusBadge status={row.implementation_status}/>
+    </Link>;
+  }
+  return <div className="catalog-structure">{[...groups].map(([code, group], index) => {
+    const groupIds = new Set(group.map(row => row.id));
+    const roots = group.filter(row => row.hierarchy_level !== "sub_control" || !groupIds.has(row.parent_control_id ?? -1));
+    const byParent = Map.groupBy(group.filter(row => row.hierarchy_level === "sub_control"), row => row.parent_control_id);
+    return <details key={code} open={filtering || index === 0}>
+      <summary><bdi className="catalog-code" dir="ltr">{code}</bdi> <strong>{cleanTitle(group[0].title_ar)}</strong></summary>
+      <ul>{roots.map(row => <li key={row.id}>{item(row)}
+        {!!byParent.get(row.id)?.length && <ul>{byParent.get(row.id)?.map(child => <li key={child.id}>{item(child)}</li>)}</ul>}
+      </li>)}</ul>
+    </details>;
+  })}</div>;
+}
+
+function ControlDrawer({ control, framework, onClose }: { control: Control; framework: Framework; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [evidence, setEvidence] = useState<EvidencePreview[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  }, []);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const { data, error } = await supabase.rpc("grc_evidence_register")
+          .select("id,link_id,evidence_name,file_name,status")
+          .eq("control_id", control.id).eq("is_current", true).order("uploaded_at", { ascending: false }).limit(4);
+        if (error) throw error;
+        if (active) setEvidence((data ?? []) as EvidencePreview[]);
+      } catch {
+        if (active) setFailed(true);
+      }
+    })();
+    return () => { active = false; };
+  }, [control.id]);
+
+  const applicability = applicabilityLabel(control.applicability);
+  return <dialog className="catalog-drawer" dir="rtl" ref={dialogRef} aria-labelledby="catalog-drawer-title" onClose={onClose}
+    onClick={event => { if (event.target === event.currentTarget) dialogRef.current?.close(); }}>
+    <article>
+      <header className="catalog-drawer-header">
+        <div className="catalog-drawer-meta"><bdi className="catalog-code" dir="ltr">{control.control_code}</bdi><bdi>{framework.code}</bdi> <span>{control.hierarchy_level === "sub_control" ? "بند فرعي" : "ضابط أساسي"}</span></div>
+        <button className="catalog-close" type="button" autoFocus aria-label="إغلاق تفاصيل الضابط" onClick={() => dialogRef.current?.close()}>×</button>
+        <h2 id="catalog-drawer-title">{(framework.code === "ECC" ? getEccOfficialTitle(control.control_code) : undefined) || cleanTitle(control.title_ar) || "تفاصيل الضابط"}</h2>
+        <p>{control.domain_ar}{applicability && ` · ${applicability}`}</p>
+      </header>
+      <div className="catalog-drawer-body">
+        <dl className="catalog-drawer-facts">
+          <div><dt>المالك</dt><dd><bdi>{control.control_owner || "غير معيّن"}</bdi></dd></div>
+          <div><dt>تاريخ الاستحقاق</dt><dd>{control.due_date ? <bdi dir="ltr">{control.due_date}</bdi> : "غير محدد"}</dd></div>
+          <div><dt>حالة التنفيذ</dt><dd><StatusBadge status={control.implementation_status}/></dd></div>
+          <div><dt>حالة الدليل</dt><dd><StatusBadge status={control.evidence_status}/></dd></div>
+        </dl>
+        <section aria-labelledby="catalog-requirement-title">
+          <h3 id="catalog-requirement-title">{control.official_text_ar ? "النص الرسمي للضابط" : "الوصف المسجل"}</h3>
+          <p className="catalog-requirement">{control.official_text_ar || control.description_ar || "لا يوجد نص مسجل لهذا الضابط."}</p>
+        </section>
+        <section aria-labelledby="catalog-evidence-title" aria-busy={evidence === null && !failed}>
+          <h3 id="catalog-evidence-title">الأدلة المرفوعة الحالية</h3>
+          {failed ? <p role="status">تعذر تحميل ملخص الأدلة. افتح صفحة الضابط للمحاولة مرة أخرى.</p>
+          : evidence === null ? <p role="status">جاري تحميل الأدلة…</p>
+          : !evidence.length ? <p>لا توجد أدلة حالية معروضة ضمن صلاحياتك.</p>
+          : <><ul className="catalog-evidence-list">{evidence.slice(0, 3).map(item => <li key={`${item.id}-${item.link_id ?? "source"}`}>
+            <span dir="auto">{item.evidence_name || item.file_name || "دليل بدون اسم"}</span>
+            <StatusBadge status={item.status || ""}/>
+          </li>)}</ul>{evidence.length > 3 && <p>تتوفر أدلة إضافية في صفحة الضابط.</p>}</>}
+        </section>
+      </div>
+      <footer className="catalog-drawer-footer"><Link href={`/controls/${control.id}`} onClick={() => dialogRef.current?.close()}>فتح صفحة الضابط الكاملة <span aria-hidden="true">←</span></Link></footer>
+    </article>
+  </dialog>;
 }
