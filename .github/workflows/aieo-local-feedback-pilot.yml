@@ -1,0 +1,204 @@
+# Bounded local-only application repair. No external model or secret.
+name: AIEO Local Real-Code QA Pilot
+on:
+  push:
+    branches: [aieo/qa-local-feedback-submit-20261126]
+    paths:
+      - '.github/workflows/aieo-local-feedback-pilot.yml'
+permissions:
+  contents: read
+concurrency:
+  group: aieo-local-feedback-single
+  cancel-in-progress: false
+jobs:
+  developer:
+    name: Developer generates exact bounded repair
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: node scripts/aieo-local-feedback-pilot.mjs developer
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aieo-local-developer
+          path: aieo-local-proof/developer.json
+          retention-days: 1
+          if-no-files-found: error
+
+  qa:
+    needs: developer
+    name: Independent QA repro, regression and full application CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-local-developer
+          path: aieo-local-proof
+      - run: npm ci
+      - name: Reproduce duplicate-submit bug on original application handler
+        env:
+          AIEO_EXPECT_BASELINE_DUPLICATE: '1'
+        run: node --test scripts/test-feedback-submit-concurrency.mjs
+      - run: node scripts/aieo-local-feedback-pilot.mjs qa-prepare
+      - name: Prove duplicate prevention and retry behavior on repaired handler
+        run: node --test scripts/test-feedback-submit-concurrency.mjs
+      - run: npm run lint
+      - run: npx next typegen
+      - run: npx tsc --noEmit
+      - name: Existing application regression suite
+        run: |
+          node scripts/test-role-home.mjs
+          node scripts/test-data-office-release-scope.mjs
+          node --test scripts/test-data-office-mutations.mjs scripts/test-nudee-mutations.mjs
+      - name: Build application using synthetic configuration
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
+        run: npm run build
+      - run: node scripts/aieo-local-feedback-pilot.mjs qa-pass
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aieo-local-qa
+          path: aieo-local-proof/qa.json
+          retention-days: 1
+          if-no-files-found: error
+
+  security:
+    needs: developer
+    name: Independent Security verifies bounded source and unchanged data handling
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-local-developer
+          path: aieo-local-proof
+      - run: node scripts/aieo-local-feedback-pilot.mjs security
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aieo-local-security
+          path: aieo-local-proof/security.json
+          retention-days: 1
+          if-no-files-found: error
+
+  reviewer:
+    needs: [qa, security]
+    name: Independent Reviewer binds exact evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-local-developer
+          path: aieo-local-proof
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-local-qa
+          path: aieo-local-proof
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-local-security
+          path: aieo-local-proof
+      - run: node scripts/aieo-local-feedback-pilot.mjs reviewer
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aieo-local-reviewer
+          path: aieo-local-proof/reviewer.json
+          retention-days: 1
+          if-no-files-found: error
+
+  publisher:
+    needs: reviewer
+    name: Draft-only real application patch publisher
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-local-developer
+          path: aieo-local-proof
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-local-qa
+          path: aieo-local-proof
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-local-security
+          path: aieo-local-proof
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-local-reviewer
+          path: aieo-local-proof
+      - name: Independently reproduce verified source and test without executing candidate
+        run: node scripts/aieo-local-feedback-pilot.mjs publish-prepare
+      - name: Publish actual repair as Draft PR only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/aieo/qa-local-feedback-submit-20261126
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REPOSITORY" = jayalshehri/CGP-MVP
+          base=9ede5b5219850add924f4e8c2174453be4a39129
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$base"
+          branch="aieo/qa-feedback-submit-patch-$GITHUB_RUN_ID"
+          git -c core.hooksPath=/dev/null switch -c "$branch" "$base"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          cp "$RUNNER_TEMP/aieo-feedback-candidate.tsx" components/FeedbackWidget.tsx
+          cp "$RUNNER_TEMP/aieo-feedback-regression.mjs" scripts/test-feedback-submit-concurrency.mjs
+          test "$(sha256sum components/FeedbackWidget.tsx | cut -d' ' -f1)" = "$(sed -n '1p' "$RUNNER_TEMP/aieo-feedback-hashes")"
+          test "$(sha256sum scripts/test-feedback-submit-concurrency.mjs | cut -d' ' -f1)" = "$(sed -n '2p' "$RUNNER_TEMP/aieo-feedback-hashes")"
+          git -c core.hooksPath=/dev/null add -- components/FeedbackWidget.tsx scripts/test-feedback-submit-concurrency.mjs
+          test "$(git diff --cached --name-only)" = "$(printf 'components/FeedbackWidget.tsx\nscripts/test-feedback-submit-concurrency.mjs')"
+          git diff --cached --check
+          git -c core.hooksPath=/dev/null commit -m 'fix(feedback): guard against concurrent duplicate submission'
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$base"
+          gh auth setup-git
+          git -c core.hooksPath=/dev/null push origin "HEAD:refs/heads/$branch"
+          gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --draft \
+            --title "fix(feedback): prevent concurrent duplicate submission (AIEO local QA pilot $GITHUB_RUN_ID)" \
+            --body "Actual application repair, generated by a deterministic bounded Developer without an external provider. Baseline duplicate reproduced with mocked Supabase; repaired handler blocks it and permits retry after offline, auth and network errors. Independent QA (lint/types/regressions/build), Security scope gate and Reviewer verified the same candidate and regression hashes. Evidence: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. No real DB access, app source sent to OpenRouter, merge or production deploy. Human review mandatory."
