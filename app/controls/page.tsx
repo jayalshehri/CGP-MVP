@@ -97,7 +97,7 @@ function ControlsContent(){
  function chooseFramework(code:string){setFramework(code);setActiveDomain("");setScope("all");setSearch("");router.replace("/controls",{scroll:false});}
 
  if(loading)return <main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>;
- if(error)return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل الضوابط</h1><p className="catalog-error">{error.message}</p><Link href="/">العودة إلى لوحة المتابعة</Link></main>;
+ if(error)return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل الضوابط</h1><p className="catalog-error">{error.message}</p><Link href="/cybersecurity">العودة إلى لوحة المتابعة</Link></main>;
  return <main className="workflow-page catalog-page" dir="rtl">
   <WorkflowHeading title="مكتبة الضوابط" description="اختر الإطار، ثم المجال الرئيسي والمجال الفرعي للوصول إلى الضابط ومتابعة تنفيذه." action={canManage?<Link className="workflow-button" href="/controls/bulk-assign">تعيين المالكين جماعيًا ←</Link>:undefined}/>
   <section aria-labelledby="framework-heading">

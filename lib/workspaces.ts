@@ -14,5 +14,13 @@ export const dataGovernanceEnabled =
 export function roleHomePath(role: UserRole): string {
   if (role === "nudee_owner") return "/data-governance/nudee";
   if (role === "data_governance_team") return "/data-governance/nudee-dashboard";
-  return "/";
+  return "/cybersecurity";
+}
+
+export type WorkspaceName = "data" | "cyber";
+
+export function workspaceHome(role: UserRole, workspace: WorkspaceName): string | null {
+  if (workspace === "data" && role === "admin") return "/data-governance/nudee-dashboard";
+  const home = roleHomePath(role);
+  return (workspace === "data") === home.startsWith("/data-governance/") ? home : null;
 }
