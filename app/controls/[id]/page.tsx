@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import StatusBadge, { statusText } from "@/components/StatusBadge";
 import EvidenceDownload from "@/components/EvidenceDownload";
@@ -8,6 +8,7 @@ import ControlAssessmentHistory from "@/components/ControlAssessmentHistory";
 import GrcAuditTrail from "@/components/GrcAuditTrail";
 import ControlReviewPanel from "@/components/ControlReviewPanel";
 import { controlPlan } from "@/lib/control-plan";
+import { catalogBackHref, catalogDetailHref } from "@/lib/control-catalog-return";
 import { eccImplementationGuideUrl, eccOfficialControlsUrl, getEccOfficialTitle, getEccStrategyExample } from "@/lib/ecc-strategy-example";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -43,7 +44,13 @@ const single=<T,>(value:T|T[]|null):T|null=>Array.isArray(value)?value[0]??null:
 const cleanTitle=(value:string)=>value.replace(/\s*[-–]\s*[\d-]+\s*$/,"").trim();
 
 export default function ControlDetailsPage() {
+ return <Suspense fallback={<main className="detail-page" role="status">جاري تحميل الضابط…</main>}><ControlDetailsContent/></Suspense>;
+}
+
+function ControlDetailsContent() {
  const {id}=useParams<{id:string}>(); const router=useRouter();
+ const fromCatalog=useSearchParams().get("from")==="catalog";
+ const [viewer,setViewer]=useState("");
  const [control,setControl]=useState<Control|null>(null),[evidence,setEvidence]=useState<Evidence[]>([]);
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[role,setRole]=useState<UserRole|null>(null);
  const [tab,setTab]=useState(0);
@@ -59,7 +66,7 @@ export default function ControlDetailsPage() {
  const [parentControl,setParentControl]=useState<HierarchyPeer|null>(null);
  const [childControls,setChildControls]=useState<HierarchyPeer[]>([]);
  useEffect(()=>{let active=true;(async()=>{try{
-  const {profile}=await requireProfile();if(!active)return;setRole(profile.role);
+  const {user,profile}=await requireProfile();if(!active)return;setRole(profile.role);setViewer(user.id);
   const controlId=Number(id);if(!Number.isSafeInteger(controlId)||controlId<=0)throw new Error('رقم الضابط غير صحيح.');
   const [c,e,rc,cy]=await Promise.all([
    supabase.from('controls').select('*,frameworks(code,name_ar,version,is_active,source_url)').eq('id',controlId).single(),
@@ -101,8 +108,10 @@ export default function ControlDetailsPage() {
  const canReview=!archived&&(role==='admin'||role==='cybersecurity_team');
  const canUpload=!archived&&(canReview||role==='control_owner');
  useEffect(()=>{let active=true;if(!control||!canReview)return()=>{active=false;};void Promise.all([supabase.rpc('ecc_assessment_reflections',{p_ecc_control_id:control.id}),supabase.rpc('grc_control_mappings',{p_control_id:control.id})]).then(([reflectionResult,mappingResult])=>{if(active){setReflections((reflectionResult.data??[]) as AssessmentReflection[]);setMappedControls((mappingResult.data??[]) as MappedControl[]);}});return()=>{active=false;};},[control,canReview]);
+ const backToControls=fromCatalog?catalogBackHref(viewer):"/controls";
+ const relatedControlHref=(controlId:number)=>fromCatalog?catalogDetailHref(controlId):`/controls/${controlId}`;
  if(loading)return <main className="detail-page" role="status">جاري تحميل الضابط…</main>;
- if(error||!control)return <main className="detail-page"><p role="alert">{error}</p><Link href="/controls">العودة إلى الضوابط</Link></main>;
+ if(error||!control)return <main className="detail-page"><p role="alert">{error}</p><Link href={backToControls}>العودة إلى الضوابط</Link></main>;
  const plan=controlPlan(control.control_code,control.description_ar||'',control.frameworks?.code);
  const strategyExample=control.frameworks?.code==='ECC'?getEccStrategyExample(control.control_code):undefined;
  const isEcc=control.frameworks?.code==='ECC';
@@ -118,13 +127,13 @@ export default function ControlDetailsPage() {
   ...(e.reviewed_at?[{key:`review-${e.id}`,time:e.reviewed_at,title:`قرار المراجعة: ${statusText(e.status||'')}`,body:e.review_notes}]:[])
  ])].sort((a,b)=>Date.parse(b.time)-Date.parse(a.time));
  return <main className="detail-page" dir="rtl">
-  <Link className="detail-back" href="/controls">← العودة إلى الضوابط</Link>
+  <Link className="detail-back" href={backToControls}>← العودة إلى الضوابط</Link>
   {archived&&<section className="detail-card" role="status"><h2>ضابط مؤرشف</h2><p>ينتمي هذا الضابط إلى إصدار تنظيمي سابق، وهو محفوظ للرجوع التاريخي وسجل التدقيق فقط. لا يمكن إسناده أو رفع أدلة جديدة له أو بدء مراجعة أو تقييم جديد.</p></section>}
   <nav className="detail-breadcrumb" aria-label="مسار التصنيف الهرمي">
    <span>{control.domain_ar}</span>
    <span aria-hidden="true">←</span>
    <span>{cleanTitle(control.title_ar)}</span>
-   {parentControl&&<><span aria-hidden="true">←</span><Link href={`/controls/${parentControl.id}`}><span dir="ltr">{parentControl.control_code}</span> {parentControl.official_text_ar||cleanTitle(parentControl.title_ar)}</Link></>}
+   {parentControl&&<><span aria-hidden="true">←</span><Link href={relatedControlHref(parentControl.id)}><span dir="ltr">{parentControl.control_code}</span> {parentControl.official_text_ar||cleanTitle(parentControl.title_ar)}</Link></>}
   </nav>
   <header className="detail-hero"><div><span className="detail-code" dir="ltr">{control.control_code}</span>{control.frameworks&&<span className="detail-framework-tag" dir="ltr">{control.frameworks.code} {control.frameworks.version}</span>}{control.hierarchy_level==='sub_control'?<span className="detail-hierarchy-tag">ضابط فرعي</span>:<span className="detail-hierarchy-tag">ضابط أساسي</span>}{applicability&&<span className="catalog-applicability">{applicability}</span>}<h1>{control.official_text_ar||(isEcc?getEccOfficialTitle(control.control_code):undefined)||strategyExample?.title||cleanTitle(control.title_ar)}</h1><p>{control.domain_ar}</p></div><div className="detail-hero-actions"><StatusBadge status={control.implementation_status}/>{canReview&&<Link className="detail-assign-owner" href={`/controls/${control.id}/assign`}>{control.control_owner?"تغيير مالك الضابط":"تعيين مالك الضابط"} ←</Link>}</div></header>
   <div className="detail-metrics"><section><small>حالة التطبيق</small><StatusBadge status={control.implementation_status}/></section><section><small>حالة الدليل</small><StatusBadge status={control.evidence_status}/></section><section><small>حالة التحقق</small><StatusBadge status={control.verification_status}/></section><section><small>موعد الاستحقاق</small><strong>{control.due_date||'غير محدد'}</strong></section></div>
@@ -163,7 +172,7 @@ export default function ControlDetailsPage() {
     </tbody></table></div>}
    </section>
    <section className="detail-card"><h2>{archived?'نص المتطلب في الإصدار السابق':'المتطلب الرسمي'}</h2><p className="detail-official">{officialRequirement}</p>{control.source_page&&<p className="detail-hint">المصدر: {control.frameworks?.code} {control.frameworks?.version} — الصفحة {control.source_page} من الوثيقة الرسمية الصادرة عن الهيئة الوطنية للأمن السيبراني.</p>}{plan.requirements.length>0&&<><h3>المتطلبات الفرعية</h3>{plan.requirements.map(r=><p className="detail-requirement" key={r.key}><b dir="ltr">{r.key}</b> {r.text}</p>)}</>}<a className="detail-back" href={archived&&control.frameworks?.source_url?control.frameworks.source_url:isEcc?eccOfficialControlsUrl:`https://nca.gov.sa/ar/regulatory-documents/controls-list/${frameworkCode}/`} target="_blank" rel="noreferrer">{archived?'مرجع الإصدار السابق':'مرجع الضوابط الرسمية للهيئة'} ↗</a></section>
-   {childControls.length>0&&<section className="detail-card"><h2>الضوابط الفرعية ({childControls.length})</h2><p className="detail-hint">بنود تنظيمية رسمية مستقلة ضمن هذا الضابط، كل منها قابل للتقييم بشكل مستقل.</p><ul className="detail-children-list">{childControls.map(k=><li key={k.id}><Link href={`/controls/${k.id}`}><span dir="ltr">{k.control_code}</span> <span>{k.official_text_ar||k.title_ar}</span><StatusBadge status={k.implementation_status}/></Link></li>)}</ul></section>}
+   {childControls.length>0&&<section className="detail-card"><h2>الضوابط الفرعية ({childControls.length})</h2><p className="detail-hint">بنود تنظيمية رسمية مستقلة ضمن هذا الضابط، كل منها قابل للتقييم بشكل مستقل.</p><ul className="detail-children-list">{childControls.map(k=><li key={k.id}><Link href={relatedControlHref(k.id)}><span dir="ltr">{k.control_code}</span> <span>{k.official_text_ar||k.title_ar}</span><StatusBadge status={k.implementation_status}/></Link></li>)}</ul></section>}
    {isEcc&&<section className="detail-card"><h2>الإرشاد المرجعي للهيئة</h2><p>يوجد دليل إرشادي مستقل لتطبيق ECC. يُستخدم للاستئناس بمنهج التطبيق، بينما يبقى نص ECC الحالي هو المتطلب الملزم عند اختلاف الإصدار أو الصياغة.</p><a className="detail-back" href={eccImplementationGuideUrl} target="_blank" rel="noreferrer">فتح الدليل الإرشادي ↗</a></section>}{["CSCC","DCC","TCC","OSMACC"].includes(frameworkCode)&&<ControlAssessmentHistory controlId={control.id} framework={frameworkCode}/>}</>}
    {tab===1&&<><section className="detail-card"><h2>الأدلة المقترحة</h2><p className="detail-hint">أمثلة مساعدة؛ تُحدد كفايتها وفق نص الضابط ونطاق التطبيق.</p><ul>{plan.evidence.map(item=><li key={item}>{item}</li>)}</ul>{canUpload&&<Link className="detail-button" href={`/controls/${control.id}/evidence/new`}>+ رفع دليل</Link>}</section><section className="detail-card"><h2>الأدلة والإصدارات</h2>{!evidence.length&&<p>لا توجد أدلة مرفوعة بعد.</p>}{evidence.map(e=><article className="control-evidence-item" key={`${e.id}-${e.link_id??"source"}`}><small>{e.is_current?'الإرسال الحالي':'إصدار سابق'} · إصدار {e.version_number}{e.link_id?' · مشترك':''}</small><h3>{e.evidence_name||e.file_name}</h3><p>{e.file_name} · {e.uploader_name||"رافع غير موثق بالاسم"}</p>{e.valid_until&&<p>الصلاحية: {e.valid_until}</p>}{canUpload&&e.is_current&&!e.link_id&&<Link href={`/controls/${control.id}/evidence/new?replace=${e.id}`}>رفع إصدار جديد</Link>}<StatusBadge status={e.status||''}/>{e.uploaded_at&&<p>{date(e.uploaded_at)}</p>}{e.description&&<p>{e.description}</p>}{e.review_notes&&<p>ملاحظات المراجع: {e.review_notes}</p>}<EvidenceDownload path={e.file_path} name={e.file_name}/>{canReview&&e.is_current&&['pending_review','under_review'].includes(e.status||'')&&<Link className="detail-button" href={`/review#evidence-${e.id}`}>مراجعة الدليل</Link>}</article>)}</section></>}
    {tab===2&&<section className="detail-card"><h2>الضوابط المرتبطة</h2><p className="detail-hint">هذه علاقات مواءمة راجعها واعتمدها الفريق؛ نوع العلاقة وحدود تغطيتها موثقان في خريطة المواءمة. يمكن رفع الدليل مرة واحدة ثم اختياره للضوابط المرتبطة؛ ويظل قرار القبول مستقلًا لكل ضابط.</p>{!canReview?<p>تظهر المواءمات التفصيلية لمدير الامتثال والمراجعة ومدير النظام.</p>:!mappedControls.length?<p>لا توجد علاقات مواءمة معتمدة لهذا الضابط.</p>:<div className="detail-timeline">{mappedControls.map(item=>{const matchedReflections=reflections.filter(result=>result.source_framework===item.framework_code&&result.source_control_code===item.control_code);return <article key={item.control_id}><strong><span dir="ltr">{item.framework_code} · {item.control_code}</span> — {item.control_title}</strong><small>{matchedReflections.length?matchedReflections.map(result=>`${result.assessment_scope}: ${assessmentStatusText[result.compliance_status]||'لم يُقيّم'}`).join(' | '):'لا توجد نتيجة معتمدة ضمن علاقة موثقة'}</small><p>{item.source_note||'راجع مصدر العلاقة وحدودها في خريطة المواءمة.'}</p><Link className="detail-back" href={`/controls/${item.control_id}`}>فتح الضابط المرتبط ←</Link></article>})}</div>}{canReview&&<p style={{marginTop:18}}><Link className="detail-button" href="/mappings">فتح خريطة المواءمة ←</Link></p>}</section>}

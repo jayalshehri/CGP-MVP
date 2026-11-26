@@ -488,3 +488,49 @@ html:has(.catalog-drawer[open]) { overflow: hidden; }
   .catalog-assignment-dialog { padding: 15px; }
   .catalog-assignment-scroll { max-height: min(34vh, 300px); }
 }
+
+.catalog-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+}
+.catalog-empty-state h2 { margin: 0 0 3px; color: var(--catalog-ink); font-size: 16px; }
+.catalog-empty-state p { margin: 0; font-size: 13px; }
+.catalog-page .catalog-empty-state button {
+  min-height: 36px;
+  padding: 5px 12px;
+  border: 1px solid #b9d7d0;
+  border-radius: 8px;
+  background: var(--catalog-accent-soft);
+  color: var(--catalog-accent);
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+@media (min-width: 761px) {
+  .catalog-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    box-shadow: 0 1px 0 #dce7e9;
+  }
+}
+@media (max-width: 760px) {
+  .catalog-table tbody tr { padding: 10px 11px; gap: 5px 8px; }
+  .catalog-table tbody th .catalog-selectable-cell { align-items: start; }
+  .catalog-table tbody th .catalog-select-control { margin-block-start: 5px; }
+  .catalog-control-line { align-items: start; flex-basis: 100%; }
+  .catalog-control-label {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.45;
+  }
+  .catalog-deadline { margin-inline-start: 4px; }
+  .catalog-table tbody td:nth-child(2) { margin-block-start: 1px; }
+  .catalog-empty-state { padding: 14px; }
+}
