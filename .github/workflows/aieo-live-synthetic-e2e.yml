@@ -48,7 +48,8 @@ jobs:
       - name: Prove source fixture is synthetic and request one real model patch
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          AIEO_MODEL_ID: ${{ vars.AIEO_MODEL_ID }}
+          # Synthetic-only model override; the existing environment variable is not changed.
+          AIEO_MODEL_ID: nvidia/nemotron-3.5-lightning:free
         run: node scripts/aieo-live-synthetic-proof.mjs developer
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
