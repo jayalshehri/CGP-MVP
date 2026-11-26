@@ -116,8 +116,43 @@ function ControlsContent(){
     <div className="catalog-workspace-head"><div><span>الخطوة 3</span><h2 id="selected-domain-heading"><b dir="ltr">{domainNumber(domainControls)}</b> {selectedDomain}</h2><p>{domainControls.length} ضابط ضمن المجال المحدد</p></div></div>
     <div className="workflow-filter workflow-filter-grid catalog-filters"><div><label htmlFor="control-search" className="cgp-field-label">البحث داخل المجال</label><input id="control-search" dir="auto" value={search} onChange={e=>setSearch(e.target.value)} placeholder="رقم الضابط أو اسمه أو المالك"/></div><div><label htmlFor="control-status" className="cgp-field-label">حالة التنفيذ</label><select id="control-status" value={status} onChange={e=>setFilter("status",e.target.value)}><option value="all">كل الحالات</option><option value="implemented">مطبق كليًا</option><option value="in_progress">مطبق جزئيًا</option><option value="not_started">غير مطبق</option><option value="not_applicable">لا ينطبق</option></select></div><div><label htmlFor="control-assignment" className="cgp-field-label">الإسناد</label><select id="control-assignment" value={assignment} onChange={e=>setFilter("assignment",e.target.value)}><option value="all">الكل</option><option value="assigned">معيّن</option><option value="unassigned">غير معيّن</option></select></div></div>
     <ResultSummary count={filtered.length} total={domainControls.length} active={searching} reset={resetFilters}/>
-    {view==="structure"?<div className="subdomain-list">{[...subdomains].map(([code,rows],index)=>{const parents=rows.filter(c=>c.hierarchy_level!=="sub_control");const byParent=Map.groupBy(rows.filter(c=>c.hierarchy_level==="sub_control"),c=>c.parent_control_id??-1);return <details className="subdomain-card" key={code} open={searching||index===0}><summary><span><b dir="ltr">{code}</b><strong>{code==="1-1"&&framework==="ECC"?"استراتيجية الأمن السيبراني":cleanTitle(rows[0].title_ar)}</strong><small>{rows.length} ضابط وبند فرعي</small></span><span className="catalog-chevron" aria-hidden="true">‹</span></summary><ul>{parents.map(c=>{const subs=byParent.get(c.id)??[];const appl=applicabilityLabel(c.applicability);return <li key={c.id}><Link className="catalog-row" href={`/controls/${c.id}`}><span className="catalog-code" dir="ltr">{c.control_code}</span><span className="catalog-title" title={c.official_text_ar??undefined}>{displayTitle(c,framework)}</span>{appl&&<span className="catalog-applicability">{appl}</span>}<StatusBadge status={c.implementation_status}/><span aria-hidden="true">←</span></Link>{subs.length>0&&<ul className="catalog-subrows">{subs.map(s=>{const sAppl=applicabilityLabel(s.applicability);return <li key={s.id}><Link className="catalog-row catalog-subrow" href={`/controls/${s.id}`}><span className="catalog-code" dir="ltr">{s.control_code}</span><span className="catalog-title" title={s.official_text_ar??undefined}>{displayTitle(s,framework)}</span>{sAppl&&<span className="catalog-applicability">{sAppl}</span>}<StatusBadge status={s.implementation_status}/><span aria-hidden="true">←</span></Link></li>})}</ul>}</li>})}</ul></details>})}</div>:<div className="followup-table-wrap">
-<table className="followup-table"><thead><tr><th>الضابط</th><th>الاسم</th><th>المالك</th><th>التنفيذ</th><th>الدليل</th><th>الاستحقاق</th><th></th></tr></thead><tbody>{sorted.map(c=><tr key={c.id}><td dir="ltr">{c.control_code}</td><td>{displayTitle(c,framework)}</td><td>{c.control_owner||"غير معيّن"}</td><td><StatusBadge status={c.implementation_status}/></td><td><StatusBadge status={c.evidence_status}/></td><td>{c.due_date||"غير محدد"}</td><td><Link href={`/controls/${c.id}`}>فتح ←</Link></td></tr>)}</tbody></table></div>}
+    {view==="structure"?<div className="subdomain-list">{[...subdomains].map(([code,rows],index)=>{const parents=rows.filter(c=>c.hierarchy_level!=="sub_control");const byParent=Map.groupBy(rows.filter(c=>c.hierarchy_level==="sub_control"),c=>c.parent_control_id??-1);return <details className="subdomain-card" key={code} open={searching||index===0}><summary><span><b dir="ltr">{code}</b><strong>{code==="1-1"&&framework==="ECC"?"استراتيجية الأمن السيبراني":cleanTitle(rows[0].title_ar)}</strong><small>{rows.length} ضابط وبند فرعي</small></span><span className="catalog-chevron" aria-hidden="true">‹</span></summary><ul>{parents.map(c=>{const subs=byParent.get(c.id)??[];const appl=applicabilityLabel(c.applicability);return <li key={c.id}><Link className="catalog-row" href={`/controls/${c.id}`}><span className="catalog-code" dir="ltr">{c.control_code}</span><span className="catalog-title" title={c.official_text_ar??undefined}>{displayTitle(c,framework)}</span>{appl&&<span className="catalog-applicability">{appl}</span>}<StatusBadge status={c.implementation_status}/><span aria-hidden="true">←</span></Link>{subs.length>0&&<ul className="catalog-subrows">{subs.map(s=>{const sAppl=applicabilityLabel(s.applicability);return <li key={s.id}><Link className="catalog-row catalog-subrow" href={`/controls/${s.id}`}><span className="catalog-code" dir="ltr">{s.control_code}</span><span className="catalog-title" title={s.official_text_ar??undefined}>{displayTitle(s,framework)}</span>{sAppl&&<span className="catalog-applicability">{sAppl}</span>}<StatusBadge status={s.implementation_status}/><span aria-hidden="true">←</span></Link></li>})}</ul>}</li>})}</ul></details>})}</div>:<div className="followup-table-wrap" tabIndex={0} role="region" aria-label="جدول متابعة الضوابط">
+     <table className="followup-table">
+      <colgroup>
+       <col className="followup-code-col" />
+       <col />
+       <col className="followup-owner-col" />
+       <col className="followup-execution-col" />
+       <col className="followup-evidence-col" />
+       <col className="followup-due-col" />
+       <col className="followup-action-col" />
+      </colgroup>
+      <thead>
+       <tr>
+        <th scope="col">الضابط</th>
+        <th scope="col">الوصف</th>
+        <th scope="col">المالك</th>
+        <th scope="col">التنفيذ</th>
+        <th scope="col">الدليل</th>
+        <th scope="col">الاستحقاق</th>
+        <th scope="col">الإجراء</th>
+       </tr>
+      </thead>
+      <tbody>{sorted.map(c=>{
+       const description=displayTitle(c,framework);
+       const owner=c.control_owner||"غير معيّن";
+       return <tr key={c.id}>
+        <td dir="ltr">{c.control_code}</td>
+        <td><span className="followup-description" title={description??undefined}>{description}</span></td>
+        <td><bdi className="followup-owner" title={owner}>{owner}</bdi></td>
+        <td><StatusBadge status={c.implementation_status}/></td>
+        <td><StatusBadge status={c.evidence_status}/></td>
+        <td>{c.due_date?<bdi className="followup-date" dir="ltr">{c.due_date}</bdi>:"غير محدد"}</td>
+        <td><Link href={`/controls/${c.id}`}>فتح ←</Link></td>
+       </tr>;
+      })}</tbody>
+     </table>
+    </div>}
     {!filtered.length&&<div className="workflow-empty">لا توجد ضوابط مطابقة داخل هذا المجال.</div>}
    </section>
   </>}
