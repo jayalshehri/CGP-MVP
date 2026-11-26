@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { requireProfile } from "@/lib/auth";
+import { controlAssignmentRoles, listAssignableControlOwners, openEvidenceRequestStatuses, saveControlOwnerAssignment, type AssignableOwner } from "@/lib/control-owner-assignment";
 import { supabase } from "@/lib/supabase";
 import { WorkflowHeading, WorkflowMetric } from "@/components/WorkflowUI";
 import AccessibleDialog from "@/components/AccessibleDialog";
@@ -19,7 +20,6 @@ type Control = {
   frameworks: { code: string } | { code: string }[] | null;
 };
 type Framework = { id: number; code: string };
-type Owner = { user_id: string; display_name: string | null };
 type OpenItem = { control_id: number; kind: "cycle" | "request" };
 
 const single = <T,>(value: T | T[] | null): T | null => (Array.isArray(value) ? value[0] ?? null : value);
@@ -33,7 +33,7 @@ export default function BulkAssignPage() {
 
   const [controls, setControls] = useState<Control[]>([]);
   const [frameworks, setFrameworks] = useState<Framework[]>([]);
-  const [owners, setOwners] = useState<Owner[]>([]);
+  const [owners, setOwners] = useState<AssignableOwner[]>([]);
   const [openItems, setOpenItems] = useState<OpenItem[]>([]);
 
   const [frameworkFilter, setFrameworkFilter] = useState("all");
@@ -47,20 +47,19 @@ export default function BulkAssignPage() {
 
   const load = useCallback(async () => {
     try {
-      await requireProfile(["admin", "cybersecurity_team"]);
+      await requireProfile(controlAssignmentRoles);
       const [c, f, o, cy, rq] = await Promise.all([
         supabase.from("controls").select("id,control_code,title_ar,domain_ar,control_owner_id,control_owner,framework_id,frameworks!inner(code,is_active)").eq("frameworks.is_active",true).order("control_code"),
         supabase.from("frameworks").select("id,code").eq("is_active", true).order("id"),
-        supabase.from("profiles").select("user_id,display_name").eq("role", "control_owner").eq("is_active", true).order("display_name"),
+        listAssignableControlOwners(),
         supabase.from("control_review_cycles").select("control_id").eq("status", "open"),
-        supabase.from("evidence_requests").select("control_id").in("status", ["open", "submitted", "changes_requested", "rejected"]),
+        supabase.from("evidence_requests").select("control_id").in("status", openEvidenceRequestStatuses),
       ]);
       if (c.error) throw c.error;
       if (f.error) throw f.error;
-      if (o.error) throw o.error;
       setControls((c.data ?? []) as Control[]);
       setFrameworks((f.data ?? []) as Framework[]);
-      setOwners((o.data ?? []) as Owner[]);
+      setOwners(o);
       const items: OpenItem[] = [
         ...((cy.data ?? []) as { control_id: number }[]).map((r) => ({ control_id: r.control_id, kind: "cycle" as const })),
         ...((rq.data ?? []) as { control_id: number }[]).map((r) => ({ control_id: r.control_id, kind: "request" as const })),
@@ -130,14 +129,8 @@ export default function BulkAssignPage() {
     setError("");
     setMessage("");
     try {
-      const owner = owners.find((o) => o.user_id === targetOwner);
-      const ids = safeToAssign.map((c) => c.id);
-      const { error: updateError } = await supabase
-        .from("controls")
-        .update({ control_owner_id: targetOwner, control_owner: owner?.display_name || "مالك الضابط" })
-        .in("id", ids);
-      if (updateError) throw updateError;
-      setMessage(`تم تعيين ${ids.length} ضابطًا للمالك المحدد.${blocked.length ? ` تم تخطي ${blocked.length} ضابطًا بسبب دورة مراجعة أو طلب دليل مفتوح.` : ""}`);
+      const applied = await saveControlOwnerAssignment(safeToAssign, targetOwner);
+      setMessage(`تم تعيين ${applied.length} ضابطًا للمالك المحدد.${applied.length < safeToAssign.length ? " لم تُحفظ جميع الضوابط المؤهلة." : ""}${blocked.length ? ` تم تخطي ${blocked.length} ضابطًا بسبب دورة مراجعة أو طلب دليل مفتوح.` : ""}`);
       setSelected(new Set());
       setConfirming(false);
       setTargetOwner("");
