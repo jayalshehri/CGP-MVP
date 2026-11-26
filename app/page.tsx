@@ -1,13 +1,13 @@
 import Link from "next/link";
 import styles from "./portal.module.css";
 
-export const metadata = { title: "اختيار مساحة العمل | CGP" };
+export const metadata = { title: "بوابة الحوكمة | CGP" };
 
 export default function Portal() {
   return <main className={styles.portal} dir="rtl">
     <section aria-labelledby="workspace-title">
-      <header><span lang="en">CGP</span><p>بوابة الحوكمة</p></header>
-      <h1 id="workspace-title">اختر مساحة العمل</h1>
+      <header><span lang="en">CGP</span></header>
+      <h1 id="workspace-title">بوابة الحوكمة</h1>
       <div className={styles.cards}>
         <Link href="/login/data">
           <h2>مكتب إدارة البيانات</h2>
