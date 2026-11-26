@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { isAuthRetryableFetchError, isAuthSessionMissingError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import AccessibleDialog from "@/components/AccessibleDialog";
@@ -15,14 +15,16 @@ export default function FeedbackWidget({ pagePath, visible }: FeedbackWidgetProp
   const [message, setMessage] = useState("");
   const [state, setState] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [error, setError] = useState("");
+  const submitInFlight = useRef(false);
   const controlId = useMemo(() => /^\/controls\/(\d+)(?:\/|$)/.exec(pagePath)?.[1] ?? null, [pagePath]);
   if (!visible) return null;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (state === "saving") return;
+    if (state === "saving" || submitInFlight.current) return;
     const cleanMessage = message.trim();
     if (!cleanMessage) { setError("اكتب الملاحظة قبل الإرسال."); setState("error"); return; }
+    submitInFlight.current = true;
     setState("saving"); setError("");
     const connectionError = "تعذر الاتصال بالخدمة. تحقق من اتصالك وحاول مرة أخرى.";
     function fail(message: string) {
@@ -60,6 +62,8 @@ export default function FeedbackWidget({ pagePath, visible }: FeedbackWidgetProp
       setState("success");
     } catch {
       fail(connectionError);
+    } finally {
+      submitInFlight.current = false;
     }
   }
 
