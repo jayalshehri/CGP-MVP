@@ -1,0 +1,226 @@
+# Reviewed local-only task registry; activation on main requires human review.
+name: AIEO Multi-Task Local Orchestrator
+on:
+  push:
+    branches: [aieo/multi-task-local-pilot-20261127]
+    paths:
+      - '.github/workflows/aieo-multi-local.yml'
+      - 'scripts/aieo-multi-local.mjs'
+      - 'scripts/aieo-multi-local-regression.mjs'
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Choose an explicitly allowlisted local task or all three
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - status-label-fallback
+          - dialog-busy-accessibility
+          - strategy-filter-anchor
+permissions:
+  contents: read
+concurrency:
+  group: aieo-multi-local-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  AIEO_TASK_SELECTION: ${{ github.event_name == 'push' && 'all' || inputs.task }}
+jobs:
+  developer:
+    if: github.repository == 'jayalshehri/CGP-MVP' && ((github.event_name == 'push' && github.ref == 'refs/heads/aieo/multi-task-local-pilot-20261127') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    name: Developer orchestrates approved task registry
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: node scripts/aieo-multi-local.mjs developer
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aieo-multi-developer
+          path: aieo-multi-evidence/developer.json
+          retention-days: 7
+          if-no-files-found: error
+
+  qa:
+    needs: developer
+    name: QA tests selected tasks and combined application CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-multi-developer
+          path: aieo-multi-evidence
+      - run: npm ci
+      - name: Reproduce each baseline and test each repaired application source
+        run: node scripts/aieo-multi-local.mjs qa-prepare
+      - run: npm run lint
+      - run: npx next typegen
+      - run: npx tsc --noEmit
+      - name: Existing application regression suite
+        run: |
+          node scripts/test-role-home.mjs
+          node scripts/test-data-office-release-scope.mjs
+          node --test scripts/test-data-office-mutations.mjs scripts/test-nudee-mutations.mjs
+      - name: Build candidate with synthetic configuration
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_aieo_build_only
+        run: npm run build
+      - run: node scripts/aieo-multi-local.mjs qa-pass
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aieo-multi-qa
+          path: aieo-multi-evidence/qa.json
+          retention-days: 7
+          if-no-files-found: error
+
+  security:
+    needs: developer
+    name: Security checks per-task scope and exact source hashes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-multi-developer
+          path: aieo-multi-evidence
+      - run: node scripts/aieo-multi-local.mjs security
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aieo-multi-security
+          path: aieo-multi-evidence/security.json
+          retention-days: 7
+          if-no-files-found: error
+
+  reviewer:
+    needs: [qa, security]
+    name: Reviewer binds all task evidence and writes dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-multi-developer
+          path: aieo-multi-evidence
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-multi-qa
+          path: aieo-multi-evidence
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-multi-security
+          path: aieo-multi-evidence
+      - run: node scripts/aieo-multi-local.mjs reviewer
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aieo-multi-reviewer
+          path: aieo-multi-evidence/reviewer.json
+          retention-days: 7
+          if-no-files-found: error
+
+  publisher:
+    needs: reviewer
+    name: Isolated draft-only publisher
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-multi-developer
+          path: aieo-multi-evidence
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-multi-qa
+          path: aieo-multi-evidence
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-multi-security
+          path: aieo-multi-evidence
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aieo-multi-reviewer
+          path: aieo-multi-evidence
+      - name: Reproduce exact reviewed changes and verify all task evidence
+        run: node scripts/aieo-multi-local.mjs publish-prepare
+      - name: Create draft only; no merge or production deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = jayalshehri/CGP-MVP
+          root="$RUNNER_TEMP/aieo-multi-publish"
+          if ! test -s "$root/paths"; then
+            echo 'No changes needed. No draft created.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          base="$(cat "$root/base")"
+          [[ "$base" =~ ^[0-9a-f]{40}$ ]]
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$base"
+          branch="aieo/local-reviewed-tasks-$GITHUB_RUN_ID"
+          git -c core.hooksPath=/dev/null switch -c "$branch" "$base"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          while IFS= read -r path; do
+            case "$path" in
+              components/StatusBadge.tsx|components/AccessibleDialog.tsx|lib/strategy-navigation.ts|scripts/aieo-multi-local-regression.mjs) ;;
+              *) echo 'Unapproved publication path'; exit 1 ;;
+            esac
+            cp "$root/$path" "$path"
+            git -c core.hooksPath=/dev/null add -- "$path"
+          done < "$root/paths"
+          sha256sum -c "$root/sha256"
+          git diff --cached --name-only | LC_ALL=C sort > "$RUNNER_TEMP/aieo-actual-paths"
+          diff -u "$root/paths" "$RUNNER_TEMP/aieo-actual-paths"
+          git diff --cached --check
+          git -c core.hooksPath=/dev/null commit -m 'fix(ui): reviewed local AIEO maintenance tasks'
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$base"
+          gh auth setup-git
+          git -c core.hooksPath=/dev/null push origin "HEAD:refs/heads/$branch"
+          pr="$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --draft \
+            --title "fix(ui): AIEO local reviewed tasks ($AIEO_TASK_SELECTION, run $GITHUB_RUN_ID)" \
+            --body "Bounded local task registry. Independent Developer, QA, Security and Reviewer gates verified the same source and candidate hashes for every selected task, plus combined full application CI. No external AI, live database, merge or production deployment. Human review is required. Evidence: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID.")"
+          printf '\n## Draft created\n\n%s\n' "$pr" >> "$GITHUB_STEP_SUMMARY"
