@@ -87,8 +87,7 @@ if (role === 'developer') {
   const sensitive = s => s.split('\n').filter(line =>
     /supabase|authError|auth\.user|created_by|control_id|page_path|insertError|navigator\.onLine|cleanMessage/.test(line));
   assert(JSON.stringify(sensitive(source)) === JSON.stringify(sensitive(candidate)), 'integration or data handling changed');
-  assert(!/fetch\(|process\.env|localStorage|eval\(/.test(candidate.replace(source, '')) ||
-    !/fetch\(|process\.env|localStorage|eval\(/.test(changes.map(pair => pair[1]).join('\n')), 'unexpected capability');
+  assert(!/fetch\(|process\.env|localStorage|eval\(/.test(changes.map(pair => pair[1]).join('\n')), 'unexpected capability');
   assert(candidate.includes('finally {\n      submitInFlight.current = false;'), 'no release on failure');
   save('security', 'passed');
 } else if (role === 'reviewer') {
