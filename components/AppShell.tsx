@@ -219,7 +219,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       {(canManageOffice || nudeeOnly) && <a href={officeHome} aria-current={workspace === "data" ? "page" : undefined}>مكتب إدارة البيانات</a>}
     </nav>
   );
-  return <div className={`cgp-workspace ${navCollapsed?"cgp-nav-collapsed":""}`} dir="rtl">
+  return <div className={`cgp-workspace ${navCollapsed?"cgp-nav-collapsed":""}`} data-workspace={workspace} dir="rtl">
     <a href="#cgp-content" className="cgp-skip" inert={searchOpen}>انتقل إلى المحتوى</a>
     <header className="cgp-topbar" inert={searchOpen}>
       <Link href={homeHref} className="cgp-brand" aria-label="CGP — الصفحة الرئيسية"><span className="cgp-brand-mark">CGP</span><span>{workspace === "data" ? "مكتب إدارة البيانات" : "منصة الحوكمة السيبرانية"}<small>{workspace === "data" ? "مؤشر نُضيء" : "منصة موحدة للالتزام والمخاطر"}</small></span></Link>
