@@ -31,6 +31,7 @@ export default function AccessibleDialog({ labelledBy, backdropClassName, classN
     ref={dialogRef}
     className={`cgp-accessible-dialog ${backdropClassName}`}
     aria-labelledby={labelledBy}
+    aria-busy={busy}
     dir="rtl"
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}
     onMouseDown={event => { if (!busy && event.target === event.currentTarget) onClose(); }}

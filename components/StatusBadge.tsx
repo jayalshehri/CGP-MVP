@@ -4,7 +4,10 @@ const labels: Record<string, string> = {
   verified: "تم التحقق", not_verified: "غير متحقق", failed: "لم يجتز", approved: "معتمد",
   needs_control_mapping: "يحتاج ربط ضابط",
 };
-export function statusText(status: string) { return labels[status.trim().toLowerCase()] || status || "غير محدد"; }
+export function statusText(status: string) {
+  const value = status.trim().toLowerCase();
+  return Object.hasOwn(labels, value) ? labels[value] : status.trim() || "غير محدد";
+}
 export default function StatusBadge({ status }: { status: string }) {
   const value = status.trim().toLowerCase();
   const tone = ["rejected", "failed", "expired"].includes(value) ? "danger" : ["implemented", "compliant", "accepted", "approved", "verified"].includes(value) ? "success" : ["pending_review", "under_review", "uploaded"].includes(value) ? "info" : ["in_progress","changes_requested","needs_control_mapping"].includes(value) ? "warning" : "neutral";
