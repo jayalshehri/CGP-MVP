@@ -181,6 +181,16 @@ def lifecycle(browser, target):
     assert len(fixture.files) == 3
     assert not fixture.unexpected, fixture.unexpected
     snap(office, target / "office-after-approval.png", True)
+    office.goto(APP + "/data-governance")
+    expect(office).to_have_url(APP + HOME)
+    expect(office.get_by_role("navigation", name="التنقل الرئيسي").get_by_role("link")).to_have_text(
+        ["الرئيسية", "المتطلبات والأدلة"])
+    owner.goto(APP + "/data-governance")
+    expect(owner).to_have_url(APP + REGISTER)
+    owner.locator(".cgp-mobile-navigation summary").click()
+    mobile_nav = owner.get_by_role("navigation", name="التنقل على الجوال")
+    expect(mobile_nav.get_by_role("link", name="مهامي", exact=True)).to_be_visible()
+    expect(mobile_nav.get_by_role("link", name="الرئيسية", exact=True)).to_have_count(0)
     office.context.close()
     owner.context.close()
 

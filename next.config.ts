@@ -7,7 +7,7 @@ const scriptPolicy = process.env.NODE_ENV === "development"
 const nextConfig: NextConfig = {
   async redirects() {
     return [
-      { source: "/data-governance", destination: "/data-governance/nudee", permanent: false },
+      { source: "/data-governance", destination: "/data-governance/nudee-dashboard", permanent: false },
       { source: "/data-governance/requests/:path*", destination: "/data-governance/nudee", permanent: false },
       { source: "/data-governance/assets/:path*", destination: "/data-governance/nudee", permanent: false },
       { source: "/data-governance/controls/:path*", destination: "/data-governance/nudee", permanent: false },
