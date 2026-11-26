@@ -109,7 +109,7 @@ export type StrategyQueryKey = "q" | "priority" | "execution_year" | "work_type"
 export function updateStrategyQuery(key: StrategyQueryKey, value: string) {
   const params = new URLSearchParams(window.location.search);
   if (!value || value === "all") params.delete(key); else params.set(key, value);
-  const next = url(window.location.pathname, params);
-  if (next === `${window.location.pathname}${window.location.search}`) return;
+  const next = url(window.location.pathname, params) + window.location.hash;
+  if (next === `${window.location.pathname}${window.location.search}${window.location.hash}`) return;
   window.history[key === "q" || key === "duration_min" || key === "duration_max" ? "replaceState" : "pushState"](null, "", next);
 }
