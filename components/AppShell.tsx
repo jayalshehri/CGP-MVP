@@ -14,8 +14,8 @@ const navigation = [
   { href: "/executive", label: "اللوحة التنفيذية", group: "", team: true },
   { href: "/reports", label: "التقارير", group: "", team: true },
   { href: "/controls", label: "الضوابط", group: "الامتثال", auditor: true },
-  { href: "/data-governance/nudee", label: "مؤشر نُضيء", group: "مساحات العمل", data: true },
-  { href: "/data-governance/nudee-dashboard", label: "لوحة مؤشر نُضيء", group: "مساحات العمل", data: true },
+  { href: "/data-governance/nudee-dashboard", label: "الرئيسية", group: "", data: true },
+  { href: "/data-governance/nudee", label: "المتطلبات والأدلة", group: "", data: true },
   { href: "/shared-controls", label: "الكتالوج الموحد", group: "الامتثال", team: true, data: true },
   { href: "/assessments", label: "تقييم CSCC", group: "قياس الالتزام", auditor: true },
   { href: "/dcc-assessment", label: "تقييم DCC", group: "قياس الالتزام", auditor: true },
@@ -91,7 +91,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 function Workspace({ children, pathname }: { children: React.ReactNode; pathname: string }) {
   const router = useRouter();
   const [account, setAccount] = useState<{ name: string; role: UserRole } | null>(null);
-  const [hasNudeeWork, setHasNudeeWork] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [error, setError] = useState("");
@@ -109,13 +108,9 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   }, []);
   useEffect(() => {
     let active = true;
-    requireProfile().then(async ({ user, profile }) => {
+    requireProfile().then(({ user, profile }) => {
       if (active) setAccount({ name: profile.display_name || user.email || "حسابي", role: profile.role });
-      if (profile.role !== "admin" && profile.role !== "data_governance_team") {
-        const { data, error } = await supabase.from("nudee_assignments").select("id").eq("assignee_id", user.id).limit(1);
-        if (active) setHasNudeeWork(!error && Boolean(data?.length));
-      } else if (active) setHasNudeeWork(false);
-    }).catch(() => { if (active) { setAccount(null); setHasNudeeWork(false); } });
+    }).catch(() => { if (active) setAccount(null); });
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session && active) { setAccount(null); router.replace("/login"); }
     });
@@ -124,13 +119,15 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
 
   const nudeeOnly = account?.role === "nudee_owner";
   const dataOfficeOnly = account?.role === "data_governance_team";
-  const homeHref = account ? roleHomePath(account.role) : "/";
   useEffect(() => {
     if (nudeeOnly && pathname !== "/data-governance/nudee" && pathname !== "/change-password") router.replace("/data-governance/nudee");
   }, [nudeeOnly, pathname, router]);
   const workspace = pathname === "/shared-controls" ? "shared" : pathname.startsWith("/data-governance") ? "data" : "cyber";
-  const workspaceLabel = workspace === "data" ? "حوكمة البيانات" : workspace === "shared" ? "مركز المواءمة" : "الأمن السيبراني";
-  const permittedItems = account ? navigation.filter(item => account.role === "nudee_owner" ? item.href === "/data-governance/nudee" : account.role === "data_governance_team" ? Boolean(item.data) : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin" || (hasNudeeWork && item.href === "/data-governance/nudee"))) : [];
+  const canManageOffice = account?.role === "admin" || dataOfficeOnly;
+  const officeHome = canManageOffice ? "/data-governance/nudee-dashboard" : "/data-governance/nudee";
+  const homeHref = workspace === "data" ? officeHome : account ? roleHomePath(account.role) : "/";
+  const workspaceLabel = workspace === "data" ? "مكتب إدارة البيانات" : workspace === "shared" ? "مركز المواءمة" : "الأمن السيبراني";
+  const permittedItems = account ? navigation.filter(item => account.role === "nudee_owner" ? item.href === "/data-governance/nudee" : account.role === "data_governance_team" ? Boolean(item.data) : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];
   const items = permittedItems.filter(item => workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls");
   // Pick the most specific route, so a parent cannot hide the active child.
   const currentItem = navigation
@@ -138,13 +135,18 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
     .sort((a, b) => b.href.length - a.href.length)[0];
   // The executive summary is not a navigation item; without this it inherits the
   // "/roadmap" prefix match and is mislabelled as the project register.
+  function navigationLabel(item: typeof navigation[number]) {
+    if (item.href === "/data-governance/nudee" && account && !canManageOffice) return "مهامي";
+    if (item.href === "/tasks" && account?.role === "control_owner") return "مهامي";
+    return item.label;
+  }
   const current = pathname === "/roadmap/executive" ? "ملخص محفظة المشاريع السيبرانية"
-    : currentItem?.label || (pathname === "/change-password" ? "تغيير كلمة المرور" : "لوحة المتابعة");
+    : currentItem ? navigationLabel(currentItem) : pathname === "/change-password" ? "تغيير كلمة المرور" : "لوحة المتابعة";
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const isProjectDetail = /^\/roadmap\/[^/]+$/.test(pathname) && !["/roadmap/analysis", "/roadmap/dashboard", "/roadmap/executive"].includes(pathname);
   const leaf = pathname.endsWith("/assign") ? "تكليف المالك" : pathname.endsWith("/evidence/new") ? "رفع دليل" : controlId ? "تفاصيل الضابط" : current;
   const linkFor = (item:typeof navigation[number]) => {
-    const label = item.href === "/tasks" && account?.role === "control_owner" ? "مهامي" : item.label;
+    const label = navigationLabel(item);
     return <Link key={item.href} href={item.href} className="cgp-nav-link" aria-label={label} title={navCollapsed ? label : undefined} aria-current={currentItem?.href === item.href ? "page" : undefined}><NavIcon href={item.href}/><span>{label}</span></Link>;
   };
   const links = items.map(linkFor);
@@ -153,7 +155,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const groups = groupOrder.filter(group=>items.some(item=>item.group===group));
   const activeGroup = currentItem?.group ?? "";
   const normalized = searchQuery.trim().toLowerCase();
-  const navigationResults = normalized ? items.filter(item => item.label.toLowerCase().includes(normalized)).slice(0, 5) : [];
+  const navigationResults = normalized ? items.filter(item => navigationLabel(item).toLowerCase().includes(normalized)).slice(0, 5) : [];
   useEffect(() => {
     const query = searchQuery.trim();
     // Cybersecurity controls have their own catalog. Keep search results within the current workspace.
@@ -211,10 +213,16 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
     if (error) { setError("تعذر تسجيل الخروج. حاول مرة أخرى."); setSigningOut(false); return; }
     router.replace("/login");
   }
+  const workspaceSwitcher = workspace === "data" && (dataOfficeOnly || nudeeOnly) ? null : (
+    <nav aria-label="تبديل مساحة العمل" className="cgp-workspace-switcher">
+      {!nudeeOnly && !dataOfficeOnly && <Link href="/" aria-current={workspace === "cyber" ? "page" : undefined}>الأمن السيبراني</Link>}
+      {(canManageOffice || nudeeOnly) && <a href={officeHome} aria-current={workspace === "data" ? "page" : undefined}>مكتب إدارة البيانات</a>}
+    </nav>
+  );
   return <div className={`cgp-workspace ${navCollapsed?"cgp-nav-collapsed":""}`} dir="rtl">
     <a href="#cgp-content" className="cgp-skip" inert={searchOpen}>انتقل إلى المحتوى</a>
     <header className="cgp-topbar" inert={searchOpen}>
-      <Link href={homeHref} className="cgp-brand" aria-label="CGP — الصفحة الرئيسية"><span className="cgp-brand-mark">CGP</span><span>منصة الحوكمة السيبرانية<small>منصة موحدة للالتزام والمخاطر</small></span></Link>
+      <Link href={homeHref} className="cgp-brand" aria-label="CGP — الصفحة الرئيسية"><span className="cgp-brand-mark">CGP</span><span>{workspace === "data" ? "مكتب إدارة البيانات" : "منصة الحوكمة السيبرانية"}<small>{workspace === "data" ? "مؤشر نُضيء" : "منصة موحدة للالتزام والمخاطر"}</small></span></Link>
       <div className="cgp-topbar-context" aria-label="موقعك الحالي"><span>{workspaceLabel}</span><i aria-hidden="true">/</i><strong>{leaf}</strong></div>
       <div className="cgp-topbar-tools">
         <button type="button" className="cgp-global-search" aria-label="البحث في مساحة العمل" onClick={openSearch} aria-haspopup="dialog" aria-expanded={searchOpen} aria-controls="cgp-search-dialog"><span aria-hidden="true">⌕</span><span>بحث</span><kbd>⌘ K</kbd></button>
@@ -227,22 +235,16 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
         <label className="cgp-search-input"><span aria-hidden="true">⌕</span><input ref={searchInputRef} aria-label={workspace === "cyber" ? "البحث عن صفحة أو ضابط" : "البحث عن صفحة في مساحة العمل"} value={searchQuery} onChange={event=>setSearchQuery(event.target.value)} placeholder={workspace === "cyber" ? "ابحث باسم الصفحة أو رقم الضابط أو اسمه" : "ابحث باسم صفحة في مساحة العمل"} /></label>
         {searching && <p className="cgp-search-hint" role="status">جاري البحث…</p>}
         {!searching && searchQuery.trim().length < 2 && <p className="cgp-search-hint">{workspace === "cyber" ? "اكتب حرفين على الأقل للبحث في الضوابط، أو اختر صفحة من القائمة." : "اكتب اسم الصفحة للوصول السريع داخل مساحة العمل الحالية."}</p>}
-        {navigationResults.length > 0 && <div className="cgp-search-section"><h3>الصفحات</h3>{navigationResults.map(item=><Link key={item.href} href={item.href} onClick={()=>setSearchOpen(false)}><span>{item.label}</span><small>{item.group}</small></Link>)}</div>}
+        {navigationResults.length > 0 && <div className="cgp-search-section"><h3>الصفحات</h3>{navigationResults.map(item=><Link key={item.href} href={item.href} onClick={()=>setSearchOpen(false)}><span>{navigationLabel(item)}</span><small>{item.group}</small></Link>)}</div>}
         {controlResults.length > 0 && <div className="cgp-search-section"><h3>الضوابط</h3>{controlResults.map(item=><Link key={item.id} href={`/controls/${item.id}`} onClick={()=>setSearchOpen(false)}><b dir="ltr">{item.control_code}</b><span>{item.title_ar}</span></Link>)}</div>}
         {!searching && searchQuery.trim().length >= 2 && !navigationResults.length && !controlResults.length && <p className="cgp-search-hint">لا توجد نتائج مطابقة ضمن صلاحياتك.</p>}
       </section>
     </div>}
     <div className="cgp-workspace-grid" inert={searchOpen}>
-      <aside className="cgp-navigation"><nav aria-label="تبديل مساحة العمل" className="cgp-workspace-switcher">
-        {!nudeeOnly && !dataOfficeOnly && <Link href="/" aria-current={workspace === "cyber" ? "page" : undefined}>الأمن السيبراني</Link>}
-        {(account?.role === "admin" || account?.role === "data_governance_team" || account?.role === "nudee_owner" || hasNudeeWork) && <a href="/data-governance/nudee" aria-current={workspace === "data" ? "page" : undefined}>مكتب إدارة البيانات</a>}
-      </nav><div className="cgp-nav-head"><p className="cgp-nav-caption">{workspaceLabel}</p><button type="button" onClick={()=>setNavCollapsed(v=>!v)} aria-label={navCollapsed?"توسيع القائمة":"طي القائمة"} aria-expanded={!navCollapsed}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 18l6-6-6-6"/></svg></button></div><nav aria-label="التنقل الرئيسي">{ungroupedItems.map(linkFor)}{groups.map(group=>{const groupItems=items.filter(item=>item.group===group);const standalone=groupItems.filter(item=>!item.subgroup);const subgroups=[...new Set(groupItems.map(item=>item.subgroup).filter(Boolean))];return <details className="cgp-nav-group" key={`${group}-${navCollapsed ? "collapsed" : "expanded"}`} open={navCollapsed || group===activeGroup}><summary><span>{group}</span><span className="cgp-nav-group-count">{groupItems.length}</span></summary>{standalone.map(linkFor)}{subgroups.map(subgroup=><div className="cgp-nav-subgroup" key={subgroup}><span>{subgroup}</span>{groupItems.filter(item=>item.subgroup===subgroup).map(linkFor)}</div>)}</details>})}</nav><Link href="/change-password" className="cgp-nav-link cgp-account-link" aria-label="إعدادات كلمة المرور" title={navCollapsed ? "إعدادات كلمة المرور" : undefined} aria-current={pathname === "/change-password" ? "page" : undefined}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-8H4v8a2 2 0 0 0 2 2zm1-10V8a5 5 0 0 1 10 0v3"/></svg><span>إعدادات كلمة المرور</span></Link><p className="cgp-scope">{workspace === "data" ? "سجلات وضوابط وطلبات إدارة البيانات ضمن صلاحيات حسابك." : workspace === "shared" ? "مواءمة معتمدة بين الأطر دون خلط مساحات العمل." : account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الأمن السيبراني ضمن صلاحيات حسابك."}</p></aside>
+      <aside className="cgp-navigation">{workspaceSwitcher}<div className="cgp-nav-head"><p className="cgp-nav-caption">{workspaceLabel}</p><button type="button" onClick={()=>setNavCollapsed(v=>!v)} aria-label={navCollapsed?"توسيع القائمة":"طي القائمة"} aria-expanded={!navCollapsed}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 18l6-6-6-6"/></svg></button></div><nav aria-label="التنقل الرئيسي">{ungroupedItems.map(linkFor)}{groups.map(group=>{const groupItems=items.filter(item=>item.group===group);const standalone=groupItems.filter(item=>!item.subgroup);const subgroups=[...new Set(groupItems.map(item=>item.subgroup).filter(Boolean))];return <details className="cgp-nav-group" key={`${group}-${navCollapsed ? "collapsed" : "expanded"}`} open={navCollapsed || group===activeGroup}><summary><span>{group}</span><span className="cgp-nav-group-count">{groupItems.length}</span></summary>{standalone.map(linkFor)}{subgroups.map(subgroup=><div className="cgp-nav-subgroup" key={subgroup}><span>{subgroup}</span>{groupItems.filter(item=>item.subgroup===subgroup).map(linkFor)}</div>)}</details>})}</nav><Link href="/change-password" className="cgp-nav-link cgp-account-link" aria-label="إعدادات كلمة المرور" title={navCollapsed ? "إعدادات كلمة المرور" : undefined} aria-current={pathname === "/change-password" ? "page" : undefined}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-8H4v8a2 2 0 0 0 2 2zm1-10V8a5 5 0 0 1 10 0v3"/></svg><span>إعدادات كلمة المرور</span></Link>{workspace !== "data" && <p className="cgp-scope">{workspace === "shared" ? "مواءمة معتمدة بين الأطر دون خلط مساحات العمل." : account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الأمن السيبراني ضمن صلاحيات حسابك."}</p>}</aside>
       <div className="cgp-page-column">
-        <details key={pathname} className="cgp-mobile-navigation" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>القائمة <span>{current}</span></summary><nav aria-label="تبديل مساحة العمل" className="cgp-workspace-switcher">
-        {!nudeeOnly && !dataOfficeOnly && <Link href="/" aria-current={workspace === "cyber" ? "page" : undefined}>الأمن السيبراني</Link>}
-        {(account?.role === "admin" || account?.role === "data_governance_team" || account?.role === "nudee_owner" || hasNudeeWork) && <a href="/data-governance/nudee" aria-current={workspace === "data" ? "page" : undefined}>مكتب إدارة البيانات</a>}
-      </nav><nav aria-label="التنقل على الجوال">{links}<Link className="cgp-nav-link" href="/change-password">إعدادات كلمة المرور</Link></nav></details>
-        {isProjectDetail ? <Suspense fallback={<nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href={homeHref}>الرئيسية</Link><span aria-hidden="true">/</span><span aria-current="page">تفاصيل المشروع</span></nav>}><ProjectBreadcrumb /></Suspense> : <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href={homeHref}>الرئيسية</Link>{pathname !== "/" && <><span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">الضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>}
+        <details key={pathname} className="cgp-mobile-navigation" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>القائمة <span>{current}</span></summary>{workspaceSwitcher}<nav aria-label="التنقل على الجوال">{links}<Link className="cgp-nav-link" href="/change-password">إعدادات كلمة المرور</Link></nav></details>
+        {workspace !== "data" && (isProjectDetail ? <Suspense fallback={<nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href={homeHref}>الرئيسية</Link><span aria-hidden="true">/</span><span aria-current="page">تفاصيل المشروع</span></nav>}><ProjectBreadcrumb /></Suspense> : <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href={homeHref}>الرئيسية</Link>{pathname !== "/" && <><span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">الضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>)}
         {error && <p role="alert" className="cgp-shell-error">{error}</p>}
         <div id="cgp-content" tabIndex={-1} className="cgp-route">{nudeeOnly && !["/data-governance/nudee","/change-password"].includes(pathname) ? <p role="status">يُتاح لهذا الحساب عرض متطلباته المسندة في مؤشر نُضيء فقط.</p> : children}</div>
         <FeedbackWidget pagePath={pathname} visible={Boolean(account) && !nudeeOnly} />

@@ -13,6 +13,6 @@ export const dataGovernanceEnabled =
 /** Choose an existing workspace after authentication; this grants no access. */
 export function roleHomePath(role: UserRole): string {
   if (role === "nudee_owner") return "/data-governance/nudee";
-  if (role === "data_governance_team") return "/data-governance/nudee";
+  if (role === "data_governance_team") return "/data-governance/nudee-dashboard";
   return "/";
 }

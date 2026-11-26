@@ -22,7 +22,7 @@ function walk(node, predicate) {
 const requirement = id => ({ id, source_row: id, standard_code: `QA-${id}`, domain_name: 'مجال اختبار', requirement_title: `متطلب ${id}`, maturity_level: 'المستوى 1: البناء', evidence_name: `دليل اختبار ${id}`, evidence_description: null, source_compliance: null });
 const assignment = (id, status) => ({ id: id + 100, requirement_id: id, assignee_id: 'qa-owner', status, due_date: null, review_notes: null });
 
-function createPage({ role = 'data_governance_team', initialStatus, empty = false } = {}) {
+function createPage({ role = 'data_governance_team', initialStatus, empty = false, view = 'all' } = {}) {
   const slots = [], effects = [];
   let cursor = 0;
   const calls = { rpc: [], upload: [], remove: [] };
@@ -86,7 +86,9 @@ function createPage({ role = 'data_governance_team', initialStatus, empty = fals
   };
   const jsx = (type, props) => ({ type, props });
   const compiled = { exports: {} };
-  const source = ts.transpileModule(readFileSync(new URL('../app/data-governance/nudee/page.tsx', import.meta.url), 'utf8'), {
+  const location = { href: 'https://test.invalid/data-governance/nudee?view=' + view };
+  const history = { replaceState(_, __, url) { location.href = url.toString(); } };
+  const source = ts.transpileModule(readFileSync(new URL('../app/data-governance/nudee/NudeeRegister.tsx', import.meta.url), 'utf8'), {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   runInNewContext(source, {
@@ -94,12 +96,13 @@ function createPage({ role = 'data_governance_team', initialStatus, empty = fals
     require(name) {
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'fragment' };
-      if (name === 'next/link') return { default: 'a' };
+      if (name === 'next/navigation') return { useSearchParams: () => new URL(location.href).searchParams };
+      if (name === '@/components/AccessibleDialog') return { default: 'dialog' };
       if (name === '@/lib/auth') return { requireProfile: async () => ({ user: { id: role === 'nudee_owner' ? 'qa-owner' : 'qa-office' }, profile: { role } }) };
       if (name === '@/lib/supabase') return { supabase };
       if (name.endsWith('.css')) return {};
       throw new Error(`Unexpected dependency: ${name}`);
-    }, crypto: { randomUUID }, console, Date, Intl,
+    }, crypto: { randomUUID }, console, Date, Intl, URL, window: { location, history },
   });
   let tree;
   const render = () => { cursor = 0; tree = compiled.exports.default(); return tree; };
@@ -145,7 +148,7 @@ test('single assignment: one write for concurrent triggers, committed success su
 
 test('bulk assignment: no concurrent duplicate, committed count retained, newly selected item cannot bypass refresh guard', async () => {
   const page = createPage(); await page.init(); page.selectBulk(1);
-  page.change(n => n.type === 'select' && !n.props.id, 'qa-owner');
+  page.change(n => n.props?.id === 'nudee-bulk-assignee', 'qa-owner');
   page.transport.failRead = true;
   const handler = page.button('إسناد المحدد').props.onClick;
   await Promise.all([handler(), handler()]);
@@ -174,7 +177,7 @@ for (const [buttonLabel, decision, success] of [
     assert.equal(page.calls.rpc[0].args.p_decision, decision);
     assert.equal(page.calls.rpc[0].args.p_notes, 'QA REVIEW NOTE');
     assert.equal(page.nodes(n => n.type === 'button' && text(n) === buttonLabel).length, 0, 'completed decision leaves current review panel');
-    page.selectRequirement(2); page.change(n => n.type === 'textarea', 'NEXT NOTE');
+    page.click('إغلاق'); page.render(); page.selectRequirement(2); page.change(n => n.type === 'textarea', 'NEXT NOTE');
     assert.equal(page.button(buttonLabel).props.disabled, true);
     await page.button(buttonLabel).props.onClick();
     assert.equal(page.calls.rpc.length, 1);
@@ -191,6 +194,47 @@ test('dedicated owner with no assignments receives normal empty state and no off
   assert.equal(page.nodes(n => n.type === 'button' && /إسناد|اعتماد/.test(text(n))).length, 0);
   assert.equal(page.nodes(n => n.props?.href === '/data-governance/nudee-dashboard').length, 0);
   assert.equal(page.calls.rpc.length, 0);
+});
+
+test('owner sees only personal assignments even when extra requirement rows are returned', async () => {
+  const page = createPage({ role: 'nudee_owner', initialStatus: 'assigned' });
+  page.db.nudee_assignments[1].assignee_id = 'someone-else';
+  page.db.nudee_requirements.push(requirement(3));
+  await page.init();
+  assert.match(text(page.tree), /مهامي/);
+  assert.match(page.byRole('status'), /1 من 1 متطلب/);
+  assert.match(text(page.tree), /دليل اختبار 1/);
+  assert.doesNotMatch(text(page.tree), /دليل اختبار [23]/);
+  assert.equal(page.nodes(n => n.props.type === 'checkbox').length, 0);
+});
+
+test('dashboard views, combined search and the status reset use the same register', async () => {
+  const page = createPage({ view: 'overdue' });
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Riyadh' });
+  page.db.nudee_requirements.push(...[3, 4, 5, 6].map(requirement));
+  for (const [id, status, due_date] of [[1, 'assigned', '2000-01-01'], [2, 'changes_requested', '2000-01-01'], [3, 'assigned', today], [4, 'submitted', '2000-01-01'], [5, 'approved', '2000-01-01']]) {
+    page.db.nudee_assignments.push({ ...assignment(id, status), due_date });
+  }
+  await page.init();
+  assert.match(page.byRole('status'), /2 من 6 متطلب/);
+  assert.match(text(page.tree), /دليل اختبار 1/);
+  assert.match(text(page.tree), /دليل اختبار 2/);
+  page.change(n => n.props?.id === 'nudee-filter', 'QA-2');
+  assert.match(page.byRole('status'), /1 من 6 متطلب/);
+  page.change(n => n.props?.id === 'nudee-filter', '');
+  for (const [status, id] of [['unassigned', 6], ['submitted', 4]]) {
+    page.change(n => n.props?.id === 'nudee-view', status);
+    assert.match(page.byRole('status'), /1 من 6 متطلب/);
+    assert.ok(page.button('دليل اختبار ' + id));
+  }
+  page.change(n => n.props?.id === 'nudee-filter', 'لا توجد نتيجة');
+  page.click('عرض كل المتطلبات'); page.render();
+  assert.match(page.byRole('status'), /6 من 6 متطلب/);
+  assert.equal(page.nodes(n => n.props?.id === 'nudee-bulk-assignee').length, 0);
+  page.selectBulk(6);
+  assert.equal(page.nodes(n => n.props?.id === 'nudee-bulk-assignee').length, 1);
+  page.change(n => n.props?.id === 'nudee-view', 'submitted');
+  assert.equal(page.nodes(n => n.props?.id === 'nudee-bulk-assignee').length, 0);
 });
 
 test('ambiguous upload response preserves binary and selected file; does not infer rollback from absent submission', async () => {
