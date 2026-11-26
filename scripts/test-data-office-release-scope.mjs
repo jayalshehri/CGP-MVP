@@ -19,7 +19,8 @@ assert.deepEqual(
   "The first Data Office release must redirect every unfinished route.",
 );
 for (const redirect of redirects) {
-  assert.equal(redirect.destination, "/data-governance/nudee");
+  const destination = redirect.source === "/data-governance" ? "/data-governance/nudee-dashboard" : "/data-governance/nudee";
+  assert.equal(redirect.destination, destination);
   assert.equal(redirect.permanent, false);
 }
 

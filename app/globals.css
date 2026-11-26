@@ -361,3 +361,9 @@ body { font-feature-settings:"kern" 1,"liga" 1; }
 .cgp-workspace-switcher a:focus-visible { outline:3px solid #14b8a6; outline-offset:2px; }
 .cgp-nav-collapsed .cgp-navigation .cgp-workspace-switcher { display:none; }
 @media(max-width:760px) { .cgp-mobile-navigation .cgp-workspace-switcher { margin:8px; } }
+
+@media (min-width: 761px) and (max-width: 1050px) {
+  [data-workspace="data"] .cgp-topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
+  [data-workspace="data"] .cgp-topbar-context { display: none; }
+  [data-workspace="data"] .cgp-account b { display: block; max-inline-size: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

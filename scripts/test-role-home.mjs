@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { roleHomePath } from "../lib/workspaces.ts";
 
 // Dedicated data personas must never begin on cybersecurity metrics.
-assert.equal(roleHomePath("data_governance_team"), "/data-governance/nudee");
+assert.equal(roleHomePath("data_governance_team"), "/data-governance/nudee-dashboard");
 assert.equal(roleHomePath("nudee_owner"), "/data-governance/nudee");
 
 // Preserve the landing route of every pre-existing cybersecurity persona.
