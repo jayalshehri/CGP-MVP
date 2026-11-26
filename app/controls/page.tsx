@@ -6,8 +6,9 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import StatusBadge from "@/components/StatusBadge";
 import { ResultSummary } from "@/components/WorkflowUI";
 import { requireProfile } from "@/lib/auth";
+import { catalogDetailHref, readCatalogPosition, rememberCatalogPosition } from "@/lib/control-catalog-return";
 import { controlAssignmentRoles, type AppliedControlOwner } from "@/lib/control-owner-assignment";
-import { getEccOfficialTitle } from "@/lib/ecc-strategy-example";
+import { getEccCatalogLabel } from "@/lib/ecc-catalog-labels";
 import { supabase } from "@/lib/supabase";
 import CatalogAssignment from "./catalog-assignment";
 import "./catalog.css";
@@ -55,7 +56,7 @@ const normalize = (value: string) => value
 const byCode = (a: Control, b: Control) => a.control_code.localeCompare(b.control_code, "en", { numeric: true });
 const applicabilityLabel = (value: string | null) => value === "CSP" ? "مقدم الخدمة CSP" : value === "CST" ? "المشترك CST" : null;
 const shortLabel = (control: Control, framework: string) =>
-  (framework === "ECC" ? getEccOfficialTitle(control.control_code) : undefined)
+  (framework === "ECC" ? getEccCatalogLabel(control.control_code) : undefined)
   || control.official_text_ar || control.description_ar || cleanTitle(control.title_ar) || "ضابط بدون عنوان";
 
 const riyadhDate = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" });
@@ -99,6 +100,8 @@ function ControlsContent() {
 
   const [search, setSearch] = useState("");
   const [cloudScope, setCloudScope] = useState("all");
+  const [viewer, setViewer] = useState("");
+  const [returnScroll, setReturnScroll] = useState<number | null>(null);
   const [controls, setControls] = useState<Control[]>([]);
   const [frameworks, setFrameworks] = useState<Framework[]>([]);
   const [canManage, setCanManage] = useState(false);
@@ -113,6 +116,13 @@ function ControlsContent() {
       try {
         const { user, profile } = await requireProfile();
         if (!active) return;
+        setViewer(user.id);
+        const previous = readCatalogPosition(user.id);
+        if (previous) {
+          setCloudScope(previous.cloudScope);
+          setSearch(previous.search);
+          setReturnScroll(previous.scroll);
+        }
         setCanManage(controlAssignmentRoles.some(role => role === profile.role));
         let query = supabase.from("controls").select("id,framework_id,control_code,title_ar,description_ar,official_text_ar,hierarchy_level,parent_control_id,applicability,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner,control_owner_id").order("id");
         if (profile.role === "control_owner") query = query.eq("control_owner_id", user.id);
@@ -129,6 +139,11 @@ function ControlsContent() {
     })();
     return () => { active = false; };
   }, [router]);
+  useEffect(() => {
+    if (loading || returnScroll === null) return;
+    const frame = requestAnimationFrame(() => window.scrollTo(0, returnScroll));
+    return () => cancelAnimationFrame(frame);
+  }, [loading, returnScroll]);
 
   const selectedFramework = frameworks.find(item => item.code === requestedFramework) ?? frameworks.find(item => item.code === "ECC") ?? frameworks[0];
   const framework = selectedFramework?.code ?? "";
@@ -154,7 +169,7 @@ function ControlsContent() {
   };
   const query = normalize(search);
   const filtered = domainControls.filter(c => {
-    const searchMatch = normalize(`${c.control_code} ${c.title_ar} ${c.official_text_ar ?? ""} ${framework} ${c.control_owner ?? ""}`).includes(query);
+    const searchMatch = normalize(`${c.control_code} ${c.title_ar} ${shortLabel(c, framework)} ${c.official_text_ar ?? ""} ${framework} ${c.control_owner ?? ""}`).includes(query);
     const statusMatch = status === "all" || (status === "implemented" ? good(c.implementation_status) : c.implementation_status === status);
     const assignmentMatch = assignment === "all" || (assignment === "assigned" ? !!c.control_owner_id : !c.control_owner_id);
     return searchMatch && statusMatch && assignmentMatch
@@ -168,6 +183,7 @@ function ControlsContent() {
 
   function updateParams(values: Record<string, string | null>) {
     const next = new URLSearchParams(params.toString());
+    next.delete("restore");
     for (const [key, value] of Object.entries(values)) {
       if (value) next.set(key, value);
       else next.delete(key);
@@ -188,6 +204,13 @@ function ControlsContent() {
     }));
     setAssignmentNotice(`تم تعيين ${rows.length} من ${reviewedCount} ضابطًا.${rows.length < reviewedCount ? " لم تُحفظ بقية الضوابط. راجع القائمة قبل المحاولة من جديد." : ""}`);
   }
+
+  const captureReturn = () => rememberCatalogPosition(viewer, search, cloudScope);
+  const singleQuickFilter = status === "all" && !ownerFilter;
+  const emptyKind = domainControls.length === 0 ? "scope" : search.trim() ? "search"
+    : singleQuickFilter && assignment === "all" && overdueFilter && !evidenceFilter ? "overdue"
+    : singleQuickFilter && assignment === "all" && evidenceFilter && !overdueFilter ? "evidence"
+    : singleQuickFilter && assignment === "unassigned" && !evidenceFilter && !overdueFilter ? "owner" : "filters";
 
   if (loading) return <main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>;
   if (error) return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل الضوابط</h1><p className="catalog-error">{error.message}</p><Link href="/cybersecurity">العودة إلى لوحة المتابعة</Link></main>;
@@ -216,7 +239,7 @@ function ControlsContent() {
       <section className="catalog-scope" aria-label="نطاق الضوابط وتصفية القائمة">
         <div className="catalog-toolbar">
           <label className="catalog-field"><span>الإطار</span>
-            <select value={framework} onChange={e => {
+            <select id="catalog-framework" value={framework} onChange={e => {
               setSearch(""); setCloudScope("all");
               updateParams({ framework: e.target.value, domain: null, status: null, assignment: null, owner: null, evidence: null, due: null });
             }}>
@@ -292,21 +315,42 @@ function ControlsContent() {
           </div>
         </div>
         {assignmentNotice && <p className="catalog-assignment-notice" role="status">{assignmentNotice}</p>}
-        {!filtered.length ? <p className="catalog-empty">لا توجد ضوابط مطابقة داخل هذا المجال.</p>
-        : view === "structure" ? <StructureList rows={filtered} domainControls={domainControls} framework={framework} filtering={filtering}/>
+        {!filtered.length ? <CatalogEmpty kind={emptyKind} onClearSearch={() => setSearch("")} onClearFilters={clearFilters}/>
+        : view === "structure" ? <StructureList rows={filtered} domainControls={domainControls} framework={framework} filtering={filtering} onNavigate={captureReturn}/>
         : <CatalogTable key={selectionScope} rows={filtered} framework={framework} today={today} nextWeek={nextWeek}
-          canManage={canManage} onOpen={setSelectedControlId} onApplied={applyOwners}/>}
+          canManage={canManage} onOpen={setSelectedControlId} onApplied={applyOwners} onNavigate={captureReturn}/>}
       </section>
       {selectedIndex >= 0 && <ControlDrawer control={filtered[selectedIndex]} framework={selectedFramework}
         position={selectedIndex + 1} total={filtered.length}
         onPrevious={selectedIndex > 0 ? () => setSelectedControlId(filtered[selectedIndex - 1].id) : undefined}
         onNext={selectedIndex + 1 < filtered.length ? () => setSelectedControlId(filtered[selectedIndex + 1].id) : undefined}
+        onNavigate={captureReturn}
         onClose={() => setSelectedControlId(null)}/>}
     </>}
   </main>;
 }
 
-function CatalogTable({ rows, framework, today, nextWeek, canManage, onOpen, onApplied }: {
+function CatalogEmpty({ kind, onClearSearch, onClearFilters }: {
+  kind: "scope" | "search" | "overdue" | "evidence" | "owner" | "filters";
+  onClearSearch: () => void;
+  onClearFilters: () => void;
+}) {
+  const content = {
+    scope: ["لا توجد ضوابط في النطاق المحدد", "اختر إطارًا آخر لعرض الضوابط المتاحة ضمن صلاحياتك.", "اختيار إطار"],
+    search: ["لا توجد نتائج مطابقة للبحث", "جرّب رقم ضابط أو عبارة أقصر، أو امسح البحث مع الإبقاء على الفلاتر.", "مسح البحث"],
+    overdue: ["لا توجد ضوابط متأخرة في هذا المجال", "يمكنك العودة إلى القائمة الكاملة لمتابعة بقية الضوابط.", "عرض الكل"],
+    evidence: ["لا توجد ضوابط تحتاج دليلًا في هذا المجال", "يمكنك العودة إلى القائمة الكاملة لمتابعة بقية الضوابط.", "عرض الكل"],
+    owner: ["لا توجد ضوابط بلا مالك في هذا المجال", "يمكنك العودة إلى القائمة الكاملة لمتابعة بقية الضوابط.", "عرض الكل"],
+    filters: ["لا توجد ضوابط تطابق الفلاتر الحالية", "أزل الفلاتر لعرض كل الضوابط في هذا المجال.", "عرض الكل"],
+  }[kind];
+  return <div className="catalog-empty catalog-empty-state">
+    <div><h2>{content[0]}</h2><p>{content[1]}</p></div>
+    <button type="button" onClick={kind === "search" ? onClearSearch : kind === "scope"
+      ? () => document.getElementById("catalog-framework")?.focus() : onClearFilters}>{content[2]}</button>
+  </div>;
+}
+
+function CatalogTable({ rows, framework, today, nextWeek, canManage, onOpen, onApplied, onNavigate }: {
   rows: Control[];
   framework: string;
   today: string;
@@ -314,6 +358,7 @@ function CatalogTable({ rows, framework, today, nextWeek, canManage, onOpen, onA
   canManage: boolean;
   onOpen: (id: number) => void;
   onApplied: (rows: AppliedControlOwner[], reviewedCount: number) => void;
+  onNavigate: () => void;
 }) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [assignmentIds, setAssignmentIds] = useState<number[] | null>(null);
@@ -347,8 +392,8 @@ function CatalogTable({ rows, framework, today, nextWeek, canManage, onOpen, onA
           <th scope="row" role="rowheader"><div className="catalog-selectable-cell">
             {canManage && <input className="catalog-select-control" type="checkbox" checked={selected.has(control.id)}
               onChange={() => toggle(control.id)} aria-label={`تحديد الضابط ${control.control_code}`}/>}
-            <Link className="catalog-control-link" href={`/controls/${control.id}`} prefetch={false} onNavigate={event => {
-              if (!window.matchMedia("(min-width: 761px)").matches) return;
+            <Link className="catalog-control-link" href={catalogDetailHref(control.id)} prefetch={false} onNavigate={event => {
+              if (!window.matchMedia("(min-width: 761px)").matches) { onNavigate(); return; }
               event.preventDefault(); onOpen(control.id);
             }}>
               <span className="catalog-control-line">
@@ -376,7 +421,9 @@ function CatalogTable({ rows, framework, today, nextWeek, canManage, onOpen, onA
   </>;
 }
 
-function StructureList({ rows, domainControls, framework, filtering }: { rows: Control[]; domainControls: Control[]; framework: string; filtering: boolean }) {
+function StructureList({ rows, domainControls, framework, filtering, onNavigate }: {
+  rows: Control[]; domainControls: Control[]; framework: string; filtering: boolean; onNavigate: () => void;
+}) {
   // Keep a matching child reachable even when the search excludes its parent.
   const shown = new Set(rows.map(row => row.id));
   const parents = new Set(rows.flatMap(row => row.parent_control_id == null ? [] : [row.parent_control_id]));
@@ -384,7 +431,7 @@ function StructureList({ rows, domainControls, framework, filtering }: { rows: C
   const groups = Map.groupBy(withParents, row => row.control_code.split("-").slice(0, 2).join("-"));
   function item(row: Control) {
     const applicability = applicabilityLabel(row.applicability);
-    return <Link className="catalog-structure-link" href={`/controls/${row.id}`} prefetch={false}>
+    return <Link className="catalog-structure-link" href={catalogDetailHref(row.id)} prefetch={false} onNavigate={onNavigate}>
       <bdi className="catalog-code" dir="ltr">{row.control_code}</bdi><span>{shortLabel(row, framework)}</span>
       {applicability && <small>{applicability}</small>}<StatusBadge status={row.implementation_status}/>
     </Link>;
@@ -402,7 +449,7 @@ function StructureList({ rows, domainControls, framework, filtering }: { rows: C
   })}</div>;
 }
 
-function ControlDrawer({ control, framework, position, total, onPrevious, onNext, onClose }: {
+function ControlDrawer({ control, framework, position, total, onPrevious, onNext, onClose, onNavigate }: {
   control: Control;
   framework: Framework;
   position: number;
@@ -410,6 +457,7 @@ function ControlDrawer({ control, framework, position, total, onPrevious, onNext
   onPrevious?: () => void;
   onNext?: () => void;
   onClose: () => void;
+  onNavigate: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -449,7 +497,7 @@ function ControlDrawer({ control, framework, position, total, onPrevious, onNext
       <header className="catalog-drawer-header">
         <div className="catalog-drawer-meta"><bdi className="catalog-code" dir="ltr">{control.control_code}</bdi><bdi>{framework.code}</bdi> <span>{control.hierarchy_level === "sub_control" ? "بند فرعي" : "ضابط أساسي"}</span></div>
         <button className="catalog-close" type="button" autoFocus aria-label="إغلاق تفاصيل الضابط" onClick={() => dialogRef.current?.close()}>×</button>
-        <h2 id="catalog-drawer-title">{(framework.code === "ECC" ? getEccOfficialTitle(control.control_code) : undefined) || cleanTitle(control.title_ar) || "تفاصيل الضابط"}</h2>
+        <h2 id="catalog-drawer-title">{(framework.code === "ECC" ? getEccCatalogLabel(control.control_code) : undefined) || cleanTitle(control.title_ar) || "تفاصيل الضابط"}</h2>
         <p>{control.domain_ar}{applicability && ` · ${applicability}`}</p>
         <nav className="catalog-drawer-navigation" aria-label="التنقل بين الضوابط المعروضة">
           <button type="button" aria-disabled={!onPrevious} onClick={onPrevious}>السابق</button>
@@ -479,7 +527,9 @@ function ControlDrawer({ control, framework, position, total, onPrevious, onNext
           </li>)}</ul>{evidence.length > 3 && <p>تتوفر أدلة إضافية في صفحة الضابط.</p>}</>}
         </section>
       </div>
-      <footer className="catalog-drawer-footer"><Link href={`/controls/${control.id}`} onClick={() => dialogRef.current?.close()}>فتح صفحة الضابط الكاملة <span aria-hidden="true">←</span></Link></footer>
+      <footer className="catalog-drawer-footer"><Link href={catalogDetailHref(control.id)} onNavigate={() => {
+        onNavigate(); dialogRef.current?.close();
+      }}>فتح صفحة الضابط الكاملة <span aria-hidden="true">←</span></Link></footer>
     </article>
   </dialog>;
 }
