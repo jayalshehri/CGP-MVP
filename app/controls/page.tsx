@@ -29,7 +29,16 @@ type Control = {
   control_owner_id: string | null;
 };
 type Framework = { id: number; code: string; name_ar: string; version: string };
-type EvidencePreview = { id: number; link_id: number | null; evidence_name: string | null; file_name: string | null; status: string | null };
+type EvidencePreview = {
+  id: number;
+  control_id: number;
+  link_id: number | null;
+  evidence_name: string | null;
+  file_name: string | null;
+  status: string | null;
+  is_current: boolean;
+  uploaded_at: string | null;
+};
 type View = "structure" | "followup";
 
 const good = (value: string) => ["implemented", "compliant"].includes(value);
@@ -285,11 +294,15 @@ function ControlDrawer({ control, framework, onClose }: { control: Control; fram
     let active = true;
     void (async () => {
       try {
-        const { data, error } = await supabase.rpc("grc_evidence_register")
-          .select("id,link_id,evidence_name,file_name,status")
-          .eq("control_id", control.id).eq("is_current", true).order("uploaded_at", { ascending: false }).limit(4);
+        // Use the same RLS-filtered register as the full control detail page.
+        // The deployed RPC works without PostgREST projection and ordering on its result.
+        const { data, error } = await supabase.rpc("grc_evidence_register");
         if (error) throw error;
-        if (active) setEvidence((data ?? []) as EvidencePreview[]);
+        const current = ((data ?? []) as EvidencePreview[])
+          .filter(item => item.control_id === control.id && item.is_current)
+          .sort((a, b) => (b.uploaded_at ?? "").localeCompare(a.uploaded_at ?? ""))
+          .slice(0, 4);
+        if (active) setEvidence(current);
       } catch {
         if (active) setFailed(true);
       }
