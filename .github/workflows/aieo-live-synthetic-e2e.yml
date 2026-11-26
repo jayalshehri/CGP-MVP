@@ -17,7 +17,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    name: Read-only synthetic proof safety and syntax checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: node --check scripts/aieo-live-synthetic-proof.mjs
+      - run: node --test scripts/aieo-model-provider.test.mjs
+
   developer:
+    needs: preflight
     if: github.ref == 'refs/heads/aieo/synthetic-live-e2e-proof-20261126'
     name: Live OpenRouter developer (synthetic source only)
     environment: aieo-ai
