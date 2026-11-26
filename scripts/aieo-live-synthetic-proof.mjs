@@ -38,6 +38,10 @@ async function propose() {
   if (!key || !model) throw Error('Provider credentials/model not configured in protected environment');
   const task = 'Replace the exact one-line control route regular expression with a version that rejects a trailing junk suffix. Return only a JSON patch.';
   const request = buildModelRequest({ source: fixtureSource, task, model, shareApproved: true });
+  // Reasoning-capable free model can exhaust the small completion budget
+  // before producing final JSON; preserve every strict final-response gate.
+  request.max_tokens = 3000;
+  request.reasoning = { enabled: false };
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST', redirect: 'error', signal: AbortSignal.timeout(25000),
     headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
@@ -50,7 +54,16 @@ async function propose() {
   if (envelope?.choices?.length !== 1 || envelope.choices[0]?.finish_reason !== 'stop' ||
       envelope.choices[0]?.message?.role !== 'assistant' ||
       typeof envelope.choices[0]?.message?.content !== 'string' ||
-      envelope.choices[0]?.message?.tool_calls != null) throw Error('Provider response not final');
+      envelope.choices[0]?.message?.tool_calls != null) {
+    // Protocol metadata only: never log model text, prompts or credentials.
+    const finish = envelope?.choices?.[0]?.finish_reason;
+    console.log('MODEL_PROTOCOL_DIAGNOSTIC', JSON.stringify({
+      finish: ['stop', 'length', 'content_filter', 'tool_calls'].includes(finish) ? finish : 'other',
+      assistantRole: envelope?.choices?.[0]?.message?.role === 'assistant',
+      hasContent: typeof envelope?.choices?.[0]?.message?.content === 'string'
+    }));
+    throw Error('Provider response not final');
+  }
   const check = validateModelPatch({ response: envelope.choices[0].message.content, source: fixtureSource });
   if (check.status !== 'proposed' || check.patchedSource !== expected.patchedSource) {
     throw Error('Live model did not propose the exact approved synthetic fix');
