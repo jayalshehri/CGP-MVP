@@ -143,7 +143,7 @@ function ControlsContent(){
        const owner=c.control_owner||"غير معيّن";
        return <tr key={c.id}>
         <td dir="ltr">{c.control_code}</td>
-        <td><span className="followup-description" title={description}>{description}</span></td>
+        <td><span className="followup-description" title={description??undefined}>{description}</span></td>
         <td><bdi className="followup-owner" title={owner}>{owner}</bdi></td>
         <td><StatusBadge status={c.implementation_status}/></td>
         <td><StatusBadge status={c.evidence_status}/></td>
