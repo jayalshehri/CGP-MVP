@@ -36,7 +36,13 @@ async function propose() {
       process.env.GITHUB_REPOSITORY !== 'jayalshehri/CGP-MVP') throw Error('Untrusted workflow');
   const key = process.env.OPENROUTER_API_KEY, model = process.env.AIEO_MODEL_ID;
   if (!key || !model) throw Error('Provider credentials/model not configured in protected environment');
-  const task = 'Replace the exact one-line control route regular expression with a version that rejects a trailing junk suffix. Return only a JSON patch.';
+  // The only permitted provider task is a byte-for-byte substitution in
+  // a synthetic fixture; explicit instructions remove model ambiguity.
+  const oldLine = fixtureSource.split('\\n')[1];
+  const newLine = expected.patchedSource.split('\\n')[1];
+  const task = 'In the synthetic source, replace exactly this existing line: ' +
+    JSON.stringify(oldLine) + ' with: ' + JSON.stringify(newLine) +
+    '. Keep every other byte unchanged. Return exactly four JSON string fields: path, find, replace, explanation. No Markdown.';
   const request = buildModelRequest({ source: fixtureSource, task, model, shareApproved: true });
   // Reasoning-capable free model can exhaust the small completion budget
   // before producing final JSON; preserve every strict final-response gate.
@@ -66,6 +72,12 @@ async function propose() {
   }
   const check = validateModelPatch({ response: envelope.choices[0].message.content, source: fixtureSource });
   if (check.status !== 'proposed' || check.patchedSource !== expected.patchedSource) {
+    // Validator-owned reasons and Boolean hashes only: never print model text.
+    console.log('MODEL_PATCH_DIAGNOSTIC', JSON.stringify({
+      status: check.status,
+      reason: check.reason || null,
+      correctSyntheticPatch: check.status === 'proposed' && check.patchedSource === expected.patchedSource
+    }));
     throw Error('Live model did not propose the exact approved synthetic fix');
   }
   save('developer', { path: MODEL_ALLOWED_PATH, source: fixtureSource, candidate: check.patchedSource,
