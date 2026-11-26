@@ -1,11 +1,12 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
+  const login = usePathname().startsWith("/data-governance") ? "/login/data" : "/login/cyber";
   const [ready, setReady] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -19,13 +20,13 @@ export default function ChangePasswordPage() {
       const { data } = await supabase.auth.getSession();
       if (!mounted) return;
       if (!data.session) {
-        router.replace("/login");
+        router.replace(login);
         return;
       }
       setReady(true);
     })();
     return () => { mounted = false; };
-  }, [router]);
+  }, [router, login]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -48,7 +49,7 @@ export default function ChangePasswordPage() {
     }
     setMessage("تم تغيير كلمة المرور بنجاح.");
     setSaving(false);
-    setTimeout(() => router.replace("/"), 1000);
+    setTimeout(() => router.replace(login), 1000);
   }
 
   if (!ready) {
@@ -58,7 +59,7 @@ export default function ChangePasswordPage() {
   return (
     <main dir="rtl" style={{display:"grid",placeItems:"center",color:"var(--cgp-ink)",padding:20}}>
       <section style={{width:"100%",maxWidth:460,background:"white",border:"1px solid #e2e7eb",borderRadius:18,padding:32,boxShadow:"0 14px 40px rgba(11,31,51,.08)"}}>
-        <div style={{fontSize:23,fontWeight:800}}>Cyber Governance Platform</div>
+        <div style={{fontSize:23,fontWeight:800}}>إعدادات الحساب</div>
         <div style={{color:"var(--cgp-teal)",fontWeight:800,marginTop:7}}>تغيير كلمة المرور</div>
         <p style={{color:"#687581",lineHeight:1.8}}>أنت مسجل الدخول. عيّن كلمة مرور جديدة لحسابك ثم احفظها.</p>
         {error && <div style={{background:"#fff2f0",color:"#9d2e24",padding:12,borderRadius:9,marginBottom:16,lineHeight:1.7}}>{error}</div>}
@@ -70,7 +71,7 @@ export default function ChangePasswordPage() {
           <input disabled={saving} id="confirm-password" type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} style={input} autoComplete="new-password" />
           <button disabled={saving} style={{width:"100%",marginTop:24,border:0,borderRadius:10,padding:13,background:"var(--cgp-teal)",color:"white",fontWeight:800,fontSize:15,cursor:"pointer"}}>{saving?"جاري الحفظ...":"حفظ كلمة المرور الجديدة"}</button>
         </form>
-        <button type="button" onClick={()=>router.push("/")} style={{width:"100%",marginTop:12,border:0,background:"transparent",color:"#687581",cursor:"pointer"}}>العودة للوحة المتابعة</button>
+        <button type="button" onClick={()=>router.push(login)} style={{width:"100%",marginTop:12,border:0,background:"transparent",color:"#687581",cursor:"pointer"}}>العودة للوحة المتابعة</button>
       </section>
     </main>
   );

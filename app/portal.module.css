@@ -1,0 +1,13 @@
+.portal { min-height: 100svh; display: grid; align-items: center; padding: clamp(24px,6vw,88px); background: #f3f7f6; color: #112c36; }
+.portal section { width: min(100%, 960px); margin-inline: auto; }
+.portal header { display: flex; align-items: center; gap: 14px; color: #445c63; }
+.portal header span { background: #143e44; color: white; padding: 9px 12px; border-radius: 9px; font-weight: 750; }
+.portal h1 { margin: 32px 0; font-size: clamp(30px,5vw,52px); }
+.cards { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+.cards a { --accent: #146357; display: flex; flex-direction: column; align-items: start; padding: clamp(24px,4vw,44px); border: 1px solid #cddad6; border-block-start: 4px solid var(--accent); border-radius: 16px; text-decoration: none; background: white; color: inherit; }
+.cards a:nth-child(2) { --accent: #254965; }
+.cards a:hover, .cards a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.cards h2 { margin: 0; font-size: clamp(22px,3vw,30px); }
+.cards p { flex: 1; margin: 12px 0 32px; line-height: 1.9; color: #495f66; }
+.cards strong { color: var(--accent); }
+@media (max-width: 640px) { .cards { grid-template-columns: 1fr; } .portal h1 { margin: 24px 0; } }
