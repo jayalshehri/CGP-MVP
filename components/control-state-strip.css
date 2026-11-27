@@ -1,0 +1,5 @@
+.control-state-strip{display:flex;align-items:center;flex-wrap:wrap;gap:6px 18px;padding:5px 0;margin:0;color:#4b6472}
+.control-state-strip>div{display:flex;align-items:center;gap:6px;min-width:0;white-space:nowrap}
+.control-state-strip dt{font-weight:650;font-size:12px}.control-state-strip dd{margin:0}
+.control-state-strip dd .cgp-status{font-size:11px;line-height:1.5;padding:3px 8px;gap:4px}
+@media(max-width:540px){.control-state-strip{gap:6px 10px}.control-state-strip>div{gap:4px}}

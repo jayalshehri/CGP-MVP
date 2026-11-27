@@ -13,6 +13,8 @@ import { getEccCatalogLabel } from "@/lib/ecc-catalog-labels";
 import { supabase } from "@/lib/supabase";
 import CatalogAssignment from "./catalog-assignment";
 import FrameworkAssessmentEntry from "@/components/FrameworkAssessmentEntry";
+import ControlStateStrip from "@/components/ControlStateStrip";
+import { controlHeading, controlFrameworkLabel, controlFollowUp, followUpText } from "@/lib/control-presentation";
 import { compactAssessmentFramework } from "@/lib/assessment-navigation";
 import "./catalog.css";
 
@@ -470,11 +472,12 @@ function ControlDrawer({ control, framework, position, total, onPrevious, onNext
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const [evidenceRegister, setEvidenceRegister] = useState<EvidencePreview[] | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (dialog && !dialog.open) dialog.showModal();
+    if (dialog && !dialog.open) { dialog.showModal(); titleRef.current?.focus(); }
   }, []);
   useEffect(() => {
     let active = true;
@@ -497,48 +500,48 @@ function ControlDrawer({ control, framework, position, total, onPrevious, onNext
   useEffect(() => { bodyRef.current?.scrollTo({ top: 0 }); }, [control.id]);
 
   const evidence = evidenceRegister?.filter(item => item.control_id === control.id)
-    .sort((a, b) => (b.uploaded_at ?? "").localeCompare(a.uploaded_at ?? "")).slice(0, 4) ?? null;
+    .sort((a, b) => (b.uploaded_at ?? "").localeCompare(a.uploaded_at ?? "")) ?? null;
 
   const applicability = applicabilityLabel(control.applicability);
+  const action = controlFollowUp({implementation: control.implementation_status, evidence: control.evidence_status, verification: control.verification_status});
   return <dialog className="catalog-drawer" dir="rtl" ref={dialogRef} aria-labelledby="catalog-drawer-title" onClose={onClose}
     onClick={event => { if (event.target === event.currentTarget) dialogRef.current?.close(); }}>
     <article>
       <header className="catalog-drawer-header">
-        <div className="catalog-drawer-meta"><bdi className="catalog-code" dir="ltr">{control.control_code}</bdi><bdi>{framework.code}</bdi> <span>{control.hierarchy_level === "sub_control" ? "بند فرعي" : "ضابط أساسي"}</span></div>
-        <button className="catalog-close" type="button" autoFocus aria-label="إغلاق تفاصيل الضابط" onClick={() => dialogRef.current?.close()}>×</button>
-        <h2 id="catalog-drawer-title">{(framework.code === "ECC" ? getEccCatalogLabel(control.control_code) : undefined) || cleanTitle(control.title_ar) || "تفاصيل الضابط"}</h2>
+        <div className="catalog-drawer-meta"><bdi className="catalog-code" dir="ltr">{control.control_code}</bdi><bdi dir="ltr">{controlFrameworkLabel(framework.code, framework.version)}</bdi><span>{control.hierarchy_level === "sub_control" ? "ضابط فرعي" : "ضابط أساسي"}</span></div>
+        <button className="catalog-close" type="button" aria-label="إغلاق تفاصيل الضابط" onClick={() => dialogRef.current?.close()}>×</button>
+        <h2 id="catalog-drawer-title" ref={titleRef} tabIndex={-1}>{controlHeading(framework.code, control.control_code, control.title_ar)}</h2>
         <p>{control.domain_ar}{applicability && ` · ${applicability}`}</p>
+      </header>
+      <div className="catalog-drawer-body" ref={bodyRef}>
+        <dl className="catalog-drawer-facts">
+          <div><dt>المالك</dt><dd><bdi>{control.control_owner || "غير معيّن"}</bdi></dd></div>
+          <div><dt>الاستحقاق</dt><dd>{formatRiyadhDate(control.due_date, "غير محدد")}</dd></div>
+        </dl>
+        <ControlStateStrip implementation={control.implementation_status} evidence={control.evidence_status} verification={control.verification_status}/>
+        <div className="catalog-drawer-next"><strong>المتابعة القادمة</strong><span>{followUpText[action]}</span></div>
+        <section className="catalog-drawer-section" aria-labelledby="catalog-evidence-title" aria-busy={evidence === null && !failed}>
+          <h3 id="catalog-evidence-title">الأدلة الحالية {evidence && <bdi className="catalog-drawer-count">{evidence.length}</bdi>}</h3>
+          {failed ? <p role="status">تعذر تحميل ملخص الأدلة. يمكنك مراجعتها في صفحة الضابط.</p>
+          : evidence === null ? <p role="status">جارٍ تحميل الأدلة…</p>
+          : !evidence.length ? <p>لا توجد أدلة حالية ضمن صلاحياتك.</p>
+          : <><ul className="catalog-evidence-list">{evidence.slice(0, 2).map(item => <li key={`${item.id}-${item.link_id ?? "source"}`}>
+            <span dir="auto">{item.evidence_name || item.file_name || "دليل بدون اسم"}</span><StatusBadge status={item.status || ""}/>
+          </li>)}</ul>{evidence.length > 2 && <p>بقية الأدلة في صفحة الضابط.</p>}</>}
+        </section>
+        <details className="catalog-drawer-section catalog-drawer-requirement" key={control.id}>
+          <summary><span>{control.official_text_ar ? "النص الرسمي للضابط" : "الوصف المسجل"}</span><span className="catalog-drawer-toggle" aria-hidden="true"/></summary>
+          <p className="catalog-requirement">{control.official_text_ar || control.description_ar || "لا يوجد نص مسجل لهذا الضابط."}</p>
+        </details>
+      </div>
+      <footer className="catalog-drawer-footer">
+        <Link href={catalogDetailHref(control.id)} onNavigate={() => { onNavigate(); dialogRef.current?.close(); }}>فتح صفحة الضابط <span aria-hidden="true">←</span></Link>
         <nav className="catalog-drawer-navigation" aria-label="التنقل بين الضوابط المعروضة">
           <button type="button" aria-disabled={!onPrevious} onClick={onPrevious}>السابق</button>
           <span role="status">{position} من {total}</span>
           <button type="button" aria-disabled={!onNext} onClick={onNext}>التالي</button>
         </nav>
-      </header>
-      <div className="catalog-drawer-body" ref={bodyRef}>
-        <dl className="catalog-drawer-facts">
-          <div><dt>المالك</dt><dd><bdi>{control.control_owner || "غير معيّن"}</bdi></dd></div>
-          <div><dt>تاريخ الاستحقاق</dt><dd>{control.due_date ? <bdi dir="ltr">{formatRiyadhDate(control.due_date)}</bdi> : "غير محدد"}</dd></div>
-          <div><dt>حالة التطبيق</dt><dd><StatusBadge status={control.implementation_status}/></dd></div>
-          <div><dt>حالة الدليل</dt><dd><StatusBadge status={control.evidence_status}/></dd></div>
-        </dl>
-        <section aria-labelledby="catalog-requirement-title">
-          <h3 id="catalog-requirement-title">{control.official_text_ar ? "النص الرسمي للضابط" : "الوصف المسجل"}</h3>
-          <p className="catalog-requirement">{control.official_text_ar || control.description_ar || "لا يوجد نص مسجل لهذا الضابط."}</p>
-        </section>
-        <section aria-labelledby="catalog-evidence-title" aria-busy={evidence === null && !failed}>
-          <h3 id="catalog-evidence-title">الأدلة المرفوعة الحالية</h3>
-          {failed ? <p role="status">تعذر تحميل ملخص الأدلة. افتح صفحة الضابط للمحاولة مرة أخرى.</p>
-          : evidence === null ? <p role="status">جارٍ تحميل الأدلة…</p>
-          : !evidence.length ? <p>لا توجد أدلة حالية معروضة ضمن صلاحياتك.</p>
-          : <><ul className="catalog-evidence-list">{evidence.slice(0, 3).map(item => <li key={`${item.id}-${item.link_id ?? "source"}`}>
-            <span dir="auto">{item.evidence_name || item.file_name || "دليل بدون اسم"}</span>
-            <StatusBadge status={item.status || ""}/>
-          </li>)}</ul>{evidence.length > 3 && <p>تتوفر أدلة إضافية في صفحة الضابط.</p>}</>}
-        </section>
-      </div>
-      <footer className="catalog-drawer-footer"><Link href={catalogDetailHref(control.id)} onNavigate={() => {
-        onNavigate(); dialogRef.current?.close();
-      }}>فتح صفحة الضابط الكاملة <span aria-hidden="true">←</span></Link></footer>
+      </footer>
     </article>
   </dialog>;
 }

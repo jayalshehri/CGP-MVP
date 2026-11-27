@@ -1,5 +1,5 @@
 "use client";
-import { formatRiyadhDateTime } from "@/lib/dates";
+import { formatRiyadhDate, formatRiyadhDateTime } from "@/lib/dates";
 import { Suspense, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
@@ -8,14 +8,16 @@ import EvidenceDownload from "@/components/EvidenceDownload";
 import ControlAssessmentHistory from "@/components/ControlAssessmentHistory";
 import GrcAuditTrail from "@/components/GrcAuditTrail";
 import ControlReviewPanel from "@/components/ControlReviewPanel";
+import ControlStateStrip from "@/components/ControlStateStrip";
+import { controlHeading, controlFrameworkLabel, controlFollowUp, followUpText } from "@/lib/control-presentation";
 import { controlPlan } from "@/lib/control-plan";
 import { evidenceReviewHref } from "@/lib/evidence-review";
 import { positiveId } from "@/lib/audit-schedule";
 import { catalogBackHref, catalogDetailHref } from "@/lib/control-catalog-return";
-import { eccImplementationGuideUrl, eccOfficialControlsUrl, getEccOfficialTitle, getEccStrategyExample } from "@/lib/ecc-strategy-example";
+import { eccImplementationGuideUrl, eccOfficialControlsUrl, getEccStrategyExample } from "@/lib/ecc-strategy-example";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { frequencyLabels, formatGrcDate, scheduleState, scheduleStateLabels, cycleStage, cycleStageLabels } from "@/lib/grc";
+import { frequencyLabels, scheduleState, scheduleStateLabels, cycleStage, cycleStageLabels } from "@/lib/grc";
 import "./detail.css";
 
 type Control = { id:number; control_code:string; title_ar:string; description_ar:string|null; official_text_ar:string|null; hierarchy_level:string; parent_control_id:number|null; applicability:string|null; source_page:string|null; domain_ar:string; implementation_status:string; evidence_status:string; verification_status:string; due_date:string|null; last_review_date:string|null; control_owner:string|null; evidence_owner:string|null; audit_frequency:string; next_audit_date:string|null; frameworks:{code:string,name_ar:string,version:string,is_active:boolean,source_url:string|null}|null; };
@@ -32,21 +34,19 @@ type ProjectRequirementLink = {
  requirement_id:number; project_id:number;
  cybersecurity_projects:{project_code:string;name_ar:string} | {project_code:string;name_ar:string}[] | null;
 };
-const tabs=['نظرة عامة','الأدلة','الضوابط المرتبطة','السجل والمراجعات'];
-const goodStatus=(value:string)=>['verified','approved','accepted','compliant'].includes(value);
+const tabs=['نظرة عامة','الأدلة','الارتباطات','السجل والمراجعات'];
 const assessmentStatusText:Record<string,string>={implemented:'مطبق كليًا',partially_implemented:'مطبق جزئيًا',not_implemented:'غير مطبق',not_applicable:'لا ينطبق'};
 const coverageText:Record<string,string>={full:'كاملة',partial:'جزئية',supporting:'داعمة'};
 const mappingConfidenceText:Record<string,string>={confirmed:'مؤكد',probable:'محتمل'};
 const single=<T,>(value:T|T[]|null):T|null=>Array.isArray(value)?value[0]??null:value;
-// title_ar is stored as "{subdomain label} - {control_code}" (a list-display
-// convention, not a header title) -- stripping the trailing code here both
-// recovers the subdomain label for the breadcrumb and avoids ever rendering
-// a bare digit/hyphen code sequence inside RTL prose, which the browser's
-// BiDi algorithm can visually reorder.
-const cleanTitle=(value:string)=>value.replace(/\s*[-–]\s*[\d-]+\s*$/,"").trim();
-
 export default function ControlDetailsPage() {
- return <Suspense fallback={<main className="detail-page" role="status">جارٍ تحميل الضابط…</main>}><ControlDetailsContent/></Suspense>;
+ return <Suspense fallback={<main className="detail-page" role="status">جارٍ تحميل الضابط…</main>}><ControlDetailsRoute/></Suspense>;
+}
+
+function ControlDetailsRoute() {
+ const {id}=useParams<{id:string}>();
+ const params=useSearchParams();
+ return <ControlDetailsContent key={`${id}:${params.get("auditRequest") ?? ''}:${params.get("auditCycle") ?? ''}`}/>;
 }
 
 function ControlDetailsContent() {
@@ -58,7 +58,12 @@ function ControlDetailsContent() {
  const [viewer,setViewer]=useState("");
  const [control,setControl]=useState<Control|null>(null),[evidence,setEvidence]=useState<Evidence[]>([]);
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[role,setRole]=useState<UserRole|null>(null);
- const [tab,setTab]=useState(0);
+ const [tab,setTab]=useState(()=>auditRequestId||auditCycleId||(typeof window!=="undefined"&&window.location.hash==="#control-review-cycle") ? 3 : 0);
+ useEffect(()=>{
+  const followHash=()=>{if(window.location.hash==="#control-review-cycle")setTab(3);};
+  window.addEventListener("hashchange",followHash);
+  return()=>window.removeEventListener("hashchange",followHash);
+ },[]);
 
  const [reflections,setReflections]=useState<AssessmentReflection[]>([]);
  const [mappedControls,setMappedControls]=useState<MappedControl[]>([]);
@@ -122,75 +127,204 @@ function ControlDetailsContent() {
  const isEcc=control.frameworks?.code==='ECC';
  const isCcc=control.frameworks?.code==='CCC';
  const isCscc=control.frameworks?.code==='CSCC';
- const frameworkLabel=control.frameworks&&(isCscc
-  ? `CSCC-${control.frameworks.version.replace('-',':')}`
-  : `${control.frameworks.code} ${control.frameworks.version}`);
+ const frameworkKey=control.frameworks?.code??'';
+ const frameworkLabel=controlFrameworkLabel(frameworkKey,control.frameworks?.version);
+ const title=controlHeading(frameworkKey,control.control_code,control.title_ar);
  const showsCsccNumberingNote=isCscc&&control.frameworks?.version==='2-2026'&&control.control_code==='2-9-1-3';
- // official_text_ar is the validated NCA regulatory text — the source of truth.
- // Older per-framework fallbacks only apply on the handful of rows a future
- // catalog refresh has not yet reached (none, as of this correction pass).
  const officialRequirement=control.official_text_ar||strategyExample?.requirement||(isCcc?control.title_ar:control.description_ar)||'لا يوجد وصف مسجل.';
+ const officialSource=(archived||isCscc)&&control.frameworks?.source_url
+  ? control.frameworks.source_url
+  : isEcc ? eccOfficialControlsUrl : `https://nca.gov.sa/ar/regulatory-documents/controls-list/${(frameworkKey||'ECC').toLowerCase()}/`;
  const applicability=applicabilityLabel(control.applicability);
- const frameworkCode=(control.frameworks?.code||'ECC').toLowerCase();
- const timeline=[...evidence.flatMap(e=>[
-  ...(e.uploaded_at?[{key:`upload-${e.id}`,time:e.uploaded_at,title:`رفع دليل: ${e.evidence_name||e.file_name}`,body:e.description}]:[]),
-  ...(e.reviewed_at?[{key:`review-${e.id}`,time:e.reviewed_at,title:`قرار المراجعة: ${statusText(e.status||'')}`,body:e.review_notes}]:[])
- ])].sort((a,b)=>Date.parse(b.time)-Date.parse(a.time));
- return <main className="detail-page" dir="rtl">
-  <Link className="detail-back" href={backToControls}>← العودة إلى الضوابط</Link>
-  {archived&&<section className="detail-card" role="status"><h2>ضابط مؤرشف</h2><p>ينتمي هذا الضابط إلى إصدار تنظيمي سابق، وهو محفوظ للرجوع التاريخي وسجل التدقيق فقط. لا يمكن إسناده أو رفع أدلة جديدة له أو بدء مراجعة أو تقييم جديد.</p></section>}
-  <nav className="detail-breadcrumb" aria-label="مسار التصنيف الهرمي">
-   <span>{control.domain_ar}</span>
-   <span aria-hidden="true">←</span>
-   <span>{cleanTitle(control.title_ar)}</span>
-   {parentControl&&<><span aria-hidden="true">←</span><Link href={relatedControlHref(parentControl.id)}><span dir="ltr">{parentControl.control_code}</span> {parentControl.official_text_ar||cleanTitle(parentControl.title_ar)}</Link></>}
-  </nav>
-  <header className="detail-hero"><div><span className="detail-code" dir="ltr">{control.control_code}</span>{control.frameworks&&<span className="detail-framework-tag" dir="ltr">{frameworkLabel}</span>}{control.hierarchy_level==='sub_control'?<span className="detail-hierarchy-tag">ضابط فرعي</span>:<span className="detail-hierarchy-tag">ضابط أساسي</span>}{applicability&&<span className="catalog-applicability">{applicability}</span>}<h1>{control.official_text_ar||(isEcc?getEccOfficialTitle(control.control_code):undefined)||strategyExample?.title||cleanTitle(control.title_ar)}</h1><p>{control.domain_ar}</p></div><div className="detail-hero-actions"><StatusBadge status={control.implementation_status}/>{canReview&&<Link className="detail-assign-owner" href={`/controls/${control.id}/assign`}>{control.control_owner?"تغيير مالك الضابط":"تعيين مالك الضابط"} ←</Link>}</div></header>
-  <div className="detail-metrics"><section><small>حالة التطبيق</small><StatusBadge status={control.implementation_status}/></section><section><small>حالة الدليل</small><StatusBadge status={control.evidence_status}/></section><section><small>حالة التحقق</small><StatusBadge status={control.verification_status}/></section><section><small>موعد الاستحقاق</small><strong>{formatGrcDate(control.due_date,"غير محدد")}</strong></section></div>
-  {!archived&&<section className="detail-next"><div><span>{canUpload?'الإجراء التالي':'وضع المراجعة'}</span><strong>{canUpload?(control.evidence_status==='not_uploaded'?'رفع الدليل المطلوب للضابط':!goodStatus(control.verification_status)?'متابعة مراجعة الدليل والتحقق':'مراجعة الضابط دوريًا والمحافظة على الأدلة'):'تستطيع معاينة الدليل والسجل فقط ضمن نطاق التدقيق الممنوح لك.'}</strong></div>{canUpload&&control.evidence_status==='not_uploaded'?<Link className="detail-button" href={`/controls/${control.id}/evidence/new`}>رفع دليل ←</Link>:<button className="detail-button" onClick={()=>setTab(3)}>فتح السجل ←</button>}</section>}
-  <section className="detail-schedule-strip">
-   <div><small>تكرار المراجعة</small><strong>{frequencyLabels[control.audit_frequency]??control.audit_frequency}</strong></div>
-   <div><small>آخر مراجعة</small><strong>{formatGrcDate(control.last_review_date)}</strong></div>
-   <div><small>المراجعة القادمة</small><strong>{formatGrcDate(control.next_audit_date)}</strong><span className={`audit-state ${scheduleState(control.next_audit_date)}`}>{scheduleStateLabels[scheduleState(control.next_audit_date)]}</span></div>
-   <div><small>مرحلة الدورة الحالية</small><span className={`audit-stage ${cycleStage(!!openCycleId,latestRequestStatus)}`}>{cycleStageLabels[cycleStage(!!openCycleId,latestRequestStatus)]}</span>{openCycleDue&&<small className="detail-schedule-due">حتى {formatGrcDate(openCycleDue)}</small>}</div>
-   {openCycleId&&reviewerName&&<div><small>المراجع المكلف</small><strong>{reviewerName}</strong></div>}
-  </section>
-  <div className="detail-tabs" role="tablist" aria-label="تفاصيل الضابط">{tabs.map((label,index)=><button key={label} id={`detail-tab-${index}`} role="tab" aria-selected={tab===index} aria-controls={`detail-panel-${index}`} tabIndex={tab===index?0:-1} onClick={()=>setTab(index)} onKeyDown={event=>{let next=index;if(event.key==='ArrowLeft')next=(index+1)%tabs.length;else if(event.key==='ArrowRight')next=(index+tabs.length-1)%tabs.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;event.preventDefault();setTab(next);document.getElementById(`detail-tab-${next}`)?.focus();}}>{label}</button>)}</div>
-  <section id={`detail-panel-${tab}`} role="tabpanel" aria-labelledby={`detail-tab-${tab}`} className="detail-columns">
-   <div className="detail-content">
-   {tab===0&&<><ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload} targetRequestId={auditRequestId} targetCycleId={auditCycleId}/>
-   <section className="detail-card requirements-projects-card">
-    <h2>المتطلبات والمشاريع المرتبطة</h2>
-    <p className="detail-hint">العلاقات عبر المتطلبات للقراءة فقط ضمن صلاحياتك. قد يرتبط المتطلب بأكثر من مشروع، وتبقى تغطية المواءمة وجودتها خاصة بكل متطلب وضابط.</p>
-    {!requirementLinks.length?<p>لا يدعم هذا الضابط أي متطلب سيبراني مسجل حاليًا.</p>:
-    <div className="req-proj-table-wrap"><table className="req-proj-table"><thead><tr><th>رمز المتطلب</th><th>المتطلب</th><th>التغطية</th><th>جودة الربط</th><th>رمز المشروع</th><th>المشروع</th></tr></thead><tbody>
-     {requirementLinks.flatMap(link=>{
-      const requirement=single(link.cybersecurity_requirements);
-      const visibleProjects=projectLinks.filter(p=>p.requirement_id===link.requirement_id&&single(p.cybersecurity_projects));
-      return (visibleProjects.length?visibleProjects:[null]).map(projectLink=>{
-      const project=projectLink?single(projectLink.cybersecurity_projects):null;
-      return <tr key={`${link.requirement_id}:${projectLink?.project_id??'none'}`}>
-       <td dir="ltr">{requirement?.requirement_code??'—'}</td>
-       <td>{requirement?.title_ar??'—'}</td>
-       <td><span className={`coverage-pill ${link.coverage_type}`}>{coverageText[link.coverage_type]??link.coverage_type}</span></td>
-       <td><span className={`mapping-pill ${link.mapping_confidence}`}>{mappingConfidenceText[link.mapping_confidence]??link.mapping_confidence}</span></td>
-       <td dir="ltr">{project?.project_code??'—'}</td>
-       <td>{project?<Link href={`/roadmap/${projectLink!.project_id}`}>{project.name_ar}</Link>:'لا يوجد مشروع ظاهر ضمن صلاحياتك'}</td>
-      </tr>;
-      });
-     })}
-    </tbody></table></div>}
-   </section>
-   <section className="detail-card"><h2>{archived?'نص المتطلب في الإصدار السابق':'المتطلب الرسمي'}</h2><p className="detail-official">{officialRequirement}</p>{control.source_page&&<p className="detail-hint">المصدر: <bdi dir="ltr">{frameworkLabel}</bdi> — الصفحة {control.source_page} من الوثيقة الرسمية الصادرة عن الهيئة الوطنية للأمن السيبراني.</p>}
-    {showsCsccNumberingNote&&<p className="detail-hint">يظهر بند المعالجة الفورية للثغرات الحرجة في وثيقة إصدار 2026 بالرقم <bdi dir="ltr">2-1-9-3</bdi>. أبقينا رقم الضابط في المنصة <bdi dir="ltr">2-9-1-3</bdi> حفاظًا على روابطه إلى أن يتأكد الترقيم.</p>}
-    {plan.requirements.length>0&&<><h3>المتطلبات الفرعية</h3>{plan.requirements.map(r=><p className="detail-requirement" key={r.key}><b dir="ltr">{r.key}</b> {r.text}</p>)}</>}<a className="detail-back" href={(archived||isCscc)&&control.frameworks?.source_url?control.frameworks.source_url:isEcc?eccOfficialControlsUrl:`https://nca.gov.sa/ar/regulatory-documents/controls-list/${frameworkCode}/`} target="_blank" rel="noreferrer">{archived?'مرجع الإصدار السابق':'مرجع الضوابط الرسمية للهيئة'} ↗</a></section>
-   {childControls.length>0&&<section className="detail-card"><h2>الضوابط الفرعية ({childControls.length})</h2><p className="detail-hint">بنود تنظيمية رسمية مستقلة ضمن هذا الضابط، كل منها قابل للتقييم بشكل مستقل.</p><ul className="detail-children-list">{childControls.map(k=><li key={k.id}><Link href={relatedControlHref(k.id)}><span dir="ltr">{k.control_code}</span> <span>{k.official_text_ar||k.title_ar}</span><StatusBadge status={k.implementation_status}/></Link></li>)}</ul></section>}
-   {isEcc&&<section className="detail-card"><h2>الإرشاد المرجعي للهيئة</h2><p>يوجد دليل إرشادي مستقل لتطبيق ECC. يُستخدم للاستئناس بمنهج التطبيق، بينما يبقى نص ECC الحالي هو المتطلب الملزم عند اختلاف الإصدار أو الصياغة.</p><a className="detail-back" href={eccImplementationGuideUrl} target="_blank" rel="noreferrer">فتح الدليل الإرشادي ↗</a></section>}{["CSCC","DCC","TCC","OSMACC"].includes(frameworkCode)&&<ControlAssessmentHistory controlId={control.id} framework={frameworkCode}/>}</>}
-   {tab===1&&<><section className="detail-card"><h2>الأدلة المقترحة</h2><p className="detail-hint">أمثلة تساعد على اختيار الدليل. يحدّد المراجع ملاءمته بناءً على نص الضابط ونطاق تطبيقه.</p><ul>{plan.evidence.map(item=><li key={item}>{item}</li>)}</ul>{canUpload&&<Link className="detail-button" href={`/controls/${control.id}/evidence/new`}>+ رفع دليل</Link>}</section><section className="detail-card"><h2>الأدلة والإصدارات</h2>{!evidence.length&&<p>لا توجد أدلة مرفوعة بعد.</p>}{evidence.map(e=><article className="control-evidence-item" key={`${e.id}-${e.link_id??"source"}`}><small>{e.is_current?'الإرسال الحالي':'إصدار سابق'} · إصدار {e.version_number}{e.link_id?' · مشترك':''}</small><h3>{e.evidence_name||e.file_name}</h3><p>{e.file_name} · {e.uploader_name||"اسم مقدّم الدليل غير مسجّل"}</p>{e.valid_until&&<p>ينتهي في {formatGrcDate(e.valid_until)}</p>}{canUpload&&e.is_current&&!e.link_id&&<Link href={`/controls/${control.id}/evidence/new?replace=${e.id}`}>رفع إصدار جديد</Link>}<StatusBadge status={e.status||''}/>{e.uploaded_at&&<p>{formatRiyadhDateTime(e.uploaded_at)}</p>}{e.description&&<p>{e.description}</p>}{e.review_notes&&<p>ملاحظات المراجع: {e.review_notes}</p>}<EvidenceDownload path={e.file_path} name={e.file_name}/>{canReview&&e.is_current&&['pending_review','under_review'].includes(e.status||'')&&<Link className="detail-button" href={evidenceReviewHref(e)}>مراجعة الدليل</Link>}</article>)}</section></>}
-   {tab===2&&<section className="detail-card"><h2>الضوابط المرتبطة</h2><p className="detail-hint">هذه علاقات مواءمة راجعها واعتمدها الفريق؛ نوع العلاقة وحدود تغطيتها موثقان في خريطة المواءمة. يمكن رفع الدليل مرة واحدة ثم اختياره للضوابط المرتبطة؛ ويظل قرار القبول مستقلًا لكل ضابط.</p>{!canReview?<p>تظهر المواءمات التفصيلية لمدير الامتثال والمراجعة ومدير النظام.</p>:!mappedControls.length?<p>لا توجد علاقات مواءمة معتمدة لهذا الضابط.</p>:<div className="detail-timeline">{mappedControls.map(item=>{const matchedReflections=reflections.filter(result=>result.source_framework===item.framework_code&&result.source_control_code===item.control_code);return <article key={item.control_id}><strong><span dir="ltr">{item.framework_code} · {item.control_code}</span> — {item.control_title}</strong><small>{matchedReflections.length?matchedReflections.map(result=>`${result.assessment_scope}: ${assessmentStatusText[result.compliance_status]||'لم يُقيّم'}`).join(' | '):'لا توجد نتيجة معتمدة ضمن علاقة موثقة'}</small><p>{item.source_note||'راجع مصدر العلاقة وحدودها في خريطة المواءمة.'}</p><Link className="detail-back" href={`/controls/${item.control_id}`}>فتح الضابط المرتبط ←</Link></article>})}</div>}{canReview&&<p style={{marginTop:18}}><Link className="detail-button" href="/mappings">فتح خريطة المواءمة ←</Link></p>}</section>}
-   {tab===3&&<section className="detail-card"><h2>سجل الأدلة والملاحظات</h2>{!timeline.length&&<p>لا توجد أنشطة مسجلة بعد.</p>}<ol className="detail-timeline">{timeline.map(item=><li key={item.key}><strong>{item.title}</strong><small>{formatRiyadhDateTime(item.time)}</small>{item.body&&<p>{item.body}</p>}</li>)}</ol></section>}
+ const displayedEvidence=[...evidence].sort((a,b)=>(b.uploaded_at??'').localeCompare(a.uploaded_at??'')||b.id-a.id);
+ const currentEvidence=displayedEvidence.filter(e=>e.is_current);
+ const previousEvidence=displayedEvidence.filter(e=>!e.is_current);
+ const latestEvidence=currentEvidence[0];
+ const needsReview=currentEvidence.find(e=>['pending_review','under_review'].includes(e.status??''));
+ const action=controlFollowUp({archived,implementation:control.implementation_status,evidence:control.evidence_status,verification:control.verification_status});
+ const stage=cycleStage(!!openCycleId,latestRequestStatus);
+ const deadline=scheduleState(control.next_audit_date);
+ const scheduleHref=`/audit-schedule?control=${control.id}`;
+ const evidenceHref=`/controls/${control.id}/evidence/new`;
+ const periodicLabel=frequencyLabels[control.audit_frequency]??control.audit_frequency??'غير محدد';
+ const goToTab=(index:number)=>{setTab(index);document.getElementById(`detail-tab-${index}`)?.focus();};
+ const timeline=evidence.flatMap(e=>{
+  const name=e.evidence_name||e.file_name||'دليل بدون اسم';
+  const identity=`${e.id}-${e.link_id??'source'}`;
+  return [
+   ...(e.uploaded_at?[{key:`upload-${identity}`,time:e.uploaded_at,title:`رفع دليل · ${name}`,by:e.uploader_name,body:e.description}]:[]),
+   ...(e.reviewed_at?[{key:`review-${identity}`,time:e.reviewed_at,title:`مراجعة الدليل · ${name} · ${statusText(e.status||'')}`,by:e.reviewer_display_name,body:e.review_notes}]:[])
+  ];
+ }).sort((a,b)=>Date.parse(b.time)-Date.parse(a.time));
+
+ const nextAction=action==='evidence'&&canUpload
+  ? <Link className="detail-button" href={evidenceHref}>رفع دليل</Link>
+  : action==='evidence_review'&&canReview&&needsReview
+   ? <Link className="detail-button" href={evidenceReviewHref(needsReview)}>مراجعة الدليل</Link>
+   : action==='periodic'&&canReview&&!openCycleId
+    ? <Link className="detail-button" href={scheduleHref}>فتح جدول التدقيق</Link>
+    : action==='evidence'||action==='evidence_review'
+     ? <button type="button" className="detail-button" onClick={()=>goToTab(1)}>عرض الأدلة</button>
+     : <button type="button" className="detail-button" onClick={()=>goToTab(3)}>{openCycleId?'فتح دورة المراجعة':'فتح السجل'}</button>;
+
+ const evidenceRow=(e:Evidence)=>{
+  const name=e.evidence_name||e.file_name||'دليل بدون اسم';
+  return <article className="detail-evidence-row" key={`${e.id}-${e.link_id??"source"}`}>
+   <div className="detail-row-heading"><div><h3 dir="auto">{name}</h3>
+    <div className="detail-evidence-meta"><span>إصدار <bdi>{e.version_number}</bdi></span>{e.link_id&&<span>دليل مشترك</span>}
+     {e.uploaded_at&&<span>رُفع {formatRiyadhDateTime(e.uploaded_at)}</span>}
+     {e.valid_until&&<span>الصلاحية حتى {formatRiyadhDate(e.valid_until)}</span>}
+    </div>
+   </div><StatusBadge status={e.status||''}/></div>
+   <div className="detail-evidence-actions">
+    <EvidenceDownload path={e.file_path} name={e.file_name}/>
+    {canUpload&&e.is_current&&!e.link_id&&<Link className="detail-secondary" href={`${evidenceHref}?replace=${e.id}`}>رفع إصدار جديد</Link>}
+    {canReview&&e.is_current&&['pending_review','under_review'].includes(e.status||'')&&<Link className="detail-button" href={evidenceReviewHref(e)}>مراجعة الدليل</Link>}
    </div>
-   <aside>{tab===3&&<GrcAuditTrail controlId={control.id} globalLink={role==="admin"||role==="cybersecurity_team"}/>} {tab===0&&!archived&&<section className="detail-card"><h2>التدقيق الدوري</h2><p className="detail-hint">جدول دورات المراجعة لهذا الضابط ومواعيدها.</p><p><strong>الموعد القادم:</strong> {formatGrcDate(control.next_audit_date,"غير مجدول")}</p><Link className="detail-button" href={`/audit-schedule?control=${control.id}`}>فتح جدول التدقيق الدوري ←</Link></section>}</aside>
+   {(e.description||e.review_notes||e.uploader_name||e.reviewer_display_name||(e.file_name&&e.file_name!==name))&&<details className="detail-disclosure detail-evidence-disclosure">
+    <summary>تفاصيل الدليل</summary>
+    {e.file_name&&e.file_name!==name&&<p>الملف <bdi dir="auto">{e.file_name}</bdi></p>}
+    {e.uploader_name&&<p>مقدّم الدليل <bdi>{e.uploader_name}</bdi></p>}
+    {e.reviewer_display_name&&<p>المراجع <bdi>{e.reviewer_display_name}</bdi></p>}
+    {e.description&&<p>{e.description}</p>}{e.review_notes&&<p>ملاحظات المراجع · {e.review_notes}</p>}
+   </details>}
+  </article>;
+ };
+
+ return <main className="detail-page detail-redesign" dir="rtl" aria-labelledby="detail-title">
+  <nav className="detail-breadcrumb" aria-label="مسار الضوابط">
+   <Link href={backToControls}>الضوابط</Link><span aria-hidden="true">‹</span><span>{control.domain_ar}</span>
+   <span aria-hidden="true">‹</span><span aria-current="page">تفاصيل الضابط</span>
+  </nav>
+  {archived&&<p className="detail-archive" role="status"><strong>ضابط مؤرشف</strong> · متاح للرجوع التاريخي فقط.</p>}
+  <header className="detail-hero">
+   <div className="detail-heading-row">
+    <div className="detail-identity">
+     <div className="detail-tags"><bdi className="detail-code" dir="ltr">{control.control_code}</bdi>
+      {frameworkLabel&&<bdi className="detail-framework-tag" dir="ltr">{frameworkLabel}</bdi>}
+      <span className="detail-hierarchy-tag">{control.hierarchy_level==='sub_control'?'ضابط فرعي':'ضابط أساسي'}</span>
+      {applicability&&<bdi className="catalog-applicability">{applicability}</bdi>}
+     </div>
+     <h1 id="detail-title">{title}</h1>
+    </div>
+    {canReview&&<details className="detail-actions-menu"><summary>إجراءات <span aria-hidden="true">⋯</span></summary>
+     <div><Link href={`/controls/${control.id}/assign`}>{control.control_owner?"تغيير مالك الضابط":"تعيين مالك الضابط"}</Link></div>
+    </details>}
+   </div>
+   <dl className="detail-meta">
+    <div><dt>مالك الضابط</dt><dd><bdi>{control.control_owner||'غير معيّن'}</bdi></dd></div>
+    <div><dt>استحقاق التطبيق</dt><dd>{formatRiyadhDate(control.due_date,'غير محدد')}</dd></div>
+   </dl>
+  </header>
+  <ControlStateStrip implementation={control.implementation_status} evidence={control.evidence_status} verification={control.verification_status}/>
+  <div className="detail-tabs" role="tablist" aria-label="تفاصيل الضابط">
+   {tabs.map((label,index)=><button type="button" key={label} id={`detail-tab-${index}`} role="tab" aria-selected={tab===index} aria-controls={`detail-panel-${index}`} tabIndex={tab===index?0:-1}
+    onClick={()=>setTab(index)} onKeyDown={event=>{
+     let next=index;if(event.key==='ArrowLeft')next=(index+1)%tabs.length;
+     else if(event.key==='ArrowRight')next=(index+tabs.length-1)%tabs.length;
+     else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;
+     event.preventDefault();goToTab(next);
+    }}>{label}{index===1&&currentEvidence.length>0&&<bdi className="detail-tab-count">{currentEvidence.length}</bdi>}</button>)}
+  </div>
+  {tabs.map((label,index)=>index!==tab&&<section key={label} id={`detail-panel-${index}`} role="tabpanel" aria-labelledby={`detail-tab-${index}`} hidden/>)}
+  <section id={`detail-panel-${tab}`} role="tabpanel" aria-labelledby={`detail-tab-${tab}`} className={`detail-columns${tab===0||tab===3?' detail-with-aside':''}`}>
+   <div className="detail-content">
+    {tab===0&&<>
+     <section className="detail-card detail-official-card">
+      <h2>{archived?'النص الرسمي في الإصدار السابق':'النص الرسمي للضابط'}</h2>
+      <p className="detail-official">{officialRequirement}</p>
+      {showsCsccNumberingNote&&<p className="detail-hint">يظهر بند المعالجة الفورية للثغرات الحرجة في وثيقة 2026 بالرقم <bdi dir="ltr">2-1-9-3</bdi>. أُبقي رقم الضابط <bdi dir="ltr">2-9-1-3</bdi> في المنصة حفاظًا على الروابط إلى حين التحقق.</p>}
+      {plan.requirements.length>0&&<details className="detail-disclosure"><summary>المتطلبات الفرعية المضمّنة</summary>{plan.requirements.map(r=><p className="detail-requirement" key={r.key}><bdi dir="ltr">{r.key}</bdi> {r.text}</p>)}</details>}
+      <div className="detail-source"><a href={officialSource} target="_blank" rel="noreferrer">{archived?'وثيقة الإصدار السابق':'وثيقة الهيئة'} {frameworkLabel&&<>· <bdi dir="ltr">{frameworkLabel}</bdi></>}</a>
+       {control.source_page&&<span>صفحة <bdi dir="ltr">{control.source_page}</bdi></span>}
+       {isEcc&&<a href={eccImplementationGuideUrl} target="_blank" rel="noreferrer">الدليل الإرشادي</a>}
+      </div>
+     </section>
+     {['CSCC','DCC','TCC','OSMACC'].includes(frameworkKey)&&<ControlAssessmentHistory controlId={control.id} framework={frameworkKey}/>}
+    </>}
+
+    {tab===1&&<>
+     <section className="detail-card">
+      <div className="detail-row-heading"><div><h2>الأدلة الحالية</h2></div>{canUpload&&<Link className="detail-button" href={evidenceHref}>رفع دليل</Link>}</div>
+      {currentEvidence.length?currentEvidence.map(evidenceRow):<p className="detail-empty">لا توجد أدلة حالية ضمن صلاحياتك.</p>}
+     </section>
+     {previousEvidence.length>0&&<details className="detail-card detail-disclosure"><summary>الإصدارات السابقة <bdi>{previousEvidence.length}</bdi></summary>{previousEvidence.map(evidenceRow)}</details>}
+     <details className="detail-card detail-disclosure"><summary>أمثلة على الأدلة</summary><p className="detail-hint">يحدّد المراجع ملاءمة الدليل حسب نص الضابط ونطاق تطبيقه.</p><ul>{plan.evidence.map(item=><li key={item}>{item}</li>)}</ul></details>
+    </>}
+
+    {tab===2&&<>
+     {(parentControl||childControls.length>0)&&<section className="detail-card"><h2>تسلسل الضابط</h2>
+      {parentControl&&<p>الضابط الأعلى · <Link className="detail-inline-link" href={relatedControlHref(parentControl.id)}><bdi dir="ltr">{parentControl.control_code}</bdi> {controlHeading(frameworkKey,parentControl.control_code,parentControl.title_ar)}</Link></p>}
+      {childControls.length>0&&<ul className="detail-children-list">{childControls.map(k=><li key={k.id}><Link href={relatedControlHref(k.id)}>
+       <bdi dir="ltr">{k.control_code}</bdi><span>{controlHeading(frameworkKey,k.control_code,k.title_ar)}</span><StatusBadge status={k.implementation_status}/>
+      </Link></li>)}</ul>}
+     </section>}
+     <section className="detail-card"><div className="detail-row-heading"><h2>المواءمات مع الأطر</h2>{canReview&&<Link className="detail-secondary" href="/mappings">خريطة المواءمة</Link>}</div>
+      {!canReview?<p className="detail-empty">تعرض المواءمات التفصيلية لفريق الامتثال ومدير النظام.</p>:!mappedControls.length?<p className="detail-empty">لا توجد مواءمات معتمدة لهذا الضابط.</p>:<div className="detail-mapping-list">{mappedControls.map(item=>{
+       const matched=reflections.filter(result=>result.source_framework===item.framework_code&&result.source_control_code===item.control_code);
+       return <article key={item.control_id}><Link className="detail-inline-link" href={relatedControlHref(item.control_id)}><bdi dir="ltr">{item.framework_code} · {item.control_code}</bdi> {item.control_title}</Link>
+        {matched.length>0&&<p className="detail-hint">{matched.map(result=>`${result.assessment_scope} · ${assessmentStatusText[result.compliance_status]||'لم يُقيّم'}`).join(' | ')}</p>}
+        {item.source_note&&<details className="detail-disclosure"><summary>ملاحظة المواءمة</summary><p>{item.source_note}</p></details>}
+       </article>;
+      })}</div>}
+     </section>
+     <section className="detail-card requirements-projects-card"><h2>المتطلبات والمشاريع المرتبطة</h2>
+      {!requirementLinks.length?<p className="detail-empty">لا توجد متطلبات مرتبطة ضمن صلاحياتك.</p>:
+      <div className="req-proj-table-wrap"><table className="req-proj-table"><thead><tr><th scope="col">المتطلب</th><th scope="col">التغطية</th><th scope="col">جودة الربط</th><th scope="col">المشروع</th></tr></thead><tbody>
+      {requirementLinks.flatMap(link=>{
+       const requirement=single(link.cybersecurity_requirements);
+       const visibleProjects=projectLinks.filter(p=>p.requirement_id===link.requirement_id&&single(p.cybersecurity_projects));
+       return (visibleProjects.length?visibleProjects:[null]).map(projectLink=>{
+        const project=projectLink?single(projectLink.cybersecurity_projects):null;
+        return <tr key={`${link.requirement_id}:${projectLink?.project_id??'none'}`}>
+         <td>{requirement?<><bdi dir="ltr">{requirement.requirement_code}</bdi> · {requirement.title_ar}</>:'—'}</td>
+         <td><span className={`coverage-pill ${link.coverage_type}`}>{coverageText[link.coverage_type]}</span></td>
+         <td><span className={`mapping-pill ${link.mapping_confidence}`}>{mappingConfidenceText[link.mapping_confidence]}</span></td>
+         <td>{project&&projectLink?<Link href={`/roadmap/${projectLink.project_id}`}><bdi dir="ltr">{project.project_code}</bdi> · {project.name_ar}</Link>:'—'}</td>
+        </tr>;
+       });
+      })}
+      </tbody></table></div>}
+     </section>
+    </>}
+
+    {tab===3&&<>
+     <ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload} targetRequestId={auditRequestId} targetCycleId={auditCycleId}/>
+     <section className="detail-card"><h2>نشاط الأدلة</h2>
+      {timeline.length?<ol className="detail-timeline">{timeline.map(item=><li key={item.key}>
+       <strong>{item.title}</strong><small>{formatRiyadhDateTime(item.time)}{item.by&&<> · <bdi>{item.by}</bdi></>}</small>
+       {item.body&&<details className="detail-disclosure"><summary>عرض الملاحظة</summary><p>{item.body}</p></details>}
+       <button type="button" className="detail-text-button" onClick={()=>goToTab(1)}>عرض الأدلة</button>
+      </li>)}</ol>:<p className="detail-empty">لا يوجد نشاط أدلة معروض.</p>}
+     </section>
+    </>}
+   </div>
+
+   {tab===0&&<aside className="detail-aside">
+    <section className="detail-card detail-next-card"><h2>{action==='periodic'?'المراجعة الدورية':'المتابعة القادمة'}</h2>
+     {action==='periodic'?<p>{periodicLabel} · {formatRiyadhDate(control.next_audit_date,'المراجعة القادمة غير مجدولة')}</p>:<p>{followUpText[action]}</p>}
+     {!archived&&openCycleId&&<p className="detail-hint">دورة مفتوحة · {cycleStageLabels[stage]}{openCycleDue&&<> · حتى {formatRiyadhDate(openCycleDue)}</>}</p>}
+     <div className="detail-next-action">{nextAction}</div>
+    </section>
+    <section className="detail-card">
+     <div className="detail-row-heading"><h2>آخر دليل حالي</h2>{latestEvidence&&<StatusBadge status={latestEvidence.status||''}/>}</div>
+     {latestEvidence?<><p className="detail-latest-title" dir="auto">{latestEvidence.evidence_name||latestEvidence.file_name||'دليل بدون اسم'}</p>
+      <p className="detail-hint">إصدار {latestEvidence.version_number}{latestEvidence.uploaded_at&&<> · {formatRiyadhDate(latestEvidence.uploaded_at)}</>}</p>
+      <button type="button" className="detail-text-button" onClick={()=>goToTab(1)}>عرض الأدلة</button></>:<p className="detail-empty">لا يوجد دليل حالي معروض.</p>}
+    </section>
+   </aside>}
+   {tab===3&&<aside className="detail-aside">
+    {!archived&&<section className="detail-card"><h2>جدول المراجعة</h2>
+     <dl className="detail-review-facts">
+      <div><dt>التكرار</dt><dd>{periodicLabel}</dd></div><div><dt>آخر مراجعة</dt><dd>{formatRiyadhDate(control.last_review_date,'غير مسجلة')}</dd></div>
+      <div><dt>المراجعة القادمة</dt><dd>{formatRiyadhDate(control.next_audit_date,'غير مجدولة')}{control.next_audit_date&&<> · {scheduleStateLabels[deadline]}</>}</dd></div>
+      <div><dt>الدورة الحالية</dt><dd>{cycleStageLabels[stage]}{openCycleDue&&<> · حتى {formatRiyadhDate(openCycleDue)}</>}</dd></div>
+      {reviewerName&&<div><dt>المراجع المكلّف</dt><dd><bdi>{reviewerName}</bdi></dd></div>}
+     </dl>
+     {canReview&&<Link className="detail-secondary" href={scheduleHref}>فتح جدول التدقيق</Link>}
+    </section>}
+    <GrcAuditTrail controlId={control.id} globalLink={role==="admin"||role==="cybersecurity_team"}/>
+   </aside>}
   </section>
  </main>;
 }
