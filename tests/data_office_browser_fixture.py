@@ -3,6 +3,8 @@
 import base64
 import json
 import time
+from email.parser import BytesParser
+from email.policy import default
 from urllib.parse import parse_qs, urlsplit
 
 
@@ -52,12 +54,13 @@ class Fixture:
         ]
         self.assignments = [
             {"id": n, "requirement_id": n, "assignee_id": OWNER, "status": status,
-             "due_date": "2020-01-01", "review_notes": None}
+             "updated_at": STAMP, "due_date": "2020-01-01", "review_notes": None}
             for n, status in [(1, "assigned"), (2, "submitted"), (4, "approved")]
         ]
         self.files = [{"id": 1, "assignment_id": 2, "file_name": "quality.pdf",
                        "storage_path": "2/fixture/quality.pdf", "submitted_at": STAMP}]
         self.audit = [{"id": 1, "assignment_id": 2, "action": "submitted", "created_at": STAMP}]
+        self.objects = {}
         self.requests = []
         self.unexpected = []
 
@@ -91,7 +94,18 @@ class Fixture:
                 result = [profile("owner")]
             elif path == "/rest/v1/nudee_final_review" and role == "office":
                 result = {"progress": 0.125}
+            elif path.startswith("/storage/v1/object/nudee-evidence/") and request.method == "GET":
+                key = path.split("/nudee-evidence/", 1)[1]
+                content, mime = self.objects[key]
+                return route.fulfill(status=200, body=content, content_type=mime, headers=headers)
             elif path.startswith("/storage/v1/object/nudee-evidence/") and request.method == "POST":
+                mime = request.headers["content-type"]
+                content = request.post_data_buffer
+                if mime.startswith("multipart/form-data"):
+                    message = BytesParser(policy=default).parsebytes(f"Content-Type: {mime}\r\n\r\n".encode() + content)
+                    part = next(part for part in message.iter_parts() if part.get_filename())
+                    mime, content = part.get_content_type(), part.get_payload(decode=True)
+                self.objects[path.split("/nudee-evidence/", 1)[1]] = content, mime
                 result = {"Key": path.removeprefix("/storage/v1/object/")}
             elif path == "/rest/v1/rpc/nudee_assign" and role == "office":
                 n = payload["p_requirement_id"]
@@ -103,17 +117,20 @@ class Fixture:
             elif path == "/rest/v1/rpc/nudee_submit_evidence" and role == "owner":
                 assignment = next(row for row in self.assignments if row["id"] == payload["p_assignment_id"])
                 assert assignment["status"] in ("assigned", "changes_requested")
-                assignment.update(status="submitted", review_notes=None)
+                assignment.update(status="submitted", review_notes=None, updated_at=STAMP)
                 self.files.append({"id": len(self.files)+1, "assignment_id": assignment["id"],
                                    "file_name": payload["p_file_name"], "storage_path": payload["p_storage_path"],
                                    "submitted_at": STAMP})
                 self.record(assignment["id"], "submitted")
                 result = self.files[-1]["id"]
-            elif path == "/rest/v1/rpc/nudee_review_evidence" and role == "office":
+            elif path in ("/rest/v1/rpc/nudee_review_evidence", "/rest/v1/rpc/nudee_review_version") and role == "office":
                 assignment = next(row for row in self.assignments if row["id"] == payload["p_assignment_id"])
                 assert assignment["status"] == "submitted"
+                if "p_submission_id" in payload:
+                    latest = max(f["id"] for f in self.files if f["assignment_id"] == assignment["id"])
+                    assert payload["p_submission_id"] == latest
                 assignment.update(status=payload["p_decision"], review_notes=payload["p_notes"])
-                self.record(assignment["id"], assignment["status"])
+                self.record(assignment["id"], assignment["status"], payload["p_notes"], payload.get("p_submission_id"))
                 result = assignment["id"]
             elif request.method == "GET" and path.startswith("/rest/v1/"):
                 assigned = [r for r in self.assignments if role == "office" or r["assignee_id"] == OWNER]
@@ -122,8 +139,7 @@ class Fixture:
                     "nudee_requirements": [r for r in self.requirements if role == "office" or r["id"] in ids],
                     "nudee_assignments": assigned, "nudee_submissions": self.files,
                 }
-                if role == "office":
-                    tables["nudee_audit"] = self.audit[:5]
+                tables["nudee_audit"] = [a for a in self.audit if any(r["id"] == a["assignment_id"] for r in assigned)]
                 table = path.rsplit("/", 1)[1]
                 if table not in tables:
                     self.unexpected.append(f"{role} {path}")
@@ -133,6 +149,8 @@ class Fixture:
                 for column, value in query.items():
                     if value[0].startswith("eq."):
                         rows = [r for r in rows if str(r.get(column)) == value[0][3:]]
+                    elif value[0].startswith("in.("):
+                        rows = [r for r in rows if str(r.get(column)) in value[0][4:-1].split(",")]
                 start = int(query.get("offset", [0])[0])
                 limit = int(query.get("limit", [len(rows)])[0])
                 result = rows[start:start + limit]
@@ -144,6 +162,6 @@ class Fixture:
             return route.fulfill(json=result, headers=headers)
         context.route("**/*", handle)
 
-    def record(self, assignment, action):
+    def record(self, assignment, action, notes=None, submission_id=None):
         self.audit.insert(0, {"id": len(self.audit)+1, "assignment_id": assignment,
-                              "action": action, "created_at": STAMP})
+                              "action": action, "notes": notes, "submission_id": submission_id, "created_at": STAMP})

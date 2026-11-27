@@ -109,6 +109,12 @@ def check_layout(browser, revision, size, target):
     if after:
         register = office.get_by_role("table", name="سجل متطلبات نُضيء")
         expect(register.locator("tbody tr")).to_have_count(4)
+        office.get_by_role("combobox", name="المجال", exact=True).select_option(label="جودة البيانات")
+        expect(register.locator("tbody tr")).to_have_count(1)
+        office.get_by_role("combobox", name="المجال", exact=True).select_option("")
+        office.get_by_role("combobox", name="مالك المتطلب", exact=True).select_option(OWNER)
+        expect(register.locator("tbody tr")).to_have_count(3)
+        office.get_by_role("combobox", name="مالك المتطلب", exact=True).select_option("")
         bulk = office.get_by_role("region", name="الإسناد الجماعي")
         expect(bulk).to_have_count(0)
         office.get_by_role("checkbox", name="تحديد الدليل " + NAMES[2]).check()
@@ -116,7 +122,7 @@ def check_layout(browser, revision, size, target):
         bulk.get_by_role("button", name="إلغاء التحديد").click()
         expect(bulk).to_have_count(0)
         office.locator("#nudee-filter").fill("missing-test-result")
-        office.get_by_text("لا توجد نتائج مطابقة للبحث والحالة.").wait_for()
+        office.get_by_text("لا توجد متطلبات تطابق خيارات البحث والتصفية.").wait_for()
         office.get_by_role("button", name="عرض كل المتطلبات").click()
         button = office.get_by_role("button", name=NAMES[1], exact=True)
         button.click()
@@ -146,6 +152,22 @@ def check_layout(browser, revision, size, target):
     assert not fixture.unexpected, fixture.unexpected
 
 
+def simple_pdf():
+    result = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for i, body in enumerate([b"<< /Type /Catalog /Pages 2 0 R >>",
+                              b"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+                              b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> >>"], 1):
+        offsets.append(len(result))
+        result.extend(f"{i} 0 obj\n".encode() + body + b"\nendobj\n")
+    start = len(result)
+    result.extend(b"xref\n0 4\n0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        result.extend(f"{offset:010d} 00000 n \n".encode())
+    result.extend(f"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n{start}\n%%EOF".encode())
+    return bytes(result)
+
+
 def lifecycle(browser, target):
     fixture = Fixture()
     office = login(browser, fixture, "office", *SIZES["desktop"], revision="after")
@@ -162,10 +184,11 @@ def lifecycle(browser, target):
         owner.get_by_role("button", name=NAMES[2], exact=True).click()
         panel = owner.get_by_role("dialog")
         if index:
-            expect(panel.get_by_text("أرفق الإصدار المحدّث.", exact=False)).to_be_visible()
+            expect(panel.locator(".nr-message").filter(has_text="أرفق الإصدار المحدّث.")).to_be_visible()
         name = f"example-{index}.pdf"
+        pdf = simple_pdf()
         panel.locator('input[type="file"]').set_input_files(
-            {"name": name, "mimeType": "application/pdf", "buffer": b"%PDF-1.4\n%synthetic fixture\n%%EOF"})
+            {"name": name, "mimeType": "application/pdf", "buffer": pdf})
         panel.get_by_role("button", name="رفع وإرسال للمراجعة").click()
         expect(panel.get_by_role("button", name=re.compile(name))).to_be_visible()
         expect(panel.locator('input[type="file"]')).to_have_count(0)
@@ -173,12 +196,24 @@ def lifecycle(browser, target):
         office.get_by_role("button", name=NAMES[2], exact=True).click()
         review = office.get_by_role("dialog")
         expect(review.get_by_role("button", name=re.compile(name))).to_be_visible()
+        review.get_by_role("button", name="عرض الملف هنا").click()
+        expect(review.locator("canvas")).to_be_visible()
+        if index:
+            expect(review.get_by_text("سبب الإعادة السابقة")).to_be_visible()
+            expect(review.locator(".nr-return")).to_contain_text("أرفق الإصدار المحدّث.")
+            review.get_by_role("button", name=re.compile("example-0.pdf")).click()
+            expect(review.get_by_role("button", name="اعتماد الدليل")).to_be_disabled()
+            review.get_by_role("button", name=re.compile(name)).click()
+            expect(review.get_by_role("button", name="اعتماد الدليل")).to_be_enabled()
         if decision == "changes_requested":
             review.get_by_label(re.compile("ملاحظات المراجعة")).fill("أرفق الإصدار المحدّث.")
             review.get_by_role("button", name="إعادة للتعديل").click()
         else:
             review.get_by_role("button", name="اعتماد الدليل").click()
         expect(review.get_by_role("heading", name="قرار المراجعة")).to_have_count(0)
+    review.get_by_role("button", name=re.compile("مراجعة الدليل التالي")).click()
+    expect(office.get_by_role("dialog", name=NAMES[1])).to_be_visible()
+    expect(office.locator("#nudee-view")).to_have_value("submitted")
     office.goto(APP + HOME)
     expect(office.locator("dl div").filter(has=office.get_by_text("معتمدة", exact=True)).locator("dd")).to_have_text(re.compile("[2٢]"))
     expect(office.get_by_text("اعتماد دليل", exact=True)).to_be_visible()

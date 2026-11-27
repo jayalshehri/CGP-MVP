@@ -184,3 +184,4 @@
   .auditList li { grid-template-columns: minmax(0,1fr); }
   .auditList time { grid-column: 1; grid-row: 3; }
 }
+.waitTime { display: block; margin-block-start: 3px; color: #53676c; font-size: .78rem; font-weight: 400; }

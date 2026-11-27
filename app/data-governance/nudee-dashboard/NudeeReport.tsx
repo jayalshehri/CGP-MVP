@@ -12,7 +12,7 @@ export type Requirement = {
  schedule_indicator:string|null; planned_start:string|null; planned_end:string|null;
  actual_end:string|null; evidence_name:string; review_phase:string|null;
 };
-export type Assignment = { id:number; requirement_id:number; status:string; due_date:string|null };
+export type Assignment = { id:number; requirement_id:number; status:string; updated_at:string; due_date:string|null };
 const requirementColumns="id,source_row,domain_name,standard_code,maturity_level,source_compliance,source_review_status,source_progress,schedule_indicator,planned_start,planned_end,actual_end,evidence_name,review_phase";
 type Filter = {domain:string;level:string;compliance:string;review:string};
 const ALL="الكل";
@@ -182,17 +182,17 @@ export default function NudeeReport({assignments}:{assignments:Assignment[]}){
     {[
      ["إجمالي الأدلة",stats.total,"يتضمن جميع الأدلة في التصفية"],
      ["ممتثل بالكامل",stats.full,fmtPct(stats.full,stats.applicable)+" من الأدلة المنطبقة"],
-     ["ممتثل لمتطلبات الهيئة حسب معادلة Excel",stats.authority,fmtPct(stats.authority,stats.applicable)+" من الأدلة المنطبقة"],
+     ["امتثال الجهة وفق معادلة المصدر",stats.authority,fmtPct(stats.authority,stats.applicable)+" من الأدلة المنطبقة"],
      ["غير ممتثل",stats.non,fmtPct(stats.non,stats.applicable)+" من الأدلة المنطبقة"],
      ["غير منطبق",stats.na,"مستبعد من مقام الامتثال"],
      ["غير مقيّم",stats.unassessed,fmtPct(stats.assessed,stats.total)+" تم تقييمها"],
-     ["امتثال NDMO",fmtPct(stats.full,stats.applicable),"ممتثل بالكامل ÷ الأدلة المنطبقة"],
+     ["الامتثال الكامل وفق المصدر",fmtPct(stats.full,stats.applicable),"ممتثل بالكامل ÷ الأدلة المنطبقة"],
      ["إنجاز مراجعة الأدلة",fmtPct(stats.reviewed,stats.total),stats.reviewed+" من "+stats.total+" مكتمل"],
-     ["متأخر عن الجدول",stats.overdue,"وفق مؤشر الجدول الزمني في ملف Excel"]
+     ["متأخر وفق الخطة المستوردة",stats.overdue,"تاريخ القياس في الخطة: 5 نوفمبر 2026"]
     ].map(([label,value,detail])=><article className={styles.metric} key={label}><span>{label}</span><strong>{typeof value==="number"?value.toLocaleString("ar-SA"):value}</strong><small>{detail}</small></article>)}
    </section>
    <section className={styles.workflow}><div><span>دورة التكليف في CGP</span><p>تُعرض حالات الأدلة داخل المنصة بصورة منفصلة عن تصنيف الامتثال الرسمي في Excel.</p></div><div className={styles.flowNumbers}><span>المسندة <b>{stats.assigned}</b></span><span>بانتظار التحقق <b>{stats.submitted}</b></span><span>المعتمدة <b>{stats.approved}</b></span></div></section>
-   {stats.unknown>0&&<p role="note" className={styles.warning}>تنبيه جودة بيانات: توجد {stats.unknown} قيمة لا تدخل في نتائج معادلات Excel الأصلية (مثل «ممتثل لمتطلبات الهيئة»)، بينما تحسب المعادلة «ممتثل للمعالي فقط». احتفظنا بالقيم الأصلية ولم نعدلها أو نحتسبها كممتثلة.</p>}
+   {stats.unknown>0&&<p role="note" className={styles.warning}>تنبيه جودة بيانات: عدد السجلات ذات التصنيف غير المعياري في العرض الحالي: {stats.unknown}. يحتاج تصنيف «ممتثل لمتطلبات الهيئة» إلى تأكيد مكتب البيانات قبل اعتماد نسبة امتثال الجهة. تحتسب معادلة المصدر حالة «ممتثل للمعالي فقط».</p>}
    <div className={styles.twoCols}>
     <section className={styles.panel}><h2>حالة الامتثال للمؤشر</h2><p>إجمالي الامتثال لمتطلبات NDMO: {fmtPct(stats.full,stats.applicable)} · امتثال متطلبات الهيئة: {fmtPct(stats.full+stats.authority,stats.applicable)}</p>
      {[["ممتثل بالكامل",stats.full],["ممتثل للمعالي فقط (صيغة Excel)",stats.authority],["غير ممتثل",stats.non],["غير منطبق",stats.na],["لم يُقيّم",stats.unassessed],["حالة غير معيارية",stats.unknown]].map(([label,n])=><div className={styles.barItem} key={label}><div><span>{label}</span><b>{n}</b></div><div className={styles.track}><div style={{width:(stats.total?100*Number(n)/stats.total:0)+"%"}}/></div></div>)}
