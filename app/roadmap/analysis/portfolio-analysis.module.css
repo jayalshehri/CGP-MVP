@@ -1,0 +1,51 @@
+.page { background: #f5f9f9; }
+.heading { margin-block: 12px 10px; }
+.heading h1 { margin: 0; color: #102a43; }
+.heading p { margin: 2px 0 0; color: #506473; font-size: 13px; }
+.panel { margin-block: 12px; padding: 15px 16px; border: 1px solid #dce8ea; border-radius: 13px; background: white; }
+.actions { border-inline-start: 3px solid #8bbdb5; }
+.panelHeader { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 7px 14px; margin-bottom: 9px; }
+.panelHeader h2 { margin: 0; color: #102a43; font-size: 18px; }
+.panelHeader p { margin: 2px 0 0; color: #506473; font-size: 12px; }
+.count { border-radius: 20px; background: #edf7f5; color: #116860; font-weight: 800; font-size: 12px; padding: 4px 8px; }
+.count[data-attention="true"] { background: #fff3df; color: #79500e; }
+.actionList, .chart { list-style: none; margin: 0; padding: 0; }
+.actionList li + li { border-top: 1px solid #e7eff0; }
+.actionLink { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 9px 3px; color: #102a43; text-decoration: none; }
+.actionLink:hover, a.chartRow:hover { background: #f3faf9; }
+.actionLink strong { font-size: 13px; overflow-wrap: anywhere; }
+.actionLink small { display: block; color: #506473; font-size: 11px; }
+.missing { display: flex; gap: 4px; flex-wrap: wrap; }
+.missing span:not(.srOnly) { padding: 2px 6px; border-radius: 6px; background: #fff4e4; color: #79500e; font-size: 11px; }
+.open { color: #116860; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.disclosure { padding: 4px 0; font: inherit; font-size: 12px; font-weight: 800; color: #116860; background: none; border: 0; text-align: start; }
+.disclosure:hover { text-decoration: underline; }
+.empty { color: #506473; font-size: 13px; margin-block: 8px 2px; }
+.dimension { display: flex; align-items: center; gap: 7px; color: #506473; font-size: 12px; }
+.dimension select { max-width: 100%; padding: 5px 9px; color: #102a43; background: white; border: 1px solid #dce8ea; border-radius: 7px; font: inherit; }
+.chartRow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) 2.5ch; align-items: center; gap: 10px; padding: 8px 5px; border-radius: 6px; color: #102a43; text-decoration: none; font-size: 13px; }
+.category { overflow-wrap: anywhere; }
+.chartRow strong { text-align: end; }
+.track { height: 10px; overflow: hidden; border-radius: 15px; background: #edf4f4; }
+.track span { display: block; height: 100%; border-radius: inherit; background: #0f766e; }
+.secondary { display: grid; gap: 8px; }
+.secondary > details { padding: 10px 14px; border: 1px solid #dce8ea; border-radius: 10px; background: white; }
+.secondary summary { cursor: pointer; color: #116860; font-weight: 800; font-size: 13px; }
+.secondary p { margin: 7px 0; color: #506473; font-size: 12px; }
+.durationGroups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.durationGroups table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: start; }
+.durationGroups caption { padding: 5px; font-weight: 800; text-align: start; }
+.durationGroups small { display: block; color: #506473; font-weight: 500; }
+.durationGroups :is(th,td) { padding: 5px; border-bottom: 1px solid #e7eff0; text-align: start; }
+.metricList { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 10px 0; }
+.metricList dt { color: #506473; font-size: 12px; }
+.metricList dd { margin: 1px 0 0; color: #102a43; font-weight: 800; font-size: 14px; }
+.method { border-top: 1px solid #e7eff0; padding-top: 9px; margin-top: 9px; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 660px) {
+ .panel { padding: 11px 12px; }
+ .heading h1 { font-size: 23px !important; }
+ .actionLink { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+ .open { display: none; }
+ .chartRow { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) 2ch; gap: 7px; }
+}
