@@ -139,10 +139,10 @@ function RoadmapDashboardContent() {
   return (
     <main className="roadmap-page roadmap-executive" dir="rtl">
       <section className="roadmap-shell">
-        <nav className="roadmap-view-tabs" aria-label="إدارة محفظة الأمن السيبراني">
-          <Link href="/roadmap">سجل المشاريع السيبرانية</Link>
-          <Link href="/roadmap/analysis">تحليل المحفظة السيبرانية</Link>
-          <Link className="active" href="/roadmap/dashboard">خارطة طريق المشاريع</Link>
+        <nav className="roadmap-view-tabs" aria-label="أقسام المشاريع السيبرانية">
+          <Link href="/roadmap">السجل</Link>
+          <Link className="active" aria-current="page" href="/roadmap/dashboard">خارطة الطريق</Link>
+          <Link href="/roadmap/analysis">تحليل المحفظة</Link>
         </nav>
 
         <header className="roadmap-exec-hero">
