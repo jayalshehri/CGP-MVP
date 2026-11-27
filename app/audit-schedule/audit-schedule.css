@@ -1,2 +1,78 @@
-.audit-schedule-page{max-width:1440px}.audit-policy-note{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:20px 0;padding:18px 22px;border:1px solid #bfe1d9;border-radius:14px;background:linear-gradient(120deg,#effaf7,#fff)}.audit-policy-note b{color:var(--cgp-teal);font-size:13px}.audit-policy-note p{margin:5px 0 0;color:#64748b;font-size:13px;line-height:1.75}.audit-policy-note>span{padding:7px 10px;border-radius:8px;background:#dff5ee;color:#08796e;font-size:11px;font-weight:800;white-space:nowrap}.audit-filter-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:20px 0}.audit-filter-bar label,.audit-editor-fields label{display:grid;gap:7px;color:#475569;font-size:12px;font-weight:800}.audit-filter-bar select,.audit-editor-fields :is(select,input){width:100%;box-sizing:border-box;border:1px solid #cbd7dc;border-radius:9px;background:#fff;padding:10px 11px;color:#102f43;font:inherit}.audit-feedback{min-height:22px;color:var(--cgp-teal);font-weight:700}.audit-table-wrap{overflow:auto;border:1px solid #dbe5e8;border-radius:16px;background:#fff;box-shadow:0 8px 20px rgba(15,23,42,.04)}.audit-table{width:100%;min-width:930px;border-collapse:collapse}.audit-table th{padding:14px;text-align:right;background:#f2f6f7;color:#536576;font-size:11px}.audit-table td{padding:14px;border-top:1px solid #eaf0f2;color:#334155;font-size:12px;vertical-align:middle}.audit-table td:first-child{min-width:320px}.audit-table td:first-child strong,.audit-table td:first-child span{display:block}.audit-table td:first-child strong{color:var(--cgp-teal);font-size:12px;margin-bottom:4px}.audit-table td:first-child span{line-height:1.6}.audit-overdue{color:#b42318!important;font-weight:800}
-.audit-row-unowned{background:#fff8f7}.audit-no-owner{color:#9d2e24;font-weight:700;font-size:12px}.audit-actions{display:flex;gap:8px}.audit-actions a,.audit-actions button{border:1px solid #afd9d0;border-radius:8px;background:#fff;color:var(--cgp-teal);padding:7px 10px;font:inherit;font-size:11px;font-weight:800;text-decoration:none;cursor:pointer}.audit-editor{position:fixed;z-index:40;inset:auto 28px 28px auto;width:min(590px,calc(100vw - 56px));padding:24px;border:1px solid #bfdfd8;border-radius:16px;background:#fff;box-shadow:0 24px 64px rgba(15,23,42,.24)}.audit-editor header{display:flex;justify-content:space-between;gap:16px;margin-bottom:18px}.audit-editor header span{color:var(--cgp-teal);font-size:12px;font-weight:800}.audit-editor h2{margin:4px 0;font-size:21px}.audit-editor p{margin:0;color:#64748b;font-size:12px;line-height:1.7}.audit-editor header>button{display:grid;place-items:center;width:34px;height:34px;border:1px solid #d5e0e4;border-radius:9px;background:#fff;color:#64748b;font-size:21px}.audit-editor-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.audit-editor footer{display:flex;gap:10px;margin-top:20px}.audit-save,.audit-cancel{border-radius:9px;padding:10px 14px;font:inherit;font-weight:800;cursor:pointer}.audit-save{border:1px solid var(--cgp-teal);background:var(--cgp-teal);color:#fff}.audit-cancel{border:1px solid #cbd7dc;background:#fff;color:#526577}@media(max-width:850px){.audit-filter-bar,.audit-editor-fields{grid-template-columns:1fr}.audit-policy-note{align-items:flex-start;flex-direction:column}.audit-editor{inset:auto 14px 14px;width:auto}}
+.audit-schedule-page,.audit-trail-page {
+  --audit-ink: #17364a;
+  --audit-muted: #536979;
+  --audit-line: #dde8eb;
+  --audit-accent: #0f766e;
+}
+.workflow-page.audit-schedule-page > .workflow-heading,.workflow-page.audit-trail-page > .workflow-heading {
+  margin-block-end: 14px;
+  padding: 16px 20px;
+}
+.schedule-scopes { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-block:12px; }
+.schedule-scopes button { display:grid; grid-template-columns:1fr auto; align-items:center; gap:5px 8px; min-width:0; padding:10px 12px; text-align:start; border:1px solid var(--audit-line); border-radius:12px; color:var(--audit-ink); background:#fff; cursor:pointer; }
+.schedule-scopes button[aria-pressed=true] { border-color:#74b9ae; background:#ebf8f5; box-shadow:inset 0 -2px #0f766e; }
+.schedule-scopes span { font-size:.83rem; font-weight:750; }
+.schedule-scopes strong { color:var(--audit-accent); font-size:1.25rem; line-height:1; }
+.schedule-scopes small { grid-column:1/-1; color:var(--audit-muted); font-size:.72rem; }
+.schedule-toolbar { display:flex; align-items:end; flex-wrap:wrap; gap:8px 10px; margin-block:12px 8px; }
+.schedule-toolbar label { display:grid; min-width:0; gap:3px; color:var(--audit-muted); font-size:.73rem; font-weight:700; }
+.schedule-toolbar > label:first-child { flex:1 1 210px; }
+.schedule-toolbar :is(input,select) { min-height:34px; min-width:0; width:100%; border:1px solid #cddce0; border-radius:8px; background:#fff; padding:5px 8px; color:var(--audit-ink); font:inherit; font-size:.79rem; }
+.schedule-more { position:relative; }
+.schedule-more summary,.schedule-btn { display:inline-flex; align-items:center; justify-content:center; min-height:34px; border:1px solid #c8dbde; border-radius:8px; padding:5px 10px; background:#fff; color:var(--audit-accent); font:inherit; font-weight:750; font-size:.77rem; text-decoration:none; cursor:pointer; }
+.schedule-more > div { position:absolute; inset-inline-start:0; z-index:2; width:min(228px,70vw); display:grid; gap:8px; border:1px solid var(--audit-line); border-radius:9px; padding:10px; margin-block-start:4px; background:#fff; box-shadow:0 6px 14px #17364a1a; }
+.schedule-btn:hover,.schedule-more summary:hover { background:#edf8f7; }
+.schedule-btn.primary { border-color:var(--audit-accent); background:var(--audit-accent); color:#fff; }
+.schedule-btn:disabled { opacity:.52; cursor:default; }
+.schedule-export,.schedule-pages > div,.schedule-drawer footer { display:flex; flex-wrap:wrap; gap:6px; }
+.schedule-subviews { display:flex; flex-wrap:wrap; gap:6px; margin-block:0 9px; }
+.schedule-subviews button { border:1px solid var(--audit-line); border-radius:999px; padding:4px 9px; color:var(--audit-muted); background:#fff; font-size:.75rem; cursor:pointer; }
+.schedule-subviews button[aria-pressed=true] { border-color:#85c5bb; color:#075d55; background:#e9f7f4; font-weight:750; }
+.schedule-list { background:#fff; border:1px solid var(--audit-line); border-radius:12px; overflow:hidden; }
+.schedule-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+.schedule-table th { text-align:start; background:#eef5f6; color:var(--audit-muted); font-size:.73rem; padding:8px 10px; }
+.schedule-table th:first-child { width:38%; }
+.schedule-table th:nth-child(4) { width:18%; }
+.schedule-table td { padding:7px 10px; border-block-start:1px solid #e8eff1; color:var(--audit-ink); font-size:.8rem; overflow-wrap:anywhere; }
+.schedule-table tr:hover { background:#f8fcfb; }
+.schedule-table td small { display:block; margin-block-start:2px; color:var(--audit-muted); font-size:.71rem; }
+.schedule-table .schedule-date:is(.overdue,.due_today) { color:#a12b22; }
+.schedule-table .schedule-date.due_soon { color:#885000; }
+.schedule-row-link { display:grid; justify-items:start; gap:2px; width:100%; border:0; padding:0; color:inherit; background:transparent; text-align:start; font:inherit; cursor:pointer; }
+.schedule-row-link b { color:var(--audit-accent); }
+.schedule-row-link:hover span { text-decoration:underline; }
+.schedule-stage { display:inline-block; border-radius:7px; padding:3px 7px; color:#40596a; background:#f0f4f7; font-size:.72rem; font-weight:700; }
+.schedule-stage:is(.completed,.assessment,.under_review) { background:#e8f7f1; color:#126352; }
+.schedule-stage:is(.changes_requested,.unowned,.cancelled) { background:#fff2e0; color:#7d490e; }
+.schedule-empty { padding:22px; color:var(--audit-ink); }
+.schedule-empty p,.schedule-note,.schedule-context { margin-block:5px; color:var(--audit-muted); font-size:.8rem; }
+.schedule-pages { display:flex; justify-content:space-between; align-items:center; gap:8px; padding-block:8px; color:var(--audit-muted); font-size:.77rem; }
+.schedule-context a,.schedule-feedback { color:var(--audit-accent); font-weight:700; }
+.schedule-portfolio { margin-block-start:16px; border-block-start:1px solid var(--audit-line); padding-block-start:12px; }
+.schedule-portfolio > summary { cursor:pointer; color:var(--audit-ink); font-weight:700; font-size:.85rem; }
+.schedule-drawer { position:fixed; inset:0 auto 0 0; margin:0; box-sizing:border-box; width:min(500px,100vw); max-width:100vw; height:100dvh; max-height:100dvh; overflow:auto; padding:20px; border:0; border-inline-start:1px solid var(--audit-line); color:var(--audit-ink); background:#fff; box-shadow:0 0 32px #17364a26; }
+.schedule-drawer::backdrop { background:#102e4166; }
+.schedule-drawer header { display:flex; align-items:start; justify-content:space-between; gap:10px; padding-block-end:12px; border-block-end:1px solid var(--audit-line); }
+.schedule-drawer header small,.schedule-drawer header b { color:var(--audit-accent); font-weight:750; }
+.schedule-drawer h2 { margin:4px 0; font-size:1.15rem; }
+.schedule-drawer dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin-block:14px; }
+.schedule-drawer dl div,.schedule-request { padding:9px; background:#f4f8f9; border-radius:8px; overflow-wrap:anywhere; }
+.schedule-drawer dt { color:var(--audit-muted); font-size:.72rem; }
+.schedule-drawer dd { margin:2px 0; font-size:.85rem; font-weight:700; }
+.schedule-request h3 { font-size:.9rem; margin:0; }
+.schedule-request p { font-size:.82rem; margin-block:5px; }
+.schedule-request a { margin-inline-end:5px; margin-block-start:4px; }
+.schedule-drawer footer { margin-block-start:14px; }
+@media(max-width:760px) {
+  .schedule-scopes { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .schedule-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+  .schedule-table,.schedule-table tbody { display:block; }
+  .schedule-table tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px 8px; padding:9px 11px; }
+  .schedule-table tr+tr { border-block-start:1px solid var(--audit-line); }
+  .schedule-table td { padding:0; border:0; }
+  .schedule-table td:first-child { grid-column:1/-1; }
+}
+@media print {
+  .schedule-scopes,.schedule-toolbar,.schedule-subviews,.schedule-pages,.schedule-portfolio,.schedule-table td:last-child,.schedule-table th:last-child { display:none!important; }
+  .schedule-table .schedule-row-link { display:grid!important; }
+}

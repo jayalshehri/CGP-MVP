@@ -1,17 +1,66 @@
-"use client";
-import GrcAuditTrail from "@/components/GrcAuditTrail";
-import { useEffect,useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { requireProfile } from "@/lib/auth";
-import { WorkflowHeading,WorkflowMetric } from "@/components/WorkflowUI";
+'use client';
 
-type AuditEvent={id:number;risk_id:number;event_type:string;previous_status:string|null;new_status:string|null;created_at:string;cyber_risks:{risk_code:string}[]};
-const labels:Record<string,string>={created:"إنشاء خطر",updated:"تحديث الخطر",status_changed:"تغيير الحالة"};
-const status:Record<string,string>={open:"مفتوح",treatment_in_progress:"قيد المعالجة",accepted:"مقبول",closed:"مغلق"};
+import GrcAuditTrail from '@/components/GrcAuditTrail';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { requireProfile } from '@/lib/auth';
+import { positiveId } from '@/lib/audit-schedule';
+import { WorkflowHeading } from '@/components/WorkflowUI';
+import './audit.css';
 
-export default function AuditPage(){
- const [items,setItems]=useState<AuditEvent[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState("");
- useEffect(()=>{let live=true;(async()=>{try{await requireProfile(["admin","cybersecurity_team"]);const {data,error}=await supabase.from("cyber_risk_events").select("id,risk_id,event_type,previous_status,new_status,created_at,cyber_risks(risk_code)").order("created_at",{ascending:false}).limit(50);if(error)throw error;if(live)setItems((data??[]) as AuditEvent[])}catch(e){if(live)setError(e instanceof Error?e.message:"تعذر تحميل سجل التدقيق")}finally{if(live)setLoading(false)}})();return()=>{live=false}},[]);
- if(loading)return <main className="workflow-page" dir="rtl">جاري تحميل سجل التدقيق…</main>;
- return <main className="workflow-page" dir="rtl"><WorkflowHeading title="سجل التدقيق" description="تاريخ الضوابط والأدلة والتكليفات والمراجعات، مع الاحتفاظ بسجل المخاطر السابق."/>{error&&<p className="cgp-shell-error" role="alert">{error}</p>}<GrcAuditTrail/><details><summary>أحداث المخاطر السابقة</summary><div className="workflow-metrics"><WorkflowMetric label="الأحداث المعروضة" value={items.length}/><WorkflowMetric label="تغييرات الحالة" value={items.filter(x=>x.event_type==="status_changed").length}/></div><section className="workflow-card"><h2>سجل الأحداث</h2>{items.length===0?<p>لا توجد أحداث حتى الآن. سيُنشأ السجل تلقائياً عند إضافة خطر أو تحديثه.</p>:<table className="workflow-table"><thead><tr><th>الوقت</th><th>الخطر</th><th>الحدث</th><th>التغيير</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{new Intl.DateTimeFormat("ar-SA",{dateStyle:"medium",timeStyle:"short"}).format(new Date(x.created_at))}</td><td dir="ltr">RISK-{x.risk_id}</td><td>{labels[x.event_type]??x.event_type}</td><td>{x.previous_status?(status[x.previous_status]??x.previous_status)+" ← "+(status[x.new_status??""]??x.new_status):(status[x.new_status??""]??"—")}</td></tr>)}</tbody></table>}</section></details></main>;
+type LegacyRiskEvent = { id: number; risk_id: number; event_type: string; previous_status: string | null; new_status: string | null; created_at: string };
+const labels: Record<string, string> = { created: 'إنشاء خطر', updated: 'تحديث الخطر', status_changed: 'تغيير الحالة' };
+const status: Record<string, string> = { open: 'مفتوح', treatment_in_progress: 'قيد المعالجة', accepted: 'مقبول', closed: 'مغلق' };
+const time = new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Riyadh' });
+
+function AuditContent() {
+  const controlId = positiveId(useSearchParams().get('control'));
+  const [authorized, setAuthorized] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [riskOpen, setRiskOpen] = useState(false);
+  const [items, setItems] = useState<LegacyRiskEvent[] | null>(null);
+  const [riskError, setRiskError] = useState('');
+
+  useEffect(() => {
+    let current = true;
+    void requireProfile(['admin', 'cybersecurity_team']).then(() => { if (current) setAuthorized(true); })
+      .catch(() => { if (current) setError('سجل التدقيق متاح لمدير النظام وفريق الأمن السيبراني.'); })
+      .finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, []);
+  useEffect(() => {
+    if (!authorized || !riskOpen) return;
+    let current = true;
+    void supabase.from('cyber_risk_events').select('id,risk_id,event_type,previous_status,new_status,created_at')
+      .order('created_at', { ascending: false }).limit(50).then(({ data, error }) => {
+        if (!current) return;
+        setRiskError(error ? 'تعذر تحميل أحداث المخاطر السابقة.' : '');
+        if (!error) setItems(data ?? []);
+      });
+    return () => { current = false; };
+  }, [authorized, riskOpen]);
+  return <main className="workflow-page audit-trail-page" dir="rtl">
+    <WorkflowHeading title="سجل التدقيق" description="تتبّع من غيّر ماذا ومتى، وافتح تفاصيل الحدث للمقارنة قبل وبعد." />
+    {loading && <p role="status">جاري تحميل سجل التدقيق…</p>}
+    {error && <p className="cgp-shell-error" role="alert">{error}</p>}
+    {authorized && <>
+      <GrcAuditTrail full reliableRead key={controlId ?? 'all'} controlId={controlId ?? undefined} />
+      {!controlId && <details className="audit-legacy" onToggle={e => setRiskOpen(e.currentTarget.open)}>
+        <summary>أحداث المخاطر السابقة</summary>
+        <p>سجل منفصل عن أحداث الحوكمة الحالية. يعرض أحدث 50 حدثًا متاحًا.</p>
+        {riskError ? <p role="alert">{riskError}</p> : !items ? <p role="status">جاري تحميل أحداث المخاطر…</p>
+          : !items.length ? <p>لا توجد أحداث مخاطر سابقة متاحة.</p>
+          : <div className="audit-legacy-table"><table className="workflow-table"><thead><tr><th scope="col">الوقت</th><th scope="col">الخطر</th><th scope="col">الحدث</th><th scope="col">التغيير</th></tr></thead>
+            <tbody>{items.map(row => <tr key={row.id}><td><time dateTime={row.created_at}>{time.format(new Date(row.created_at))}</time></td>
+              <td dir="ltr">RISK-{row.risk_id}</td><td>{labels[row.event_type] ?? row.event_type}</td>
+              <td>{row.previous_status ? `${status[row.previous_status] ?? row.previous_status} ← ` : ''}{status[row.new_status ?? ''] ?? row.new_status ?? '—'}</td></tr>)}</tbody>
+          </table></div>}
+      </details>}
+    </>}
+  </main>;
+}
+export default function AuditPage() {
+  return <Suspense fallback={<main className="workflow-page" role="status">جاري تحميل سجل التدقيق…</main>}><AuditContent /></Suspense>;
 }
