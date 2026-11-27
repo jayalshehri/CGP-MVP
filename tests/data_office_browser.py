@@ -64,8 +64,16 @@ def check_layout(browser, revision, size, target):
     if after:
         expect(office.get_by_role("region", name="ملخص أعمال المكتب").get_by_role("link")).to_have_count(3)
     elif new_heading.count():
-        office.get_by_text("آخر نشاط للتكليفات", exact=True).wait_for()
+        recent = office.get_by_text("آخر نشاط للتكليفات", exact=True)
+        recent.wait_for(state="attached")
+        disclosure = recent.locator("xpath=ancestor::details[1]")
+        was_closed = disclosure.count() and disclosure.get_attribute("open") is None
+        if was_closed:
+            disclosure.locator("summary").first.click()
+        recent.wait_for()
         office.get_by_text("تقديم دليل للمراجعة", exact=True).wait_for()
+        if was_closed:
+            disclosure.locator("summary").first.click()
     else:
         office.get_by_role("heading", name="مصفوفة الامتثال حسب المجال").wait_for()
     snap(office, target / f"{size}-office-home.png", after)
@@ -316,6 +324,67 @@ def office_chat(browser):
     page.context.close()
 
 
+def evidence_distribution(browser):
+    fixture = Fixture()
+    new_id = 5
+    fixture.requirements.append(dict(fixture.requirements[0], id=new_id, source_row=new_id, evidence_name="الدليل المعاد"))
+    fixture.assignments.append(dict(fixture.assignments[0], id=new_id, requirement_id=new_id, status="changes_requested"))
+    page = login(browser, fixture, "manager", *SIZES["phone"], revision="after")
+    chart = page.get_by_role("region", name="توزيع المتطلبات حسب حالة الدليل")
+    legend = chart.get_by_role("list")
+    states = ["unassigned", "assigned", "submitted", "changes_requested", "approved"]
+    expect(chart.get_by_text("إجمالي المتطلبات").locator("..").locator("strong")).to_have_text("٥")
+    expect(legend.get_by_role("link")).to_have_count(5)
+    expect(chart.locator("svg path")).to_have_count(5)
+    priorities = page.get_by_role("region", name="أولويات اليوم")
+    assert priorities.bounding_box()["y"] < chart.bounding_box()["y"]
+    expect(chart.locator("details")).not_to_have_attribute("open", "")
+    chart.get_by_text("عرض التأخر حسب المجال").click()
+    chart.get_by_role("link", name=re.compile("حوكمة البيانات")).click()
+    expect(page.locator("#nudee-view")).to_have_value("overdue")
+    expect(page.get_by_role("combobox", name="المجال", exact=True)).to_have_value("حوكمة البيانات")
+    expect(page.locator("tbody tr")).to_have_count(2)
+    page.go_back()
+    for state in states:
+        row = legend.locator(f'a[href*="view={state}"]')
+        expect(row.locator("b")).to_have_text("١")
+        expect(row.locator("small")).to_contain_text("٢٠")
+        row.focus()
+        page.keyboard.press("Enter")
+        expect(page.locator("#nudee-view")).to_have_value(state)
+        expect(page.locator("tbody tr")).to_have_count(1)
+        page.go_back()
+
+    # A change of state shifts exactly one requirement when the dashboard refreshes.
+    fixture.assignments[-1]["status"] = "approved"
+    page.get_by_role("button", name="تحديث اللوحة").click()
+    expect(legend.locator('a[href*="view=approved"] b')).to_have_text("٢")
+    expect(legend.locator('a[href*="view=approved"] small')).to_contain_text("٤٠")
+    expect(legend.locator('a[href*="view=changes_requested"] b')).to_have_text("٠")
+    expect(chart.locator("svg path")).to_have_count(4)
+
+    fixture.assignments.clear()
+    page.get_by_role("button", name="تحديث اللوحة").click()
+    arc = chart.locator('svg a[href*="view=unassigned"] path')
+    expect(chart.locator("svg path")).to_have_count(1)
+    expect(legend.locator('a[href*="view=unassigned"] small')).to_contain_text("١٠٠")
+    # Click the actual painted ring, outside its transparent center.
+    arc.scroll_into_view_if_needed()
+    point = arc.evaluate("""path => {
+      const point = path.getPointAtLength(path.getTotalLength() / 8).matrixTransform(path.getScreenCTM());
+      return [point.x, point.y];
+    }""")
+    page.mouse.click(*point)
+    expect(page.locator("#nudee-view")).to_have_value("unassigned")
+    expect(page.locator("tbody tr")).to_have_count(5)
+    fixture.requirements.clear()
+    page.goto(APP + HOME)
+    expect(chart.get_by_text("لا توجد متطلبات مسجّلة لعرض توزيعها.")).to_be_visible()
+    expect(chart.locator("svg")).to_have_count(0)
+    assert not fixture.unexpected, fixture.unexpected
+    page.context.close()
+
+
 def evidence_center(browser, target):
     fixture = Fixture()
     req = fixture.requirements[0]
@@ -486,6 +555,7 @@ if __name__ == "__main__":
         if args.revision == "after":
             manager_landing(browser)
             office_chat(browser)
+            evidence_distribution(browser)
             evidence_center(browser, args.output)
             all_maturity_levels(browser)
             preparation(browser)

@@ -7,6 +7,7 @@ import { requireProfile } from "@/lib/auth";
 import { readStrategyRows } from "@/lib/strategy-read";
 import { supabase } from "@/lib/supabase";
 import OfficeAssistant from "./OfficeAssistant";
+import StatusDistribution from "./StatusDistribution";
 import { findWork, recordLink, weeklyDue, workLink, type Scope, type WorkItem } from "./officeWork";
 import { officeWeek } from "../nudee/queues";
 import daily from "./daily.module.css";
@@ -92,12 +93,17 @@ function OfficeSummary({items,userId,names,loaded}: OfficeData) {
         : <p>{items.length?"لا توجد تكليفات متأخرة أو قريبة الاستحقاق أو أدلة تنتظر قرارك.":"لم تُستورد متطلبات نُضيء بعد."}</p>}
         <Link className={daily.footerLink} href={workLink({view:"unassigned"})}>إسناد المتطلبات ←</Link>
       </section>
-      <section className={daily.panel} aria-labelledby="domain-title"><h2 id="domain-title">التكليفات المتأخرة حسب المجال</h2>
-        {domains.length?<ul className={daily.bars}>{domains.map(([name,count])=><li key={name}>
-          <Link href={workLink({view:"overdue",domain:name})}><span>{name}<b>{number.format(count)}</b></span>
-            <i aria-hidden="true"><i style={{width:(100*count/domains[0][1])+"%"}}/></i></Link></li>)}</ul>
-        :<p>لا توجد تكليفات متأخرة في المجالات المسجّلة.</p>}
-        {domains.length>0&&<Link className={daily.footerLink} href={workLink({view:"overdue"})}>عرض كل المتأخر ←</Link>}
+      <section className={daily.panel} aria-labelledby="distribution-title">
+        <h2 id="distribution-title">توزيع المتطلبات حسب حالة الدليل</h2>
+        <StatusDistribution items={items}/>
+        <details className={daily.overdueDetails}>
+          <summary>عرض التأخر حسب المجال</summary>
+          {domains.length?<ul className={daily.bars}>{domains.map(([name,count])=><li key={name}>
+            <Link href={workLink({view:"overdue",domain:name})}><span>{name}<b>{number.format(count)}</b></span>
+              <i aria-hidden="true"><i style={{width:(100*count/domains[0][1])+"%"}}/></i></Link></li>)}</ul>
+          :<p>لا توجد تكليفات متأخرة في المجالات المسجّلة.</p>}
+          {domains.length>0&&<Link className={daily.footerLink} href={workLink({view:"overdue"})}>عرض كل المتأخر ←</Link>}
+        </details>
       </section>
     </div>
     <details className={daily.activity}><summary>سجل النشاط الأخير</summary><RecentActivity names={names}/></details>
