@@ -187,6 +187,47 @@ def simple_pdf():
     return bytes(result)
 
 
+def preparation(browser):
+    from zipfile import ZipFile
+    fixture = Fixture()
+    original = {"id": 2, "assignment_id": 4, "file_name": "approved.pdf", "storage_path": "4/test/approved.pdf", "submitted_at": "2026-01-04T08:00:00Z"}
+    fixture.files.append(original)
+    fixture.objects[original["storage_path"]] = simple_pdf(), "application/pdf"
+    office = login(browser, fixture, "office", *SIZES["desktop"], revision="after")
+    office.goto(APP + INDICATOR)
+    office.get_by_text("جاهزية الأسئلة وحزمة المجال", exact=True).click()
+    office.get_by_label("المستوى المستهدف").select_option(index=1)
+    expect(office.get_by_role("button", name="تأكيد جاهزية السؤال داخليًا")).to_be_disabled()
+    office.get_by_role("button", name="حفظ المستوى المستهدف").click()
+    expect(office.get_by_text("حُفظ المستوى المستهدف.")).to_be_visible()
+    office.get_by_label("السؤال", exact=True).select_option("DG-04")
+    office.get_by_label("المستوى المستهدف").select_option(index=1)
+    office.get_by_role("button", name="تأكيد جاهزية السؤال داخليًا").click()
+    expect(office.get_by_text("أكد المكتب جاهزية السؤال داخليًا")).to_be_visible()
+    with office.expect_download() as download:
+        office.get_by_role("button", name="تنزيل حزمة المجال").click()
+    with ZipFile(download.value.path()) as archive:
+        pdf = next(path for path in archive.namelist() if path.endswith(".pdf"))
+        assert archive.read(pdf) == simple_pdf()
+        assert NAMES[0] in archive.read("الأدلة غير المعتمدة.csv").decode("utf-8-sig")
+        assert NAMES[3] not in archive.read("الأدلة غير المعتمدة.csv").decode("utf-8-sig")
+    office.get_by_role("link", name=NAMES[3], exact=True).click()
+    expect(office.locator("tbody tr")).to_have_count(1)
+    owner = login(browser, fixture, "owner", *SIZES["phone"], revision="after")
+    owner.get_by_role("button", name=NAMES[0], exact=True).click()
+    expect(owner.get_by_role("heading", name="ما المطلوب في الدليل؟")).to_be_visible()
+    owner.get_by_text("استخدام دليل معتمد من تكليفاتي").click()
+    owner.get_by_label("الدليل السابق").select_option("2")
+    owner.get_by_label("الصفحة أو البند").fill("ص ٢")
+    owner.get_by_role("button", name="إرسال النسخة لمراجعة المتطلب").click()
+    expect(owner.get_by_text("أُرسل الدليل السابق لمراجعة هذا المتطلب.")).to_be_visible()
+    assert fixture.assignments[0]["status"] == "submitted"
+    assert fixture.files[-1]["source_locator"] == "ص ٢"
+    assert not fixture.unexpected, fixture.unexpected
+    office.context.close()
+    owner.context.close()
+
+
 def lifecycle(browser, target):
     fixture = Fixture()
     office = login(browser, fixture, "office", *SIZES["desktop"], revision="after")
@@ -281,6 +322,7 @@ if __name__ == "__main__":
             results[size] = {"viewport": SIZES[size], "office": "passed", "owner": "passed"}
             print(f"PASS {args.revision} desktop/tablet/mobile layout: {size}", flush=True)
         if args.revision == "after":
+            preparation(browser)
             lifecycle(browser, args.output)
             results["workflow_with_synthetic_backend"] = "passed"
             print("PASS assignment, upload, return, resubmission, approval, home refresh", flush=True)

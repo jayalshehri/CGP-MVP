@@ -49,3 +49,18 @@
   .domains tbody th { font-size: .82rem; }
   .domains thead th { font-size: .74rem; }
 }
+
+.preparation { padding: clamp(14px, 3vw, 26px); display: grid; gap: 16px; }
+.preparation label { display: grid; gap: 5px; font-weight: 650; min-width: 0; }
+.preparation select { width: 100%; max-width: 100%; min-width: 0; border: 1px solid #9cb9b2; border-radius: 8px; background: white; color: #163f3c; padding: 9px; font: inherit; }
+.question { border-block-start: 1px solid #d8e5df; padding-block-start: 14px; min-width: 0; }
+.question h3 { font-size: 1.08rem; line-height: 1.65; margin-block: 0 12px; }
+.preparation p { margin-block: 8px; }
+.preparation button { padding: 8px 13px; border: 1px solid #176759; border-radius: 8px; background: #125c50; color: white; font: inherit; cursor: pointer; }
+.preparation button:disabled { cursor: default; background: #e5eeeb; color: #485f59; border-color: #b8cac3; }
+.buttons, .exportRow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.exportRow { justify-content: space-between; border-block-start: 1px solid #ccdcd6; padding-block-start: 14px; }
+.evidenceList { padding: 0; list-style: none; }
+.evidenceList li { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding-block: 7px; border-block-end: 1px solid #edf1ef; }
+.evidenceList a { color: #145f55; overflow-wrap: anywhere; }
+.evidenceList span { font-size: .82rem; white-space: nowrap; }
