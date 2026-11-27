@@ -1,26 +1,38 @@
 'use client';
-import {useEffect,useState} from 'react';
+import {Suspense,useEffect,useState} from 'react';
 import Link from 'next/link';
 import {supabase} from '@/lib/supabase';
 import {requireProfile} from '@/lib/auth';
 import {WorkflowHeading,WorkflowMetric} from '@/components/WorkflowUI';
 import {csvDownload} from '@/lib/grc';
+import { useSearchParams } from 'next/navigation';
+import { positiveId } from '@/lib/audit-schedule';
+import { crosswalkTypeLabels as types } from '@/lib/control-presentation';
 import '@/components/assessment-workspace.css';
 type Mapping={id:number;source_id:number;target_id:number;source_framework:string;target_framework:string;source_code:string;target_code:string;source_title:string;target_title:string;source_version:string|null;target_version:string|null;relationship_type:string;coverage_type:string;validation_status:string;source_reference:string|null;coverage_notes:string|null;reviewed_by:string|null;reviewed_at:string|null;approved_by:string|null;approved_at:string|null;revision:number};
 type ControlChoice={id:number;label:string};
-const types:Record<string,string>={reference:'إشارة مرجعية',supports:'يدعم',partial:'تداخل جزئي',equivalent:'تكافؤ ضمن نطاق موثق'};
 const statuses:Record<string,string>={pending:'بحاجة إلى مراجعة واعتماد',approved:'معتمد',rejected:'مرفوض'};
 export default function MappingsPage(){
+ return <Suspense fallback={<main className="workflow-page ae-page" role="status">جارٍ تحميل خريطة المواءمة…</main>}><MappingsScope/></Suspense>;
+}
+function MappingsScope(){
+ const controlId=positiveId(useSearchParams().get('control'));
+ return <MappingsContent key={controlId??'all'} controlId={controlId}/>;
+}
+function MappingsContent({controlId}:{controlId:number|null}){
  const [choices,setChoices]=useState<ControlChoice[]>([]);
  const [rows,setRows]=useState<Mapping[]>([]),[actor,setActor]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(true),[refresh,setRefresh]=useState(0);
  const [search,setSearch]=useState(''),[source,setSource]=useState(''),[target,setTarget]=useState(''),[status,setStatus]=useState(''),[type,setType]=useState(''),[page,setPage]=useState(0),[open,setOpen]=useState<number|null>(null);
  useEffect(()=>{let active=true;void(async()=>{try{const {user}=await requireProfile(['admin','cybersecurity_team']);const [r,c]=await Promise.all([supabase.rpc('cgp_crosswalk'),supabase.from('controls').select('id,control_code,title_ar,frameworks!inner(code,is_active)').eq('frameworks.is_active',true)]);if(r.error||c.error)throw r.error||c.error;if(active){setRows(r.data??[]);setChoices((c.data??[]).map(x=>({id:x.id,label:`${(Array.isArray(x.frameworks)?x.frameworks[0]:x.frameworks)?.code??''} ${x.control_code} — ${x.title_ar}`})));setActor(user.id);setError('');}}catch(e){if(active)setError(e instanceof Error?e.message:typeof e==='object'&&e&&'message'in e?String(e.message):'تعذر تحميل المواءمة');}finally{if(active)setLoading(false);}})();return()=>{active=false;};},[refresh]);
- const visible=rows.filter(r=>(!source||r.source_framework===source)&&(!target||r.target_framework===target)&&(!status||r.validation_status===status)&&(!type||r.coverage_type===type)&&`${r.source_framework} ${r.source_code} ${r.source_title} ${r.target_framework} ${r.target_code} ${r.target_title}`.toLowerCase().includes(search.toLowerCase()));
- const frameworks=[...new Set(rows.flatMap(r=>[r.source_framework,r.target_framework]))];
+ const scoped=controlId?rows.filter(r=>r.source_id===controlId||r.target_id===controlId):rows;
+ const visible=scoped.filter(r=>(!source||r.source_framework===source)&&(!target||r.target_framework===target)&&(!status||r.validation_status===status)&&(!type||r.coverage_type===type)&&`${r.source_framework} ${r.source_code} ${r.source_title} ${r.target_framework} ${r.target_code} ${r.target_title}`.toLowerCase().includes(search.toLowerCase()));
+ const frameworks=[...new Set(scoped.flatMap(r=>[r.source_framework,r.target_framework]))];
+ const scopedLabel=choices.find(choice=>choice.id===controlId)?.label;
  const change=(set:(s:string)=>void,v:string)=>{set(v);setPage(0);};
  return <main className="workflow-page ae-page" dir="rtl"><WorkflowHeading title="خريطة مواءمة الضوابط" description="علاقات موثقة بين المتطلبات. الإشارة المرجعية لا تعني تكافؤ المتطلبات أو انتقال الالتزام تلقائيًا."/>
  {error&&<p className="ae-error" role="alert">{error} <button onClick={()=>setRefresh(v=>v+1)}>إعادة المحاولة</button></p>}
- <NewMapping choices={choices} refresh={()=>setRefresh(v=>v+1)}/><div className="workflow-metrics"><WorkflowMetric label="علاقات مسجلة" value={rows.length}/><WorkflowMetric label="علاقات معتمدة" value={rows.filter(r=>r.validation_status==='approved').length} tone="success"/><WorkflowMetric label="بحاجة إلى مراجعة" value={rows.filter(r=>r.validation_status==='pending').length} tone="warning"/></div>
+ {controlId&&<p className="ae-warning">يعرض هذا النطاق المواءمات المرتبطة بالضابط المحدد{scopedLabel&&<> · <bdi>{scopedLabel}</bdi></>} · <Link href="/mappings">عرض جميع المواءمات</Link></p>}
+ <NewMapping choices={choices} refresh={()=>setRefresh(v=>v+1)}/><div className="workflow-metrics"><WorkflowMetric label="علاقات مسجلة" value={scoped.length}/><WorkflowMetric label="علاقات معتمدة" value={scoped.filter(r=>r.validation_status==='approved').length} tone="success"/><WorkflowMetric label="بحاجة إلى مراجعة" value={scoped.filter(r=>r.validation_status==='pending').length} tone="warning"/></div>
  <p className="ae-warning">الروابط المستوردة سابقًا محفوظة للمراجعة. راجع رقم المتطلب الكامل وإصدار الوثيقة وحدود التغطية قبل الاعتماد. مشاركة ملف تتطلب مراجعة مستقلة لكل ضابط.</p>
  <div className="ae-toolbar"><label>البحث<input value={search} onChange={e=>change(setSearch,e.target.value)}/></label>{([['الإطار المصدر',source,setSource],['الإطار الهدف',target,setTarget]] as const).map(([l,v,set])=><label key={l}>{l}<select value={v} onChange={e=>change(set,e.target.value)}><option value="">الكل</option>{frameworks.map(f=><option key={f}>{f}</option>)}</select></label>)}<label>العلاقة<select value={type} onChange={e=>change(setType,e.target.value)}><option value="">الكل</option>{Object.entries(types).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><label>الاعتماد<select value={status} onChange={e=>change(setStatus,e.target.value)}><option value="">الكل</option>{Object.entries(statuses).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label></div>
  <div className="ae-actions"><button onClick={()=>csvDownload('control-crosswalk.csv',[['المصدر','الهدف','العلاقة','الاعتماد','المرجع','حدود التغطية'],...visible.map(r=>[`${r.source_framework} ${r.source_code}`,`${r.target_framework} ${r.target_code}`,types[r.coverage_type],statuses[r.validation_status],r.source_reference??'',r.coverage_notes??''])])}>تصدير CSV</button><button onClick={()=>window.print()}>طباعة / PDF</button></div>

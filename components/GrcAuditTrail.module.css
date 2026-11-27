@@ -46,3 +46,31 @@
   .events > tbody > tr > td { border:0; padding-block:3px 6px; }
   .events > tbody > tr > td:first-child { grid-column:1/-1; padding-block-start:8px; }
 }
+
+.compact{margin:0 0 12px;padding:14px 16px}
+.compact .header{align-items:center;margin-bottom:7px}
+.compact .header>a{font-size:.8rem;white-space:nowrap;text-underline-offset:3px}
+.compactFilters,.legacyEvents{font-size:.82rem;color:var(--muted)}
+.compactFilters>summary,.legacyEvents>summary{cursor:pointer;padding:6px 0;color:#155c57;font-weight:750}
+.compactFilters[open]{padding-bottom:6px}
+.compactFilters .filters{margin-top:6px;grid-template-columns:repeat(auto-fit,minmax(135px,1fr))}
+.timeline{list-style:none;margin:2px 0 0;padding:0}
+.timeline>li{margin:0;padding-inline-start:15px;border-inline-start:1px solid var(--line);position:relative}
+.timeline>li::before{content:'';position:absolute;inset-inline-start:-4px;inset-block-start:19px;width:7px;height:7px;background:#468b80;border-radius:50%}
+.timelineEvent{border-block-end:1px solid #e9eff0}
+.timelineEvent>summary{list-style:none;cursor:pointer;padding:9px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:5px 14px}
+.timelineEvent>summary::-webkit-details-marker{display:none}
+.timelineEvent>summary::after{content:'+';color:var(--teal);font-weight:800;flex:none}
+.timelineEvent[open]>summary::after{content:'−'}
+.timelineMain{min-width:0;flex:1;display:grid;gap:2px;font-size:.84rem}
+.timelineTitle{color:var(--muted);font-size:.77rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.timelineBy{display:flex;flex-wrap:wrap;gap:3px 9px;justify-content:flex-end;color:var(--muted);font-size:.75rem;max-width:46%}
+.timelineBy time{white-space:nowrap}
+.decisionNote{display:grid;gap:3px;padding:7px 9px;border-radius:6px;background:#f2f8f6;white-space:pre-wrap;overflow-wrap:anywhere}
+.legacyEvents{margin-top:9px}
+@media(max-width:540px){
+ .compact{padding:12px}
+ .timelineEvent>summary{display:grid;grid-template-columns:minmax(0,1fr) auto}
+ .timelineBy{grid-row:2;grid-column:1/-1;justify-content:flex-start;max-width:none}
+ .timelineEvent>summary::after{grid-row:1;grid-column:2}
+}

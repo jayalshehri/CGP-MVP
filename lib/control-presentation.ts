@@ -33,3 +33,10 @@ export const followUpText: Record<ReturnType<typeof controlFollowUp>, string> = 
   verification: 'التحقق من التطبيق',
   periodic: 'مراجعة دورية',
 };
+
+export const crosswalkTypeLabels: Record<string, string> = {
+  reference: 'إشارة مرجعية',
+  supports: 'يدعم',
+  partial: 'تداخل جزئي',
+  equivalent: 'تكافؤ ضمن نطاق موثق',
+};
