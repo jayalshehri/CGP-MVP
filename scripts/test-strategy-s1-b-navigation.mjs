@@ -49,7 +49,10 @@ function load(path, cache = new Map()) {
     if (name.endsWith('.module.css')) return { default: new Proxy({}, { get: (_, key) => key }) };
     if (name.endsWith('.css')) return {};
     if (name === 'react') return { ...React, useEffect: () => {} };
-    if (name === 'next/link') return { __esModule: true, default: ({ href, children, scroll: _scroll, ...props }) => React.createElement('a', { href, ...props }, children) };
+    if (name === 'next/link') return { __esModule: true, default: ({ href, children, ...props }) => {
+      delete props.scroll;
+      return React.createElement('a', { href, ...props }, children);
+    } };
     if (name === 'next/navigation') return { useParams: () => ({ id: pathId }), useSearchParams: () => activeUrl.searchParams, useRouter: () => ({ push: go, replace() { throw new Error('Unexpected redirect'); } }) };
     if (name === '@/lib/supabase') return { supabase: new Proxy({}, { get() { throw new Error('No live service allowed'); } }) };
     if (name === '@/lib/auth') return { requireProfile() { throw new Error('No live auth allowed'); } };
