@@ -21,15 +21,12 @@ const navigation = [
   { href: "/data-governance/users", label: "إدارة المستخدمين", group: "", data: true, admin: true },
   { href: "/shared-controls", label: "الكتالوج الموحد", group: "الامتثال", team: true, data: true },
   { href: "/mappings", label: "خريطة المواءمة", group: "قياس الالتزام", team: true },
-  { href: "/third-parties", label: "مخاطر الأطراف الخارجية", group: "العمليات", team: true },
-  { href: "/assets", label: "سجل الأصول التقنية", group: "العمليات", team: true },
-  { href: "/risks", label: "سجل المخاطر السيبرانية", group: "العمليات" },
-  { href: "/vulnerabilities", label: "سجل الثغرات", group: "العمليات" },
-  { href: "/tasks", label: "التكليفات", group: "العمليات" },
-  { href: "/roadmap/dashboard", label: "خارطة طريق المشاريع", group: "العمليات", subgroup: "إدارة خارطة الطريق", team: true },
-  { href: "/roadmap/analysis", label: "تحليل المحفظة السيبرانية", group: "العمليات", subgroup: "إدارة خارطة الطريق", team: true },
-  { href: "/roadmap", label: "سجل المشاريع السيبرانية", group: "العمليات", subgroup: "إدارة خارطة الطريق", team: true },
-  { href: "/alerts", label: "مركز التنبيهات", group: "العمليات", team: true },
+  { href: "/tasks", label: "المتابعة اليومية", group: "العمليات" },
+  { href: "/roadmap", label: "المشاريع السيبرانية", group: "العمليات", team: true },
+  { href: "/assets", label: "سجل الأصول", group: "العمليات", subgroup: "الأصول والثغرات", team: true },
+  { href: "/vulnerabilities", label: "سجل الثغرات", group: "العمليات", subgroup: "الأصول والثغرات" },
+  { href: "/risks", label: "سجل المخاطر", group: "العمليات", subgroup: "المخاطر والأطراف الخارجية" },
+  { href: "/third-parties", label: "مخاطر الأطراف الخارجية", group: "العمليات", subgroup: "المخاطر والأطراف الخارجية", team: true },
   { href: "/evidence", label: "سجل الأدلة", group: "الامتثال", auditor: true },
   { href: "/review", label: "مراجعة الأدلة", group: "الامتثال", team: true },
   { href: "/audit", label: "سجل التدقيق", group: "الامتثال", team: true },
@@ -134,8 +131,9 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const items = permittedItems.filter(item => workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls");
   // Pick the most specific route, so a parent cannot hide the active child.
   const assessmentFramework = compactAssessmentForPath(pathname);
+  const navigationPath = pathname === "/alerts" ? "/tasks" : pathname;
   const currentItem = navigation
-    .filter(item => (assessmentFramework && item.href === "/controls") || pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/")))
+    .filter(item => (assessmentFramework && item.href === "/controls") || navigationPath === item.href || (item.href !== "/" && navigationPath.startsWith(item.href + "/")))
     .sort((a, b) => b.href.length - a.href.length)[0];
   // The executive summary is not a navigation item; without this it inherits the
   // "/roadmap" prefix match and is mislabelled as the project register.
@@ -160,7 +158,10 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const groups = groupOrder.filter(group=>items.some(item=>item.group===group));
   const activeGroup = currentItem?.group ?? "";
   const normalized = searchQuery.trim().toLowerCase();
-  const navigationResults = normalized ? items.filter(item => navigationLabel(item).toLowerCase().includes(normalized)).slice(0, 5) : [];
+  const navigationResults = normalized ? items.filter(item => {
+    const keywords = item.href === "/tasks" ? (account?.role === "control_owner" ? "التكليفات" : "التكليفات التنبيهات") : item.href === "/roadmap" ? "سجل المشاريع خارطة الطريق تحليل المحفظة" : "";
+    return `${navigationLabel(item)} ${keywords}`.toLowerCase().includes(normalized);
+  }).slice(0, 5) : [];
   useEffect(() => {
     const query = searchQuery.trim();
     // Cybersecurity controls have their own catalog. Keep search results within the current workspace.
@@ -243,7 +244,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
       </section>
     </div>}
     <div className="cgp-workspace-grid" inert={searchOpen}>
-      <aside className="cgp-navigation"><div className="cgp-nav-head"><p className="cgp-nav-caption">{workspaceLabel}</p><button type="button" onClick={()=>setNavCollapsed(v=>!v)} aria-label={navCollapsed?"توسيع القائمة":"طي القائمة"} aria-expanded={!navCollapsed}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 18l6-6-6-6"/></svg></button></div><nav aria-label="التنقل الرئيسي">{ungroupedItems.map(linkFor)}{groups.map(group=>{const groupItems=items.filter(item=>item.group===group);const standalone=groupItems.filter(item=>!item.subgroup);const subgroups=[...new Set(groupItems.map(item=>item.subgroup).filter(Boolean))];return <details className="cgp-nav-group" key={`${group}-${navCollapsed ? "collapsed" : "expanded"}`} open={navCollapsed || group===activeGroup}><summary><span>{group}</span><span className="cgp-nav-group-count">{groupItems.length}</span></summary>{standalone.map(linkFor)}{subgroups.map(subgroup=><div className="cgp-nav-subgroup" key={subgroup}><span>{subgroup}</span>{groupItems.filter(item=>item.subgroup===subgroup).map(linkFor)}</div>)}</details>})}</nav><Link href={passwordHref} className="cgp-nav-link cgp-account-link" aria-label="إعدادات كلمة المرور" title={navCollapsed ? "إعدادات كلمة المرور" : undefined} aria-current={pathname === passwordHref ? "page" : undefined}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-8H4v8a2 2 0 0 0 2 2zm1-10V8a5 5 0 0 1 10 0v3"/></svg><span>إعدادات كلمة المرور</span></Link>{workspace !== "data" && <p className="cgp-scope">{workspace === "shared" ? "مواءمة معتمدة بين الأطر دون خلط مساحات العمل." : account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الأمن السيبراني ضمن صلاحيات حسابك."}</p>}</aside>
+      <aside className="cgp-navigation"><div className="cgp-nav-head"><p className="cgp-nav-caption">{workspaceLabel}</p><button type="button" onClick={()=>setNavCollapsed(v=>!v)} aria-label={navCollapsed?"توسيع القائمة":"طي القائمة"} aria-expanded={!navCollapsed}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 18l6-6-6-6"/></svg></button></div><nav aria-label="التنقل الرئيسي">{ungroupedItems.map(linkFor)}{groups.map(group=>{const groupItems=items.filter(item=>item.group===group);const standalone=groupItems.filter(item=>!item.subgroup);const subgroups=[...new Set(groupItems.map(item=>item.subgroup).filter(Boolean))];return <details className="cgp-nav-group" key={`${group}-${navCollapsed ? "collapsed" : "expanded"}`} open={navCollapsed || group===activeGroup}><summary><span>{group}</span><span className="cgp-nav-group-count">{standalone.length + subgroups.length}</span></summary>{standalone.map(linkFor)}{subgroups.map(subgroup=><div className="cgp-nav-subgroup" key={subgroup}>{!navCollapsed && <span>{subgroup}</span>}{groupItems.filter(item=>item.subgroup===subgroup).map(linkFor)}</div>)}</details>})}</nav><Link href={passwordHref} className="cgp-nav-link cgp-account-link" aria-label="إعدادات كلمة المرور" title={navCollapsed ? "إعدادات كلمة المرور" : undefined} aria-current={pathname === passwordHref ? "page" : undefined}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-8H4v8a2 2 0 0 0 2 2zm1-10V8a5 5 0 0 1 10 0v3"/></svg><span>إعدادات كلمة المرور</span></Link>{workspace !== "data" && <p className="cgp-scope">{workspace === "shared" ? "مواءمة معتمدة بين الأطر دون خلط مساحات العمل." : account?.role === "control_owner" ? "تعرض المنصة الضوابط المكلف بها فقط." : "متابعة الأمن السيبراني ضمن صلاحيات حسابك."}</p>}</aside>
       <div className="cgp-page-column">
         <details key={pathname} className="cgp-mobile-navigation" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>القائمة <span>{current}</span></summary><nav aria-label="التنقل على الجوال">{links}<Link className="cgp-nav-link" href={passwordHref}>إعدادات كلمة المرور</Link></nav></details>
         {workspace !== "data" && (isProjectDetail ? <Suspense fallback={<nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href={homeHref}>الرئيسية</Link><span aria-hidden="true">/</span><span aria-current="page">تفاصيل المشروع</span></nav>}><ProjectBreadcrumb /></Suspense> : <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href={homeHref}>الرئيسية</Link>{pathname !== "/" && <><span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">الضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>)}
