@@ -66,7 +66,7 @@ export default function AssessmentWorkspace({frameworkCode,requestedCycle}:{fram
   const editor=entry?<AssessmentItemEditor key={`${entry.id}-${entry.revision}-${finding?.revision??0}`} item={entry} cycle={cycle} people={people} projects={projects}
     evidence={[...new Map(evidence.filter(e=>e.control_id===entry.control_id).map(e=>[e.id,e])).values()]}
     evidenceIds={links.filter(l=>l.item_id===entry.id).map(l=>l.evidence_id)} finding={finding} actor={actor} role={role} busy={busy||loading} command={command}/>:null;
-  const setup=team&&cycle.status==='draft'?<CycleSetup key={`${cycle.id}-${cycle.revision}`} cycle={cycle} items={items} people={people} busy={busy||loading} command={command} initiallyOpen={!cycle.scope_confirmed_at||!cycle.assessor_id||!cycle.reviewer_id||!cycle.approver_id||!cycle.due_date}/>:null;
+  const setup=team&&cycle.status==='draft'?<CycleSetup key={`${cycle.id}-${cycle.revision}`} cycle={cycle} items={items} people={people} busy={busy||loading} command={command} initiallyOpen/>:null;
   const executive=<div className="dcc-executive" style={{padding:'0 18px 14px'}}>
     <p className="ae-muted">{metrics.missing} بندًا يحتاج استكمال البيانات · {overdue.length} معالجة متأخرة</p>
     {domains.map(d=>{const m=assessmentMetrics(items.filter(i=>i.domain_ar===d),['approved','closed'].includes(cycle.status));
