@@ -64,3 +64,14 @@
 .evidenceList li { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding-block: 7px; border-block-end: 1px solid #edf1ef; }
 .evidenceList a { color: #145f55; overflow-wrap: anywhere; }
 .evidenceList span { font-size: .82rem; white-space: nowrap; }
+.board { padding: clamp(14px,2.5vw,24px); border: 1px solid #c8dcd3; border-radius: 14px; background: white; margin-block: 16px; }
+.board header,.board li { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.board header { justify-content: space-between; }
+.board h2 { font-size: 1.13rem; margin: 0; color: #20483d; }
+.board select,.board button { border: 1px solid #a6beb1; border-radius: 6px; background: #fff; padding: 6px 10px; font: inherit; color: #1c5345; }
+.board button { cursor: pointer; }
+.board p,.board small { font-size: .84rem; color: #496458; }
+.board ul { padding: 0; list-style: none; }
+.board li { padding-block: 11px; border-block-start: 1px solid #dae5de; }
+.board li div { display: grid; gap: 4px; flex: 1 1 21rem; }
+.board a { color: #126356; text-underline-offset: 3px; }

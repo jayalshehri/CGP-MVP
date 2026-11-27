@@ -91,6 +91,16 @@ class Fixture:
                 result = session(role)["user"]
             elif path == "/rest/v1/profiles":
                 result = profile(role)
+            elif path == "/rest/v1/rpc/nudee_question_overview" and role == "office":
+                result = []
+                for req in self.requirements:
+                    code = req["standard_code"]
+                    d = next((d for d in self.decisions if d["standard_code"] == code and d["domain_name"] == req["domain_name"]), {})
+                    a = next((a for a in self.assignments if a["requirement_id"] == req["id"]), {})
+                    ready = a.get("status") == "approved" and any(s["assignment_id"] == a["id"] for s in self.files)
+                    state = "no_target" if not d else ("confirmed" if d["confirmed"] else "ready") if ready else "blocked"
+                    result.append(dict(standard_code=code, domain_name=req["domain_name"], target_level=d.get("target_level"),
+                                       question_state=state, missing_count=int(state == "blocked")))
             elif path == "/rest/v1/rpc/nudee_preparation_manifest" and role == "office":
                 result = []
                 for req in self.requirements:
@@ -140,13 +150,13 @@ class Fixture:
                                          "due_date": payload["p_due_date"], "status": "assigned", "review_notes": None})
                 self.record(n, "assigned")
                 result = n
-            elif path == "/rest/v1/rpc/nudee_submit_evidence" and role == "owner":
+            elif path in ("/rest/v1/rpc/nudee_submit_evidence", "/rest/v1/rpc/nudee_submit_with_locator") and role == "owner":
                 assignment = next(row for row in self.assignments if row["id"] == payload["p_assignment_id"])
                 assert assignment["status"] in ("assigned", "changes_requested")
                 assignment.update(status="submitted", review_notes=None, updated_at=STAMP)
                 self.files.append({"id": len(self.files)+1, "assignment_id": assignment["id"],
                                    "file_name": payload["p_file_name"], "storage_path": payload["p_storage_path"],
-                                   "submitted_at": STAMP})
+                                   "source_locator": payload.get("p_locator"), "submitted_at": STAMP})
                 self.record(assignment["id"], "submitted")
                 result = self.files[-1]["id"]
             elif path in ("/rest/v1/rpc/nudee_review_evidence", "/rest/v1/rpc/nudee_review_version") and role == "office":
@@ -191,4 +201,4 @@ class Fixture:
 
     def record(self, assignment, action, notes=None, submission_id=None):
         self.audit.insert(0, {"id": len(self.audit)+1, "assignment_id": assignment,
-                              "action": action, "notes": notes, "submission_id": submission_id, "created_at": STAMP})
+                              "action": action, "reviewer_name": profile("office")["display_name"] if action in ("approved", "changes_requested") else None, "notes": notes, "submission_id": submission_id, "created_at": STAMP})

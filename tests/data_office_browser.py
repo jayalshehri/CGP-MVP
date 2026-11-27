@@ -4,6 +4,7 @@ import argparse
 import json
 import re
 from pathlib import Path
+from zipfile import ZipFile
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -188,7 +189,6 @@ def simple_pdf():
 
 
 def preparation(browser):
-    from zipfile import ZipFile
     fixture = Fixture()
     original = {"id": 2, "assignment_id": 4, "file_name": "approved.pdf", "storage_path": "4/test/approved.pdf", "submitted_at": "2026-01-04T08:00:00Z"}
     fixture.files.append(original)
@@ -218,7 +218,7 @@ def preparation(browser):
     expect(owner.get_by_role("heading", name="ما المطلوب في الدليل؟")).to_be_visible()
     owner.get_by_text("استخدام دليل معتمد من تكليفاتي").click()
     owner.get_by_label("الدليل السابق").select_option("2")
-    owner.get_by_label("الصفحة أو البند").fill("ص ٢")
+    owner.get_by_label("الصفحة أو البند", exact=True).fill("ص ٢")
     owner.get_by_role("button", name="إرسال النسخة لمراجعة المتطلب").click()
     expect(owner.get_by_text("أُرسل الدليل السابق لمراجعة هذا المتطلب.")).to_be_visible()
     assert fixture.assignments[0]["status"] == "submitted"
@@ -226,6 +226,38 @@ def preparation(browser):
     assert not fixture.unexpected, fixture.unexpected
     office.context.close()
     owner.context.close()
+
+
+def evidence_center(browser, target):
+    fixture = Fixture()
+    req = fixture.requirements[0]
+    req.update(standard_code="DG.MQ.1", specification_code="DG.1.1", responsible_department="قسم التخطيط", planned_end="2027-01-14")
+    office = login(browser, fixture, "office", *SIZES["phone"], revision="after")
+    office.goto(APP + REGISTER)
+    office.get_by_role("searchbox").fill("DG.1.1")
+    group = office.locator(".nr-question-group")
+    expect(group).to_have_count(1)
+    expect(group.get_by_text("DG.MQ.1")).to_be_visible()
+    group.get_by_role("button", name="متابعة التكليف").click()
+    dialog = office.get_by_role("dialog")
+    expect(dialog.get_by_text("قسم التخطيط")).to_be_visible()
+    with office.expect_download() as download:
+        dialog.get_by_role("button", name="تنزيل نموذج إعداد داخلي (Word)").click()
+    with ZipFile(download.value.path()) as archive:
+        doc = archive.read("word/document.xml").decode()
+        assert "نموذج إعداد داخلي" in doc and "DG.1.1" in doc and NAMES[0] in doc
+    office.goto(APP + INDICATOR)
+    board = office.get_by_role("region", name="جاهزية الأسئلة حسب المجال")
+    board.locator("li").filter(has_text="DG.MQ.1").get_by_role("button").click()
+    expect(office.get_by_label("السؤال", exact=True)).to_have_value("DG.MQ.1")
+    office.get_by_label("المستوى المستهدف").select_option(index=1)
+    office.get_by_role("button", name="حفظ المستوى المستهدف").click()
+    board.get_by_role("link", name="عرض الأدلة الناقصة (1)").click()
+    expect(office.locator(".nr-level-group li")).to_have_count(1)
+    expect(office.get_by_text("قسم التخطيط", exact=False)).to_be_visible()
+    snap(office, target / "phone-governance-gap.png", True)
+    assert not fixture.unexpected, fixture.unexpected
+    office.context.close()
 
 
 def lifecycle(browser, target):
@@ -244,11 +276,14 @@ def lifecycle(browser, target):
         owner.get_by_role("button", name=NAMES[2], exact=True).click()
         panel = owner.get_by_role("dialog")
         if index:
+            panel.locator(".nr-decisions summary").click()
+            expect(panel.locator(".nr-decisions")).to_contain_text("مسؤول المكتب التجريبي")
             expect(panel.locator(".nr-message").filter(has_text="أرفق الإصدار المحدّث.")).to_be_visible()
         name = f"example-{index}.pdf"
         pdf = simple_pdf()
         panel.locator('input[type="file"]').set_input_files(
             {"name": name, "mimeType": "application/pdf", "buffer": pdf})
+        panel.locator("#nr-upload-locator").fill("صفحة ٤")
         panel.get_by_role("button", name="رفع وإرسال للمراجعة").click()
         expect(panel.get_by_role("button", name=re.compile(name))).to_be_visible()
         expect(panel.locator('input[type="file"]')).to_have_count(0)
@@ -256,6 +291,7 @@ def lifecycle(browser, target):
         office.get_by_role("button", name=NAMES[2], exact=True).click()
         review = office.get_by_role("dialog")
         expect(review.get_by_role("button", name=re.compile(name))).to_be_visible()
+        expect(review.get_by_text("صفحة ٤", exact=False)).to_be_visible()
         review.get_by_role("button", name="عرض الملف هنا").click()
         expect(review.locator("canvas")).to_be_visible()
         if index:
@@ -285,7 +321,7 @@ def lifecycle(browser, target):
     office.goto(APP + "/data-governance")
     expect(office).to_have_url(APP + HOME)
     expect(office.get_by_role("navigation", name="التنقل الرئيسي").get_by_role("link")).to_have_text(
-        ["الرئيسية", "مؤشر نُضيء", "المتطلبات والأدلة"])
+        ["الرئيسية", "مؤشر نُضيء", "مركز الأدلة"])
     owner.goto(APP + "/data-governance")
     expect(owner).to_have_url(APP + REGISTER)
     owner.locator(".cgp-mobile-navigation summary").click()
@@ -322,6 +358,7 @@ if __name__ == "__main__":
             results[size] = {"viewport": SIZES[size], "office": "passed", "owner": "passed"}
             print(f"PASS {args.revision} desktop/tablet/mobile layout: {size}", flush=True)
         if args.revision == "after":
+            evidence_center(browser, args.output)
             preparation(browser)
             lifecycle(browser, args.output)
             results["workflow_with_synthetic_backend"] = "passed"

@@ -6,7 +6,7 @@ import { labels, type ManifestRow } from "./package";
 import styles from "./indicator.module.css";
 
 export type QuestionRecord = { id: number; standard_code: string; requirement_title: string; domain_name: string; maturity_level: string };
-const levels = ["المستوى 1: البناء","المستوى 2: التعريف","المستوى 3: التفعيل"];
+import { localLevels as levels } from "../nudee/reference";
 type Decision = { id: number; target_level: string; confirmed: boolean; evidence_ids: number[] };
 const numbers = new Intl.NumberFormat("ar-SA");
 async function manifest(domain: string, records: QuestionRecord[]) {
@@ -17,9 +17,9 @@ async function manifest(domain: string, records: QuestionRecord[]) {
   return rows;
 }
 
-function DomainReview({ domain, records }: { domain: string; records: QuestionRecord[] }) {
+function DomainReview({ domain, records, initialCode, onChange }: { domain: string; records: QuestionRecord[]; initialCode?:string; onChange:()=>void }) {
   const [rows, setRows] = useState<ManifestRow[]>([]);
-  const [code, setCode] = useState(records[0].standard_code);
+  const [code, setCode] = useState(records.find(r=>r.standard_code===initialCode)?.standard_code || records[0].standard_code);
   const [retry, setRetry] = useState(0);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -47,7 +47,7 @@ function DomainReview({ domain, records }: { domain: string; records: QuestionRe
     {error && <p role="alert">{error} <button onClick={() => { setError(""); setRetry(n => n+1); }}>إعادة التحميل</button></p>}
     {rows.length > 0 ? <>
       <QuestionReview key={code} domain={domain} code={code} title={questions.find(q => q[0] === code)?.[1] || code}
-        rows={rows.filter(r => r.standard_code === code)} reload={() => setRetry(n => n+1)} />
+        rows={rows.filter(r => r.standard_code === code)} reload={() => {setRetry(n => n+1);onChange();}} />
       <div className={styles.exportRow}><div><strong>حزمة المجال</strong><p>ملف ZIP يضم النسخ المعتمدة داخليًا وفهرس الأدلة وقائمة النواقص.</p></div>
         <button type="button" disabled={exporting} onClick={exportDomain}>{exporting ? "جارٍ تجهيز الملفات…" : "تنزيل حزمة المجال"}</button></div>
     </> : !error && <p role="status">جارٍ تحميل الأدلة…</p>}
@@ -107,12 +107,12 @@ function QuestionReview({domain, code, title, rows, reload}: {domain:string; cod
   </div>;
 }
 
-export default function QuestionPreparation({records}:{records:QuestionRecord[]}) {
-  const [domain,setDomain]=useState(records[0]?.domain_name ?? "");
+export default function QuestionPreparation({records,initialDomain,initialCode,onChange}:{records:QuestionRecord[];initialDomain?:string;initialCode?:string;onChange:()=>void}) {
+  const [domain,setDomain]=useState(initialDomain || records[0]?.domain_name || "");
   const selected=useMemo(()=>records.filter(r=>r.domain_name===domain),[records,domain]);
   return <section className={styles.preparation} aria-label="تجهيز أسئلة نُضيء">
     <label>مجال القياس<select aria-label="مجال القياس" value={domain} onChange={e=>setDomain(e.target.value)}>
       {Array.from(new Set(records.map(r=>r.domain_name))).map(d=><option key={d}>{d}</option>)}</select></label>
-    {selected.length>0 && <DomainReview key={domain} domain={domain} records={selected}/>}
+    {selected.length>0 && <DomainReview key={domain} domain={domain} records={selected} initialCode={domain===initialDomain?initialCode:undefined} onChange={onChange}/>}
   </section>;
 }

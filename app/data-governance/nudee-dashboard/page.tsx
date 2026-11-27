@@ -86,7 +86,7 @@ function OfficeSummary({ records, assignments }: OfficeData) {
   return <>
     <dl className={styles.homeMetrics} aria-label="ملخص متطلبات نُضيء">
       {[
-        { label: "إجمالي المتطلبات", value: records.length },
+        { label: "الأدلة المطلوبة", value: records.length },
         { label: "قيد التنفيذ", value: summary.inProgress },
         { label: "بانتظار المراجعة", value: summary.submitted },
         { label: "معتمدة", value: summary.approved },

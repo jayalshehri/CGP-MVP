@@ -100,6 +100,8 @@ function createPage({ role = 'data_governance_team', initialStatus, empty = fals
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'fragment' };
       if (name === 'next/navigation') return { useSearchParams: () => new URL(location.href).searchParams };
+      if (name === './reference') return { governanceDomain: 'حوكمة البيانات', localLevels: ['المستوى 1: البناء','المستوى 2: التعريف','المستوى 3: التفعيل'] };
+      if (name === './SourceReference' || name === './EvidenceGroups') return { default: 'section' };
       if (name === './EvidenceVersions') return { default: 'versions' };
       if (name === '@/lib/strategy-read') return { readStrategyRows: fetch => fetch(0, 499) };
       if (name === '@/components/AccessibleDialog') return { default: 'dialog' };
@@ -197,7 +199,7 @@ test('dedicated owner with no assignments receives normal empty state and no off
   const page = createPage({ role: 'nudee_owner', empty: true }); await page.init();
   assert.equal(page.byRole('alert'), '');
   assert.match(text(page.tree), /لا توجد متطلبات مسندة إلى حسابك حاليًا/);
-  assert.match(page.byRole('status'), /0 من 0 متطلب/);
+  assert.match(page.byRole('status'), /0 من 0 دليل/);
   assert.equal(page.nodes(n => n.type === 'button' && /إسناد|اعتماد/.test(text(n))).length, 0);
   assert.equal(page.nodes(n => n.props?.href === '/data-governance/nudee-dashboard').length, 0);
   assert.equal(page.calls.rpc.length, 0);
@@ -209,7 +211,7 @@ test('owner sees only personal assignments even when extra requirement rows are 
   page.db.nudee_requirements.push(requirement(3));
   await page.init();
   assert.match(text(page.tree), /مهامي/);
-  assert.match(page.byRole('status'), /1 من 1 متطلب/);
+  assert.match(page.byRole('status'), /1 من 1 دليل/);
   assert.match(text(page.tree), /دليل اختبار 1/);
   assert.doesNotMatch(text(page.tree), /دليل اختبار [23]/);
   assert.equal(page.nodes(n => n.props.type === 'checkbox').length, 0);
@@ -223,20 +225,20 @@ test('dashboard views, combined search and the status reset use the same registe
     page.db.nudee_assignments.push({ ...assignment(id, status), due_date });
   }
   await page.init();
-  assert.match(page.byRole('status'), /2 من 6 متطلب/);
+  assert.match(page.byRole('status'), /2 من 6 دليل/);
   assert.match(text(page.tree), /دليل اختبار 1/);
   assert.match(text(page.tree), /دليل اختبار 2/);
   page.change(n => n.props?.id === 'nudee-filter', 'QA-2');
-  assert.match(page.byRole('status'), /1 من 6 متطلب/);
+  assert.match(page.byRole('status'), /1 من 6 دليل/);
   page.change(n => n.props?.id === 'nudee-filter', '');
   for (const [status, id] of [['unassigned', 6], ['submitted', 4]]) {
     page.change(n => n.props?.id === 'nudee-view', status);
-    assert.match(page.byRole('status'), /1 من 6 متطلب/);
+    assert.match(page.byRole('status'), /1 من 6 دليل/);
     assert.ok(page.button('دليل اختبار ' + id));
   }
   page.change(n => n.props?.id === 'nudee-filter', 'لا توجد نتيجة');
   page.click('عرض كل المتطلبات'); page.render();
-  assert.match(page.byRole('status'), /6 من 6 متطلب/);
+  assert.match(page.byRole('status'), /6 من 6 دليل/);
   assert.equal(page.nodes(n => n.props?.id === 'nudee-bulk-assignee').length, 0);
   page.selectBulk(6);
   assert.equal(page.nodes(n => n.props?.id === 'nudee-bulk-assignee').length, 1);
