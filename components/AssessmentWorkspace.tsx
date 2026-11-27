@@ -1,9 +1,9 @@
 'use client';
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useId,useRef,useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {supabase} from '@/lib/supabase';
 import {requireProfile} from '@/lib/auth';
-import {AssessmentCycle,AssessmentItem,AssessmentFinding,Person,assessmentLabels,cycleLabels,cycleColumns,assessmentMetrics,displayPercent,reviewLabels} from '@/lib/assessment';
+import {AssessmentCycle,AssessmentItem,AssessmentFinding,Person,assessmentLabels,cycleLabels,cycleColumns,assessmentMetrics,displayPercent,reviewLabels,assessmentRoleConflict,assessmentRoleOptionConflicts,assessmentCommandErrorMessage} from '@/lib/assessment';
 import {EvidenceRecord,csvDownload,todayRiyadh} from '@/lib/grc';
 import {WorkflowHeading,WorkflowMetric} from '@/components/WorkflowUI';
 import AssessmentItemEditor from '@/components/AssessmentItemEditor';
@@ -45,7 +45,7 @@ export default function AssessmentWorkspace({frameworkCode,requestedCycle}:{fram
   const r=await supabase.rpc('cgp_assessment_command',{p_action:action,p_cycle:selected,p_data:{cycle_revision:cycle?.revision,...data}});if(r.error)throw r.error;
   if(dcc&&['create','reassess'].includes(action)){setLoading(true);router.push(dccCycleHref(r.data.id));return true;}
   setLoading(true);if(['create','reassess'].includes(action)){setSelected(r.data.id);setOpen(null);setPage(0);}setRefresh(v=>v+1);setMessage('تم حفظ الإجراء وتسجيله في سجل التدقيق.');return true;
- }catch(e){setError(e instanceof Error?e.message:typeof e==='object'&&e&&'message'in e?String(e.message):'تعذر تنفيذ الإجراء');return false;}finally{setBusy(false);}};
+ }catch(e){setError(assessmentCommandErrorMessage(e));return false;}finally{setBusy(false);}};
  const metrics=assessmentMetrics(items,!!cycle&&['approved','closed'].includes(cycle.status));
  const openGaps=findings.filter(f=>f.status!=='closed'); const overdue=openGaps.filter(f=>f.due_date&&f.due_date<todayRiyadh());
  const domains=[...new Set(items.map(i=>i.domain_ar))];
@@ -103,7 +103,34 @@ export default function AssessmentWorkspace({frameworkCode,requestedCycle}:{fram
 }
 function ItemRow({item,expanded,onOpen,count,children}:{item:AssessmentItem;expanded:boolean;onOpen:()=>void;count:number;children:React.ReactNode}){return <><tr><td><b dir="ltr">{item.control_code}</b><p>{item.description_ar||item.title_ar}</p>{!item.is_scoring&&<small>سياق تنظيمي — لا يدخل في النسبة</small>}</td><td>{assessmentLabels[item.compliance_status??'']??'لم يُقيّم'}</td><td>{reviewLabels[item.review_status]}</td><td>{count}</td><td><button aria-expanded={expanded} onClick={onOpen}>{expanded?'إغلاق':'فتح'}</button></td></tr>{expanded&&<tr><td colSpan={5}>{children}</td></tr>}</>;}
 function CycleSetup({cycle,items,people,busy,command,initiallyOpen}:{cycle:AssessmentCycle;items:AssessmentItem[];people:Person[];busy:boolean;command:(a:string,d:Record<string,unknown>)=>Promise<boolean>;initiallyOpen?:boolean}){
- const [assessor,setAssessor]=useState(cycle.assessor_id??''),[reviewer,setReviewer]=useState(cycle.reviewer_id??''),[approver,setApprover]=useState(cycle.approver_id??''),[due,setDue]=useState(cycle.due_date??''),[reason,setReason]=useState(cycle.scope_reason??'');const [ids,setIds]=useState(items.filter(i=>i.is_scoring).map(i=>i.id));
+ const [assessor,setAssessor]=useState(cycle.assessor_id??''),[reviewer,setReviewer]=useState(cycle.reviewer_id??''),[approver,setApprover]=useState(cycle.approver_id??''),[due,setDue]=useState(cycle.due_date??''),[reason,setReason]=useState(cycle.scope_reason??'');
+ const [ids,setIds]=useState(items.filter(i=>i.is_scoring).map(i=>i.id));
+ const hintId=useId(), conflictId=useId();
+ const roles={assessor_id:assessor,reviewer_id:reviewer,approver_id:approver};
+ const conflict=assessmentRoleConflict(roles);
  const members=people.filter(p=>['admin','cybersecurity_team'].includes(p.role));
- return <details className="ae-card ae-no-print" open={initiallyOpen}><summary>إعداد المسؤوليات ونطاق الحساب</summary><form className="ae-form-grid" onSubmit={e=>{e.preventDefault();void command('configure',{assessor_id:assessor,reviewer_id:reviewer,approver_id:approver,due_date:due});}}>{([['المقيم',assessor,setAssessor],['المراجع',reviewer,setReviewer],['المعتمد',approver,setApprover]] as const).map(([label,value,set])=><label key={label}>{label}<select required value={value} onChange={e=>set(e.target.value)}><option value="">اختر المسؤول</option>{members.map(p=><option key={p.user_id} value={p.user_id}>{p.display_name||p.user_id}</option>)}</select></label>)}<label>الموعد<input required type="date" value={due} onInput={e=>setDue(e.currentTarget.value)} onChange={e=>setDue(e.target.value)}/></label><button disabled={busy}>حفظ المسؤوليات</button></form><form onSubmit={e=>{e.preventDefault();void command('scope',{item_ids:ids,reason});}}><p>اختر وحدات القياس. لا يمكن احتساب الرئيسي وفرعه معًا. تبقى المتطلبات الأخرى ظاهرة للسياق.</p><div className="ae-scope">{items.map(i=><label key={i.id} className="ae-check"><input type="checkbox" checked={ids.includes(i.id)} onChange={e=>setIds(v=>e.target.checked?[...v,i.id]:v.filter(id=>id!==i.id))}/><b dir="ltr">{i.control_code}</b> {i.title_ar}</label>)}</div><label>مبرر النطاق<textarea required value={reason} onChange={e=>setReason(e.target.value)}/></label><button disabled={busy}>تأكيد نطاق الحساب ({ids.length})</button></form></details>;
+ return <details className="ae-card ae-no-print" open={initiallyOpen}>
+  <summary>إعداد المسؤوليات ونطاق الحساب</summary>
+  <p className="ae-muted" id={hintId}>لضمان استقلالية القرار، اختر مراجعًا ومعتمدًا مختلفين عن المقيّم.</p>
+  {conflict&&<p className="ae-warning" id={conflictId} role="alert">{conflict}</p>}
+  <form className="ae-form-grid" onSubmit={e=>{e.preventDefault();if(!busy&&!conflict&&assessor&&reviewer&&approver&&due)void command('configure',{...roles,due_date:due});}}>
+   {([['المقيّم','assessor_id',assessor,setAssessor],['المراجع','reviewer_id',reviewer,setReviewer],['المعتمد','approver_id',approver,setApprover]] as const).map(([label,role,value,set])=><label key={role}>{label}
+    <select required value={value} onChange={e=>set(e.target.value)} aria-describedby={conflict?`${hintId} ${conflictId}`:hintId}>
+     <option value="">اختر المسؤول</option>
+     {members.map(p=>{
+      const blocked=assessmentRoleOptionConflicts(role,p.user_id,roles);
+      return <option key={p.user_id} value={p.user_id} disabled={blocked}>{p.display_name||p.user_id}{blocked?' — يتعارض مع دور آخر':''}</option>;
+     })}
+    </select>
+   </label>)}
+   <label>الموعد<input required type="date" value={due} onChange={e=>setDue(e.target.value)}/></label>
+   <button type="submit" disabled={busy||!!conflict||!assessor||!reviewer||!approver||!due}>حفظ المسؤوليات</button>
+  </form>
+  <form onSubmit={e=>{e.preventDefault();void command('scope',{item_ids:ids,reason});}}>
+   <p>اختر وحدات القياس. لا يمكن احتساب الرئيسي وفرعه معًا. تبقى المتطلبات الأخرى ظاهرة للسياق.</p>
+   <div className="ae-scope">{items.map(i=><label key={i.id} className="ae-check"><input type="checkbox" checked={ids.includes(i.id)} onChange={e=>setIds(v=>e.target.checked?[...v,i.id]:v.filter(id=>id!==i.id))}/><b dir="ltr">{i.control_code}</b> {i.title_ar}</label>)}</div>
+   <label>مبرر النطاق<textarea required value={reason} onChange={e=>setReason(e.target.value)}/></label>
+   <button disabled={busy}>تأكيد نطاق الحساب ({ids.length})</button>
+  </form>
+ </details>;
 }
