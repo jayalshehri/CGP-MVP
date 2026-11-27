@@ -1,5 +1,5 @@
 import { readStrategyRows } from './strategy-read';
-import { cycleStage, scheduleState, todayRiyadh, type EvidenceRequest, type ReviewCycle } from './grc';
+import { cycleStage, cycleStageLabels, scheduleState, todayRiyadh, type EvidenceRequest, type ReviewCycle } from './grc';
 
 export type ScheduleControl = {
   id: number; control_code: string; title_ar: string; control_owner: string | null; control_owner_id: string | null;
@@ -19,17 +19,10 @@ export function positiveId(value: string | null | undefined) {
 export function describeStage(row: ScheduleRow) {
   if (row.cycle?.status === 'completed') return { key: 'completed', label: 'مكتملة' };
   if (!row.cycle) return !row.control.control_owner_id
-    ? { key: 'unowned', label: 'بلا مالك' }
-    : { key: 'unscheduled', label: 'بلا دورة مفتوحة' };
-  if (!row.request) return { key: 'none', label: 'دورة مفتوحة · بلا طلب دليل' };
-  if (row.request.status === 'accepted') return { key: 'assessment', label: 'بانتظار التقييم والإغلاق' };
-  if (row.request.status === 'cancelled') return { key: 'cancelled', label: 'طلب الدليل ملغى' };
-  const stage = cycleStage(true, row.request.status);
-  return {
-    key: stage,
-    label: stage === 'under_review' ? 'قيد مراجعة الدليل'
-      : stage === 'changes_requested' ? 'بانتظار الاستكمال' : 'بانتظار تقديم الدليل',
-  };
+    ? { key: 'unowned', label: 'مالك غير معيّن' }
+    : { key: 'unscheduled', label: 'لم تُجدول دورة' };
+  const stage = cycleStage(true, row.request?.status);
+  return { key: stage, label: cycleStageLabels[stage] };
 }
 
 export const dueState = (row: ScheduleRow, days: number) =>

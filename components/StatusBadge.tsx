@@ -1,7 +1,7 @@
 const labels: Record<string, string> = {
   implemented: "مطبق كليًا", compliant: "مطبق كليًا", in_progress: "مطبق جزئيًا", not_started: "غير مطبق", not_implemented: "غير مطبق", not_applicable: "لا ينطبق",
-  expired: "منتهي الصلاحية", changes_requested: "يحتاج استكمالًا", accepted: "مقبول", rejected: "مرفوض", pending_review: "بانتظار المراجعة", under_review: "قيد المراجعة", not_uploaded: "لم يرفع", uploaded: "مرفوع",
-  verified: "تم التحقق", not_verified: "غير متحقق", failed: "لم يجتز", approved: "معتمد",
+  expired: "منتهي الصلاحية", changes_requested: "يحتاج استكمالًا", accepted: "مقبول", rejected: "مرفوض", pending_review: "بانتظار المراجعة", under_review: "قيد المراجعة", not_uploaded: "لم يُرفع", uploaded: "مرفوع",
+  verified: "تم التحقق", not_verified: "لم يتم التحقق", failed: "لم يجتز", approved: "معتمد",
   needs_control_mapping: "يحتاج ربط ضابط",
 };
 export function statusText(status: string) { return labels[status.trim().toLowerCase()] || status || "غير محدد"; }

@@ -3,6 +3,7 @@
  * transport doubles. These are component-logic regressions, NOT browser, RLS or
  * authenticated integration tests. No network or database writes occur.
  */
+import * as dates from '../lib/dates.ts';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -77,6 +78,7 @@ function createPage(kind, seed = []) {
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'fragment' };
       if (name === '@/lib/auth') return { requireProfile: async () => ({ user: { id: 'qa-office' }, profile: { role: 'data_governance_team' } }) };
       if (name === '@/lib/supabase') return { supabase };
+      if (name === '@/lib/dates') return dates;
       if (name.endsWith('.css')) return {};
       throw new Error(`Unexpected module: ${name}`);
     },

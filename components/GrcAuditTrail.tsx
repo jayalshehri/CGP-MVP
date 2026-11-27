@@ -1,5 +1,6 @@
 'use client';
 
+import { formatRiyadhTime } from "@/lib/dates";
 import Link from 'next/link';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -11,7 +12,6 @@ import styles from './GrcAuditTrail.module.css';
 
 const pageSize = 30;
 const failure = 'تعذر تحميل سجل التدقيق. أعد المحاولة.';
-const eventTime = new Intl.DateTimeFormat('ar-SA', { timeStyle: 'medium', timeZone: 'Asia/Riyadh' });
 
 export default function GrcAuditTrail({ controlId, reliableRead = false, full = false, globalLink = false }: {
   controlId?: number; reliableRead?: boolean; full?: boolean; globalLink?: boolean;
@@ -161,8 +161,8 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
 
   return <section dir="rtl" className={`${styles.card} ${full ? styles.full : styles.embedded}`}>
     <header className={styles.header}><div><h2>سجل الأحداث التلقائي</h2>
-      <p>السجل يبدأ من تفعيل الميزة. قرارات الأدلة الأقدم محفوظة في تاريخ الأدلة.</p>
-      {full && earliest && <p className={styles.coverage}>أقدم حدث متاح لك {formatGrcDate(earliest)} · التوقيت بتوقيت الرياض</p>}
+      <p>يعرض السجل الأحداث منذ تفعيله. للقرارات الأقدم، ارجع إلى سجل مراجعة الدليل.</p>
+      {full && earliest && <p className={styles.coverage}>أقدم حدث ضمن صلاحياتك {formatGrcDate(earliest)} · بتوقيت الرياض</p>}
     </div>
       {globalLink && controlId && <Link href={`/audit?control=${controlId}`}>فتح في السجل العام ←</Link>}
     </header>
@@ -180,11 +180,11 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
       {full && <label>إلى تاريخ<input type="date" value={until} onChange={e => change(setUntil, e.target.value)} /></label>}
     </div>
     <div className={styles.bar}>
-      {controlId && full && <span>عرض تغييرات ضابط محدد {lookup.get(controlId)?.control_code || `#${controlId}`} <Link href="/audit">عرض السجل الكامل</Link></span>}
+      {controlId && full && <span>عرض التغييرات للضابط {lookup.get(controlId)?.control_code || `#${controlId}`} <Link href="/audit">عرض السجل الكامل</Link></span>}
       {filters && <button type="button" onClick={reset}>مسح الفلاتر</button>}
-      <button type="button" className={styles.export} disabled={loading || !!dateError || !!error || !rows.length} onClick={exportPage}>تصدير الصفحة الحالية CSV</button>
+      <button type="button" className={styles.export} disabled={loading || !!dateError || !!error || !rows.length} onClick={exportPage}>تصدير الصفحة الحالية (CSV)</button>
     </div>
-    {dateError ? <p role="alert" className={styles.notice}>{dateError}</p> : loading ? <p role="status" className={styles.notice}>جاري تحميل الأحداث…</p>
+    {dateError ? <p role="alert" className={styles.notice}>{dateError}</p> : loading ? <p role="status" className={styles.notice}>جارٍ تحميل الأحداث…</p>
       : error ? <div role="alert" className={styles.notice}>{error} <button onClick={() => void load()}>إعادة المحاولة</button></div>
       : !rows.length ? <p className={styles.notice}>لا توجد أحداث مطابقة.</p>
       : full ? <div className={styles.tableWrap}><table className={styles.events}>
@@ -200,7 +200,7 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
                 {ref.context && <small>الضابط <b dir="ltr">{ref.context}</b></small>}
               </button></td>
               <td><span className={styles.verb}>{verb(row)}</span></td><td>{person(row)}</td>
-              <td><time dateTime={row.occurred_at}>{formatGrcDate(row.occurred_at)}<small>{eventTime.format(new Date(row.occurred_at))}</small></time></td>
+              <td><time dateTime={row.occurred_at}>{formatGrcDate(row.occurred_at)}<small>{formatRiyadhTime(row.occurred_at)}</small></time></td>
             </tr>
             {openId === row.id && <tr className={styles.expanded}><td colSpan={4}>{details(row)}</td></tr>}
           </Fragment>;
@@ -210,7 +210,7 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
         const ref = reference(row);
         return <details key={row.id} className={styles.item}><summary>
           <strong>{verb(row)} · {label(row)} · <b dir="ltr">{ref.code}</b></strong>
-          <small>{person(row)} · {formatGrcDate(row.occurred_at)} · {eventTime.format(new Date(row.occurred_at))}</small>
+          <small>{person(row)} · {formatGrcDate(row.occurred_at)} · {formatRiyadhTime(row.occurred_at)}</small>
         </summary>{details(row)}</details>;
       })}
     <nav className={styles.pagination} aria-label="صفحات سجل التدقيق">

@@ -1,5 +1,6 @@
 "use client";
 
+import { riyadhIsoDate } from "@/lib/dates";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
@@ -13,7 +14,7 @@ const envLabels:Record<string,string>={production:"إنتاج",staging:"تهيئ
 const classLabels:Record<string,string>={public:"عام",internal:"داخلي",confidential:"سري",restricted:"سري للغاية"};
 const statusLabels:Record<string,string>={active:"نشط",maintenance:"تحت الصيانة",retired:"متقاعد",planned:"مخطط"};
 const criticalityLabels:Record<string,string>={low:"منخفض",medium:"متوسط",high:"عالٍ",critical:"حرج"};
-const dateToday=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"});
+const dateToday=()=>riyadhIsoDate();
 const defaultForm={asset_code:"",name_ar:"",description:"",asset_type:"application",business_owner:"",technical_owner:"",environment:"production",data_classification:"internal",criticality:"medium",status:"active",location:"",last_review_date:"",next_review_date:""};
 
 export default function AssetsPage(){

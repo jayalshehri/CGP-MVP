@@ -1,4 +1,5 @@
 "use client";
+import { formatRiyadhDateTime } from "@/lib/dates";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { projectIdFromPath, projectReturn, projectTabs, projectView, updateStrategyQuery } from "@/lib/strategy-navigation";
@@ -471,7 +472,7 @@ function ProjectDetailContent({ id }: { id: string }) {
                 <h3>النتيجة المستهدفة</h3>
                 <p className="project-outcome">{project.target_outcome?.trim() || "لا توجد نتيجة مستهدفة مسجلة."}</p>
                 <p className="detail-hint">النتيجة المتوقع تحقيقها عند اكتمال المشروع؛ ليست إثباتًا لتحقق النتيجة.</p>
-                <p>آخر تعديل: {project.updated_at && Number.isFinite(Date.parse(project.updated_at)) ? <time dateTime={project.updated_at}>{new Date(project.updated_at).toLocaleString("ar-SA", { calendar: "gregory", timeZone: "Asia/Riyadh" })} (الرياض)</time> : "غير مسجل"}</p>
+                <p>آخر تعديل: {project.updated_at && Number.isFinite(Date.parse(project.updated_at)) ? <time dateTime={project.updated_at}>{formatRiyadhDateTime(project.updated_at)} (الرياض)</time> : "غير مسجل"}</p>
               </section>
             )}
 

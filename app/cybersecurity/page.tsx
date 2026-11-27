@@ -1,4 +1,5 @@
 "use client";
+import { riyadhIsoDate, formatRiyadhTime } from "@/lib/dates";
 import GrcAttention from "@/components/GrcAttention";
 
 import Link from "next/link";
@@ -50,11 +51,11 @@ export default function Home() {
         if (controlResult.error || evidenceResult.error) throw controlResult.error || evidenceResult.error;
         const controls=(controlResult.data??[]) as DashboardControl[];
         const applicable=controls.filter(c=>isApplicable(c.implementation_status));
-        const today=new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"});
+        const today=riyadhIsoDate();
         const domainMap=new Map<string,{name:string;total:number;done:number;percentage:number}>();
         applicable.forEach(c=>{const f=frameworkOf(c.frameworks);const name=`${f.code} · ${f.name_ar}`;const row=domainMap.get(name)??{name,total:0,done:0,percentage:0};row.total++;if(isImplemented(c.implementation_status))row.done++;row.percentage=percentage(row.done,row.total);domainMap.set(name,row)});
         const dashboard:Dashboard={total:applicable.length,compliance:percentage(applicable.filter(c=>isImplemented(c.implementation_status)).length,applicable.length),waiting_evidence:applicable.filter(c=>!EVIDENCE_PRESENT.has((c.evidence_status||"").toLowerCase())).length,overdue:applicable.filter(c=>Boolean(c.due_date&&c.due_date<today&&!isImplemented(c.implementation_status))).length,pending_review:evidenceResult.count??0,verified:applicable.filter(c=>isVerified(c.verification_status)).length,domains:[...domainMap.values()]};
-        if (mounted) { setStats(dashboard); setError(""); setUpdatedAt(new Date().toLocaleTimeString("ar-SA")); }
+        if (mounted) { setStats(dashboard); setError(""); setUpdatedAt(formatRiyadhTime(new Date())); }
       } catch (e) {
         if (mounted) { setStats(null); setError(e instanceof Error ? e.message : "تعذر تحميل البيانات. حاول مرة أخرى."); setAuthReady(true); }
         const { data } = await supabase.auth.getSession();
