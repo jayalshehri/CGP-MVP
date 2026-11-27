@@ -12,6 +12,8 @@ type Entry = {id:number;kind:string;subject:string;outcome:string;reference:stri
 type Mapping = {requirement_id:number;evidence_name:string;domain_name:string;standard_code:string;codes:string[];mapping_state:string;decision_id:number|null;approved_version:number|null};
 type Improvement = {id:number;requirement_id:number;description:string;due_date:string;closed_at:string|null;closure_ref:number|null;decision_ref:string|null;owner_id:string};
 type Officer = {user_id:string;display_name:string};
+type Rule={authority:string;delegate_id:string;mandate:string};
+type Signoff={id:number;action_id:number;submission_id:number;decision_ref:string;decision_date:string};
 type Specification = {code:string;page:number};
 const marks:Record<string,string>={unassessed:"لم يُقيَّم",full:"ممتثل",partial:"تنفيذ جزئي",non:"غير ممتثل",na:"غير منطبق"};
 const components:Record<string,string>={maturity:"نضج الممارسات",compliance:"الامتثال للمواصفات",operational:"التميز التشغيلي"};
@@ -24,6 +26,8 @@ function download(data:unknown,name:string){
  const link=document.createElement("a");link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 export default function AssessmentFile(){
+ const [authority,setAuthority]=useState("office"),[rule,setRule]=useState<Rule|null>(null);
+ const [delegates,setDelegates]=useState<Officer[]>([]),[signoffs,setSignoffs]=useState<Signoff[]>([]),[viewer,setViewer]=useState("");
  const [cycles,setCycles]=useState<Cycle[]>([]),[cycle,setCycle]=useState(0);
  const [specs,setSpecs]=useState<Specification[]>([]),[maps,setMaps]=useState<Mapping[]>([]),[owners,setOwners]=useState<Officer[]>([]);
  const [entries,setEntries]=useState<Entry[]>([]),[actions,setActions]=useState<Improvement[]>([]);
@@ -36,19 +40,21 @@ export default function AssessmentFile(){
  useEffect(()=>{
   let active=true;
   async function load(){
-   const [allCycles,allSpecs,mapping,people]=await Promise.all([
+   const [allCycles,allSpecs,mapping,people,officers,session]=await Promise.all([
     readStrategyRows<Cycle>((a,b)=>supabase.from("nudee_cycles").select("id,title,methodology",{count:"exact"}).order("id",{ascending:false}).range(a,b),r=>r.id),
     readStrategyRows<Specification>((a,b)=>supabase.from("nudee_specifications").select("code,page",{count:"exact"}).order("code").range(a,b),r=>r.code),
     readStrategyRows<Mapping>((a,b)=>supabase.from("nudee_evidence_mapping").select("*",{count:"exact"}).order("requirement_id").range(a,b),r=>r.requirement_id),
-    supabase.rpc("nudee_assignees")
+    supabase.rpc("nudee_assignees"),supabase.rpc("nudee_approval_officers"),supabase.auth.getUser()
    ]);
-   if(allCycles.error||allSpecs.error||mapping.error||people.error)throw Error();
+   if(allCycles.error||allSpecs.error||mapping.error||people.error||officers.error||session.error)throw Error();
    const id=cycle||allCycles.data[0]?.id||0;
    const history=id?await readStrategyRows<Entry>((a,b)=>supabase.from("nudee_cycle_events").select("id,kind,subject,outcome,reference,created_at,payload",{count:"exact"}).eq("cycle_id",id).neq("kind","snapshot").order("id",{ascending:false}).range(a,b),r=>r.id):{data:[],error:false};
    const snapshots=id?await readStrategyRows<Entry>((a,b)=>supabase.from("nudee_cycle_events").select("id,kind,subject,outcome,reference,created_at",{count:"exact"}).eq("cycle_id",id).eq("kind","snapshot").order("id",{ascending:false}).range(a,b),r=>r.id):{data:[],error:false};
    const plans=id?await readStrategyRows<Improvement>((a,b)=>supabase.from("nudee_improvements").select("*",{count:"exact"}).eq("cycle_id",id).order("id",{ascending:false}).range(a,b),r=>r.id):{data:[],error:false};
-   if(history.error||snapshots.error||plans.error)throw Error();
-   if(active){setUnavailable(false);setCycles(allCycles.data);setCycle(id);setSpecs(allSpecs.data);setMaps(mapping.data);setOwners(people.data??[]);setEntries([...history.data,...snapshots.data]);setActions(plans.data);setCode(old=>old||allSpecs.data[0]?.code||"");setLoading(false);}
+   const mandate=id?await supabase.from("nudee_approval_rules").select("authority,delegate_id,mandate").eq("cycle_id",id).maybeSingle():{data:null,error:null};
+   const signed=id?await readStrategyRows<Signoff>((a,b)=>supabase.from("nudee_action_signoffs").select("id,action_id,submission_id,decision_ref,decision_date,nudee_improvements!inner(cycle_id)",{count:"exact"}).eq("nudee_improvements.cycle_id",id).order("id",{ascending:false}).range(a,b),r=>r.id):{data:[],error:false};
+   if(history.error||snapshots.error||plans.error||mandate.error||signed.error)throw Error();
+   if(active){setUnavailable(false);setRule(mandate.data);setSignoffs(signed.data);setDelegates(officers.data??[]);setViewer(session.data.user?.id??"");setCycles(allCycles.data);setCycle(id);setSpecs(allSpecs.data);setMaps(mapping.data);setOwners(people.data??[]);setEntries([...history.data,...snapshots.data]);setActions(plans.data);setCode(old=>old||allSpecs.data[0]?.code||"");setLoading(false);}
   }
   load().catch(()=>{if(active){setUnavailable(true);setError("تعذر تحميل ملف التقييم كاملًا.");setLoading(false);}});
   return ()=>{active=false;};
@@ -73,13 +79,18 @@ export default function AssessmentFile(){
  const stale=!!decision&&JSON.stringify(signature)!==JSON.stringify(decision.payload);
  const official=entries.find(e=>e.kind==="result"&&e.subject===subject);
  const ref=specs.find(s=>s.code===code);
+ const approvedVersion=(a:Improvement)=>maps.find(m=>m.requirement_id===a.requirement_id)?.approved_version;
+ const signoff=(a:Improvement)=>signoffs.find(s=>s.action_id===a.id&&s.submission_id===(a.closure_ref??approvedVersion(a)));
+ const authorityName=(a:string)=>a==="committee"?"لجنة الحوكمة":"المدير التنفيذي";
  const actionName=(r:number)=>maps.find(m=>m.requirement_id===r)?.evidence_name??String(r);
  return <div className={styles.assessment}>
  {notice&&<p role="status">{notice}</p>}{error&&<p role="alert">{error} <button onClick={()=>{setError("");setLoading(true);setRevision(r=>r+1);}}>إعادة التحميل</button></p>}
  {loading?<p role="status">جارٍ تحميل ملف التقييم…</p>:unavailable?null:<fieldset disabled={busy}>
- <label>دورة التقييم<select value={cycle} onChange={e=>{setCycle(Number(e.target.value));setSnapshot(null);setLoading(true);setError("");}}>{!cycles.length&&<option value={0}>لا توجد دورة مسجلة</option>}{cycles.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}</select></label>
+ <label>دورة التقييم<select aria-label="دورة التقييم" value={cycle} onChange={e=>{setCycle(Number(e.target.value));setSnapshot(null);setLoading(true);setError("");}}>{!cycles.length&&<option value={0}>لا توجد دورة مسجلة</option>}{cycles.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}</select></label>
  {cycles.find(c=>c.id===cycle)&&<p>مرجع الدورة · {cycles.find(c=>c.id===cycle)?.methodology}</p>}
- <details><summary>تسجيل دورة تقييم</summary><form onSubmit={e=>record(e,"cycle",f=>({subject:input(f,"title")}))}><label>اسم الدورة<input name="title" maxLength={160} required/></label><label>إصدار المنهجية ومرجع تعليمات الدورة<input name="reference" maxLength={1600} required/></label><button>إنشاء الدورة</button></form></details>
+ <details><summary>تسجيل دورة تقييم</summary><form onSubmit={e=>record(e,"cycle",f=>({subject:input(f,"title"),authority,delegate:input(f,"delegate")||null,mandate:input(f,"mandate")}))}><label>اسم الدورة<input name="title" maxLength={160} required/></label><label>إصدار المنهجية ومرجع تعليمات الدورة<input name="reference" maxLength={1600} required/></label><label>صلاحية إغلاق إجراءات التحسين<select value={authority} onChange={e=>setAuthority(e.target.value)}><option value="office">اعتماد مكتب البيانات</option><option value="executive">يتطلب قرار المدير التنفيذي</option><option value="committee">يتطلب قرار لجنة الحوكمة</option></select></label>
+ {authority!=="office"&&<><label>مرجع التفويض أو مصفوفة الصلاحيات<input name="mandate" required maxLength={1600}/></label><label>المفوّض بتوثيق القرار<select name="delegate" required><option value="">اختر المفوّض</option>{delegates.map(o=><option key={o.user_id} value={o.user_id}>{o.display_name||"مسؤول المكتب"}</option>)}</select></label></>}
+ <button>إنشاء الدورة</button></form></details>
  <details><summary>تصنيف الأدلة وربطها بالمواصفات · {format(maps.filter(r=>r.mapping_state==="unresolved").length)} تحتاج مراجعة</summary>
  <label>حالة الربط<select value={mappingFilter} onChange={e=>setMappingFilter(e.target.value)}><option value="all">جميع الأدلة</option>{Object.entries(mappingLabels).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
  <label>بحث عن دليل<input type="search" value={search} onChange={e=>setSearch(e.target.value)}/></label>
@@ -89,6 +100,7 @@ export default function AssessmentFile(){
  <small>أدخل الرموز مفصولة بفاصلة. اترك الحقل فارغًا لتصنيف الدليل «نضج فقط» مع ذكر السبب.</small>
  <label>مبرر التصنيف<input name="reference" required maxLength={1600}/></label><button>حفظ تصنيف الدليل</button></form></>:<p>لا توجد أدلة تطابق البحث.</p>}</details>
  {cycle>0&&<>
+ <p>{rule?"إغلاق إجراءات هذه الدورة يتطلب قرار "+authorityName(rule.authority)+" · "+rule.mandate:"صلاحية إغلاق الإجراءات · مكتب البيانات"}</p>
  <details><summary>تقييم المواصفات · {format(specs.length)} مواصفة</summary>
  <label>المواصفة<select value={code} onChange={e=>setCode(e.target.value)}>{specs.map(s=><option key={s.code}>{s.code}</option>)}</select></label>
  <p>{decision?(stale?"تغيّرت الأدلة منذ التقييم":marks[decision.outcome]):"لم يُقيَّم"} · {format(linked.filter(r=>r.approved_version).length)} من {format(linked.length)} أدلة مرتبطة معتمدة. {ref&&<a href={"https://dmo.kku.edu.sa/sites/dmo.kku.edu.sa/files/2026-10/National-Data-Index_v1.0_AR.pdf#page="+(ref.page+1)} target="_blank" rel="noreferrer">إحالة سدايا</a>}</p>
@@ -102,7 +114,9 @@ export default function AssessmentFile(){
  <form onSubmit={e=>record(e,"improve",f=>({requirement:Number(input(f,"req")),owner:input(f,"owner"),due:input(f,"due")}))}><label>المتطلب<select name="req" required>{maps.map(m=><option value={m.requirement_id} key={m.requirement_id}>{m.standard_code} · {m.evidence_name}</option>)}</select></label>
  <label>مالك الإجراء<select name="owner" required><option value="">اختر المالك</option>{owners.map(o=><option value={o.user_id} key={o.user_id}>{o.display_name}</option>)}</select></label><label>موعد الإغلاق<input name="due" type="date" required/></label><label>الفجوة والإجراء المطلوب<textarea name="reference" required maxLength={1600}/></label><button>إضافة إجراء تحسين</button></form>
  <ul>{actions.map(a=><li key={a.id}><strong>{a.description}</strong> · {owners.find(o=>o.user_id===a.owner_id)?.display_name??"مالك مسجّل"} · {formatRiyadhDate(a.due_date)} · {a.closed_at?"مغلق":a.due_date<riyadhIsoDate()?"متأخر":"مفتوح"}<br/><Link href={evidenceUrl+a.requirement_id}>{actionName(a.requirement_id)}</Link>
- {a.closed_at?<p>نسخة الإغلاق {a.closure_ref} · {a.decision_ref}</p>:<form onSubmit={e=>record(e,"close",()=>({action_id:a.id}))}><label>قرار الإغلاق ومرجع الاعتماد وفق صلاحيات الجهة<input name="reference" maxLength={1600} required/></label><button>إغلاق بالدليل المعتمد</button></form>}</li>)}</ul></details>
+ {rule&&<p>{signoff(a)?"قرار "+authorityName(rule.authority)+" · "+signoff(a)?.decision_ref+" · "+formatRiyadhDate(signoff(a)?.decision_date):"بانتظار قرار "+authorityName(rule.authority)+" على نسخة دليل الإغلاق"}</p>}
+ {rule&&rule.delegate_id===viewer&&!a.closed_at&&!signoff(a)&&approvedVersion(a)&&<form onSubmit={e=>record(e,"signoff",f=>({action_id:a.id,version:approvedVersion(a),date:input(f,"date")}))}><label>مرجع قرار {authorityName(rule.authority)}<input name="reference" required maxLength={1600}/></label><label>تاريخ القرار<input name="date" type="date" required max={riyadhIsoDate()}/></label><button>توثيق القرار للنسخة المعتمدة</button></form>}
+ {a.closed_at?<p>نسخة الإغلاق {a.closure_ref} · {a.decision_ref}</p>:<form onSubmit={e=>record(e,"close",()=>({action_id:a.id}))}><label>قرار الإغلاق ومرجع الاعتماد وفق صلاحيات الجهة<input name="reference" maxLength={1600} required/></label><button disabled={!approvedVersion(a)||!!rule&&!signoff(a)}>إغلاق بالدليل المعتمد</button></form>}</li>)}</ul></details>
  <details><summary>لقطات الدورة المؤرخة</summary><form onSubmit={e=>record(e,"snapshot",()=>({}))}><label>وصف اللقطة أو مرجع عرض اللجنة<input required name="reference" maxLength={1600}/></label><button>تثبيت لقطة للتقرير</button></form>
  {entries.filter(e=>e.kind==="snapshot").map(e=><p key={e.id}>{formatRiyadhDateTime(e.created_at)} · {e.reference} <button type="button" onClick={async()=>{const r=await supabase.from("nudee_cycle_events").select("payload").eq("id",e.id).single();if(r.error){setError("تعذر تنزيل اللقطة.");return;}setSnapshot({id:e.id,data:r.data.payload});}}>عرض اللقطة</button></p>)}
  {snapshot&&entries.some(e=>e.id===snapshot.id&&e.kind==="snapshot")&&<section aria-label="ملخص اللقطة"><h3>ملخص اللقطة · {formatRiyadhDateTime(snapshot.data.as_of)}</h3>

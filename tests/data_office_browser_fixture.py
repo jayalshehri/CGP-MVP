@@ -132,6 +132,8 @@ class Fixture:
                 self.files.append(dict(source, id=result, assignment_id=target["id"], source_submission_id=source["id"],
                                        source_locator=payload["p_locator"]))
                 target["status"] = "submitted"
+            elif path == "/rest/v1/rpc/nudee_approval_officers" and role == "office":
+                result = [profile("office")]
             elif path == "/rest/v1/rpc/nudee_assignees" and role == "office":
                 result = [profile("owner")]
             elif path == "/rest/v1/nudee_final_review" and role == "office":

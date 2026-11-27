@@ -115,7 +115,7 @@ def check_layout(browser, revision, size, target):
         expect(field).to_have_value("جودة البيانات")
         summary.click()
         office.get_by_text("ملف التقييم وخطة التحسين", exact=True).click()
-        expect(office.get_by_label("دورة التقييم", exact=True)).to_be_visible()
+        expect(office.get_by_role("combobox", name="دورة التقييم", exact=True)).to_be_visible()
         expect(office.get_by_role("option", name="لا توجد دورة مسجلة")).to_have_count(1)
         office.goto(APP + HOME)
         office.get_by_role("link", name=re.compile("متابعة التكليفات المتأخرة")).click()
