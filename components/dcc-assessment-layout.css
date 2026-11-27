@@ -55,3 +55,75 @@
 @media print{
  .dcc-hero{background:white!important;color:#000;box-shadow:none;padding:8px 0}.dcc-hero p,.dcc-code-chip,.dcc-eyebrow,.dcc-hero-meta,.dcc-hero-meta strong{color:#000}.dcc-hero::before{display:none}.dcc-print-row{display:table-row}.dcc-table{display:block;overflow:visible}.dcc-table td p{display:block;overflow:visible}.dcc-register{border:0}
 }
+
+/* Cycle pages lead with the assigned action, then the work list. */
+.dcc-hero-cycle{padding:15px 22px;border-radius:14px}
+.dcc-hero-cycle .dcc-hero-main{gap:8px 18px}
+.dcc-cycle-identity{flex:1 1 310px;min-width:0}
+.dcc-hero-cycle .dcc-hero-meta{padding:0;margin:0 0 4px;border:0;gap:7px 11px;line-height:1.35}
+.dcc-hero-cycle h1{font-size:clamp(21px,3vw,28px);line-height:1.45}
+.dcc-cycle-due{font-size:12px;color:#e1e4ff;line-height:1.6;margin-top:3px}
+.dcc-cycle-due strong{color:#fff}
+.dcc-hero .dcc-state[data-tone=ok]{color:#1d593e;background:#e3f2e9}
+.dcc-cycle-flow{margin-block:10px;background:#fff;border:1px solid var(--dcc-line);border-radius:11px}
+.dcc-cycle-flow .dcc-stages{margin:0;padding:5px;gap:3px}
+.dcc-cycle-flow .dcc-stages li{padding:6px 8px;gap:6px;border-color:transparent;border-radius:7px}
+.dcc-cycle-flow .dcc-stages li[data-stage=current]{border-color:#d5d9ef;background:#eef0fa;box-shadow:none}
+.dcc-cycle-flow .dcc-stages strong{font-size:12px;font-weight:700}
+.dcc-cycle-flow .dcc-stage-num{height:24px;width:24px;flex-basis:24px}
+.dcc-cycle-context{display:flex;align-items:center;gap:5px 12px;justify-content:space-between;flex-wrap:wrap;border-block-start:1px solid var(--dcc-line);padding:4px 10px;font-size:12px;color:var(--dcc-sub)}
+.dcc-cycle-context > p{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.dcc-cycle-context strong{color:var(--dcc-ink)}
+.dcc-cycle-details{position:relative;margin-inline-start:auto}
+.dcc-cycle-details summary{display:flex;align-items:center;gap:5px;min-height:32px;color:var(--dcc-accent);list-style:none}
+.dcc-cycle-details summary::-webkit-details-marker{display:none}
+.dcc-cycle-details summary::after{content:'⌄';font-size:14px;line-height:1}
+.dcc-cycle-details:not([open]) > div{display:none}
+.dcc-cycle-facts{position:absolute;z-index:3;inset-inline-end:0;inset-block-start:100%;width:min(340px,calc(100vw - 47px));display:grid;gap:8px;padding:12px;background:#fff;border:1px solid var(--dcc-line);border-radius:8px;box-shadow:0 10px 28px #262c4d20}
+.dcc-cycle-facts .dcc-roles{margin:0}
+.dcc-cycle-facts button{justify-self:start;padding:4px 8px;font-size:12px;background:#f4f5fc;color:var(--dcc-accent)}
+.dcc-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-block:10px}
+.dcc-metric{padding:8px 12px;gap:1px}
+.dcc-metric-line{display:flex;gap:2px 8px;align-items:baseline;justify-content:space-between;flex-wrap:wrap;min-width:0;width:100%}
+.dcc-metric-line strong{font-size:18px;line-height:1.4}
+.dcc-metric-line span{line-height:1.5}
+.dcc-metric-result{align-content:center}
+.dcc-progress{height:5px;margin-top:2px}
+.dcc-register{margin-block-start:10px}
+.dcc-register > .dcc-section-head{padding-block:9px}
+.dcc-quick{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:0 14px 7px}
+.dcc-workspace .dcc-quick button{display:inline-flex;gap:5px;align-items:center;min-height:34px;padding:3px 8px;background:#f2f4fa;border:1px solid #e2e6f0;border-radius:20px;color:#3d4966;font-size:12px;font-weight:650;line-height:1.35}
+.dcc-workspace .dcc-quick button[aria-pressed=true]{background:#e7eafa;border-color:#9ea6d6;color:#2d377b}
+.dcc-quick button bdi{display:inline-grid;place-items:center;min-width:19px;height:19px;border-radius:10px;color:#37417a;background:#e3e7f6}
+.dcc-filters{padding-block:6px;gap:8px}
+.dcc-filters input,.dcc-filters select{height:35px}
+.dcc-table th,.dcc-table td{padding-block:7px}
+.dcc-table td:first-child{width:56%}
+.dcc-workspace .dcc-row-open{min-height:34px}
+.dcc-row-title{align-items:baseline}
+.dcc-row-title strong{min-width:0;overflow-wrap:anywhere}
+.dcc-row-title small{background:#f1f2f6;border-radius:4px;padding:0 4px;white-space:nowrap}
+.dcc-drawer-evidence{font-size:12px;color:var(--dcc-sub);margin:0 0 8px!important}
+.dcc-drawer-evidence bdi{display:inline-block;padding:0 6px;margin-inline-start:3px;border-radius:5px;background:var(--dcc-soft);color:var(--dcc-ink)}
+.dcc-drawer .ae-card{padding:0;border:0;box-shadow:none}
+@media(max-width:660px){
+ .dcc-hero-cycle{padding:12px}
+ .dcc-cycle-identity{flex-basis:100%}
+ .dcc-hero-cycle h1{font-size:21px}
+ .dcc-cycle-flow .dcc-stages li{padding:4px 6px}
+ .dcc-cycle-flow .dcc-stages strong{font-size:11px}
+ .dcc-cycle-flow .dcc-stage-num{height:21px;width:21px;flex-basis:21px}
+ .dcc-cycle-context{padding-inline:7px}
+ .dcc-summary{gap:6px}
+ .dcc-metric{padding:6px 8px}
+ .dcc-metric-line strong{font-size:15px}
+ .dcc-quick{padding-inline:9px}
+ .dcc-item-cards{gap:5px}
+ .dcc-item-footer{padding:0;border:0;margin:3px 0 0}
+}
+@media print{
+ .dcc-hero-cycle{background:white!important;color:#000}
+ .dcc-cycle-due,.dcc-cycle-due strong{color:#000}
+}
+.dcc-table p.ae-print-only,.dcc-item-cards p.ae-print-only{display:none}
+@media print{.dcc-table p.ae-print-only{display:block}}

@@ -14,15 +14,6 @@ const decisionLabels: Record<DecisionAction, string> = {
   start: 'بدء التقييم', collect: 'جمع الأدلة', submit: 'إرسال للمراجعة', return: 'إعادة للاستكمال',
   complete: 'إكمال المراجعة', approve: 'اعتماد التقييم', close: 'إغلاق الدورة', reassess: 'إنشاء إعادة تقييم',
 };
-const stageCopy: Record<string, string> = {
-  draft: 'حدّد نطاق الحساب وعيّن المقيّم والمراجع والمعتمد قبل بدء العمل.',
-  in_progress: 'سجّل نتائج التطبيق واربط الأدلة. بعد استكمال البنود، أرسل الدورة إلى المراجع.',
-  evidence_collection: 'استكمل الأدلة والنتائج التي تحتاج متابعة قبل الإرسال للمراجعة.',
-  under_review: 'يراجع المكلّف النتائج والأدلة ويقبل كل بند أو يعيده للاستكمال.',
-  completed: 'اكتملت المراجعة. يعتمد المكلّف النتيجة ويحدّد موعد إعادة التقييم.',
-  approved: 'هذه نتيجة داخلية معتمدة. لا يُعدّل محتوى الدورة بعد الاعتماد.',
-  closed: 'هذه دورة مغلقة محفوظة للرجوع إليها.',
-};
 
 function Icon({ kind }: { kind: 'workflow' | 'check' | 'arrow' }) {
   return <svg aria-hidden="true" viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -32,17 +23,26 @@ function Icon({ kind }: { kind: 'workflow' | 'check' | 'arrow' }) {
   </svg>;
 }
 
-function DccHero({ title, subtitle, tag, cycle, actions }: { title: string; subtitle: string; tag: string; cycle?: AssessmentCycle; actions?: ReactNode }) {
-  return <header className="dcc-hero">
-    <div className="dcc-hero-top"><div className="dcc-eyebrow"><Icon kind="workflow"/> مساحة عمل التقييم</div><bdi dir="ltr" className="dcc-code-chip">{tag}</bdi></div>
-    <div className="dcc-hero-main">
-      <div><h1>{title}</h1><p>{subtitle}</p></div>
+function DccHero({ title, subtitle, tag, cycle, actions }: { title: string; subtitle?: string; tag: string; cycle?: AssessmentCycle; actions?: ReactNode }) {
+  return <header className={`dcc-hero${cycle ? ' dcc-hero-cycle' : ''}`}>
+    {cycle ? <div className="dcc-hero-main">
+      <div className="dcc-cycle-identity">
+        <div className="dcc-hero-meta">
+          <bdi dir="ltr" className="dcc-code-chip">{tag}</bdi>
+          <span className="dcc-chip dcc-state" data-tone={['approved', 'closed'].includes(cycle.status) ? 'ok' : 'pending'}>{cycleLabels[cycle.status] ?? cycle.status}</span>
+          <span>دورة <bdi dir="ltr">#{cycle.id}</bdi></span>
+        </div>
+        <h1>{title}</h1>
+        <div className="dcc-cycle-due">الاستحقاق <strong>{formatRiyadhDate(cycle.due_date, 'غير محدد')}</strong></div>
+      </div>
       {actions && <div className="dcc-hero-actions ae-no-print">{actions}</div>}
-    </div>
-    {cycle && <div className="dcc-hero-meta"><span className="dcc-chip dcc-state">{cycleLabels[cycle.status] ?? cycle.status}</span><span>الدورة <bdi dir="ltr">#{cycle.id}</bdi></span>
-      <span>الاستحقاق <strong>{formatRiyadhDate(cycle.due_date, 'غير محدد')}</strong></span>
-      {cycle.next_review_date && <span>إعادة التقييم <strong>{formatRiyadhDate(cycle.next_review_date)}</strong></span>}
-      {cycle.imported && !cycle.approved_at && <span>سجل مستورد دون اعتماد سابق</span>}</div>}
+    </div> : <>
+      <div className="dcc-hero-top"><div className="dcc-eyebrow"><Icon kind="workflow"/> مساحة عمل التقييم</div><bdi dir="ltr" className="dcc-code-chip">{tag}</bdi></div>
+      <div className="dcc-hero-main">
+        <div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>
+        {actions && <div className="dcc-hero-actions ae-no-print">{actions}</div>}
+      </div>
+    </>}
   </header>;
 }
 
@@ -111,7 +111,7 @@ function WorkflowStages({ cycle }: { cycle: AssessmentCycle }) {
       const current = i === active && !finished;
       return <li key={label} data-stage={done ? 'done' : current ? 'current' : 'next'} aria-current={current ? 'step' : undefined}>
         <span className="dcc-stage-num" aria-hidden="true">{done ? <Icon kind="check"/> : i + 1}</span>
-        <span><strong>{label}</strong><small>{done ? 'مكتملة' : current ? 'المرحلة الحالية' : 'لاحقًا'}</small></span>
+        <strong>{label}<span className="dcc-sr">{done ? ' — مكتملة' : ''}</span></strong>
       </li>;
     })}
   </ol>;
@@ -167,37 +167,69 @@ export function DccAssessmentCycle(props: LayoutProps) {
   const { cycle, metrics, actor, role, team, busy, search, setSearch, domain, setDomain, status, setStatus,
     domains, visible, page, setPage, openItem, open, editor, mode, setMode, evidenceCount, error, message, retry } = props;
   const [decision, setDecision] = useState<DecisionAction | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
   const actions = cycleActions(cycle, actor, team);
-  const quick = (value: string) => { setStatus(status === value ? '' : value); setMode('operational'); setPage(0); };
-  const reviewerNames = [['المقيّم', cycle.assessor_id], ['المراجع', cycle.reviewer_id], ['المعتمد', cycle.approver_id]] as const;
-  const formattedTitle = (item: AssessmentItem) => item.title_ar.replace(/\s+[-–]\s+[\d-]+\s*$/, '').trim();
+  const quick = (value: string) => {
+    setSearch(''); setDomain(''); setStatus(status === value ? '' : value); setMode('operational'); setPage(0);
+  };
+  const roleEntries = [['المقيّم', cycle.assessor_id], ['المراجع', cycle.reviewer_id], ['المعتمد', cycle.approver_id]] as const;
+  const currentRole = roleEntries[dccStage(cycle.status) === 2 ? 1 : dccStage(cycle.status) === 3 ? 2 : 0];
+  const finished = ['approved', 'closed'].includes(cycle.status);
+  const hasSetup = Boolean(props.setup);
+  const hasDetails = team || Boolean(cycle.next_review_date) || (cycle.imported && !cycle.approved_at);
+  const displayPerson = (id: string | null) => !id ? 'غير معيّن' : props.people.find(person => person.user_id === id)?.display_name || (id === actor ? 'أنت' : 'مكلّف');
+  const shortTitle = (item: AssessmentItem) => {
+    const title = item.title_ar.replace(/\s+[-–]\s+[\d-]+\s*$/, '').trim();
+    const description = item.description_ar?.trim().split(/\n\s*\n/, 1)[0].replace(/\s+/g, ' ');
+    if (!description) return title;
+    const actualRequirement = description.replace(/^(?:رجوع[ًاا]*|بالإضافة)[^،؛]{0,150}[،؛]\s*(?=(?:فإن|يجب|يُراجع|تُراجع))/, '');
+    const words = actualRequirement.split(' ');
+    if (actualRequirement.length <= 85) return actualRequirement;
+    let short = '';
+    for (const word of words) {
+      if (`${short} ${word}`.trim().length > 78) break;
+      short = `${short} ${word}`.trim();
+    }
+    return short ? `${short}…` : title;
+  };
   const statusChip = (item: AssessmentItem) => <span className="dcc-chip" data-tone={item.compliance_status === 'implemented' ? 'ok' : item.compliance_status === 'partially_implemented' ? 'pending' : item.compliance_status === 'not_implemented' ? 'alert' : 'neutral'}>{assessmentLabels[item.compliance_status ?? ''] ?? 'لم يُقيّم'}</span>;
   const openButton = (item: AssessmentItem) => <button className="dcc-row-open" type="button" aria-haspopup="dialog" aria-label={`فتح البند ${item.control_code}`} onClick={() => open(item.id)}>فتح <span aria-hidden="true">←</span></button>;
-  const rowTitle = (item: AssessmentItem) => <><div className="dcc-row-title"><bdi className="dcc-control-code" dir="ltr">{item.control_code}</bdi><strong>{formattedTitle(item)}</strong></div>
-    <p>{item.description_ar || item.title_ar}</p>{!item.is_scoring && <small>للسياق · خارج الحساب الحالي</small>}</>;
+  const rowTitle = (item: AssessmentItem) => <><div className="dcc-row-title"><bdi className="dcc-control-code" dir="ltr">{item.control_code}</bdi><strong>{shortTitle(item)}</strong>
+    {!item.is_scoring && <small>خارج الحساب الحالي</small>}</div>
+    <p className="ae-print-only">{item.description_ar || item.title_ar}</p></>;
   return <main className="workflow-page ae-page dcc-workspace" dir="rtl">
     <Breadcrumbs showCycles/>
     <DccHero title={cycle.scope_name} tag={`DCC-${cycle.framework_version.replace('-', ':')}`} cycle={cycle}
-      subtitle={stageCopy[cycle.status] ?? 'تقييم ضوابط الأمن السيبراني للبيانات'}
-      actions={actions[0] && <><button type="button" className="dcc-primary dcc-light" disabled={busy} onClick={() => setDecision(actions[0])}>{decisionLabels[actions[0]]} <span aria-hidden="true">←</span></button>
+      actions={actions[0] ? <><button type="button" className="dcc-primary dcc-light" disabled={busy} onClick={() => setDecision(actions[0])}>{decisionLabels[actions[0]]} <span aria-hidden="true">←</span></button>
         {actions.length > 1 && <details className="dcc-more"><summary>إجراءات أخرى</summary>
-          <div>{actions.slice(1).map(action => <button type="button" key={action} disabled={busy} onClick={event => { event.currentTarget.closest('details')?.removeAttribute('open'); setDecision(action); }}>{decisionLabels[action]}</button>)}</div></details>}</>}/>
-    <WorkflowStages cycle={cycle}/>
-    {!decision && !openItem && error && <p role="alert" className="ae-error">{error} <button type="button" onClick={retry}>إعادة المحاولة</button></p>}
-    {!openItem && message && <p role="status" className="workflow-success">{message}</p>}
-    {team && <dl className="dcc-roles ae-no-print">{reviewerNames.map(([label, id]) => <div key={label}><dt>{label}</dt><dd>{id ? props.people.find(person => person.user_id === id)?.display_name || 'مكلّف' : 'لم يُعيّن'}</dd></div>)}</dl>}
-    {props.setup}
-    {cycle.status === 'draft' && !cycle.scope_confirmed_at && <p className="dcc-notice">لم يُؤكّد نطاق الحساب بعد. النطاق المقترح قابل للمراجعة قبل بدء الدورة.</p>}
+          <div>{actions.slice(1).map(action => <button type="button" key={action} disabled={busy} onClick={event => { event.currentTarget.closest('details')?.removeAttribute('open'); setDecision(action); }}>{decisionLabels[action]}</button>)}</div></details>}</>
+        : hasSetup ? <button type="button" className="dcc-primary dcc-light" aria-haspopup="dialog" onClick={() => setSetupOpen(true)}>إعداد الدورة <span aria-hidden="true">←</span></button> : undefined}/>
+    <section className="dcc-cycle-flow ae-no-print" aria-label="سير دورة التقييم">
+      <WorkflowStages cycle={cycle}/>
+      {(!finished || hasDetails) && <div className="dcc-cycle-context">
+        {!finished && <p><span>{cycle.status === 'draft' && !cycle.scope_confirmed_at ? 'النطاق بحاجة إلى تأكيد' : 'المسؤول الآن'}</span>
+          <strong>{currentRole[0]} · {displayPerson(currentRole[1])}</strong></p>}
+        {hasDetails && <details className="dcc-cycle-details">
+          <summary>تفاصيل الدورة</summary>
+          <div className="dcc-cycle-facts">
+            {team && <dl className="dcc-roles">{roleEntries.map(([label, id]) => <div key={label}><dt>{label}</dt><dd>{displayPerson(id)}</dd></div>)}</dl>}
+            {cycle.next_review_date && <p>إعادة التقييم <strong>{formatRiyadhDate(cycle.next_review_date)}</strong></p>}
+            {cycle.imported && !cycle.approved_at && <p>سجل مستورد دون اعتماد سابق.</p>}
+            {hasSetup && <button type="button" aria-haspopup="dialog" onClick={event => { event.currentTarget.closest('details')?.removeAttribute('open'); setSetupOpen(true); }}>تعديل إعدادات الدورة</button>}
+          </div>
+        </details>}
+      </div>}
+    </section>
+    {!decision && !openItem && !setupOpen && error && <p role="alert" className="ae-error">{error} <button type="button" onClick={retry}>إعادة المحاولة</button></p>}
+    {!openItem && !setupOpen && message && <p role="status" className="workflow-success">{message}</p>}
     <section className="dcc-summary" aria-label="ملخص دورة التقييم">
-      <div className="dcc-metric dcc-metric-result"><span>الالتزام المعتمد داخليًا</span><strong>{metrics.compliance === null ? (['approved', 'closed'].includes(cycle.status) ? 'لا توجد نسبة' : 'لم يُعتمد') : <bdi dir="ltr">{displayPercent(metrics.compliance)}</bdi>}</strong><small>النتيجة الداخلية وليست نتيجة حصين</small></div>
-      <div className="dcc-metric"><span>تقدّم إدخال النتائج</span><strong><bdi dir="ltr">{metrics.assessed} / {metrics.total}</bdi></strong>
+      <div className="dcc-metric"><div className="dcc-metric-line"><span>تقدّم التقييم</span><strong><bdi dir="ltr">{metrics.assessed} / {metrics.total}</bdi></strong></div>
         <progress className="dcc-progress" aria-label="تقدّم إدخال النتائج" value={metrics.assessed} max={Math.max(1, metrics.total)}/>
       </div>
-      <button className="dcc-metric ae-no-print" type="button" onClick={() => quick('unassessed')} aria-pressed={status === 'unassessed' && mode === 'operational'}><span>لم يُقيّم</span><strong>{metrics.unassessed}</strong><small>عرض البنود ←</small></button>
-      <button className="dcc-metric ae-no-print" type="button" onClick={() => quick('gap')} aria-pressed={status === 'gap' && mode === 'operational'}><span>الفجوات المفتوحة</span><strong>{props.gapCount}</strong><small>{props.overdueCount} تجاوزت موعد المعالجة</small></button>
+      <div className="dcc-metric dcc-metric-result"><div className="dcc-metric-line"><span>الالتزام المعتمد داخليًا</span><strong>{metrics.compliance === null ? (finished ? 'لا توجد نسبة' : 'لم يُعتمد') : <bdi dir="ltr">{displayPercent(metrics.compliance)}</bdi>}</strong></div></div>
     </section>
     <section className="dcc-register">
-      <div className="dcc-section-head"><div><h2>{mode === 'executive' ? 'ملخص الدورة' : 'بنود التقييم'}</h2><p>{role === 'control_owner' ? 'تعرض الصفحة البنود ضمن نطاق تكليفك.' : 'تقييم البنود والأدلة والملاحظات في دورة واحدة.'}</p></div>
+      <div className="dcc-section-head"><div><h2>{mode === 'executive' ? 'ملخص الدورة' : 'بنود التقييم'}</h2>{role === 'control_owner' && <p>ضمن نطاق تكليفك</p>}</div>
         <div className="dcc-register-actions ae-no-print">
           {role !== 'control_owner' && <div className="dcc-view-toggle" role="group" aria-label="طريقة عرض التقييم"><button type="button" aria-pressed={mode === 'operational'} onClick={() => setMode('operational')}>البنود</button><button type="button" aria-pressed={mode === 'executive'} onClick={() => setMode('executive')}>ملخص</button></div>}
           <details className="dcc-more dcc-more-light"><summary>خيارات</summary><div>
@@ -208,6 +240,11 @@ export function DccAssessmentCycle(props: LayoutProps) {
         </div>
       </div>
       {mode === 'executive' ? props.executive : <>
+        <div className="dcc-quick ae-no-print" role="group" aria-label="تصفية سريعة">
+          <button type="button" aria-pressed={status === 'unassessed'} onClick={() => quick('unassessed')}>لم يُقيّم <bdi>{metrics.unassessed}</bdi></button>
+          <button type="button" aria-pressed={status === 'gap'} onClick={() => quick('gap')}>فجوات مفتوحة <bdi>{props.gapCount}</bdi></button>
+          {props.overdueCount > 0 && <button type="button" aria-pressed={status === 'overdue'} onClick={() => quick('overdue')}>معالجة متأخرة <bdi>{props.overdueCount}</bdi></button>}
+        </div>
         <div className="dcc-filters ae-no-print">
           <label>البحث<input type="search" dir="auto" value={search} placeholder="رمز الضابط أو نصه" onChange={event => { setSearch(event.target.value); setPage(0); }}/></label>
           <label>المجال<select value={domain} onChange={event => { setDomain(event.target.value); setPage(0); }}><option value="">جميع المجالات</option>{domains.map(value => <option key={value}>{value}</option>)}</select></label>
@@ -217,10 +254,10 @@ export function DccAssessmentCycle(props: LayoutProps) {
           </select></label>
         </div>
         {visible.length ? <div className="dcc-table">
-          <table><thead><tr><th scope="col">البند</th><th scope="col">التطبيق</th><th scope="col">المراجعة</th><th scope="col">الأدلة</th><th scope="col"><span className="dcc-sr">التفاصيل</span></th></tr></thead>
+          <table><thead><tr><th scope="col">البند</th><th scope="col">التطبيق</th><th scope="col">المراجعة</th><th scope="col"><span className="dcc-sr">التفاصيل</span></th></tr></thead>
             <tbody>{visible.map((item, index) => <tr key={item.id} className={index < page * 12 || index >= (page + 1) * 12 ? 'dcc-print-row' : undefined}>
               <td>{rowTitle(item)}</td><td>{statusChip(item)}</td>
-              <td>{reviewLabels[item.review_status] ?? '—'}</td><td>{evidenceCount(item.id)}</td>
+              <td>{reviewLabels[item.review_status] ?? '—'}</td>
               <td className="ae-no-print">{openButton(item)}</td>
             </tr>)}</tbody>
           </table>
@@ -229,14 +266,20 @@ export function DccAssessmentCycle(props: LayoutProps) {
           {visible.slice(page * 12, (page + 1) * 12).map(item => <li key={item.id}>
             {rowTitle(item)}
             <div className="dcc-item-status">{statusChip(item)}<span>{reviewLabels[item.review_status] ?? '—'}</span></div>
-            <div className="dcc-item-footer"><span>{evidenceCount(item.id)} دليل مرتبط</span>{openButton(item)}</div>
+            <div className="dcc-item-footer">{openButton(item)}</div>
           </li>)}
         </ul>}
         <div className="dcc-paging ae-no-print"><span role="status">عرض {visible.length ? page * 12 + 1 : 0}–{Math.min(visible.length, (page + 1) * 12)} من {visible.length}</span><button type="button" disabled={page === 0} onClick={() => setPage(page - 1)}>السابق</button><button type="button" disabled={(page + 1) * 12 >= visible.length} onClick={() => setPage(page + 1)}>التالي</button></div>
       </>}
     </section>
+    {setupOpen && hasSetup && <DccDialog aside title="إعداد دورة التقييم" close={() => setSetupOpen(false)}>
+      {error && <p role="alert" className="ae-error">{error}</p>}
+      {message && <p role="status" className="workflow-success">{message}</p>}
+      {props.setup}
+    </DccDialog>}
     {openItem && <DccDialog aside title={`تفاصيل البند ${openItem.control_code}`} close={() => open(null)}>
-      {error && <p role="alert" className="ae-error">{error}</p>}{message && <p role="status" className="workflow-success">{message}</p>}{editor}
+      {error && <p role="alert" className="ae-error">{error}</p>}{message && <p role="status" className="workflow-success">{message}</p>}
+      <p className="dcc-drawer-evidence">الأدلة المرتبطة <bdi>{evidenceCount(openItem.id)}</bdi></p>{editor}
     </DccDialog>}
     {decision && <DecisionDialog key={decision} action={decision} cycle={cycle} command={props.command} busy={busy} error={error} close={() => setDecision(null)}/>}
   </main>;
