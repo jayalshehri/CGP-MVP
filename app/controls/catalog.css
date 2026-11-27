@@ -137,6 +137,7 @@
   font-size: 12px;
 }
 .catalog-scope-note strong { color: var(--catalog-ink); }
+.catalog-source-link { color: var(--catalog-ink); text-decoration: underline; text-underline-offset: 2px; }
 
 .catalog-results { margin-block-start: 16px; min-width: 0; }
 .catalog-results-bar {
