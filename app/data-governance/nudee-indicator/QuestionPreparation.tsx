@@ -1,4 +1,5 @@
 "use client";
+import { evidenceLink } from "./routes";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -103,7 +104,7 @@ function QuestionReview({domain, code, title, rows, reload}: {domain:string; cod
           {confirmed ? <strong>أكد المكتب جاهزية السؤال داخليًا</strong> : <button disabled={busy||!complete} onClick={()=>save(true)}>تأكيد جاهزية السؤال داخليًا</button>}
         </div>
         <ul className={styles.evidenceList}>{scope.map(r=><li key={r.requirement_id}>
-          <Link href={{pathname:"/data-governance/nudee",query:{evidence:r.requirement_id}}}>{r.evidence_name}</Link>
+          <Link href={evidenceLink({domain, evidence:r.requirement_id})}>{r.evidence_name}</Link>
           <span>{labels[r.status] ?? r.status}</span></li>)}</ul>
       </>}
     </>}

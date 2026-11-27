@@ -1,6 +1,6 @@
 "use client";
 import { formatRiyadhDate, riyadhIsoDate } from "@/lib/dates";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
@@ -27,7 +27,10 @@ function ownerPriority(a: Assignment | undefined, today: string) {
 const statusLabels:Record<string,string>={unassigned:"لم يكلّف",assigned:"بانتظار الرفع",submitted:"بانتظار المراجعة",changes_requested:"أعيد للتعديل",approved:"معتمد"};
 const views:Record<string,string>={all:"كل الحالات",...statusLabels,overdue:"متأخر",action:"تحتاج إجراء مني",review:"بانتظار قراري"};
 const pageSize=25;
-export default function NudeeRegister(){
+export default function NudeeRegister({ embedded = false, renderPreparation }: {
+ embedded?: boolean;
+ renderPreparation?: (records: Requirement[], domain: string) => ReactNode;
+} = {}){
  const query=useSearchParams();
  const [role,setRole]=useState<"office"|"assignee"|null>(null);
  const [currentUserId,setCurrentUserId]=useState<string|null>(null);
@@ -62,7 +65,7 @@ export default function NudeeRegister(){
  const explicitScope=!!(evidenceId||question||linkedTask||query.get("domain")||query.get("layout"));
  const requestedView=query.get("view") || (explicitScope?"all":role==="assignee"?"action":"all");
  const hasPilot=requirements.some(r=>r.domain_name===governanceDomain && /^DG\.MQ\./.test(r.standard_code));
- const defaultPilot=requestedView==="all" && !linkedTask && !evidenceId && query.get("layout")!=="list" && hasPilot;
+ const defaultPilot=!embedded && requestedView==="all" && !linkedTask && !evidenceId && query.get("layout")!=="list" && hasPilot;
  const domain=role==="office" ? query.get("domain") || (defaultPilot ? governanceDomain : "") : "";
  const grouped=role==="office" && !evidenceId && query.get("layout")!=="list" && !!domain && (requirements.some(r=>r.domain_name===domain && /\.MQ\./.test(r.standard_code)) || !!question);
  const [ownerFilter,setOwnerFilter]=useState("");
@@ -285,22 +288,23 @@ export default function NudeeRegister(){
  const shortcuts=role==="assignee"
   ? [["action","تحتاج إجراء مني"],["submitted","أُرسلت للمراجعة"],["approved","أدلة معتمدة"]]
   : [["review","بانتظار قراري"],["overdue","تكليفات متأخرة"],["changes_requested","معادة للتعديل"]];
- return <div className="dg-page nr-page" dir="rtl">
-  <header className="nr-heading office-hero">
+ return <div className={embedded ? "nr-page nr-embedded" : "dg-page nr-page"} dir="rtl">
+  {!embedded&&<header className="nr-heading office-hero">
    <h1>{role==="assignee"?"مهامي":view==="review"?"مراجعة الأدلة":"مركز الأدلة"}</h1>
    {role&&<p>{role==="assignee"?"تابع تكليفاتك وارفع أدلتك لمراجعة مكتب البيانات.":"تابع أدلة القياس من الإسناد وحتى الاعتماد."}</p>}
-  </header>
-  {role&&<div className="nr-quick" role="group" aria-label="قوائم العمل">
+  </header>}
+  {!embedded&&role&&<div className="nr-quick" role="group" aria-label="قوائم العمل">
    {shortcuts.map(([key,label])=><button key={key} type="button" aria-pressed={view===key&&!domain&&!filter&&!ownerFilter&&!evidenceId}
     onClick={()=>{setFilter("");setOwnerFilter("");changeScope(key,"","list");}}>
     <strong>{scoped.filter(r=>inView(byRequirement.get(r.id),key,today,currentUserId)).length.toLocaleString("ar-SA")}</strong><span>{label}</span>
    </button>)}
   </div>}
   {role==="assignee"&&currentUserId&&<MyImprovements userId={currentUserId}/>}
-  {role==="office"&&<SourceReference/>}
+  {!embedded&&role==="office"&&<SourceReference/>}
   {!current&&feedback}
   {role&&linkedTask&&!current&&<p className="nr-message" role="status">المتطلب غير متاح ضمن صلاحيات حسابك.</p>}
   {loading&&<p role="status">جارٍ تحميل المتطلبات والأدلة…</p>}
+  {embedded&&role==="office"&&!question&&!evidenceId&&renderPreparation?.(scoped,domain)}
   {role&&<section className="nr-register" aria-label={role==="office"?"سجل المتطلبات":"تكليفاتي"}>
    <h2 className="nr-queue-title">{domain|| (role==="assignee"?"متطلباتي":"سجل المتطلبات")}</h2>
    {evidenceId&&<button type="button" className="nr-secondary" onClick={()=>changeScope("all","")}>عرض سجل المتطلبات كاملًا</button>}
@@ -340,7 +344,7 @@ export default function NudeeRegister(){
    {!visible.length?<div className="nr-empty">
     <p>{scoped.length?(view==="review"&&!filter&&!domain&&!ownerFilter?"لا توجد أدلة تنتظر قرارك حاليًا.":view==="action"&&!filter?"لا توجد متطلبات تحتاج إجراء منك حاليًا.":"لا توجد متطلبات تطابق خيارات البحث والتصفية."):role==="assignee"?"لا توجد متطلبات مسندة إلى حسابك حاليًا.":"لا توجد متطلبات في السجل حاليًا."}</p>
     {scoped.length>0&&<button type="button" className="nr-secondary" onClick={()=>{setFilter("");setOwnerFilter("");changeScope("all","");}}>عرض كل المتطلبات</button>}
-   </div>:grouped?<EvidenceGroups key={domain+"|"+filter+"|"+(question||"")} rows={visible} assignments={byRequirement} labels={statusLabels} expand={!!filter.trim()||!!question} onOpen={openRequirement}/>:<table className="nr-table" aria-label={role==="office"?"سجل متطلبات نُضيء":"المتطلبات المسندة إليّ"}>
+   </div>:grouped?<EvidenceGroups key={domain+"|"+filter+"|"+(question||"")} rows={visible} assignments={byRequirement} names={names} labels={statusLabels} expand={!!filter.trim()||!!question} onOpen={openRequirement}/>:<table className="nr-table" aria-label={role==="office"?"سجل متطلبات نُضيء":"المتطلبات المسندة إليّ"}>
     <thead><tr>{role==="office"&&<th scope="col" className="nr-select-col"><span className="nr-sr">تحديد للإسناد</span></th>}
      <th scope="col">الدليل والمعيار</th><th scope="col" className="nr-status-col">الحالة</th>{role==="office"&&<th scope="col" className="nr-owner-col">المكلّف</th>}<th scope="col" className="nr-due-col">الاستحقاق</th>
     </tr></thead>
@@ -369,6 +373,7 @@ export default function NudeeRegister(){
     <button type="button" disabled={currentPage===pages} onClick={()=>setPage(currentPage+1)}>التالي</button>
    </div>}
   </section>}
+  {embedded&&role==="office"&&<SourceReference/>}
   {current&&<AccessibleDialog key={current.id} labelledBy="nr-detail-title" backdropClassName="nr-overlay" className="nr-panel" busy={busy} onClose={closeRequirement}>
    <header className="nr-detail-heading">
     <div><small><bdi>{current.standard_code}</bdi> · {current.domain_name}</small><h2 id="nr-detail-title">{current.evidence_name}</h2></div>

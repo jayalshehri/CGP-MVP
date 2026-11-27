@@ -112,3 +112,5 @@ dialog.nr-overlay[open] { display: grid; justify-items: end; align-items: stretc
 
 .nr-next {display:flex;gap:8px 16px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#edf6f1;color:#24473b;border-radius:8px;padding:7px 12px;font-size:.88rem}
 .nr-next a {display:inline-flex;align-items:center;min-height:42px;font-weight:700;color:#075e4b}
+
+.nr-embedded { max-inline-size: none; min-inline-size: 0; }

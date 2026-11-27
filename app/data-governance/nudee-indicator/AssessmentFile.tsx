@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { evidenceLink } from "./routes";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { readStrategyRows } from "@/lib/strategy-read";
@@ -18,7 +19,6 @@ type Specification = {code:string;page:number};
 const marks:Record<string,string>={unassessed:"لم يُقيَّم",full:"ممتثل",partial:"تنفيذ جزئي",non:"غير ممتثل",na:"غير منطبق"};
 const components:Record<string,string>={maturity:"نضج الممارسات",compliance:"الامتثال للمواصفات",operational:"التميز التشغيلي"};
 const mappingLabels:Record<string,string>={unresolved:"تحتاج تصنيفًا",maturity:"دليل نضج فقط",linked:"ربط راجعه المكتب",source:"ربط من المصدر"};
-const evidenceUrl="/data-governance/nudee?evidence=";
 const format=(n:number)=>n.toLocaleString("ar-SA");
 function input(form:HTMLFormElement,name:string){return String(new FormData(form).get(name)??"").trim();}
 function download(data:unknown,name:string){
@@ -104,7 +104,7 @@ export default function AssessmentFile(){
  <details><summary>تقييم المواصفات · {format(specs.length)} مواصفة</summary>
  <label>المواصفة<select value={code} onChange={e=>setCode(e.target.value)}>{specs.map(s=><option key={s.code}>{s.code}</option>)}</select></label>
  <p>{decision?(stale?"تغيّرت الأدلة منذ التقييم":marks[decision.outcome]):"لم يُقيَّم"} · {format(linked.filter(r=>r.approved_version).length)} من {format(linked.length)} أدلة مرتبطة معتمدة. {ref&&<a href={"https://dmo.kku.edu.sa/sites/dmo.kku.edu.sa/files/2026-10/National-Data-Index_v1.0_AR.pdf#page="+(ref.page+1)} target="_blank" rel="noreferrer">إحالة سدايا</a>}</p>
- {linked.length>0&&<ul>{linked.map(r=><li key={r.requirement_id}><Link href={evidenceUrl+r.requirement_id}>{r.evidence_name}</Link> · {r.approved_version?"نسخة معتمدة":"بانتظار دليل معتمد"}</li>)}</ul>}
+ {linked.length>0&&<ul>{linked.map(r=><li key={r.requirement_id}><Link href={evidenceLink({evidence:r.requirement_id})}>{r.evidence_name}</Link> · {r.approved_version?"نسخة معتمدة":"بانتظار دليل معتمد"}</li>)}</ul>}
  <form key={code+"-"+decision?.id} onSubmit={e=>record(e,"spec",f=>({subject:code,outcome:input(f,"mark"),previous:decision?.id??null}))}>
  <label>حكم المكتب<select name="mark" defaultValue={decision?.outcome??"unassessed"}>{Object.entries(marks).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label>مسوّغ الحكم أو عدم الانطباق<textarea name="reference" required maxLength={1600}/></label><button>توثيق التقييم الداخلي</button></form></details>
  <details><summary>النتائج الصادرة عن سدايا</summary><dl>{Object.entries(components).map(([k,title])=>{const e=entries.find(x=>x.kind==="result"&&x.subject===k);return <div key={k}><dt>{title}</dt><dd>{e?e.outcome+" · "+e.reference+" · "+formatRiyadhDate((e.payload as {issued_on:string}).issued_on):"بانتظار النتيجة الموثقة"}</dd></div>;})}</dl>
@@ -113,7 +113,7 @@ export default function AssessmentFile(){
  <details><summary>خطة التحسين · {format(actions.filter(a=>!a.closed_at).length)} إجراءات مفتوحة</summary>
  <form onSubmit={e=>record(e,"improve",f=>({requirement:Number(input(f,"req")),owner:input(f,"owner"),due:input(f,"due")}))}><label>المتطلب<select name="req" required>{maps.map(m=><option value={m.requirement_id} key={m.requirement_id}>{m.standard_code} · {m.evidence_name}</option>)}</select></label>
  <label>مالك الإجراء<select name="owner" required><option value="">اختر المالك</option>{owners.map(o=><option value={o.user_id} key={o.user_id}>{o.display_name}</option>)}</select></label><label>موعد الإغلاق<input name="due" type="date" required/></label><label>الفجوة والإجراء المطلوب<textarea name="reference" required maxLength={1600}/></label><button>إضافة إجراء تحسين</button></form>
- <ul>{actions.map(a=><li key={a.id}><strong>{a.description}</strong> · {owners.find(o=>o.user_id===a.owner_id)?.display_name??"مالك مسجّل"} · {formatRiyadhDate(a.due_date)} · {a.closed_at?"مغلق":a.due_date<riyadhIsoDate()?"متأخر":"مفتوح"}<br/><Link href={evidenceUrl+a.requirement_id}>{actionName(a.requirement_id)}</Link>
+ <ul>{actions.map(a=><li key={a.id}><strong>{a.description}</strong> · {owners.find(o=>o.user_id===a.owner_id)?.display_name??"مالك مسجّل"} · {formatRiyadhDate(a.due_date)} · {a.closed_at?"مغلق":a.due_date<riyadhIsoDate()?"متأخر":"مفتوح"}<br/><Link href={evidenceLink({evidence:a.requirement_id})}>{actionName(a.requirement_id)}</Link>
  {rule&&<p>{signoff(a)?"قرار "+authorityName(rule.authority)+" · "+signoff(a)?.decision_ref+" · "+formatRiyadhDate(signoff(a)?.decision_date):"بانتظار قرار "+authorityName(rule.authority)+" على نسخة دليل الإغلاق"}</p>}
  {rule&&rule.delegate_id===viewer&&!a.closed_at&&!signoff(a)&&approvedVersion(a)&&<form onSubmit={e=>record(e,"signoff",f=>({action_id:a.id,version:approvedVersion(a),date:input(f,"date")}))}><label>مرجع قرار {authorityName(rule.authority)}<input name="reference" required maxLength={1600}/></label><label>تاريخ القرار<input name="date" type="date" required max={riyadhIsoDate()}/></label><button>توثيق القرار للنسخة المعتمدة</button></form>}
  {a.closed_at?<p>نسخة الإغلاق {a.closure_ref} · {a.decision_ref}</p>:<form onSubmit={e=>record(e,"close",()=>({action_id:a.id}))}><label>قرار الإغلاق ومرجع الاعتماد وفق صلاحيات الجهة<input name="reference" maxLength={1600} required/></label><button disabled={!approvedVersion(a)||!!rule&&!signoff(a)}>إغلاق بالدليل المعتمد</button></form>}</li>)}</ul></details>

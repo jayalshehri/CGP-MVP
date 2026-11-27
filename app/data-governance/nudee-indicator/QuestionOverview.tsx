@@ -1,4 +1,5 @@
 "use client";
+import { evidenceLink } from "./routes";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -8,11 +9,11 @@ import styles from "./indicator.module.css";
 
 type Summary = { domain_name:string; standard_code:string; target_level:string|null; question_state:string; missing_count:number };
 const states: Record<string,string> = {baseline:"غياب القدرات مسجّل",no_target:"بانتظار تحديد المستهدف",blocked:"تحتاج استكمال أدلة",ready:"جاهز لتأكيد المكتب",confirmed:"مؤكد داخليًا",unsupported:"يتطلب مراجعة النطاق"};
-export default function QuestionOverview({records, revision, onPrepare}:{
-  records: QuestionRecord[]; revision:number; onPrepare:(domain:string,code:string)=>void;
+export default function QuestionOverview({records, initialDomain, revision, onPrepare}:{
+  records: QuestionRecord[]; initialDomain: string; revision:number; onPrepare:(domain:string,code:string)=>void;
 }) {
   const domains=Array.from(new Set(records.map(r=>r.domain_name)));
-  const [domain,setDomain]=useState(domains.includes(governanceDomain)?governanceDomain:domains[0]);
+  const [domain,setDomain]=useState(initialDomain || (domains.includes(governanceDomain)?governanceDomain:domains[0]));
   const [rows,setRows]=useState<Summary[]|null>(null);
   const [failed,setFailed]=useState(false);
   const [retry,setRetry]=useState(0);
@@ -39,7 +40,7 @@ export default function QuestionOverview({records, revision, onPrepare}:{
         <ul>{group.map(r=>{
           const title=records.find(item=>item.domain_name===domain && item.standard_code===r.standard_code)?.requirement_title;
           return <li key={r.standard_code}><div><small><bdi>{r.standard_code}</bdi> · {states[r.question_state]}{r.target_level&&" · "+r.target_level}</small><strong>{title}</strong></div>
-            {r.question_state==="blocked"&&<Link href={{pathname:"/data-governance/nudee",query:{domain,question:r.standard_code,missing:r.target_level}}}>عرض الأدلة الناقصة ({r.missing_count})</Link>}
+            {r.question_state==="blocked"&&<Link href={evidenceLink({domain,question:r.standard_code,...(r.target_level ? { missing:r.target_level } : {})})}>عرض الأدلة الناقصة ({r.missing_count})</Link>}
             <button type="button" onClick={()=>onPrepare(domain,r.standard_code)}>{r.question_state==="no_target"?"تحديد المستوى المستهدف":"فتح مراجعة السؤال"}</button>
           </li>;
         })}</ul></>}
