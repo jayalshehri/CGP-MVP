@@ -12,6 +12,7 @@ from data_office_browser_fixture import APP, NAMES, OWNER, Fixture
 
 REGISTER = "/data-governance/nudee"
 HOME = REGISTER + "-dashboard"
+INDICATOR = REGISTER + "-indicator"
 SIZES = {"desktop": (1440, 900), "tablet": (820, 1180), "phone": (390, 844)}
 
 
@@ -64,15 +65,32 @@ def check_layout(browser, revision, size, target):
     snap(office, target / f"{size}-office-home.png", after)
 
     if after:
-        summary = office.get_by_text("تقرير نُضيء التفصيلي", exact=True)
-        counts = office.locator("dl[aria-label='ملخص متطلبات نُضيء'] dd")
-        expect(counts).to_have_count(4)
-        initial_counts = counts.all_text_contents()
+        expect(office.get_by_text("تقرير نُضيء التفصيلي", exact=True)).to_have_count(0)
+        expect(office.locator("dl[aria-label='ملخص متطلبات نُضيء'] dd")).to_have_count(4)
         assert not any("nudee_final_review" in path for _, _, path in fixture.requests)
+        nav_toggle = office.locator(".cgp-mobile-navigation summary")
+        if nav_toggle.is_visible():
+            nav_toggle.click()
+        office.get_by_role("link", name="مؤشر نُضيء", exact=True).click()
+        expect(office).to_have_url(APP + INDICATOR)
+        expect(office.get_by_role("heading", name="مؤشر نُضيء", exact=True)).to_be_visible()
+        readiness = office.get_by_role("region", name="جاهزية الأدلة داخل المكتب")
+        expect(readiness.get_by_text(re.compile("[٢2][٥5][٪%]"))).to_be_visible()
+        by_domain = office.get_by_role("region", name="جاهزية الأدلة حسب المجال")
+        snap(office, target / f"{size}-indicator.png", True)
+        by_domain.get_by_role("link", name=re.compile("جودة البيانات")).click()
+        expect(office.get_by_role("combobox", name="المجال", exact=True)).to_have_value("جودة البيانات")
+        expect(office.locator("tbody tr")).to_have_count(1)
+        office.reload()
+        expect(office.get_by_role("button", name=NAMES[1], exact=True)).to_be_visible()
+        expect(office.locator("tbody tr")).to_have_count(1)
+        office.go_back()
+        expect(office).to_have_url(APP + INDICATOR)
+        summary = office.get_by_text("تقرير نُضيء التفصيلي", exact=True)
         summary.click()
         field = office.get_by_role("combobox", name="المجال", exact=True)
         field.select_option(label="جودة البيانات")
-        expect(counts).to_have_text(initial_counts)
+        expect(readiness.get_by_text(re.compile("[٢2][٥5][٪%]"))).to_be_visible()
         update = office.get_by_role("button", name="تحديث المراجعة الشاملة", exact=True)
         update.click()
         edit = office.get_by_role("dialog", name="تحديث المراجعة الشاملة")
@@ -91,6 +109,7 @@ def check_layout(browser, revision, size, target):
         summary.click()
         expect(field).to_have_value("جودة البيانات")
         summary.click()
+        office.goto(APP + HOME)
         office.get_by_role("link", name=re.compile("متابعة التكليفات المتأخرة")).click()
         expect(office.locator("#nudee-view")).to_have_value("overdue")
         expect(office.locator("tbody tr")).to_have_count(1)
@@ -225,13 +244,18 @@ def lifecycle(browser, target):
     office.goto(APP + "/data-governance")
     expect(office).to_have_url(APP + HOME)
     expect(office.get_by_role("navigation", name="التنقل الرئيسي").get_by_role("link")).to_have_text(
-        ["الرئيسية", "المتطلبات والأدلة"])
+        ["الرئيسية", "مؤشر نُضيء", "المتطلبات والأدلة"])
     owner.goto(APP + "/data-governance")
     expect(owner).to_have_url(APP + REGISTER)
     owner.locator(".cgp-mobile-navigation summary").click()
     mobile_nav = owner.get_by_role("navigation", name="التنقل على الجوال")
     expect(mobile_nav.get_by_role("link", name="مهامي", exact=True)).to_be_visible()
     expect(mobile_nav.get_by_role("link", name="الرئيسية", exact=True)).to_have_count(0)
+    expect(mobile_nav.get_by_role("link", name="مؤشر نُضيء")).to_have_count(0)
+    owner.goto(APP + INDICATOR)
+    expect(owner).to_have_url(APP + REGISTER)
+    expect(owner.get_by_role("heading", name="مهامي")).to_be_visible()
+    assert not any(role == "owner" and "nudee_final_review" in path for role, _, path in fixture.requests)
     office.context.close()
     owner.context.close()
 

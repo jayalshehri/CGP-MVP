@@ -1,0 +1,51 @@
+.overview {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 14px;
+  margin-block: 22px;
+}
+.overview h2, .domains h2 { margin: 0; font-size: 1.02rem; }
+.primary, .countCard, .domains {
+  min-width: 0; background: #fff; border: 1px solid #d9e6e4; border-radius: 14px;
+}
+.primary, .countCard {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  padding: clamp(16px, 2vw, 24px);
+}
+.primary { color: #fff; background: #10584f; border-color: #10584f; }
+.primary strong { font-size: clamp(2.1rem, 4vw, 3.15rem); line-height: 1.22; }
+.primary a { font-size: .84rem; color: #f1faf7; text-underline-offset: 3px; }
+.overview .primary a:focus-visible { outline-color: white; }
+.primary progress, .domains progress {
+  appearance: none; width: 100%; height: 5px; overflow: hidden; border: 0;
+  border-radius: 99px; background: #e3efec; color: #167a69; accent-color: #167a69;
+}
+.primary progress { background: #447b74; color: #9ae7ca; accent-color: #9ae7ca; }
+.primary progress::-webkit-progress-bar { background: #447b74; }
+.primary progress::-webkit-progress-value { background: #9ae7ca; }
+.primary progress::-moz-progress-bar { background: #9ae7ca; }
+.domains progress::-webkit-progress-bar { background: #e3efec; }
+.domains progress::-webkit-progress-value { background: #167a69; }
+.domains progress::-moz-progress-bar { background: #167a69; }
+.countCard { color: #173c42; text-decoration: none; }
+.countCard:hover { background: #f5faf8; border-color: #62998e; }
+.countCard strong { font-size: clamp(1.9rem, 3vw, 2.65rem); line-height: 1.3; }
+.countCard span { margin-block-start: auto; font-size: .83rem; font-weight: 650; color: #17675b; }
+.domains { margin-block-start: 16px; }
+.domains h2 { padding: 19px 20px; font-size: 1.12rem; }
+.domains table { width: 100%; border-collapse: collapse; text-align: start; table-layout: fixed; }
+.domains th, .domains td { text-align: start; padding: 10px 16px; border-block-start: 1px solid #e0e9e7; overflow-wrap: anywhere; }
+.domains thead th { background: #f3f7f6; font-size: .82rem; color: #435d63; }
+.domains th:first-child { width: 40%; }
+.domains td { font-size: .9rem; font-variant-numeric: tabular-nums; }
+.domains tbody a { display: inline-block; padding-block: 4px; color: #12685d; text-underline-offset: 4px; }
+.domains td progress { display: block; max-width: 9rem; margin-block-start: 5px; }
+@media (max-width: 700px) {
+  .overview { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-block: 14px; }
+  .primary { grid-column: 1 / -1; }
+  .countCard { gap: 6px; padding: 14px 12px; }
+  .domains :is(th, td) { padding: 8px 5px; }
+  .domains th:first-child { width: 37%; }
+  .domains tbody th { font-size: .82rem; }
+  .domains thead th { font-size: .74rem; }
+}

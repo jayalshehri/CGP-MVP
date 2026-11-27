@@ -1,7 +1,6 @@
 "use client";
 
 import { formatRiyadhDateTime, riyadhIsoDate } from "@/lib/dates";
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { requireProfile } from "@/lib/auth";
@@ -10,9 +9,6 @@ import { supabase } from "@/lib/supabase";
 import type { Assignment, Requirement } from "./NudeeReport";
 import styles from "./nudee-dashboard.module.css";
 
-const NudeeReport = dynamic(() => import("./NudeeReport"), {
-  loading: () => <p role="status">جارٍ تحميل التقرير…</p>,
-});
 const number = new Intl.NumberFormat("ar-SA");
 const auditLabels: Record<string, string> = {
   assigned: "إسناد متطلب", submitted: "تقديم دليل للمراجعة",
@@ -57,7 +53,6 @@ function RecentActivity({ names }: { names: Map<number, string> }) {
 }
 
 function OfficeSummary({ records, assignments }: OfficeData) {
-  const [reportStarted, setReportStarted] = useState(false);
   const today = riyadhIsoDate();
   const summary = useMemo(() => {
     const byRequirement = new Map(assignments.map(a => [a.requirement_id, a]));
@@ -110,12 +105,6 @@ function OfficeSummary({ records, assignments }: OfficeData) {
       </section>
       <RecentActivity names={summary.names} />
     </div>
-    {!!records.length && <details className={styles.report} onToggle={event => {
-      if (event.currentTarget.open) setReportStarted(true);
-    }}>
-      <summary>تقرير نُضيء التفصيلي</summary>
-      {reportStarted && <div className={styles.reportBody}><NudeeReport assignments={assignments} /></div>}
-    </details>}
   </>;
 }
 
@@ -147,7 +136,7 @@ export default function NudeeDashboard() {
 
   return <main className={styles.root} dir="rtl">
     <header className={styles.heading}>
-      <div><span className={styles.eyebrow}>المؤشر الوطني للبيانات · نُضيء</span><h1>مكتب إدارة البيانات</h1></div>
+      <h1>مكتب إدارة البيانات</h1>
       {data && <Link className={styles.back} href="/data-governance/nudee">عرض المتطلبات</Link>}
     </header>
     {data ? <OfficeSummary {...data} /> : error ? <div className={styles.alert}>
