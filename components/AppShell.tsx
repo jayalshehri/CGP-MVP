@@ -7,6 +7,7 @@ import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import FeedbackWidget from "@/components/FeedbackWidget";
 import { projectReturn } from "@/lib/strategy-navigation";
+import { compactAssessmentForPath } from "@/lib/assessment-navigation";
 import { roleHomePath, workspaceHome } from "@/lib/workspaces";
 
 const navigation = [
@@ -20,8 +21,6 @@ const navigation = [
   { href: "/data-governance/users", label: "إدارة المستخدمين", group: "", data: true, admin: true },
   { href: "/shared-controls", label: "الكتالوج الموحد", group: "الامتثال", team: true, data: true },
   { href: "/assessments", label: "تقييم CSCC", group: "قياس الالتزام", auditor: true },
-  { href: "/tcc-assessment", label: "تقييم TCC", group: "قياس الالتزام", auditor: true },
-  { href: "/osmacc-assessment", label: "تقييم OSMACC", group: "قياس الالتزام", auditor: true },
   { href: "/mappings", label: "خريطة المواءمة", group: "قياس الالتزام", team: true },
   { href: "/third-parties", label: "مخاطر الأطراف الخارجية", group: "العمليات", team: true },
   { href: "/assets", label: "سجل الأصول التقنية", group: "العمليات", team: true },
@@ -62,9 +61,6 @@ function NavIcon({ href }: { href: string }) {
     "/risks": "M12 3l9 16H3L12 3z M12 9v4 M12 17h.01",
     "/assets": "M4 7h16v13H4z M7 7V4h10v3 M8 12h8 M8 16h5",
     "/assessments": "M4 19V5 M4 19h16 M8 16v-4 M12 16V8 M16 16v-7 M20 16V5",
-    "/dcc-assessment": "M4 19V5 M4 19h16 M8 16v-4 M12 16V8 M16 16v-7 M20 16V5",
-    "/tcc-assessment": "M4 19V5 M4 19h16 M8 16v-4 M12 16V8 M16 16v-7 M20 16V5",
-    "/osmacc-assessment": "M4 19V5 M4 19h16 M8 16v-4 M12 16V8 M16 16v-7 M20 16V5",
     "/mappings": "M5 5h6v6H5z M13 13h6v6h-6z M11 8h2 M12 8v5 M12 13h1",
     "/users": "M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M2 21v-2a6 6 0 0 1 12 0v2 M16 4a4 4 0 0 1 0 8 M17 15a5 5 0 0 1 5 5v1",
     "/feedback": "M20 11.5a8 8 0 0 1-8 8 8.8 8.8 0 0 1-3.4-.7L4 20l1.2-3.7A8 8 0 1 1 20 11.5z M8 11.5h.01 M12 11.5h.01 M16 11.5h.01",
@@ -138,9 +134,9 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const permittedItems = account ? navigation.filter(item => account.role === "nudee_owner" ? item.href === "/data-governance/nudee" : account.role === "data_governance_team" ? Boolean(item.data) && !item.admin : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];
   const items = permittedItems.filter(item => workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls");
   // Pick the most specific route, so a parent cannot hide the active child.
-  const isDccEvaluation = pathname === "/dcc-assessment" || pathname.startsWith("/dcc-assessment/");
+  const assessmentFramework = compactAssessmentForPath(pathname);
   const currentItem = navigation
-    .filter(item => (isDccEvaluation && item.href === "/controls") || pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/")))
+    .filter(item => (assessmentFramework && item.href === "/controls") || pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/")))
     .sort((a, b) => b.href.length - a.href.length)[0];
   // The executive summary is not a navigation item; without this it inherits the
   // "/roadmap" prefix match and is mislabelled as the project register.
@@ -149,7 +145,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
     if (item.href === "/tasks" && account?.role === "control_owner") return "مهامي";
     return item.label;
   }
-  const current = isDccEvaluation ? "تقييم ضوابط الأمن السيبراني للبيانات"
+  const current = assessmentFramework ? `تقييم ${assessmentFramework.title}`
     : pathname === "/roadmap/executive" ? "ملخص محفظة المشاريع السيبرانية"
     : currentItem ? navigationLabel(currentItem) : pathname === passwordHref ? "تغيير كلمة المرور" : "لوحة المتابعة";
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
