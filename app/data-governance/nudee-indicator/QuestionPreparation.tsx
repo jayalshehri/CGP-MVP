@@ -9,8 +9,8 @@ export type QuestionRecord = { id: number; standard_code: string; requirement_ti
 import { baselineLevel, localLevels as levels } from "../nudee/reference";
 type Decision = { id: number; target_level: string; confirmed: boolean; evidence_ids: number[] };
 const numbers = new Intl.NumberFormat("ar-SA");
-async function manifest(domain: string, records: QuestionRecord[]) {
-  const { data, error } = await supabase.rpc("nudee_preparation_manifest", { p_domain: domain });
+async function manifest(domain: string, records: QuestionRecord[], exporting=false) {
+  const { data, error } = await supabase.rpc(exporting?"nudee_export_manifest":"nudee_preparation_manifest", { p_domain: domain });
   const rows = (data ?? []) as ManifestRow[];
   const ids = new Set(rows.map(r => r.requirement_id));
   if (error || rows.length !== records.length || ids.size !== rows.length || records.some(r => !ids.has(r.id))) throw new Error("تعذر تحميل حزمة المجال كاملة. حدّث الصفحة ثم أعد المحاولة.");
@@ -32,7 +32,7 @@ function DomainReview({ domain, records, initialCode, onChange }: { domain: stri
   async function exportDomain() {
     setExporting(true); setError("");
     try {
-      const fresh = await manifest(domain, records);
+      const fresh = await manifest(domain, records,true);
       const { downloadPackage } = await import("./package");
       await downloadPackage(domain, fresh);
       setRows(fresh);

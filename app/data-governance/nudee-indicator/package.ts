@@ -4,12 +4,14 @@ import { supabase } from "@/lib/supabase";
 export type ManifestRow = {
   requirement_id: number; standard_code: string; specification_code: string | null; maturity_level: string;
   evidence_name: string; status: string; submission_id: number | null; storage_path: string | null;
-  file_name: string | null; source_locator: string | null;
+  file_name: string | null; source_locator: string | null; reviewer_name?:string; reviewed_at?:string; question_state?:string; target_level?:string; reference_page?:number; effective_codes?:string[]; mapping_state?:string;
 };
 
 export const labels: Record<string, string> = {
   unassigned: "لم يُسند", assigned: "بانتظار الرفع", submitted: "بانتظار المراجعة", changes_requested: "معاد للتعديل", approved: "معتمد داخليًا",
 };
+const questionStates:Record<string,string>={no_target:"لم يحدد المستهدف",baseline:"غياب القدرات",blocked:"تنقص أدلة",ready:"جاهز للتأكيد",confirmed:"مؤكد داخليًا",unsupported:"يحتاج مراجعة"};
+const mappingStates:Record<string,string>={source:"من المصدر",linked:"مراجع",maturity:"نضج فقط",unresolved:"يحتاج تصنيفًا"};
 function segment(value: string) {
   return value.replace(/[^\p{L}\p{N} ._-]/gu, "_").replace(/\.{2,}/g, "_").trim().slice(0, 95) || "_";
 }
@@ -29,7 +31,7 @@ export async function downloadPackage(domain: string, rows: ManifestRow[]) {
         controller.enqueue(bytes);
         if (final) controller.close();
       });
-      const heading = ["رمز السؤال", "رمز المواصفة", "المستوى", "الدليل", "الحالة", "معرف النسخة المعتمدة", "الصفحة أو البند", "المسار في الحزمة"];
+      const heading = ["رمز السؤال", "رمز المواصفة", "المستوى", "الدليل", "الحالة", "معرف النسخة المعتمدة", "الصفحة أو البند", "المسار في الحزمة","المراجع","تاريخ القرار","جاهزية السؤال","المستوى المستهدف","صفحة مرجع سدايا","رموز المواصفات المراجعة","حالة الربط"];
       const index: (string | number | null)[][] = [heading], missing = [heading];
       try {
         for (const row of rows) {
@@ -44,7 +46,7 @@ export async function downloadPackage(domain: string, rows: ManifestRow[]) {
             zip.add(entry);
             entry.push(new Uint8Array(await data.arrayBuffer()), true);
           }
-          const fields = [row.standard_code, row.specification_code, row.maturity_level, row.evidence_name, labels[row.status] ?? row.status, row.submission_id, row.source_locator, path];
+          const fields = [row.standard_code, row.specification_code, row.maturity_level, row.evidence_name, labels[row.status] ?? row.status, row.submission_id, row.source_locator, path,row.reviewer_name??"",row.reviewed_at??"",questionStates[row.question_state??""]??"غير مسجل",row.target_level??"",row.reference_page??"",row.effective_codes?.join(", ")??"",mappingStates[row.mapping_state??""]??""];
           index.push(fields);
           if (!path) missing.push(fields.map(value => String(value ?? "")));
         }

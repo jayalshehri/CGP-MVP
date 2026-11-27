@@ -75,3 +75,13 @@
 .board li { padding-block: 11px; border-block-start: 1px solid #dae5de; }
 .board li div { display: grid; gap: 4px; flex: 1 1 21rem; }
 .board a { color: #126356; text-underline-offset: 3px; }
+.assessment fieldset {border:0;padding:0;min-inline-size:0}
+.assessment details {border-block-start:1px solid #d1ded8;padding:12px 0}
+.assessment summary {cursor:pointer;font-weight:700;color:#214d40;min-block-size:38px}
+.assessment form,.assessment label {display:grid;gap:7px}
+.assessment form {margin-block:12px;max-inline-size:44rem;gap:12px}
+.assessment input,.assessment select,.assessment textarea,.assessment button {font:inherit;color:#173f36;border:1px solid #91aaa0;background:white;border-radius:7px;padding:8px;min-height:44px;max-width:100%;box-sizing:border-box;min-width:0}
+.assessment button {width:fit-content;cursor:pointer;font-weight:700}
+.assessment li {padding-block:6px;overflow-wrap:anywhere}
+.assessment a {color:#075f4b;text-decoration:underline}
+.assessment small,.assessment dd {color:#38564a}

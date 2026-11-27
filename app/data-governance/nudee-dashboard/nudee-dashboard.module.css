@@ -19,7 +19,7 @@
 .metric{display:flex;flex-direction:column;gap:7px;background:#fff;border:1px solid #e1e9e9;border-radius:16px;padding:19px 20px;min-height:138px;box-shadow:0 3px 15px #12334208}
 .metric span{font-size:.91rem;color:#475f6a;font-weight:650}
 .metric strong{font-size:clamp(1.55rem,2.5vw,2.1rem);color:#0c6862;font-weight:850;font-variant-numeric:tabular-nums}
-.metric small{font-size:.78rem;color:#667e89;line-height:1.6}
+.metric small{font-size:.78rem;color:#485e69;line-height:1.6}
 .workflow{margin:18px 0;padding:18px 22px;background:#eaf5f3;border:1px solid #c2dfd9;border-radius:16px;display:flex;align-items:center;justify-content:space-between;gap:20px}
 .workflow>div:first-child>span{display:block;font-weight:800;color:#0d5d55}
 .workflow p{margin:5px 0 0;color:#577076;line-height:1.7;font-size:.83rem}

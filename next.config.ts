@@ -8,13 +8,13 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/data-governance", destination: "/data-governance/nudee-dashboard", permanent: false },
-      { source: "/data-governance/requests/:path*", destination: "/data-governance/nudee", permanent: false },
-      { source: "/data-governance/assets/:path*", destination: "/data-governance/nudee", permanent: false },
-      { source: "/data-governance/controls/:path*", destination: "/data-governance/nudee", permanent: false },
-      { source: "/data-governance/quality/:path*", destination: "/data-governance/nudee", permanent: false },
-      { source: "/data-governance/privacy/:path*", destination: "/data-governance/nudee", permanent: false },
-      { source: "/data-governance/sharing/:path*", destination: "/data-governance/nudee", permanent: false },
-      { source: "/data-governance/reports/:path*", destination: "/data-governance/nudee", permanent: false },
+      { source: "/data-governance/requests/:path*", destination: "/data-governance/nudee-dashboard?section=requests", permanent: false },
+      { source: "/data-governance/assets/:path*", destination: "/data-governance/nudee-dashboard?section=assets", permanent: false },
+      { source: "/data-governance/controls/:path*", destination: "/data-governance/nudee-dashboard?section=controls", permanent: false },
+      { source: "/data-governance/quality/:path*", destination: "/data-governance/nudee-dashboard?section=quality", permanent: false },
+      { source: "/data-governance/privacy/:path*", destination: "/data-governance/nudee-dashboard?section=privacy", permanent: false },
+      { source: "/data-governance/sharing/:path*", destination: "/data-governance/nudee-dashboard?section=sharing", permanent: false },
+      { source: "/data-governance/reports/:path*", destination: "/data-governance/nudee-indicator?report=1", permanent: false },
     ];
   },
   async headers() {
