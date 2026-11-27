@@ -10,7 +10,7 @@ for (const role of ["admin", "cybersecurity_team", "control_owner", "nca_externa
   assert.equal(roleHomePath(role), "/cybersecurity", role);
 }
 
-assert.equal(workspaceHome("admin", "data"), "/data-governance/nudee-indicator");
+assert.equal(workspaceHome("admin", "data"), "/data-governance/nudee-dashboard");
 assert.equal(workspaceHome("control_owner", "data"), null);
 assert.equal(workspaceHome("nudee_owner", "cyber"), null);
 console.log("PASS: workspace routes for all six roles");

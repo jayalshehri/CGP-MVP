@@ -21,3 +21,25 @@ export function inView(task: Task | undefined, view: string, today: string, user
     default: return (task?.status || "unassigned") === view;
   }
 }
+
+/** Sunday through Saturday, using a Riyadh calendar date supplied by the caller. */
+export function officeWeek(today: string) {
+  const start = new Date(today + "T12:00:00Z");
+  start.setUTCDate(start.getUTCDate() - start.getUTCDay());
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 6);
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+}
+
+export function withinDueDates(task: Task | undefined, from: string, to: string) {
+  if (!from && !to) return true;
+  const due = task?.due_date;
+  return !!due && (!from || due >= from) && (!to || due <= to);
+}
+
+export function matchesWorkFilter(task: Task | undefined, view: string, today: string, userId: string | null,
+  status = "", from = "", to = "") {
+  return inView(task, view, today, userId)
+    && (!status || (task?.status || "unassigned") === status)
+    && withinDueDates(task, from, to);
+}

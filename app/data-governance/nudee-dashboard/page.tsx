@@ -1,12 +1,15 @@
 "use client";
 
-import { formatRiyadhDateTime, riyadhIsoDate } from "@/lib/dates";
+import { formatRiyadhDate, formatRiyadhDateTime, riyadhIsoDate } from "@/lib/dates";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { requireProfile } from "@/lib/auth";
 import { readStrategyRows } from "@/lib/strategy-read";
 import { supabase } from "@/lib/supabase";
-import type { Assignment, Requirement } from "./NudeeReport";
+import OfficeAssistant from "./OfficeAssistant";
+import { findWork, recordLink, weeklyDue, workLink, type Scope, type WorkItem } from "./officeWork";
+import { officeWeek } from "../nudee/queues";
+import daily from "./daily.module.css";
 import styles from "./nudee-dashboard.module.css";
 
 const number = new Intl.NumberFormat("ar-SA");
@@ -15,8 +18,9 @@ const auditLabels: Record<string, string> = {
   changes_requested: "طلب تعديل الدليل", approved: "اعتماد دليل",
 };
 type AuditEvent = { id: number; assignment_id: number; action: string; created_at: string };
-type HomeRequirement = Pick<Requirement, "id" | "evidence_name">;
-type OfficeData = { records: HomeRequirement[]; assignments: Assignment[] };
+type HomeRequirement = Pick<WorkItem, "id" | "evidence_name" | "domain_name">;
+type Task = NonNullable<WorkItem["task"]> & {id:number; requirement_id:number};
+type OfficeData = {items:WorkItem[]; userId:string; names:Map<number,string>; loaded:Date};
 
 function RecentActivity({ names }: { names: Map<number, string> }) {
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
@@ -52,60 +56,51 @@ function RecentActivity({ names }: { names: Map<number, string> }) {
   </section>;
 }
 
-function OfficeSummary({ records, assignments }: OfficeData) {
-  const today = riyadhIsoDate();
-  const summary = useMemo(() => {
-    const byRequirement = new Map(assignments.map(a => [a.requirement_id, a]));
-    const names = new Map<number, string>();
-    let earliest: string | null = null;
-    let inProgress = 0, submitted = 0, approved = 0, unassigned = 0, overdue = 0;
-    for (const r of records) {
-      const a = byRequirement.get(r.id);
-      if (!a) { unassigned++; continue; }
-      names.set(a.id, r.evidence_name);
-      if (a.status === "submitted") {
-        submitted++;
-        if (a.updated_at && (!earliest || a.updated_at < earliest)) earliest = a.updated_at;
-      }
-      if (a.status === "approved") approved++;
-      if (a.status === "assigned" || a.status === "changes_requested") {
-        inProgress++;
-        if (a.due_date && a.due_date < today) overdue++;
-      }
-    }
-    const sentDay = earliest && riyadhIsoDate(new Date(earliest));
-    const waitingDays = sentDay ? Math.max(0, Math.round((Date.parse(today) - Date.parse(sentDay)) / 86400000)) : null;
-    return { waitingDays, inProgress, submitted, approved, unassigned, overdue, names };
-  }, [records, assignments, today]);
-
-  const actions = [
-    { view: "unassigned", title: "إسناد المتطلبات", count: summary.unassigned },
-    { view: "submitted", title: "مراجعة الأدلة المقدّمة", count: summary.submitted },
-    { view: "overdue", title: "متابعة التكليفات المتأخرة اليوم", count: summary.overdue },
+function OfficeSummary({items,userId,names,loaded}: OfficeData) {
+  const today=riyadhIsoDate(loaded);
+  const {review,late,due,priorities,domains}=useMemo(()=>{
+    const list=(scope:Scope)=>findWork(items,scope,today,userId);
+    const review=list({view:"submitted"});
+    const late=list({view:"overdue"});
+    const due=list(weeklyDue(today));
+    const priorityCandidates=[...late.map(item=>({item,action:"متابعة التكليف"})),
+      ...list({view:"review"}).map(item=>({item,action:"مراجعة الدليل"})),
+      ...due.map(item=>({item,action:"فتح التكليف"}))];
+    const priorities=priorityCandidates.slice(0,3);
+    const counts=new Map<string,number>();
+    for(const row of late) counts.set(row.domain_name,(counts.get(row.domain_name) || 0)+1);
+    const domains=[...counts].sort(([a,x],[b,y])=>y-x || a.localeCompare(b,"ar")).slice(0,5);
+    return {review,late,due,priorities,domains};
+  },[items,today,userId]);
+  const cards = [
+    {label:"أدلة بانتظار المراجعة",rows:review,scope:{view:"submitted"},note:"فتح الأدلة المقدّمة",color:"green"},
+    {label:"تكليفات متأخرة",rows:late,scope:{view:"overdue"},note:"فتح التكليفات المتأخرة",color:"amber"},
+    {label:"تستحق هذا الأسبوع",rows:due,scope:weeklyDue(today),note:"من اليوم حتى "+formatRiyadhDate(officeWeek(today).end),color:"slate"},
   ];
   return <>
-    {typeof window!=="undefined" && new URLSearchParams(window.location.search).has("section") && <p className={styles.empty} role="status">هذا الرابط يعود إلى خدمة سابقة. استخدم إجراءات المكتب أدناه، أو افتح <Link href="/data-governance/nudee">مركز الأدلة</Link>.</p>}
-    <dl className={styles.homeMetrics} aria-label="ملخص متطلبات نُضيء">
-      {[
-        { label: "الأدلة المطلوبة", value: records.length },
-        { label: "قيد التنفيذ", value: summary.inProgress },
-        { label: "بانتظار المراجعة", value: summary.submitted },
-        { label: "معتمدة", value: summary.approved },
-      ].map(kpi => <div key={kpi.label}><dt>{kpi.label}</dt><dd>{number.format(kpi.value)}</dd></div>)}
-    </dl>
-    {!records.length && <p role="status" className={styles.empty}>لم تُستورد متطلبات نُضيء بعد.</p>}
-    <div className={styles.homeColumns}>
-      <section className={styles.homePanel} aria-labelledby="actions-title">
-        <h2 id="actions-title">إجراءات المكتب</h2>
-        <ul className={styles.actionList}>{actions.map(action => <li key={action.view}>
-          <Link href={`/data-governance/nudee?view=${action.view}`}>
-            <span>{action.title}{action.view === "submitted" && summary.waitingDays !== null &&
-              <small className={styles.waitTime}>{summary.waitingDays === 0 ? "أقدم دليل وصل اليوم" : `مدة انتظار أقدم دليل بالأيام: ${number.format(summary.waitingDays)}`}</small>}</span><strong>{number.format(action.count)}</strong><span aria-hidden="true">←</span>
-          </Link>
-        </li>)}</ul>
+    {typeof window!=="undefined" && new URLSearchParams(window.location.search).has("section") && <p className={styles.empty} role="status">هذا الرابط يعود إلى خدمة سابقة. <Link href="/data-governance/nudee">فتح مركز الأدلة</Link></p>}
+    <OfficeAssistant items={items} today={today} userId={userId}/>
+    <section className={daily.metrics} aria-label="ملخص أعمال المكتب">{cards.map(card=>
+      <Link key={card.label} href={workLink(card.scope)} className={daily.card} data-tone={card.color}>
+        <span>{card.label}</span><strong>{number.format(card.rows.length)}</strong><small>{card.note} ←</small>
+      </Link>)}</section>
+    <div className={daily.grid}>
+      <section className={daily.panel} aria-labelledby="priorities-title"><h2 id="priorities-title">أولويات اليوم</h2>
+        {priorities.length ? <ol className={daily.list}>{priorities.map(({item,action})=>
+          <li key={item.id}><div><strong>{item.evidence_name}</strong><small>{item.owner} · {item.task?.due_date ? formatRiyadhDate(item.task.due_date) : "دون موعد مسجّل"}</small></div>
+          <Link href={recordLink(item)} aria-label={action+" · "+item.evidence_name}>{action} ←</Link></li>)}</ol>
+        : <p>{items.length?"لا توجد تكليفات متأخرة أو قريبة الاستحقاق أو أدلة تنتظر قرارك.":"لم تُستورد متطلبات نُضيء بعد."}</p>}
+        <Link className={daily.footerLink} href={workLink({view:"unassigned"})}>إسناد المتطلبات ←</Link>
       </section>
-      <RecentActivity names={summary.names} />
+      <section className={daily.panel} aria-labelledby="domain-title"><h2 id="domain-title">التكليفات المتأخرة حسب المجال</h2>
+        {domains.length?<ul className={daily.bars}>{domains.map(([name,count])=><li key={name}>
+          <Link href={workLink({view:"overdue",domain:name})}><span>{name}<b>{number.format(count)}</b></span>
+            <i aria-hidden="true"><i style={{width:(100*count/domains[0][1])+"%"}}/></i></Link></li>)}</ul>
+        :<p>لا توجد تكليفات متأخرة في المجالات المسجّلة.</p>}
+        {domains.length>0&&<Link className={daily.footerLink} href={workLink({view:"overdue"})}>عرض كل المتأخر ←</Link>}
+      </section>
     </div>
+    <details className={daily.activity}><summary>سجل النشاط الأخير</summary><RecentActivity names={names}/></details>
   </>;
 }
 
@@ -117,16 +112,27 @@ export default function NudeeDashboard() {
     let active = true;
     async function load() {
       try {
-        await requireProfile(["admin", "data_governance_team"]);
+        const {user}=await requireProfile(["admin", "data_governance_team"]);
         if (!active) return;
-        const [requirements, assignments] = await Promise.all([
+        const [requirements, assignments, directory] = await Promise.all([
           readStrategyRows<HomeRequirement>((from, to) => supabase.from("nudee_requirements")
-            .select("id,evidence_name", { count: "exact" }).order("id").range(from, to), r => r.id),
-          readStrategyRows<Assignment>((from, to) => supabase.from("nudee_assignments")
-            .select("id,requirement_id,status,updated_at,due_date", { count: "exact" }).order("id").range(from, to), a => a.id),
+            .select("id,evidence_name,domain_name", { count: "exact" }).order("id").range(from, to), r => r.id),
+          readStrategyRows<Task>((from, to) => supabase.from("nudee_assignments")
+            .select("id,requirement_id,status,updated_at,due_date,assignee_id", { count: "exact" }).order("id").range(from, to), a => a.id),
+          supabase.rpc("nudee_assignees"),
         ]);
         if (requirements.error || assignments.error) throw new Error("تعذر تحميل متطلبات المكتب وتكليفاته.");
-        if (active) setData({ records: requirements.data, assignments: assignments.data });
+        const directoryRows: {user_id:string;display_name:string|null}[]=directory.data??[];
+        const people=new Map(directoryRows.map(p=>[p.user_id,p.display_name]));
+        const tasks=new Map(assignments.data.map(t=>[t.requirement_id,t]));
+        const names=new Map<number,string>();
+        const items=requirements.data.map(r=>{
+          const task=tasks.get(r.id);
+          if(task)names.set(task.id,r.evidence_name);
+          const owner=task?.assignee_id ? people.get(task.assignee_id) || "اسم المالك غير متاح" : "لم يُحدّد المالك";
+          return {...r,task,owner};
+        });
+        if(active)setData({items,userId:user.id,names,loaded:new Date()});
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : "تعذر تحميل بيانات المكتب.");
       }
@@ -135,10 +141,11 @@ export default function NudeeDashboard() {
     return () => { active = false; };
   }, [attempt]);
 
-  return <main className={styles.root} dir="rtl">
-    <header className={styles.heading}>
+  return <main className={styles.root+" "+daily.root} dir="rtl">
+    <header className={daily.heading}>
       <h1>مكتب إدارة البيانات</h1>
-      {data && <Link className={styles.back} href="/data-governance/nudee">عرض المتطلبات</Link>}
+      {data && <div className={daily.freshness}><small>آخر تحديث للوحة · <time dateTime={data.loaded.toISOString()}>{formatRiyadhDateTime(data.loaded)}</time></small>
+        <button type="button" onClick={()=>{setError("");setData(null);setAttempt(n=>n+1);}}>تحديث اللوحة</button></div>}
     </header>
     {data ? <OfficeSummary {...data} /> : error ? <div className={styles.alert}>
       <p role="alert">{error}</p>
