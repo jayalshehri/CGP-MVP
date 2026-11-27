@@ -3,18 +3,19 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { projectHref, roadmapFocus } from "@/lib/strategy-navigation";
+import { portfolioFiltersFrom, portfolioHref, projectHref, registerState, roadmapFocus } from "@/lib/strategy-navigation";
+import { matchesPortfolioFilters, type PortfolioFilterProject } from "@/lib/project-portfolio";
+import { PortfolioFilters, PortfolioTabs } from "../portfolio-workspace";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-read";
 import { readCanonicalEdges, type CanonicalEdges } from "@/lib/strategy-portfolio-read";
-import { projectCount } from "@/lib/arabic-count";
 import { ReadNotice, ReadSection } from "../read-state";
 import { averageProgress } from "../portfolio-metrics";
-import { dimensionOptions, dimensionText, durationLabel, executionYearFor, executionYearText, executionYears, executiveOwnerLabel, isArchived, isLegacyProject, isPortfolioScope, matchesPortfolioFilters, matchesScope, portfolioScopes, scopedRequirementCounts, type PortfolioScope, projectStatusText as statusText, workTypeText, type PortfolioDimension, type PortfolioFields } from "@/lib/portfolio-analytics";
+import { durationLabel, executionYearFor, executionYearText, executionYears, executiveOwnerLabel, isArchived, isLegacyProject, matchesScope, scopedRequirementCounts, projectStatusText as statusText, workTypeText, type PortfolioFields } from "@/lib/portfolio-analytics";
 import "../roadmap.css";
 
-type Project = PortfolioFields & {
+type Project = PortfolioFields & PortfolioFilterProject & {
   id: number;
   project_code: string;
   name_ar: string;
@@ -23,8 +24,7 @@ type Project = PortfolioFields & {
 };
 type LinkRow = { project_id: number; control_id: number };
 
-const projectColumns = "id,project_code,name_ar,status,progress_percent,portfolio_priority,execution_year,work_type,executive_owner_code,executive_owner_other,duration_value,duration_unit,archived_at";
-const filterDimensions: PortfolioDimension[] = ["priority", "execution_year", "work_type", "executive_owner", "status"];
+const projectColumns = "id,project_code,name_ar,status,progress_percent,portfolio_priority,execution_year,work_type,executive_owner_code,executive_owner_other,duration_value,duration_unit,archived_at,mapping_completeness";
 
 export default function RoadmapDashboard() {
   return <Suspense fallback={<p>جاري التحميل...</p>}><RoadmapDashboardContent /></Suspense>;
@@ -34,14 +34,14 @@ function RoadmapDashboardContent() {
   const router = useRouter();
   const params = useSearchParams();
   const focusId = roadmapFocus(params)?.id;
+  const filters = useMemo(() => portfolioFiltersFrom(registerState(params)), [params]);
+  const scope = filters.archive;
   const yearHeadings = useRef(new Map<string, HTMLHeadingElement>());
-  const [filters, setFilters] = useState<Record<PortfolioDimension, string>>({ priority: "all", execution_year: "all", work_type: "all", executive_owner: "all", status: "all" });
   const [projects, setProjects] = useState<Project[]>([]);
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [canonical, setCanonical] = useState<CanonicalEdges | null>(null);
-  const [scope, setScope] = useState<PortfolioScope>("active");
   const [reads, setReads] = useState<{ projects: ReadStatus; links: ReadStatus }>({ projects: "UNAVAILABLE", links: "UNAVAILABLE" });
   const projectsReady = reads.projects === "COMPLETE";
   const linksReady = projectsReady && reads.links === "COMPLETE";
@@ -58,7 +58,10 @@ function RoadmapDashboardContent() {
 
   const projectLink = (project: Project) => {
     const year = executionYearFor(project.portfolio_priority);
-    return projectHref(project.id, "roadmap", new URLSearchParams(year ? { focus_year: String(year) } : {}));
+    const context = new URLSearchParams(params.toString());
+    if (year) context.set("focus_year", String(year));
+    else context.delete("focus_year");
+    return projectHref(project.id, "roadmap", context);
   };
 
   useEffect(() => {
@@ -100,7 +103,8 @@ function RoadmapDashboardContent() {
 
   // Displayed scope: active portfolio by default, narrowed by the filters. Every
   // KPI below (including requirement-derived controls) counts exactly these projects.
-  const visible = useMemo(() => projects.filter((project) => matchesScope(project, scope) && matchesPortfolioFilters(project, filters)), [projects, scope, filters]);
+  const visible = useMemo(() => projects.filter((project) => matchesPortfolioFilters(project, filters)), [projects, filters]);
+  const scopeCount = projects.filter(project => matchesScope(project, scope)).length;
   const modern = useMemo(() => scopedRequirementCounts(canonical, visible), [canonical, visible]);
   const data = useMemo(() => {
     const ids = new Set(visible.map((project) => project.id));
@@ -139,24 +143,16 @@ function RoadmapDashboardContent() {
   return (
     <main className="roadmap-page roadmap-executive" dir="rtl">
       <section className="roadmap-shell">
-        <nav className="roadmap-view-tabs" aria-label="أقسام المشاريع السيبرانية">
-          <Link href="/roadmap">السجل</Link>
-          <Link className="active" aria-current="page" href="/roadmap/dashboard">خارطة الطريق</Link>
-          <Link href="/roadmap/analysis">تحليل المحفظة</Link>
-        </nav>
+        <PortfolioTabs current="roadmap" params={params} />
 
         <header className="roadmap-exec-hero">
           <div><span>خطة التنفيذ · ثلاث سنوات</span><h1>خارطة طريق المشاريع</h1><p>توزيع المشاريع بحسب سنة التنفيذ المشتقة من الأولوية (P1 ← السنة الأولى، P2 ← الثانية، P3 ← الثالثة)؛ لا يمثل اعتماديات أو تسلسل تنفيذ.</p></div>
-          <div className="roadmap-export-actions"><button type="button" disabled={!exportReady} title={!exportReady ? "التصدير غير متاح حتى تكتمل القراءات" : undefined} onClick={() => { if (exportReady) window.print(); }}>تصدير PDF</button><button type="button" disabled={!exportReady} onClick={exportExcel}>تصدير Excel</button><Link href="/roadmap/executive" className="roadmap-primary">عرض الإدارة العليا ←</Link><Link href="/roadmap" className="roadmap-secondary">تحديث المشاريع</Link></div>
+          <div className="roadmap-export-actions"><button type="button" disabled={!exportReady} title={!exportReady ? "التصدير غير متاح حتى تكتمل القراءات" : undefined} onClick={() => { if (exportReady) window.print(); }}>تصدير PDF</button><button type="button" disabled={!exportReady} onClick={exportExcel}>تصدير Excel</button><Link href="/roadmap/executive" className="roadmap-primary">عرض الإدارة العليا ←</Link><Link href={portfolioHref("register", params)} className="roadmap-secondary">فتح السجل</Link></div>
         </header>
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
         <ReadNotice statuses={[reads.projects, reads.links, modern ? "COMPLETE" : "UNAVAILABLE"]} />
 
-        <section className="register-toolbar" aria-label="تصفية خارطة طريق المشاريع">
-          <label><span>المحفظة</span><select value={scope} onChange={(event) => { if (isPortfolioScope(event.target.value)) setScope(event.target.value); }}>{Object.entries(portfolioScopes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          {filterDimensions.map((dimension) => <label key={dimension}><span>{dimensionText[dimension]}</span><select value={filters[dimension]} onChange={(event) => setFilters({ ...filters, [dimension]: event.target.value })}><option value="all">الكل</option>{Object.entries(dimensionOptions[dimension]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>)}
-          <strong>{projectsReady ? projectCount(visible.length) : unavailable}</strong>
-        </section>
+        <PortfolioFilters current="roadmap" params={params} count={projectsReady ? visible.length : null} total={scopeCount} />
 
         <section className="roadmap-exec-kpis roadmap-snapshot" aria-label="ملخص خارطة طريق المشاريع">
           <Kpi label="المشاريع" value={projectsReady ? visible.length : unavailable} detail={projectsReady ? `${data.active} قيد التنفيذ · ${data.complete} مكتمل` : unavailable} />

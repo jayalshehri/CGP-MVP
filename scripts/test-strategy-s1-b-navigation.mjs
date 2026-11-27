@@ -30,6 +30,7 @@ function load(path, cache = new Map()) {
   if (cache.has(path)) return cache.get(path);
   const fixtureModule = { exports: {} }; cache.set(path, fixtureModule.exports);
   const compiled = ts.transpileModule(source(path), {
+    fileName: path,
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     transformers: { before: [context => {
       const visit = node => {
@@ -45,9 +46,13 @@ function load(path, cache = new Map()) {
     }] },
   }).outputText;
   const resolve = name => {
+    if (name.endsWith('.module.css')) return { default: new Proxy({}, { get: (_, key) => key }) };
     if (name.endsWith('.css')) return {};
     if (name === 'react') return { ...React, useEffect: () => {} };
-    if (name === 'next/link') return { __esModule: true, default: ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children) };
+    if (name === 'next/link') return { __esModule: true, default: ({ href, children, ...props }) => {
+      delete props.scroll;
+      return React.createElement('a', { href, ...props }, children);
+    } };
     if (name === 'next/navigation') return { useParams: () => ({ id: pathId }), useSearchParams: () => activeUrl.searchParams, useRouter: () => ({ push: go, replace() { throw new Error('Unexpected redirect'); } }) };
     if (name === '@/lib/supabase') return { supabase: new Proxy({}, { get() { throw new Error('No live service allowed'); } }) };
     if (name === '@/lib/auth') return { requireProfile() { throw new Error('No live auth allowed'); } };
@@ -85,6 +90,23 @@ equal(nav.registerState(params('archive=archived')).archive, 'archived', 'archiv
 const roadmapLink = nav.projectHref(37, 'roadmap', params('focus_year=1&focus_quarter=Q1&year=2029'));
 equal(roadmapLink, '/roadmap/37?tab=overview&from=roadmap&focus_year=1', 'exact roadmap contract (execution year; quarter ignored)');
 equal(nav.projectReturn(new URL(roadmapLink, activeUrl).searchParams).href, '/roadmap/dashboard?focus_year=1', 'focus context roundtrip');
+for (const origin of ['register', 'roadmap', 'analysis']) {
+  const context = params('q=مشروع&owner=it&status=planned&archive=include&mapping=mapping_pending&focus_year=1&returnUrl=https://other.test');
+  const target = new URL(nav.portfolioHref(origin, context), activeUrl);
+  check(target.pathname === originRoutes[origin] && target.searchParams.get('archive') === 'include' && target.searchParams.get('mapping') === 'mapping_pending' && !target.searchParams.has('focus_year') && !target.searchParams.has('returnUrl'), `${origin}: shared filter link is bounded to the view`);
+  const detail = new URL(nav.projectHref(37, origin, context), activeUrl);
+  const back = new URL(nav.projectReturn(detail.searchParams).href, activeUrl);
+  equal(back.pathname, originRoutes[origin], `${origin}: filtered project returns to the originating view`);
+  for (const key of ['q', 'owner', 'status', 'archive', 'mapping']) equal(back.searchParams.get(key), context.get(key), `${origin}: ${key} survives project roundtrip`);
+  equal(back.searchParams.get('focus_year'), origin === 'roadmap' ? '1' : null, `${origin}: preserve only relevant focus`);
+}
+go('/roadmap/dashboard?priority=P1&execution_year=1&owner=it');
+nav.updateStrategyQueryFields({ priority: 'P2', execution_year: '' });
+equal(activeUrl.searchParams.get('priority'), 'P2', 'combined phase selection applies priority');
+equal(activeUrl.searchParams.get('execution_year'), null, 'combined selection clears the legacy year');
+move(-1);
+equal(activeUrl.searchParams.get('execution_year'), '1', 'single history step restores legacy year');
+
 for (const value of ['focus_year=2027&focus_quarter=Q1', 'focus_year=4', 'focus_quarter=Q1']) equal(nav.roadmapFocus(params(value)), null, 'invalid/legacy focus ignored');
 for (const tab of ['overview', 'requirements', 'controls', 'evidence', 'treatments', 'audit']) equal(nav.projectView(params(`tab=${tab}`), []).tab, tab, `tab ${tab}`);
 equal(plain(nav.projectView(params('tab=history&framework=HIDDEN&coverage=invalid&verification=accepted'), ['DCC'])), { tab: 'overview', framework: 'all', coverage: 'all', verification: 'all' }, 'invalid detail filters default');
@@ -114,6 +136,23 @@ for (const [path, origin] of [['app/roadmap/page.tsx', 'register'], ['app/roadma
   check(html.includes(`/roadmap/37?tab=overview&amp;from=${origin}`), `${origin} production page exact link rendered`);
   check(!html.includes('/roadmap/NOT-AN-ID'), 'project code is never identity');
 }
+
+const other = { ...project, id: 38, project_code: 'OTHER', name_ar: 'مشروع إدارة مختلف', status: 'in_progress', executive_owner_code: 'cybersecurity', portfolio_priority: 'P2', execution_year: 2 };
+const archived = { ...project, id: 39, project_code: 'ARCHIVED', name_ar: 'مشروع مؤرشف', archived_at: '2026-01-01' };
+const projectRoutes = Object.entries({ register: 'app/roadmap/page.tsx', roadmap: 'app/roadmap/dashboard/page.tsx', analysis: 'app/roadmap/analysis/page.tsx' });
+for (const [origin, path] of projectRoutes) {
+  const html = render(path, `${originRoutes[origin]}?owner=it&status=planned`, { projects: [project, other, archived] });
+  check(html.includes('عرض مشروع واحد من أصل 2 في هذا النطاق'), `${origin}: same filtered numerator and non-archived denominator`);
+  check(html.includes('إزالة فلتر تقنية المعلومات') && html.includes('إزالة فلتر مخطط'), `${origin}: removable chips match active filters`);
+  check(html.includes('owner=it&amp;status=planned'), `${origin}: links carry shared filter state`);
+  check(!html.includes('مشروع إدارة مختلف') && !html.includes('مشروع مؤرشف'), `${origin}: filtered projects do not leak into the displayed result`);
+}
+const compactRegister = render('app/roadmap/page.tsx', '/roadmap', { projects: [project, other] });
+equal((compactRegister.match(/role="columnheader"/g) ?? []).length, 6, 'register has six concise columns for team users');
+check(!compactRegister.includes('register-metrics') && compactRegister.includes('ملخص الربط بالضوابط للمشاريع المعروضة'), 'table replaces stacked KPI cards; mapping details stay accessible');
+const ownerRegister = render('app/roadmap/page.tsx', '/roadmap', { role: 'control_owner' });
+check(!ownerRegister.includes('مشروع جديد') && !ownerRegister.includes('aria-label="تعديل '), 'read-only register keeps existing role boundaries');
+
 const detail = 'app/roadmap/[id]/page.tsx';
 const detailHTML = render(detail, '/roadmap/37?tab=requirements&from=analysis');
 check(detailHTML.includes('aria-selected="true" tabindex="0">المتطلبات'), 'real detail selected tab rendered');

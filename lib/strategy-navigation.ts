@@ -8,6 +8,7 @@ const origins = {
 } as const;
 export type ProjectOrigin = keyof typeof origins;
 type Params = Pick<URLSearchParams, "get">;
+export type PortfolioOrigin = Exclude<ProjectOrigin, "executive">;
 const choice = (value: string | null, allowed: readonly string[], fallback = "all") =>
   value !== null && allowed.includes(value) ? value : fallback;
 
@@ -25,6 +26,7 @@ const durationBound = (value: string | null) => value !== null && /^\d+(\.\d+)?$
 // values (including legacy year=2027 / priority=high / quarter links) reset to "all".
 export function registerState(params: Params) {
   const archive = params.get("archive");
+  const scope: "active" | "archived" | "all" = archive === "archived" ? "archived" : archive === "include" ? "all" : "active";
   return {
     q: params.get("q") ?? "",
     priority: choice(params.get("priority"), unset(["P1", "P2", "P3"])),
@@ -37,14 +39,14 @@ export function registerState(params: Params) {
     duration_max: durationBound(params.get("duration_max")),
     mapping: choice(params.get("mapping"), ["verified", "partially_mapped", "mapping_pending", "source_error"]),
     // Absent = active portfolio. "include" shows archived and active together.
-    archive: archive === "archived" ? "archived" : archive === "include" ? "all" : "active",
+    archive: scope,
   };
 }
 
 /** Canonical lib/project-portfolio.ts PortfolioFilters built from URL state. */
 export function portfolioFiltersFrom(state: ReturnType<typeof registerState>) {
   return {
-    query: state.q, archive: state.archive as "active" | "archived" | "all",
+    query: state.q, archive: state.archive,
     priority: state.priority, year: state.execution_year, workType: state.work_type, owner: state.owner,
     status: state.status, durationUnit: state.duration_unit, durationMin: state.duration_min, durationMax: state.duration_max,
     mappingCompleteness: state.mapping,
@@ -64,14 +66,22 @@ export function projectOrigin(params: Params): ProjectOrigin {
   return value && Object.hasOwn(origins, value) ? value as ProjectOrigin : "register";
 }
 
-function originParams(params: Params, origin: ProjectOrigin) {
+export function portfolioFilterParams(params: Params) {
   const result = new URLSearchParams();
-  if (origin === "register") {
-    for (const [key, value] of Object.entries(registerState(params))) {
-      if (key === "archive") { if (archiveQueryValue(value)) result.set(key, archiveQueryValue(value)); }
-      else if (value && value !== "all") result.set(key, value);
+  for (const [key, value] of Object.entries(registerState(params))) {
+    if (key === "archive") {
+      const archive = archiveQueryValue(value);
+      if (archive) result.set(key, archive);
+    } else if (value && value !== "all") {
+      result.set(key, value);
     }
-  } else if (origin === "roadmap") {
+  }
+  return result;
+}
+
+function originParams(params: Params, origin: ProjectOrigin) {
+  const result = origin === "executive" ? new URLSearchParams() : portfolioFilterParams(params);
+  if (origin === "roadmap") {
     const focus = roadmapFocus(params);
     if (focus) result.set("focus_year", focus.year);
   }
@@ -79,6 +89,10 @@ function originParams(params: Params, origin: ProjectOrigin) {
 }
 
 const url = (path: string, params: URLSearchParams) => `${path}${params.size ? `?${params}` : ""}`;
+
+export function portfolioHref(origin: PortfolioOrigin, params: Params) {
+  return url(origins[origin].path, portfolioFilterParams(params));
+}
 
 export function projectReturn(params: Params) {
   const origin = projectOrigin(params);
@@ -107,9 +121,15 @@ export type StrategyQueryKey = "q" | "priority" | "execution_year" | "work_type"
 // Called only by existing presentation controls. Next integrates native history
 // with useSearchParams; replace search keystrokes, push explicit choices.
 export function updateStrategyQuery(key: StrategyQueryKey, value: string) {
+  updateStrategyQueryFields({ [key]: value }, key === "q" || key === "duration_min" || key === "duration_max");
+}
+
+export function updateStrategyQueryFields(fields: Partial<Record<StrategyQueryKey, string>>, replace = false) {
   const params = new URLSearchParams(window.location.search);
-  if (!value || value === "all") params.delete(key); else params.set(key, value);
+  for (const [key, value] of Object.entries(fields)) {
+    if (!value || value === "all") params.delete(key); else params.set(key, value);
+  }
   const next = url(window.location.pathname, params);
   if (next === `${window.location.pathname}${window.location.search}`) return;
-  window.history[key === "q" || key === "duration_min" || key === "duration_max" ? "replaceState" : "pushState"](null, "", next);
+  window.history[replace ? "replaceState" : "pushState"](null, "", next);
 }
