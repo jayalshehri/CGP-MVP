@@ -12,6 +12,7 @@ import { controlAssignmentRoles, type AppliedControlOwner } from "@/lib/control-
 import { getEccCatalogLabel } from "@/lib/ecc-catalog-labels";
 import { supabase } from "@/lib/supabase";
 import CatalogAssignment from "./catalog-assignment";
+import DccAssessmentEntry from "@/components/DccAssessmentEntry";
 import "./catalog.css";
 
 type Control = {
@@ -292,6 +293,8 @@ function ControlsContent() {
           <span><strong>{primaryCount}</strong> ضابط أساسي <span aria-hidden="true">·</span> <strong>{scoped.length - primaryCount}</strong> ضابط فرعي</span>
         </div>
       </section>
+
+      {framework === "DCC" && <DccAssessmentEntry key={selectedFramework.id} frameworkId={selectedFramework.id}/>}
 
       <section className="catalog-results" aria-label="نتائج الضوابط">
         <div className="catalog-results-bar">
