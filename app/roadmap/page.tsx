@@ -159,6 +159,7 @@ function ProjectRegisterContent() {
         await load();
       } else {
         const result = await supabase.from("cybersecurity_projects").insert({ ...payload, created_by: user.id }).select("id").single();
+        if (result.error?.code === "23505") throw new Error("رمز المشروع مستخدم. اختر رمزًا مختلفًا.");
         if (result.error) throw result.error;
         router.push(projectHref(result.data.id, "register", params));
       }
@@ -216,17 +217,19 @@ function ProjectRegisterContent() {
 
       {open && (
         <AccessibleDialog backdropClassName="roadmap-dialog-backdrop" className="roadmap-dialog project-register-dialog compact-form-dialog" labelledBy="roadmap-dialog-title" busy={saving} onClose={() => setOpen(false)}>
-            <header><div><span>{selected ? "بيانات المشروع" : "إضافة مشروع"}</span><h2 id="roadmap-dialog-title">{selected?.name_ar || "مشروع سيبراني جديد"}</h2></div><button type="button" disabled={saving} aria-label="إغلاق" onClick={() => setOpen(false)}>×</button></header>
+            <header><div><h2 id="roadmap-dialog-title">{selected ? "تعديل المشروع" : "مشروع جديد"}</h2>{selected && <p>{selected.name_ar}</p>}</div><button type="button" disabled={saving} aria-label="إغلاق" onClick={() => setOpen(false)}>×</button></header>
             {error && <p role="alert" className="roadmap-alert">{error}</p>}
 
-            <form onSubmit={save} className="roadmap-form compact-form">
-              <PortfolioProjectFields form={form} onChange={(next) => setForm({ ...next, target_outcome: form.target_outcome })} creating={!selected} />
-              <label className="wide">النتيجة المستهدفة<textarea rows={2} value={form.target_outcome} onChange={(event) => setForm({ ...form, target_outcome: event.target.value })} /><small>النتيجة المتوقع تحقيقها عند اكتمال المشروع. حقل اختياري، وليس إثباتًا لتحقق النتيجة.</small></label>
+            <form onSubmit={save} className="roadmap-form compact-form" onInvalidCapture={event => {
+              const disclosure = event.target instanceof HTMLElement ? event.target.closest("details") : null;
+              if (disclosure) disclosure.open = true;
+            }}>
+              <PortfolioProjectFields form={form} onChange={setForm} creating={!selected} />
               {selected?.archived_at && <p className="wide detail-hint">المشروع ضمن المحفظة المؤرشفة{selected.archive_reason ? ` — ${selected.archive_reason}` : ""}. الأرشفة مستقلة عن حالة التنفيذ ولا تُدار من هذا النموذج.</p>}
 
               <footer>
                 <button type="button" disabled={saving} onClick={() => setOpen(false)}>إلغاء</button>
-                {canManage && <button className="roadmap-primary" disabled={saving}>{saving ? "جاري الحفظ…" : selected ? "حفظ التعديلات" : "حفظ وإنشاء المشروع"}</button>}
+                {canManage && <button className="roadmap-primary" disabled={saving}>{saving ? "جاري الحفظ…" : selected ? "حفظ التعديلات" : "إنشاء المشروع"}</button>}
               </footer>
             </form>
         </AccessibleDialog>

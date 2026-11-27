@@ -249,7 +249,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
         <details key={pathname} className="cgp-mobile-navigation" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>القائمة <span>{current}</span></summary><nav aria-label="التنقل على الجوال">{links}<Link className="cgp-nav-link" href={passwordHref}>إعدادات كلمة المرور</Link></nav></details>
         {workspace !== "data" && (isProjectDetail ? <Suspense fallback={<nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href={homeHref}>الرئيسية</Link><span aria-hidden="true">/</span><span aria-current="page">تفاصيل المشروع</span></nav>}><ProjectBreadcrumb /></Suspense> : <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href={homeHref}>الرئيسية</Link>{pathname !== "/" && <><span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">الضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>)}
         {error && <p role="alert" className="cgp-shell-error">{error}</p>}
-        <div id="cgp-content" tabIndex={-1} className="cgp-route">{children}</div>
+        <div id="cgp-content" tabIndex={-1} className="cgp-route" data-cgp-section={activeGroup === "العمليات" ? "operations" : undefined}>{children}</div>
         <FeedbackWidget pagePath={pathname} visible={Boolean(account) && !nudeeOnly} />
       </div>
     </div>

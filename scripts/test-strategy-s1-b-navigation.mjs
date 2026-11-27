@@ -153,6 +153,28 @@ check(!compactRegister.includes('register-metrics') && compactRegister.includes(
 const ownerRegister = render('app/roadmap/page.tsx', '/roadmap', { role: 'control_owner' });
 check(!ownerRegister.includes('مشروع جديد') && !ownerRegister.includes('aria-label="تعديل '), 'read-only register keeps existing role boundaries');
 
+const projectFields = load('lib/strategy-project-fields.ts');
+const createDraft = { ...projectFields.emptyProjectForm, project_code: 'FORM-1', name_ar: 'مشروع جديد تجريبي', portfolio_priority: 'P2', duration_value: '3', duration_unit: 'month' };
+const createMarkup = render('app/roadmap/page.tsx', '/roadmap', { open: true, form: createDraft });
+const createForm = createMarkup.split('<dialog')[1]?.split('</dialog>')[0] ?? '';
+for (const label of ['اسم المشروع', 'رمز المشروع', 'الأولوية', 'مدة المشروع']) check(createForm.includes(label), `creation retains ${label}`);
+check(!createForm.includes('الحالة<select') && !createForm.includes('نسبة التقدم<input') && !createForm.includes('سنة التنفيذ <output>'), 'creation does not ask for derived year, default status, or initial progress');
+check(createForm.includes('السنة الثانية · P2') && createForm.includes('يبدأ المشروع بحالة «مخطط» وتقدّم <bdi>0%</bdi>.'), 'creation communicates its derived year and defaults');
+const optional = createForm.split('<summary>تفاصيل اختيارية</summary>')[1]?.split('</details>')[0] ?? '';
+for (const label of ['الجهة المالكة', 'نوع العمل', 'النتيجة المستهدفة', 'وصف المشروع']) check(optional.includes(label), `${label} is optional and collapsed`);
+equal(plain(projectFields.projectWriteFields(createDraft)), { project_code: 'FORM-1', name_ar: 'مشروع جديد تجريبي', description_ar: null, portfolio_priority: 'P2', work_type: null, executive_owner_code: null, executive_owner_other: null, duration_value: 3, duration_unit: 'month', status: 'planned', progress_percent: 0, target_outcome: null }, 'minimal form preserves the valid payload and defaults');
+const editRecord = { ...project, target_outcome: 'نتيجة محفوظة', description_ar: 'وصف محفوظ', executive_owner_code: 'other', executive_owner_other: 'جهة تجريبية' };
+const editDraft = projectFields.projectToForm(editRecord);
+const editForm = render('app/roadmap/page.tsx', '/roadmap', { open: true, form: editDraft, selected: editRecord }).split('<dialog')[1]?.split('</dialog>')[0] ?? '';
+check(/readonly=""/i.test(editForm) && editForm.includes('الحالة<select') && editForm.includes('نسبة التقدم<input'), 'edit keeps writable state and immutable project code');
+check(editForm.includes('جهة تجريبية') && editForm.includes('نتيجة محفوظة') && editForm.includes('وصف محفوظ'), 'collapsed edit details preserve saved values');
+equal(plain(projectFields.projectWriteFields(editDraft, editRecord)), {}, 'unmodified edit does not write optional values back');
+check(source('app/roadmap/page.tsx').includes('result.error?.code === "23505"') && source('app/roadmap/page.tsx').includes('disclosure.open = true'), 'duplicate code error is clear and invalid optional details are revealed');
+const shellSource = source('components/AppShell.tsx');
+check(shellSource.includes('data-cgp-section={activeGroup === "العمليات" ? "operations" : undefined}'), 'typography flag derives from the Operations menu group');
+const styleSource = source('app/globals.css');
+check(styleSource.includes('.cgp-route[data-cgp-section="operations"] h1') && styleSource.includes('.cgp-route[data-cgp-section="operations"] h2'), 'heading scale is limited to Operations');
+
 const analysisPage = 'app/roadmap/analysis/page.tsx';
 const readyProject = { ...project, id: 70, name_ar: 'مشروع مكتمل البيانات', target_outcome: 'نتيجة محددة' };
 const missingProject = { ...readyProject, id: 71, name_ar: 'مشروع يحتاج بيانات', target_outcome: null, executive_owner_code: null, duration_unit: null };
@@ -181,6 +203,22 @@ const req = { project_id: 37, requirement_id: 12, coverage_type: 'full', cyberse
 const control = { requirement_id: 12, control_id: 41, coverage_type: 'partial', mapping_confidence: 'confirmed', controls: { id: 41, control_code: 'C41', title_ar: 'ضابط', implementation_status: 'not_implemented', evidence_status: 'accepted', verification_status: 'verified', frameworks: { code: 'DCC' } } };
 const filteredHTML = render(detail, '/roadmap/37?tab=controls&framework=DCC&coverage=partial&verification=verified', { projectRequirements: [req], requirementControls: [control] });
 for (const value of ['DCC', 'partial', 'verified']) check(filteredHTML.includes(`value="${value}" selected=""`), `actual filter ${value} reconstructs on refresh`);
+const detailReads = { requirements: 'COMPLETE', controls: 'COMPLETE', legacy: 'COMPLETE', treatments: 'COMPLETE' };
+const sourceProject = { ...project, import_staging_id: 'fixture', mapping_reference_count: 8, mapping_exact_count: 0, mapping_source_error_count: 0 };
+const overview = render(detail, '/roadmap/37?tab=overview', { project: sourceProject, reads: detailReads });
+check(!overview.includes('project-kpi-row') && !overview.includes('مراجع مرتبطة') && overview.indexOf('role="tablist"') < overview.indexOf('role="tabpanel"'), 'overview leads with tabs, without empty cards or import diagnostics');
+equal((overview.match(/role="tab"/g) ?? []).length, 6, 'all task and evidence tabs remain available');
+check(overview.includes('aria-labelledby="project-tab-overview"'), 'tabpanel is labelled by the active tab');
+const emptyControls = render(detail, '/roadmap/37?tab=controls', { project: sourceProject, reads: detailReads });
+check(emptyControls.includes('لا توجد ضوابط مرتبطة بالمشروع بعد.') && !emptyControls.includes('controls-table-filters'), 'empty controls tab uses a single compact state, not an empty table or filters');
+check(emptyControls.includes('ملخص الربط والتحقق') && emptyControls.includes('0 من 8 مراجع مرتبطة'), 'import diagnostics remain available under the controls disclosure');
+const pendingControl = { ...control, controls: { ...control.controls, verification_status: 'pending' } };
+const pendingHtml = render(detail, '/roadmap/37?tab=controls&verification=not_verified', { reads: detailReads, projectRequirements: [req], requirementControls: [pendingControl], legacyLinks: [{ project_id: 37, control_id: 42, controls: { id: 42, control_code: 'DIRECT', title_ar: 'ربط مباشر مستقل' } }] });
+check(pendingHtml.includes('href="/controls/41"') && pendingHtml.includes('href="/controls/42"') && pendingHtml.includes('روابط مباشرة</dt><dd>1</dd>'), 'not verified includes pending states, and direct relationships remain independently visible');
+const treatmentTab = render(detail, '/roadmap/37?tab=treatments', { reads: detailReads });
+check(treatmentTab.includes('<summary>إضافة معالجة</summary>') && treatmentTab.includes('<summary>تقنيات مقترحة</summary>'), 'treatment forms are tucked into disclosures');
+const quietAudit = render(detail, '/roadmap/37?tab=audit', { reads: detailReads });
+check(quietAudit.includes('لا توجد أحداث تدقيق مرتبطة عبر المتطلبات لعرضها هنا.') && !quietAudit.includes('project-kpi-row'), 'audit empty state is scoped and compact');
 for (const unavailable of ['المشروع غير موجود أو ليس ضمن صلاحيتك.', 'رقم المشروع غير صحيح.']) {
   const html = render(detail, '/roadmap/999?project_id=37&from=executive', { project: null, error: unavailable });
   check(html.includes('role="alert"') && !html.includes(project.name_ar) && html.includes('href="/roadmap/executive"'), 'missing/deleted/unauthorized shows safe error, no substituted project');
