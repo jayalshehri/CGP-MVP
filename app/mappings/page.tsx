@@ -169,7 +169,7 @@ function MappingsContent({ controlId }: { controlId: number | null }) {
               <label>الإطار المرتبط<select value={filters.target} onChange={event => { setFilters({ ...filters, target: event.target.value }); setPage(0); }}>
                 <option value="">الكل</option>{targets.map(item => <option key={item}>{item}</option>)}
               </select></label>
-              <label>نوع العلاقة<select value={filters.type} onChange={event => { setFilters({ ...filters, type: event.target.value }); setPage(0); }}>
+              <label>كيف يرتبط الضابطان؟<select value={filters.type} onChange={event => { setFilters({ ...filters, type: event.target.value }); setPage(0); }}>
                 <option value="">الكل</option>{Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select></label>
             </div>
@@ -275,7 +275,7 @@ function MappingDetails({ row, actor, onUpdated }: { row: Mapping; actor: string
       <summary>مراجعة العلاقة</summary>
       <div className="cw-form">
         {error && <p role="alert" className="cw-error">{error}</p>}
-        <label>نوع العلاقة<select value={type} onChange={event => setType(event.target.value)}>
+        <label>كيف يرتبط الضابطان؟<select value={type} onChange={event => setType(event.target.value)}>
           {Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
         <label>الوثيقة والإصدار والصفحة<input value={reference} onChange={event => setReference(event.target.value)}/></label>
@@ -333,7 +333,7 @@ function NewMapping({ choices, onUpdated }: { choices: ControlChoice[]; onUpdate
       <datalist id="cw-controls">{choices.map(choice => <option key={choice.id} value={choice.label}/>)}</datalist>
       <label>الضابط المصدر<input list="cw-controls" value={source} onChange={event => setSource(event.target.value)} required/></label>
       <label>الضابط المرتبط<input list="cw-controls" value={target} onChange={event => setTarget(event.target.value)} required/></label>
-      <label>نوع العلاقة<select value={type} onChange={event => setType(event.target.value)}>
+      <label>كيف يرتبط الضابطان؟<select value={type} onChange={event => setType(event.target.value)}>
         {Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label>
       <label>الوثيقة والإصدار والصفحة<input value={reference} onChange={event => setReference(event.target.value)} required/></label>

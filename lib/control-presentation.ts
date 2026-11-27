@@ -35,8 +35,8 @@ export const followUpText: Record<ReturnType<typeof controlFollowUp>, string> = 
 };
 
 export const crosswalkTypeLabels: Record<string, string> = {
-  reference: 'إشارة مرجعية',
-  supports: 'يدعم',
-  partial: 'تداخل جزئي',
-  equivalent: 'تكافؤ ضمن نطاق موثق',
+  reference: 'مرجع للاطلاع فقط',
+  supports: 'يساعد على تنفيذ المتطلب',
+  partial: 'يغطي جزءًا من المتطلب',
+  equivalent: 'نفس المتطلب ضمن نطاق محدد',
 };
