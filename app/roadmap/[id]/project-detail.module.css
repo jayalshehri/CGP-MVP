@@ -19,3 +19,9 @@
   .tabs button[role="tab"] { font-size: 12px; padding-inline: 9px; }
   .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.requirementsBar { display: flex; justify-content: flex-start; margin-bottom: 9px; }
+.requirementsBar button { font-size: 13px; }
+.mappingReason { margin-top: 5px; }
+.mappingReason summary { color: #116860; cursor: pointer; font-size: 12px; }
+.mappingReason p { margin: 3px 0; font-size: 12px; overflow-wrap: anywhere; }
