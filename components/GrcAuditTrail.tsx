@@ -1,23 +1,24 @@
 'use client';
 
-import { formatRiyadhTime } from "@/lib/dates";
+import { formatRiyadhDateTime, formatRiyadhTime } from "@/lib/dates";
 import Link from 'next/link';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { createReadEpoch } from '@/lib/strategy-read';
 import { formatGrcDate, csvDownload } from '@/lib/grc';
-import { type AuditEvent, type AuditFramework, type AuditRow, actions, changed, entities, escapeAuditLike, eventLink, eventReference, fields, firstAuditRelation, qualifiedAuditCode, showValue } from '@/lib/audit-trail';
+import { type AuditEvent, type AuditFramework, type AuditRow, actions, changed, entities, escapeAuditLike, eventLink, eventReference, fieldValue, fields, firstAuditRelation, qualifiedAuditCode, showValue } from '@/lib/audit-trail';
 import styles from './GrcAuditTrail.module.css';
 
-const pageSize = 30;
+type LegacyEntry = { key: string; time: string; title: string; by: string | null; body?: string | null };
 const failure = 'تعذر تحميل سجل التدقيق. أعد المحاولة.';
 type FrameworkOption = AuditFramework & { id: number; is_active: boolean };
 const eventColumns = 'id,control_id,entity_type,entity_id,action,actor_id,actor_name,occurred_at,previous_data,new_data';
 const controlColumns = 'id,control_code,title_ar,frameworks(code,name_ar)';
 
-export default function GrcAuditTrail({ controlId, reliableRead = false, full = false, globalLink = false }: {
-  controlId?: number; reliableRead?: boolean; full?: boolean; globalLink?: boolean;
+export default function GrcAuditTrail({ controlId, reliableRead = false, full = false, globalLink = false, compact = false, legacyEntries = [] }: {
+  controlId?: number; reliableRead?: boolean; full?: boolean; globalLink?: boolean; compact?: boolean; legacyEntries?: LegacyEntry[];
 }) {
+  const pageSize = compact ? 10 : 30;
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [frameworks, setFrameworks] = useState<FrameworkOption[]>([]);
   const [framework, setFramework] = useState('');
@@ -34,6 +35,7 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<number | null>(null);
   const [earliest, setEarliest] = useState('');
+  const [cutoffKnown, setCutoffKnown] = useState(false);
   const epoch = useRef(createReadEpoch());
   const filters = Boolean(kind || action || actor || controlCode || framework || since || until);
   const dateError = since && until && since > until ? 'تاريخ النهاية يجب أن يكون في يوم البداية أو بعده.' : '';
@@ -85,7 +87,7 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
     } finally {
       if (epoch.current.valid(ticket)) setLoading(false);
     }
-  }, [action, actor, controlCode, controlId, dateError, framework, full, kind, page, reliableRead, since, until]);
+  }, [action, actor, controlCode, controlId, dateError, framework, full, kind, page, pageSize, reliableRead, since, until]);
 
   useEffect(() => {
     const current = epoch.current;
@@ -93,13 +95,18 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
     return () => { clearTimeout(timer); current.cancel(); };
   }, [load]);
   useEffect(() => {
-    if (!full) return;
+    if (!full && !(compact && controlId)) return;
     let live = true;
-    void supabase.from('grc_audit_events').select('occurred_at').order('occurred_at').limit(1).then(({ data, error }) => {
-      if (live && !error) setEarliest(data?.[0]?.occurred_at ?? '');
+    let query = supabase.from('grc_audit_events').select('occurred_at');
+    if (compact && controlId) query = query.eq('control_id', controlId);
+    void query.order('occurred_at').limit(1).then(({ data, error }) => {
+      if (live && !error) {
+        setEarliest(data?.[0]?.occurred_at ?? '');
+        setCutoffKnown(true);
+      }
     });
     return () => { live = false; };
-  }, [full]);
+  }, [full, compact, controlId]);
 
   useEffect(() => {
     if (!full || controlId) return;
@@ -120,6 +127,21 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
   const person = (row: AuditEvent) => row.actor_name || row.actor_id || 'عملية نظام';
   const label = (row: AuditEvent) => entities[row.entity_type] ?? row.entity_type;
   const verb = (row: AuditEvent) => actions[row.action] ?? row.action;
+  const eventTitle = (row: AuditEvent) => {
+    if (row.entity_type === 'evidence_reviews' || row.entity_type === 'evidence_control_link_reviews') {
+      const decision = row.new_data?.decision;
+      if (decision === 'accepted') return 'قبول الدليل';
+      if (decision === 'rejected') return 'رفض الدليل';
+      if (decision === 'changes_requested') return 'طلب استكمال الدليل';
+    }
+    if (row.entity_type === 'evidence' && row.action === 'insert') return 'رفع دليل';
+    if (row.entity_type === 'control_assessments' && row.action === 'insert') return 'اعتماد تقييم الضابط';
+    if (row.entity_type === 'control_review_cycles' && row.action === 'update' && row.new_data?.status === 'completed' && row.previous_data?.status !== 'completed') return 'إغلاق دورة المراجعة';
+    return `${verb(row)} · ${label(row)}`;
+  };
+  const archivedEntries = !compact ? [] : legacyEntries.filter(item =>
+    !cutoffKnown || !earliest || Date.parse(item.time) < Date.parse(earliest));
+
   const reference = (row: AuditRow) => eventReference(row, firstAuditRelation(row.controls));
   const change = (set: (value: string) => void, value: string) => {
     set(value);
@@ -155,13 +177,15 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
   function details(row: AuditRow) {
     const keys = changed(row);
     const linked = eventLink(row, full);
+    const reason = fieldValue(row, 'rationale', 'review_notes');
     const { framework: relatedFramework } = reference(row);
     return <div className={styles.details}>
       <div className={styles.detailBar}><span>الحدث <b dir="ltr">#{row.id}</b></span>
-        {linked && <Link href={linked.href}>{linked.label} ←</Link>}
+        {linked && (!compact || linked.href !== `/controls/${controlId}`) && <Link href={linked.href}>{linked.label} ←</Link>}
       </div>
       {relatedFramework && <p className={styles.frameworkDetail}><strong>الإطار التنظيمي</strong> <bdi dir="ltr">{relatedFramework.code}</bdi>
         <span>{relatedFramework.name_ar}</span></p>}
+      {compact && reason && <p className={styles.decisionNote}><strong>مبرر القرار</strong><span>{reason}</span></p>}
       {keys.length > 0 ? <table className={styles.diff}><thead><tr><th scope="col">الحقل</th><th scope="col">قبل</th><th scope="col">بعد</th></tr></thead>
         <tbody>{keys.map(key => <tr key={key}><th scope="row">{fields[key] ?? key}</th>
           <td dir="auto">{showValue(key, row.previous_data?.[key])}</td><td dir="auto">{showValue(key, row.new_data?.[key])}</td></tr>)}</tbody>
@@ -169,14 +193,14 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
     </div>;
   }
 
-  return <section dir="rtl" className={`${styles.card} ${full ? styles.full : styles.embedded}`}>
-    <header className={styles.header}><div><h2>سجل الأحداث التلقائي</h2>
-      <p>يعرض السجل الأحداث منذ تفعيله. للقرارات الأقدم، ارجع إلى سجل مراجعة الدليل.</p>
+  return <section dir="rtl" className={`${styles.card} ${full ? styles.full : styles.embedded}${compact ? ` ${styles.compact}` : ''}`}>
+    <header className={styles.header}><div><h2>{compact ? 'نشاط الضابط' : 'سجل الأحداث التلقائي'}</h2>
+      {!compact && <p>يعرض السجل الأحداث منذ تفعيله. للقرارات الأقدم، ارجع إلى سجل مراجعة الدليل.</p>}
       {full && earliest && <p className={styles.coverage}>أقدم حدث ضمن صلاحياتك {formatGrcDate(earliest)} · بتوقيت الرياض</p>}
     </div>
       {globalLink && controlId && <Link href={`/audit?control=${controlId}`}>فتح في السجل العام ←</Link>}
     </header>
-    <div className={styles.filters}>
+    <AuditFilters compact={compact} active={filters}><div className={styles.filters}>
       {full && !controlId && <label>الإطار التنظيمي<select value={framework} disabled={!frameworks.length} onChange={e => change(setFramework, e.target.value)}>
         <option value="">جميع الأطر</option>{frameworks.map(item => <option key={item.id} value={item.id}>{item.code} — {item.name_ar}</option>)}
       </select></label>}
@@ -198,6 +222,7 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
       {filters && <button type="button" onClick={reset}>مسح الفلاتر</button>}
       <button type="button" className={styles.export} disabled={loading || !!dateError || !!error || !rows.length} onClick={exportPage}>تصدير الصفحة الحالية (CSV)</button>
     </div>
+    </AuditFilters>
     {dateError ? <p role="alert" className={styles.notice}>{dateError}</p> : loading ? <p role="status" className={styles.notice}>جارٍ تحميل الأحداث…</p>
       : error ? <div role="alert" className={styles.notice}>{error} <button onClick={() => void load()}>إعادة المحاولة</button></div>
       : !rows.length ? <p className={styles.notice}>لا توجد أحداث مطابقة.</p>
@@ -220,7 +245,13 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
           </Fragment>;
         })}</tbody>
       </table></div>
-      : rows.map(row => {
+      : compact ? <ol className={styles.timeline}>{rows.map(row => {
+        const ref = reference(row);
+        return <li key={row.id}><details className={styles.timelineEvent}><summary>
+          <span className={styles.timelineMain}><strong>{eventTitle(row)}</strong>{ref.title && <span className={styles.timelineTitle} title={ref.title}>{ref.title}</span>}</span>
+          <span className={styles.timelineBy}><bdi>{person(row)}</bdi><time dateTime={row.occurred_at}>{formatRiyadhDateTime(row.occurred_at)}</time></span>
+        </summary>{details(row)}</details></li>;
+      })}</ol> : rows.map(row => {
         const ref = reference(row);
         return <details key={row.id} className={styles.item}><summary>
           <strong>{verb(row)} · {label(row)} · <bdi dir="ltr">{ref.displayCode}</bdi></strong>
@@ -228,10 +259,21 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
           <small>{person(row)} · {formatGrcDate(row.occurred_at)} · {formatRiyadhTime(row.occurred_at)}</small>
         </summary>{details(row)}</details>;
       })}
-    <nav className={styles.pagination} aria-label="صفحات سجل التدقيق">
+    {(!compact || page > 0 || hasNext) && <nav className={styles.pagination} aria-label="صفحات سجل التدقيق">
       <button disabled={!page || loading} onClick={() => go(page - 1)}>الأحدث</button>
       <span aria-live="polite">صفحة {page + 1}</span>
       <button disabled={!hasNext || loading} onClick={() => go(page + 1)}>الأقدم</button>
-    </nav>
+    </nav>}
+    {compact && !filters && archivedEntries.length > 0 && <details className={styles.legacyEvents}>
+      <summary>{cutoffKnown && earliest ? 'نشاط الأدلة قبل بدء سجل الأحداث' : 'النشاط المحفوظ في سجل الأدلة'}</summary>
+      <ol className={styles.timeline}>{archivedEntries.map(item => <li key={item.key}><details className={styles.timelineEvent}><summary>
+        <span className={styles.timelineMain}><strong>{item.title}</strong></span>
+        <span className={styles.timelineBy}>{item.by && <bdi>{item.by}</bdi>}<time dateTime={item.time}>{formatRiyadhDateTime(item.time)}</time></span>
+      </summary>{item.body ? <p className={styles.decisionNote}>{item.body}</p> : <p className={styles.notice}>لا توجد ملاحظة مسجلة لهذا النشاط.</p>}</details></li>)}</ol>
+    </details>}
   </section>;
+}
+
+function AuditFilters({ compact, active, children }: { compact: boolean; active: boolean; children: React.ReactNode }) {
+  return compact ? <details className={styles.compactFilters}><summary>تصفية الأحداث وتصديرها{active && ' · تصفية نشطة'}</summary>{children}</details> : <>{children}</>;
 }
