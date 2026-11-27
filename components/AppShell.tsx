@@ -128,7 +128,7 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   }, [wrongArea, ownerOutsideTasks, loginHref, router]);
   const workspace = pathname === "/shared-controls" ? "shared" : pathname.startsWith("/data-governance") ? "data" : "cyber";
   const canManageOffice = account?.role === "admin" || dataOfficeOnly;
-  const officeHome = canManageOffice ? "/data-governance/nudee-dashboard" : "/data-governance/nudee";
+  const officeHome = account ? workspaceHome(account.role, "data") ?? "/login/data" : "/login/data";
   const homeHref = workspace === "data" ? officeHome : account ? roleHomePath(account.role) : "/";
   const workspaceLabel = workspace === "data" ? "مكتب إدارة البيانات" : workspace === "shared" ? "مركز المواءمة" : "الأمن السيبراني";
   const permittedItems = account ? navigation.filter(item => account.role === "nudee_owner" ? item.href === "/data-governance/nudee" : account.role === "data_governance_team" ? Boolean(item.data) && !item.admin : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];

@@ -13,14 +13,14 @@ export const dataGovernanceEnabled =
 /** Choose an existing workspace after authentication; this grants no access. */
 export function roleHomePath(role: UserRole): string {
   if (role === "nudee_owner") return "/data-governance/nudee";
-  if (role === "data_governance_team") return "/data-governance/nudee-dashboard";
+  if (role === "data_governance_team") return "/data-governance/nudee?view=review";
   return "/cybersecurity";
 }
 
 export type WorkspaceName = "data" | "cyber";
 
 export function workspaceHome(role: UserRole, workspace: WorkspaceName): string | null {
-  if (workspace === "data" && role === "admin") return "/data-governance/nudee-dashboard";
+  if (workspace === "data" && role === "admin") return "/data-governance/nudee-indicator";
   const home = roleHomePath(role);
   return (workspace === "data") === home.startsWith("/data-governance/") ? home : null;
 }
