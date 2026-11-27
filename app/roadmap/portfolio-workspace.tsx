@@ -28,7 +28,7 @@ function Select({ label, value, choices, set }: { label: string; value: string; 
   </select></label>;
 }
 
-export function PortfolioFilters({ current, params, count, total }: { current: PortfolioOrigin; params: Params; count: number | null; total: number }) {
+export function PortfolioFilters({ current, params, count, total, compact = false, countNote }: { current: PortfolioOrigin; params: Params; count: number | null; total: number; compact?: boolean; countNote?: string }) {
   const state = registerState(params);
   const phaseFromYear = state.execution_year === "all" || state.execution_year === "unset" ? state.execution_year : `P${state.execution_year}`;
   const conflictingPhases = state.priority !== "all" && phaseFromYear !== "all" && state.priority !== phaseFromYear;
@@ -51,7 +51,8 @@ export function PortfolioFilters({ current, params, count, total }: { current: P
   const unitSelected = state.duration_unit !== "all" && state.duration_unit !== "unset";
   const select = (label: string, key: StrategyQueryKey, value: string, choices: Record<string, string>) =>
     <Select label={label} value={value} choices={choices} set={next => updateStrategyQuery(key, next)} />;
-  return <section className={styles.filters} aria-label="تصفية المشاريع">
+  const resultLabel = count === null ? "عدد النتائج غير متاح" : count !== total ? `عرض ${projectCount(count)} من أصل ${total} في هذا النطاق` : projectCount(count);
+  const fields = <>
     <div className={styles.filterRow}>
       <label className={`${styles.field} ${styles.search}`}><span>بحث</span><input type="search" value={state.q} onChange={event => updateStrategyQuery("q", event.target.value)} placeholder="اسم المشروع أو رمزه" /></label>
       {select("الجهة المالكة", "owner", state.owner, withAll("كل الجهات", owners))}
@@ -71,12 +72,16 @@ export function PortfolioFilters({ current, params, count, total }: { current: P
         </>}
       </div>
     </details>
+  </>;
+  return <section className={compact ? styles.compactFilters : styles.filters} aria-label="تصفية المشاريع">
+    {compact ? <details className={styles.filterDisclosure}>
+      <summary><span>الفلاتر</span><span className={styles.compactCount} role="status">{resultLabel}{countNote && <> · {countNote}</>}</span></summary>
+      <div className={styles.filterFields}>{fields}</div>
+    </details> : fields}
     {chips.length > 0 && <div className={styles.chips} aria-label="الفلاتر المطبّقة">
       {chips.map(({ key, title, clear }) => <button type="button" key={key} onClick={clear} aria-label={`إزالة فلتر ${title}`}><bdi>{title}</bdi><span aria-hidden="true">×</span></button>)}
       <Link href={portfolioHref(current, emptyParams)} scroll={false}>مسح الفلاتر</Link>
     </div>}
-    <div className={styles.resultsBar}>
-      <p role="status">{count === null ? "عدد النتائج غير متاح" : count !== total ? `عرض ${projectCount(count)} من أصل ${total} في هذا النطاق` : projectCount(count)}</p>
-    </div>
+    {!compact && <div className={styles.resultsBar}><p role="status">{resultLabel}</p></div>}
   </section>;
 }
