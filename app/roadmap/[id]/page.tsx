@@ -1,4 +1,5 @@
 "use client";
+import { controlFrameworkLabel } from "@/lib/control-presentation";
 import { formatRiyadhDateTime } from "@/lib/dates";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -14,6 +15,7 @@ import { executionYearLabels, formatDuration, mappingCompletenessLabels, workTyp
 import "../roadmap.css";
 import "@/app/controls/[id]/detail.css";
 import styles from "./project-detail.module.css";
+import ProjectRequirementEditor from "./ProjectRequirementEditor";
 
 // Canonical QA portfolio record (lib/project-portfolio.ts) plus detail-only fields.
 type Project = PortfolioProject & {
@@ -31,11 +33,12 @@ type GapTreatment = {
   priority: "high" | "medium" | "low";
 };
 
-type Requirement = { id: number; requirement_code: string; title_ar: string; status: string };
+type Requirement = { id: number; requirement_code: string; title_ar: string; status: string; project_scope_id?: number | null };
 type ProjectRequirement = {
   project_id: number;
   requirement_id: number;
   coverage_type: "full" | "partial" | "supporting";
+  notes?: string | null;
   cybersecurity_requirements: Requirement | Requirement[] | null;
 };
 type ControlRow = {
@@ -45,13 +48,14 @@ type ControlRow = {
   implementation_status: string;
   evidence_status: string;
   verification_status: string;
-  frameworks: { code: string } | { code: string }[] | null;
+  frameworks: { code: string; version?: string } | { code: string; version?: string }[] | null;
 };
 type RequirementControl = {
   requirement_id: number;
   control_id: number;
   coverage_type: "full" | "partial" | "supporting";
   mapping_confidence: "confirmed" | "probable";
+  notes?: string | null;
   controls: ControlRow | ControlRow[] | null;
 };
 type LegacyLink = { project_id: number; control_id: number; controls: Pick<ControlRow, "id" | "control_code" | "title_ar"> | Pick<ControlRow, "id" | "control_code" | "title_ar">[] | null };
@@ -90,6 +94,8 @@ function ProjectDetailContent({ id }: { id: string }) {
   const [treatments, setTreatments] = useState<GapTreatment[]>([]);
   const [role, setRole] = useState<UserRole>("control_owner");
   const [loading, setLoading] = useState(true);
+  const [requirementEditorOpen, setRequirementEditorOpen] = useState(false);
+  const [requirementRevision, setRequirementRevision] = useState(0);
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [message, setMessage] = useState("");
@@ -137,7 +143,7 @@ function ProjectDetailContent({ id }: { id: string }) {
           supabase.from("cybersecurity_projects").select("*").eq("id", projectId).single(),
           readStrategyRows((from, to) => supabase
             .from("cybersecurity_project_requirements")
-            .select("project_id,requirement_id,coverage_type,cybersecurity_requirements(id,requirement_code,title_ar,status)", { count: "exact" })
+            .select("project_id,requirement_id,coverage_type,notes,cybersecurity_requirements(id,requirement_code,title_ar,status,project_scope_id)", { count: "exact" })
             .eq("project_id", projectId).order("project_id").order("requirement_id").range(from, to),
             row => `${row.project_id}:${row.requirement_id}`),
           readStrategyRows((from, to) => supabase.from("cybersecurity_project_controls")
@@ -166,7 +172,7 @@ function ProjectDetailContent({ id }: { id: string }) {
         const [rc, activeControlResult] = await Promise.all([
           readStrategyRows((from, to) => supabase
             .from("cybersecurity_requirement_controls")
-            .select("requirement_id,control_id,coverage_type,mapping_confidence,controls(id,control_code,title_ar,implementation_status,evidence_status,verification_status,frameworks(code))", { count: "exact" })
+            .select("requirement_id,control_id,coverage_type,mapping_confidence,notes,controls(id,control_code,title_ar,implementation_status,evidence_status,verification_status,frameworks(code,version))", { count: "exact" })
             .eq("mapping_status", "active").in("requirement_id", requirementIds)
             .order("requirement_id").order("control_id").range(from, to),
             row => `${row.requirement_id}:${row.control_id}`),
@@ -198,7 +204,7 @@ function ProjectDetailContent({ id }: { id: string }) {
       active = false;
       epoch.cancel();
     };
-  }, [id, router]);
+  }, [id, router, requirementRevision]);
 
   async function addTreatment() {
     if (!project || !gapTitle.trim() || !recommendation.trim()) return;
@@ -274,22 +280,22 @@ function ProjectDetailContent({ id }: { id: string }) {
         // from Verified Controls / Compliance Contribution / Coverage below simply because it
         // contributes no controls to those pools.
         const mappingStatus: "mapped" | "unresolved" = links.length === 0 ? "unresolved" : "mapped";
-        return { requirement, coverage: pr.coverage_type, controlsCount: links.length, verifiedCount, confirmedCount, probableCount, mappingStatus };
+        return { requirement, coverage: pr.coverage_type, notes: pr.notes, controlsCount: links.length, verifiedCount, confirmedCount, probableCount, mappingStatus };
       }),
     [projectRequirements, requirementControls],
   );
 
   const derivedControls = useMemo(() => {
-    const rows: Array<{ requirementId: number; requirementCode: string; projectCoverage: "full" | "partial" | "supporting" | null; coverage: "full" | "partial" | "supporting"; mappingConfidence: "confirmed" | "probable"; control: ControlRow }> = [];
+    const rows: Array<{ requirementId: number; requirementCode: string; reason?: string; projectCoverage: "full" | "partial" | "supporting" | null; coverage: "full" | "partial" | "supporting"; mappingConfidence: "confirmed" | "probable"; control: ControlRow }> = [];
     for (const rc of requirementControls) {
       const control = single(rc.controls);
       if (!control) continue;
       const projectLink = projectRequirements.find(item => item.requirement_id === rc.requirement_id);
       const requirement = single(projectLink?.cybersecurity_requirements ?? null);
-      rows.push({ requirementId: rc.requirement_id, requirementCode: requirement?.requirement_code ?? "—", projectCoverage: projectLink?.coverage_type ?? null, coverage: rc.coverage_type, mappingConfidence: rc.mapping_confidence, control });
+      rows.push({ requirementId: rc.requirement_id, requirementCode: requirement?.requirement_code ?? "—", projectCoverage: projectLink?.coverage_type ?? null, coverage: rc.coverage_type, mappingConfidence: rc.mapping_confidence, reason: requirement?.project_scope_id === project?.id ? rc.notes ?? undefined : undefined, control });
     }
     return rows;
-  }, [requirementControls, projectRequirements]);
+  }, [requirementControls, projectRequirements, project?.id]);
 
   const uniqueControls = useMemo(() => {
     const seen = new Map<number, ControlRow>();
@@ -413,6 +419,7 @@ function ProjectDetailContent({ id }: { id: string }) {
 
             {tab === 1 && (<ReadSection available={requirementsReady}>
               <section className="requirements-tab">
+                {canManage && !project.archived_at && <div className={styles.requirementsBar}><button type="button" className="roadmap-primary" onClick={() => setRequirementEditorOpen(true)}>إضافة متطلب أو ربط موجود</button></div>}
                 {!requirementsWithStats.length && <p className={styles.empty}>لا توجد متطلبات مرتبطة بالمشروع بعد.</p>}
                 {requirementsWithStats.map(
                   (item) =>
@@ -421,7 +428,9 @@ function ProjectDetailContent({ id }: { id: string }) {
                         <header>
                           <h3>{item.requirement.title_ar}</h3><small>رمز المتطلب <span dir="ltr">{item.requirement.requirement_code}</span></small>
                           <span className="requirement-coverage-tag">تغطية المشروع {coverageText[item.coverage] ?? item.coverage}</span>
+                          {item.requirement.project_scope_id === project.id && <small>خاص بهذا المشروع</small>}
                         </header>
+                        {item.notes && <p className={styles.muted}>{item.notes}</p>}
                         {!controlsReady ? <p className="metric-unavailable">{unavailable}</p> : item.mappingStatus === "unresolved" ? (
                           <p className="requirement-warning">
                             <StatusBadge status="needs_control_mapping" /> لم يُربط هذا المتطلب بضابط بعد.
@@ -487,12 +496,13 @@ function ProjectDetailContent({ id }: { id: string }) {
                         const framework = single(row.control.frameworks);
                         return (
                           <tr key={`${row.requirementId}:${row.control.id}`}>
-                            <td dir="ltr">{framework?.code ?? "—"}</td>
+                            <td dir="ltr">{framework ? controlFrameworkLabel(framework.code, framework.version) : "—"}</td>
                             <td><span dir="ltr">{row.requirementCode}</span><small> · تغطية المشروع: {row.projectCoverage ? coverageText[row.projectCoverage] : unavailable}</small></td>
                             <td>
                               <Link href={`/controls/${row.control.id}`}>
                                 <span dir="ltr">{row.control.control_code}</span> — {row.control.title_ar}
                               </Link>
+                              {row.reason && <details className={styles.mappingReason}><summary>سبب الربط</summary><p>{row.reason}</p></details>}
                             </td>
                             <td><span className={`coverage-pill ${row.coverage}`}>{coverageText[row.coverage] ?? row.coverage}</span></td>
                             <td><span className={`mapping-pill ${row.mappingConfidence}`}>{mappingConfidenceText[row.mappingConfidence] ?? row.mappingConfidence}</span></td>
@@ -621,6 +631,11 @@ function ProjectDetailContent({ id }: { id: string }) {
             )}
         </div>
       </section>
+      {requirementEditorOpen && canManage && !project.archived_at && <ProjectRequirementEditor projectId={project.id} linkedIds={projectRequirements.map(row => row.requirement_id)} onClose={() => setRequirementEditorOpen(false)} onSaved={() => {
+        setRequirementEditorOpen(false);
+        setMessage("تم حفظ الربط المخطط دون تغيير حالة الضوابط.");
+        setRequirementRevision(value => value + 1);
+      }} />}
     </main>
   );
 }
