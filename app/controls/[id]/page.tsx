@@ -249,7 +249,6 @@ function ControlDetailsContent() {
       {currentEvidence.length?currentEvidence.map(evidenceRow):<p className="detail-empty">لا توجد أدلة حالية ضمن صلاحياتك.</p>}
      </section>
      {previousEvidence.length>0&&<details className="detail-card detail-disclosure"><summary>الإصدارات السابقة <bdi>{previousEvidence.length}</bdi></summary>{previousEvidence.map(evidenceRow)}</details>}
-     <details className="detail-card detail-disclosure"><summary>أمثلة على الأدلة</summary><p className="detail-hint">يحدّد المراجع ملاءمة الدليل حسب نص الضابط ونطاق تطبيقه.</p><ul>{plan.evidence.map(item=><li key={item}>{item}</li>)}</ul></details>
     </>}
 
     {tab===2&&<>
