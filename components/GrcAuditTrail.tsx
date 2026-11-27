@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { createReadEpoch } from '@/lib/strategy-read';
+import { positiveId } from '@/lib/audit-schedule';
 import { formatGrcDate, csvDownload } from '@/lib/grc';
 import { type AuditEvent, type AuditFramework, type AuditRow, actions, changed, entities, escapeAuditLike, eventLink, eventReference, fieldValue, fields, firstAuditRelation, qualifiedAuditCode, showValue } from '@/lib/audit-trail';
 import styles from './GrcAuditTrail.module.css';
@@ -14,6 +15,11 @@ const failure = 'تعذر تحميل سجل التدقيق. أعد المحاو�
 type FrameworkOption = AuditFramework & { id: number; is_active: boolean };
 const eventColumns = 'id,control_id,entity_type,entity_id,action,actor_id,actor_name,occurred_at,previous_data,new_data';
 const controlColumns = 'id,control_code,title_ar,frameworks(code,name_ar)';
+type RequirementLabel = { id: number; requirement_code: string; title_ar: string };
+const isRequirementLink = (row: AuditEvent) => row.entity_type === 'cybersecurity_requirement_controls';
+const requirementId = (row: AuditEvent) => isRequirementLink(row) ? positiveId(fieldValue(row, 'requirement_id')) : null;
+const coverageLabels: Record<string, string> = { full: 'تغطية كاملة', partial: 'تغطية جزئية', supporting: 'تغطية داعمة' };
+
 
 export default function GrcAuditTrail({ controlId, reliableRead = false, full = false, globalLink = false, compact = false, legacyEntries = [] }: {
   controlId?: number; reliableRead?: boolean; full?: boolean; globalLink?: boolean; compact?: boolean; legacyEntries?: LegacyEntry[];
@@ -36,6 +42,7 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
   const [openId, setOpenId] = useState<number | null>(null);
   const [earliest, setEarliest] = useState('');
   const [cutoffKnown, setCutoffKnown] = useState(false);
+  const [requirementLabels, setRequirementLabels] = useState<Map<number, RequirementLabel>>(new Map());
   const epoch = useRef(createReadEpoch());
   const filters = Boolean(kind || action || actor || controlCode || framework || since || until);
   const dateError = since && until && since > until ? 'تاريخ النهاية يجب أن يكون في يوم البداية أو بعده.' : '';
@@ -77,8 +84,22 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
       if (!epoch.current.valid(ticket)) return;
       if (response.error) throw new Error(response.error.message);
       const values = (response.data ?? []) as unknown as AuditRow[];
-      setRows(values.slice(0, pageSize));
+      const pageRows = values.slice(0, pageSize);
+      setRows(pageRows);
       setHasNext(values.length > pageSize);
+      setRequirementLabels(new Map());
+      if (compact) {
+        const ids = [...new Set(pageRows.map(requirementId).filter((id): id is number => id !== null))];
+        if (ids.length) {
+          // Read display labels only for this page and through the caller's existing RLS.
+          try {
+            const catalog = await supabase.from('cybersecurity_requirements').select('id,requirement_code,title_ar').in('id', ids);
+            if (epoch.current.valid(ticket) && !catalog.error) {
+              setRequirementLabels(new Map((catalog.data ?? []).map(item => [item.id, item])));
+            }
+          } catch { /* The audit snapshot remains usable even if labels are unavailable. */ }
+        }
+      }
     } catch (e) {
       if (!epoch.current.valid(ticket)) return;
       setError(reliableRead || full ? failure : e instanceof Error ? e.message : failure);
@@ -87,7 +108,7 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
     } finally {
       if (epoch.current.valid(ticket)) setLoading(false);
     }
-  }, [action, actor, controlCode, controlId, dateError, framework, full, kind, page, pageSize, reliableRead, since, until]);
+  }, [action, actor, compact, controlCode, controlId, dateError, framework, full, kind, page, pageSize, reliableRead, since, until]);
 
   useEffect(() => {
     const current = epoch.current;
@@ -128,6 +149,12 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
   const label = (row: AuditEvent) => entities[row.entity_type] ?? row.entity_type;
   const verb = (row: AuditEvent) => actions[row.action] ?? row.action;
   const eventTitle = (row: AuditEvent) => {
+    if (isRequirementLink(row)) {
+      const coverage = coverageLabels[fieldValue(row, 'coverage_type')];
+      if (row.action === 'insert') return ['ربط متطلب بالضابط', coverage].filter(Boolean).join(' · ');
+      if (row.action === 'update') return 'تحديث ربط متطلب بالضابط';
+      if (row.action === 'delete') return 'إزالة ربط متطلب بالضابط';
+    }
     if (row.entity_type === 'evidence_reviews' || row.entity_type === 'evidence_control_link_reviews') {
       const decision = row.new_data?.decision;
       if (decision === 'accepted') return 'قبول الدليل';
@@ -143,6 +170,15 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
     !cutoffKnown || !earliest || Date.parse(item.time) < Date.parse(earliest));
 
   const reference = (row: AuditRow) => eventReference(row, firstAuditRelation(row.controls));
+  const linkSubtitle = (row: AuditRow) => {
+    const control = firstAuditRelation(row.controls);
+    const framework = firstAuditRelation(control?.frameworks);
+    const id = requirementId(row);
+    const requirement = id === null ? undefined : requirementLabels.get(id);
+    const controlCode = control?.control_code ? qualifiedAuditCode(control.control_code, framework) : '';
+    const requirementName = requirement?.title_ar || (requirement?.requirement_code ?? (id === null ? 'متطلب سيبراني' : `متطلب #${id}`));
+    return `${requirementName}${controlCode ? ` · ${controlCode}` : ''}`;
+  };
   const change = (set: (value: string) => void, value: string) => {
     set(value);
     setPage(0);
@@ -179,6 +215,10 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
     const linked = eventLink(row, full);
     const reason = fieldValue(row, 'rationale', 'review_notes');
     const { framework: relatedFramework } = reference(row);
+    const rowDetails = keys.length > 0 ? <table className={styles.diff}><thead><tr><th scope="col">الحقل</th><th scope="col">قبل</th><th scope="col">بعد</th></tr></thead>
+      <tbody>{keys.map(key => <tr key={key}><th scope="row">{fields[key] ?? key}</th>
+        <td dir="auto">{showValue(key, row.previous_data?.[key])}</td><td dir="auto">{showValue(key, row.new_data?.[key])}</td></tr>)}</tbody>
+    </table> : <p>لا توجد قيم قبل وبعد مسجّلة لهذا الحدث.</p>;
     return <div className={styles.details}>
       <div className={styles.detailBar}><span>الحدث <b dir="ltr">#{row.id}</b></span>
         {linked && (!compact || linked.href !== `/controls/${controlId}`) && <Link href={linked.href}>{linked.label} ←</Link>}
@@ -186,10 +226,10 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
       {relatedFramework && <p className={styles.frameworkDetail}><strong>الإطار التنظيمي</strong> <bdi dir="ltr">{relatedFramework.code}</bdi>
         <span>{relatedFramework.name_ar}</span></p>}
       {compact && reason && <p className={styles.decisionNote}><strong>مبرر القرار</strong><span>{reason}</span></p>}
-      {keys.length > 0 ? <table className={styles.diff}><thead><tr><th scope="col">الحقل</th><th scope="col">قبل</th><th scope="col">بعد</th></tr></thead>
-        <tbody>{keys.map(key => <tr key={key}><th scope="row">{fields[key] ?? key}</th>
-          <td dir="auto">{showValue(key, row.previous_data?.[key])}</td><td dir="auto">{showValue(key, row.new_data?.[key])}</td></tr>)}</tbody>
-      </table> : <p>لا توجد قيم قبل وبعد مسجّلة لهذا الحدث.</p>}
+      {compact && isRequirementLink(row) ? <>
+        <p className={styles.decisionNote}>{linkSubtitle(row)}</p>
+        <details><summary>التفاصيل التقنية للحدث</summary>{rowDetails}</details>
+      </> : rowDetails}
     </div>;
   }
 
@@ -246,9 +286,9 @@ export default function GrcAuditTrail({ controlId, reliableRead = false, full = 
         })}</tbody>
       </table></div>
       : compact ? <ol className={styles.timeline}>{rows.map(row => {
-        const ref = reference(row);
+        const subtitle = isRequirementLink(row) ? linkSubtitle(row) : reference(row).title;
         return <li key={row.id}><details className={styles.timelineEvent}><summary>
-          <span className={styles.timelineMain}><strong>{eventTitle(row)}</strong>{ref.title && <span className={styles.timelineTitle} title={ref.title}>{ref.title}</span>}</span>
+          <span className={styles.timelineMain}><strong>{eventTitle(row)}</strong>{subtitle && <span className={styles.timelineTitle} title={subtitle}>{subtitle}</span>}</span>
           <span className={styles.timelineBy}><bdi>{person(row)}</bdi><time dateTime={row.occurred_at}>{formatRiyadhDateTime(row.occurred_at)}</time></span>
         </summary>{details(row)}</details></li>;
       })}</ol> : rows.map(row => {
