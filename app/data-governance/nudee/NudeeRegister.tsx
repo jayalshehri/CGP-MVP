@@ -1,5 +1,5 @@
 "use client";
-import { riyadhIsoDate } from "@/lib/dates";
+import { formatRiyadhDate, riyadhIsoDate } from "@/lib/dates";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -10,15 +10,14 @@ import MyImprovements from "./MyImprovements";
 import AccessibleDialog from "@/components/AccessibleDialog";
 import "../data-governance.css";
 import "./register.css";
+import "./office-workspace.css";
+import { canReview, inView, isOverdue as isLate } from "./queues";
 import EvidenceGroups from "./EvidenceGroups";
 import SourceReference from "./SourceReference";
 import { frameworkCopy, governanceDomain, localLevels, type EvidenceRequirement as Requirement } from "./reference";
 
 type Assignment={id:number;requirement_id:number;assignee_id:string|null;status:string;updated_at:string;due_date:string|null;review_notes:string|null};
 type User={user_id:string;display_name:string|null;role:string};
-function isLate(a: Assignment | undefined, today: string) {
- return !!a?.due_date && a.due_date < today && ["assigned", "changes_requested"].includes(a.status);
-}
 function ownerPriority(a: Assignment | undefined, today: string) {
  if (a?.status === "changes_requested") return 0;
  if (isLate(a, today)) return 1;
@@ -26,11 +25,10 @@ function ownerPriority(a: Assignment | undefined, today: string) {
  return a?.status === "submitted" ? 3 : 4;
 }
 const statusLabels:Record<string,string>={unassigned:"لم يكلّف",assigned:"بانتظار الرفع",submitted:"بانتظار المراجعة",changes_requested:"أعيد للتعديل",approved:"معتمد"};
-const views:Record<string,string>={all:"كل الحالات",...statusLabels,overdue:"متأخر"};
+const views:Record<string,string>={all:"كل الحالات",...statusLabels,overdue:"متأخر",action:"تحتاج إجراء مني",review:"بانتظار قراري"};
 const pageSize=25;
 export default function NudeeRegister(){
  const query=useSearchParams();
- const requestedView=query.get("view")||"all";
  const [role,setRole]=useState<"office"|"assignee"|null>(null);
  const [currentUserId,setCurrentUserId]=useState<string|null>(null);
  const [requirements,setRequirements]=useState<Requirement[]>([]);
@@ -40,8 +38,8 @@ export default function NudeeRegister(){
  const [filter,setFilter]=useState("");
  const [page,setPage]=useState(1);
  const [selected,setSelected]=useState<number|null>(null);
- const [assignee,setAssignee]=useState("");
- const [due,setDue]=useState("");
+ const [draftAssignee,setAssignee]=useState<string|null>(null);
+ const [draftDue,setDue]=useState<string|null>(null);
  const [reason,setReason]=useState("");
  const [sourceId,setSourceId]=useState("");
  const [locator,setLocator]=useState("");
@@ -60,8 +58,11 @@ export default function NudeeRegister(){
  const [notice,setNotice]=useState("");
  const question=role==="office" ? query.get("question") : null;
  const gapTarget=question ? query.get("missing") : null;
+ const linkedTask=query.get("open");
+ const explicitScope=!!(evidenceId||question||linkedTask||query.get("domain")||query.get("layout"));
+ const requestedView=query.get("view") || (explicitScope?"all":role==="assignee"?"action":"all");
  const hasPilot=requirements.some(r=>r.domain_name===governanceDomain && /^DG\.MQ\./.test(r.standard_code));
- const defaultPilot=requestedView==="all" && !evidenceId && query.get("layout")!=="list" && hasPilot;
+ const defaultPilot=requestedView==="all" && !linkedTask && !evidenceId && query.get("layout")!=="list" && hasPilot;
  const domain=role==="office" ? query.get("domain") || (defaultPilot ? governanceDomain : "") : "";
  const grouped=role==="office" && !evidenceId && query.get("layout")!=="list" && !!domain && (requirements.some(r=>r.domain_name===domain && /\.MQ\./.test(r.standard_code)) || !!question);
  const [ownerFilter,setOwnerFilter]=useState("");
@@ -96,7 +97,8 @@ export default function NudeeRegister(){
   try{await load();setNotice("");}catch(e){setError(e instanceof Error?e.message:"تعذر تحميل البيانات. حاول مرة أخرى.");}
   finally{pending.current=false;setBusy(false);setLoading(false);}
  }
- const view=Object.hasOwn(views,requestedView)&&!(role==="assignee"&&requestedView==="unassigned")?requestedView:"all";
+ const availableViews=Object.entries(views).filter(([key])=>role==="office"?key!=="action":key!=="unassigned"&&key!=="review");
+ const view=availableViews.some(([key])=>key===requestedView)?requestedView:"all";
  const byRequirement=useMemo(()=>new Map(assignments.map(a=>[a.requirement_id,a])),[assignments]);
  const names=useMemo(()=>new Map(users.map(u=>[u.user_id,u.display_name||u.user_id])),[users]);
  const submittedIds=useMemo(()=>new Set(submissions.map(s=>s.assignment_id)),[submissions]);
@@ -115,32 +117,33 @@ export default function NudeeRegister(){
     if(rank<0 || rank>localLevels.indexOf(gapTarget) || (a?.status==="approved" && submittedIds.has(a.id)))return false;
    }
    if(ownerFilter && a?.assignee_id!==ownerFilter)return false;
-   if(view==="overdue"){
-    if(!isLate(a,today))return false;
-   }else if(view!=="all"&&(a?.status||"unassigned")!==view)return false;
+   if(!inView(a,view,today,currentUserId))return false;
    return [r.standard_code,r.evidence_name,r.domain_name,r.requirement_title,r.specification_code,r.responsible_department].join(" ").toLocaleLowerCase("ar").includes(search);
   }).sort((left,right)=>{
    const a=byRequirement.get(left.id), b=byRequirement.get(right.id);
-   if(view==="submitted")return (a?.updated_at||"").localeCompare(b?.updated_at||"") || left.source_row-right.source_row;
+   if(view==="submitted"||view==="review")return (a?.updated_at||"").localeCompare(b?.updated_at||"") || left.source_row-right.source_row;
    if(role==="assignee" || view==="overdue"){
     const rank=role==="assignee"?ownerPriority(a,today)-ownerPriority(b,today):0;
     return rank || (a?.due_date||"9999").localeCompare(b?.due_date||"9999") || left.source_row-right.source_row;
    }
    return left.source_row-right.source_row;
   });
- },[scoped,byRequirement,view,filter,today,role,domain,ownerFilter,evidenceId,question,gapTarget,submittedIds]);
+ },[scoped,byRequirement,view,filter,today,role,domain,ownerFilter,evidenceId,question,gapTarget,submittedIds,currentUserId]);
  const pages=Math.max(1,Math.ceil(visible.length/pageSize));
  const currentPage=Math.min(page,pages);
  const pageRows=visible.slice((currentPage-1)*pageSize,currentPage*pageSize);
- const current=scoped.find(r=>r.id===selected);
+ const activeId=selected ?? (linkedTask ? Number(linkedTask) : null);
+ const current=scoped.find(r=>r.id===activeId);
  const assignment=current?byRequirement.get(current.id):undefined;
+ const assignee=draftAssignee ?? assignment?.assignee_id ?? "";
+ const due=draftDue ?? assignment?.due_date ?? "";
  function canAssign(a:Assignment|undefined){return !a||(a.status==="assigned"&&!submittedIds.has(a.id));}
  function changeScope(viewValue:string,domainValue:string,layout=domainValue?"group":"list"){
   const url=new URL(window.location.href);
-  url.searchParams.delete("evidence");
+  url.searchParams.delete("evidence");url.searchParams.delete("open");
   url.searchParams.delete("question");url.searchParams.delete("missing");
   url.searchParams.set("layout",layout);
-  if(viewValue==="all")url.searchParams.delete("view");else url.searchParams.set("view",viewValue);
+  url.searchParams.set("view",viewValue);
   if(domainValue)url.searchParams.set("domain",domainValue);else url.searchParams.delete("domain");
   window.history.replaceState(null,"",url);
   setPage(1);setBulkIds([]);
@@ -150,14 +153,21 @@ export default function NudeeRegister(){
   setSelected(r.id);setVersionId(null);setCompletedReview(null);setFile(null);setError("");setNotice("");
   setAssignee(a?.assignee_id||"");setDue(a?.due_date||"");setNote("");setReason("");setSourceId("");setLocator("");setUploadLocator("");
  }
- function closeRequirement(){setSelected(null);setFile(null);setVersionId(null);}
+ function closeRequirement(){
+  if(linkedTask){
+   const url=new URL(window.location.href);
+   url.searchParams.delete("open");
+   window.history.replaceState(null,"",url);
+  }
+  setSelected(null);setFile(null);setVersionId(null);setAssignee(null);setDue(null);
+ }
  const files=useMemo(()=>assignment?submissions.filter(s=>s.assignment_id===assignment.id).sort((a,b)=>b.id-a.id):[],[assignment,submissions]);
  const latest=files[0];
  const displayed=files.find(s=>s.id===versionId)||latest;
  const latestSelected=!!latest && latest.id===displayed?.id;
  const nextReview=visible.find(r=>{
   const other=byRequirement.get(r.id);
-  return r.id!==selected && other?.status==="submitted" && other.assignee_id!==currentUserId;
+  return r.id!==activeId && canReview(other,currentUserId);
  });
  async function assign(){
   if(role!=="office"||!current||!canAssign(assignment)||!assignee||pending.current||needsRefresh)return;pending.current=true;setBusy(true);setError("");setNotice("");
@@ -272,16 +282,27 @@ export default function NudeeRegister(){
  const userOptions=users.map(u=><option key={u.user_id} value={u.user_id}>{u.display_name||u.user_id}</option>);
 
  const canUpload=assignment&&assignment.assignee_id===currentUserId&&["assigned","changes_requested"].includes(assignment.status);
+ const shortcuts=role==="assignee"
+  ? [["action","تحتاج إجراء مني"],["submitted","أُرسلت للمراجعة"],["approved","أدلة معتمدة"]]
+  : [["review","بانتظار قراري"],["overdue","تكليفات متأخرة"],["changes_requested","معادة للتعديل"]];
  return <div className="dg-page nr-page" dir="rtl">
-  <header className="nr-heading">
-   <h1>{role==="assignee"?"مهامي":"مركز الأدلة"}</h1>
+  <header className="nr-heading office-hero">
+   <h1>{role==="assignee"?"مهامي":view==="review"?"مراجعة الأدلة":"مركز الأدلة"}</h1>
    {role&&<p>{role==="assignee"?"تابع تكليفاتك وارفع أدلتك لمراجعة مكتب البيانات.":"تابع أدلة القياس من الإسناد وحتى الاعتماد."}</p>}
   </header>
+  {role&&<div className="nr-quick" role="group" aria-label="قوائم العمل">
+   {shortcuts.map(([key,label])=><button key={key} type="button" aria-pressed={view===key&&!domain&&!filter&&!ownerFilter&&!evidenceId}
+    onClick={()=>{setFilter("");setOwnerFilter("");changeScope(key,"","list");}}>
+    <strong>{scoped.filter(r=>inView(byRequirement.get(r.id),key,today,currentUserId)).length.toLocaleString("ar-SA")}</strong><span>{label}</span>
+   </button>)}
+  </div>}
   {role==="assignee"&&currentUserId&&<MyImprovements userId={currentUserId}/>}
   {role==="office"&&<SourceReference/>}
   {!current&&feedback}
+  {role&&linkedTask&&!current&&<p className="nr-message" role="status">المتطلب غير متاح ضمن صلاحيات حسابك.</p>}
   {loading&&<p role="status">جارٍ تحميل المتطلبات والأدلة…</p>}
   {role&&<section className="nr-register" aria-label={role==="office"?"سجل المتطلبات":"تكليفاتي"}>
+   <h2 className="nr-queue-title">{domain|| (role==="assignee"?"متطلباتي":"سجل المتطلبات")}</h2>
    {evidenceId&&<button type="button" className="nr-secondary" onClick={()=>changeScope("all","")}>عرض سجل المتطلبات كاملًا</button>}
    {role==="office"&&hasPilot&&<div className="nr-layout-switch">
     <button type="button" className="nr-secondary" aria-pressed={grouped} onClick={()=>changeScope("all",domain||governanceDomain,"group")}>عرض أسئلة المجال</button>
@@ -294,7 +315,7 @@ export default function NudeeRegister(){
     </label>
     <label htmlFor="nudee-view">حالة المتطلب
      <select id="nudee-view" value={view} onChange={e=>changeScope(e.target.value,domain)}>
-      {Object.entries(views).filter(([key])=>role==="office"||key!=="unassigned").map(([key,label])=><option key={key} value={key}>{label}</option>)}
+      {availableViews.map(([key,label])=><option key={key} value={key}>{label}</option>)}
      </select>
     </label>
     {role==="office"&&<>
@@ -317,7 +338,7 @@ export default function NudeeRegister(){
     <button type="button" className="nr-secondary" disabled={busy} onClick={()=>setBulkIds([])}>إلغاء التحديد</button>
    </section>}
    {!visible.length?<div className="nr-empty">
-    <p>{scoped.length?"لا توجد متطلبات تطابق خيارات البحث والتصفية.":role==="assignee"?"لا توجد متطلبات مسندة إلى حسابك حاليًا.":"لا توجد متطلبات في السجل حاليًا."}</p>
+    <p>{scoped.length?(view==="review"&&!filter&&!domain&&!ownerFilter?"لا توجد أدلة تنتظر قرارك حاليًا.":view==="action"&&!filter?"لا توجد متطلبات تحتاج إجراء منك حاليًا.":"لا توجد متطلبات تطابق خيارات البحث والتصفية."):role==="assignee"?"لا توجد متطلبات مسندة إلى حسابك حاليًا.":"لا توجد متطلبات في السجل حاليًا."}</p>
     {scoped.length>0&&<button type="button" className="nr-secondary" onClick={()=>{setFilter("");setOwnerFilter("");changeScope("all","");}}>عرض كل المتطلبات</button>}
    </div>:grouped?<EvidenceGroups key={domain+"|"+filter+"|"+(question||"")} rows={visible} assignments={byRequirement} labels={statusLabels} expand={!!filter.trim()||!!question} onOpen={openRequirement}/>:<table className="nr-table" aria-label={role==="office"?"سجل متطلبات نُضيء":"المتطلبات المسندة إليّ"}>
     <thead><tr>{role==="office"&&<th scope="col" className="nr-select-col"><span className="nr-sr">تحديد للإسناد</span></th>}
@@ -332,13 +353,13 @@ export default function NudeeRegister(){
        disabled={!canAssign(a)||busy||(!checked&&bulkIds.length>=100)} onChange={e=>setBulkIds(ids=>e.target.checked?[...ids,r.id]:ids.filter(id=>id!==r.id))} /></td>}
       <td className="nr-evidence-col"><button type="button" className="nr-open" aria-haspopup="dialog" disabled={busy} onClick={()=>openRequirement(r)}>{r.evidence_name}</button>
        <small><bdi>{r.standard_code||"—"}</bdi> · {r.domain_name}</small>
-       {a && <span className="nr-mobile-meta">{role==="office"&&<span>{names.get(a.assignee_id||"")||"مكلّف مسجّل"} · </span>}{a.due_date?<><span>الاستحقاق </span><time dir="ltr" dateTime={a.due_date}>{a.due_date}</time></>:"دون موعد محدد"}</span>}
+       {a && <span className="nr-mobile-meta">{role==="office"&&<span>{names.get(a.assignee_id||"")||"مكلّف مسجّل"} · </span>}{a.due_date?<><span>الاستحقاق </span><time dateTime={a.due_date}>{formatRiyadhDate(a.due_date)}</time></>:"دون موعد محدد"}</span>}
        {role==="assignee"&&status==="changes_requested"&&<><span className="nr-row-note">{a?.review_notes}</span>
         <button type="button" className="nr-revise" onClick={()=>openRequirement(r)}>رفع نسخة معدّلة</button></>}
        </td>
       <td className="nr-status-col"><span className="nr-status" data-status={status}>{statusLabels[status]||status}</span>{isLate(a,today)&&<small className="nr-late">متأخر عن الاستحقاق</small>}</td>
       {role==="office"&&<td className="nr-owner-col">{a?.assignee_id?(names.get(a.assignee_id)||"مكلّف مسجّل"):"—"}</td>}
-      <td className="nr-due-col">{a?.due_date?<time dateTime={a.due_date} dir="ltr">{a.due_date}</time>:"—"}</td>
+      <td className="nr-due-col">{a?.due_date?<time dateTime={a.due_date} >{formatRiyadhDate(a.due_date)}</time>:"—"}</td>
      </tr>;
     })}</tbody>
    </table>}
@@ -389,7 +410,7 @@ export default function NudeeRegister(){
     <button className="nr-primary" disabled={busy||needsRefresh||!assignee} onClick={assign}>حفظ التكليف</button>
    </section>}
    {canUpload&&<section id="nr-submit" tabIndex={-1} className="nr-detail-section"><h3>إرسال الدليل</h3>
-    <label htmlFor="nudee-file">ملف الدليل<input key={selected} id="nudee-file" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" aria-describedby="nr-file-formats"
+    <label htmlFor="nudee-file">ملف الدليل<input key={current.id} id="nudee-file" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" aria-describedby="nr-file-formats"
      disabled={busy||needsRefresh} onChange={e=>setFile(e.target.files?.[0]||null)} /></label>
     <small id="nr-file-formats">PDF أو DOCX أو PNG أو JPEG، بحد أقصى 20 ميجابايت.</small>
     <label htmlFor="nr-upload-locator">موضع الإثبات في الملف <small>(الصفحة أو البند)</small>

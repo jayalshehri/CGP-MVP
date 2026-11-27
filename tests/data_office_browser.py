@@ -33,7 +33,7 @@ def login(browser, fixture, role, width, height, revision):
     page.get_by_label("البريد الإلكتروني").fill(f"{role}@example.test")
     page.get_by_label("كلمة المرور").fill("fixture-only")
     page.get_by_role("button", name=submit_label, exact=True).click()
-    expect(page).to_have_url(re.compile(r"/data-governance/nudee(?:-dashboard)?$"), timeout=20000)
+    expect(page).to_have_url(re.compile(r"/data-governance/nudee(?:-dashboard|-indicator|\?view=review)?$"), timeout=20000)
     return page
 
 
@@ -52,7 +52,10 @@ def check_layout(browser, revision, size, target):
     after = revision == "after"
     office = login(browser, fixture, "office", width, height, revision)
     if after:
-        expect(office).to_have_url(APP + HOME)
+        expect(office).to_have_url(APP + REGISTER + "?view=review")
+        expect(office.get_by_role("heading", name="مراجعة الأدلة", exact=True)).to_be_visible()
+        expect(office.get_by_role("button", name=NAMES[1], exact=True)).to_be_visible()
+        office.goto(APP + HOME)
     else:
         office.goto(APP + HOME)
     new_heading = office.get_by_role("heading", level=1, name="مكتب إدارة البيانات", exact=True)
@@ -79,6 +82,11 @@ def check_layout(browser, revision, size, target):
         expect(readiness.get_by_text(re.compile("[٢2][٥5][٪%]"))).to_be_visible()
         by_domain = office.get_by_role("region", name="جاهزية الأدلة حسب المجال")
         snap(office, target / f"{size}-indicator.png", True)
+        office.get_by_role("region", name="متطلبات تحتاج متابعة").get_by_role("link", name=re.compile(re.escape(NAMES[1]))).click()
+        expect(office.get_by_role("dialog", name=NAMES[1])).to_be_visible()
+        office.keyboard.press("Escape")
+        expect(office.get_by_role("dialog")).to_have_count(0)
+        office.go_back()
         by_domain.get_by_role("link", name=re.compile("جودة البيانات")).click()
         expect(office.get_by_role("combobox", name="المجال", exact=True)).to_have_value("جودة البيانات")
         expect(office.locator("tbody tr")).to_have_count(1)
@@ -235,6 +243,20 @@ def preparation(browser):
     owner.context.close()
 
 
+def manager_landing(browser):
+    fixture = Fixture()
+    fixture.cycles = [{"id": 9, "title": "دورة الاختبار"}]
+    fixture.cycle_events = [{"id": 15, "cycle_id": 9, "kind": "result", "subject": "maturity",
+                             "outcome": "نتيجة تجريبية", "reference": "مرجع تجريبي"}]
+    page = login(browser, fixture, "manager", *SIZES["desktop"], revision="after")
+    expect(page).to_have_url(APP + INDICATOR)
+    summary = page.get_by_role("region", name="آخر دورة تقييم مسجلة")
+    expect(summary).to_contain_text("دورة الاختبار")
+    expect(summary).to_contain_text("نتيجة تجريبية")
+    expect(summary).to_contain_text("مرجع تجريبي")
+    page.context.close()
+
+
 def evidence_center(browser, target):
     fixture = Fixture()
     req = fixture.requirements[0]
@@ -300,6 +322,7 @@ def all_maturity_levels(browser):
 def lifecycle(browser, target):
     fixture = Fixture()
     office = login(browser, fixture, "office", *SIZES["desktop"], revision="after")
+    office.goto(APP + HOME)
     office.get_by_role("link", name=re.compile("إسناد المتطلبات")).click()
     expect(office.locator("#nudee-view")).to_have_value("unassigned")
     office.get_by_role("button", name=NAMES[2], exact=True).click()
@@ -396,6 +419,7 @@ if __name__ == "__main__":
             results[size] = {"viewport": SIZES[size], "office": "passed", "owner": "passed"}
             print(f"PASS {args.revision} desktop/tablet/mobile layout: {size}", flush=True)
         if args.revision == "after":
+            manager_landing(browser)
             evidence_center(browser, args.output)
             all_maturity_levels(browser)
             preparation(browser)

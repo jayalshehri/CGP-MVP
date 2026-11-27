@@ -85,3 +85,23 @@
 .assessment li {padding-block:6px;overflow-wrap:anywhere}
 .assessment a {color:#075f4b;text-decoration:underline}
 .assessment small,.assessment dd {color:#38564a}
+
+.workGrid { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:16px; align-items:start; margin-block:18px; }
+.workGrid .domains,.priorities { margin:0; border:1px solid #d1dfd8; border-radius:14px; background:#fff; min-width:0; }
+.workGrid h2 { padding:18px 18px 2px; color:#204637; font-size:1.12rem; margin:0; }
+.panelHint { margin:3px 18px 14px; color:#52665c; font-size:.85rem; line-height:1.65; }
+.domainList,.priorities ul { list-style:none; margin:0; padding:0; }
+.domainList { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.domainList li,.priorities li { border-block-start:1px solid #dee7e1; }
+.domainList li:nth-child(even) { border-inline-start:1px solid #dee7e1; }
+.domainList a,.priorities li a { display:grid; gap:4px; height:100%; padding:12px 16px; color:#224c40; text-decoration:none; overflow-wrap:anywhere; }
+.domainList a:hover,.priorities li a:hover { background:#f0f6f2; }
+.domainList span,.domainList small,.priorities li small { font-size:.8rem; color:#4d6159; }
+.domainList progress { margin:3px 0; }
+.priorities li span { font-size:.76rem; color:#644b1b; background:#f7efdc; border-radius:6px; padding:2px 8px; width:fit-content; }
+.allWork { display:block; padding:12px 16px; color:#0c6354; text-underline-offset:4px; }
+@media(max-width:800px){.workGrid{grid-template-columns:1fr}.priorities{grid-row:1}}
+@media(max-width:420px){.domainList a,.priorities li a{padding:10px}}
+
+.cycleLine {display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;padding:12px 16px;border-inline-start:3px solid #9c895b;background:#f6f5ef;color:#324a3c;overflow-wrap:anywhere}
+.cycleLine span,.cycleLine button{font-size:.88rem}.cycleLine button{border:0;background:transparent;color:#075e4b;text-decoration:underline;cursor:pointer;min-height:38px}

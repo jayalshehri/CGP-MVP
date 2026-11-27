@@ -17,10 +17,10 @@ STAMP = "2026-01-04T08:00:00Z"
 
 
 def profile(role):
-    office = role == "office"
+    office = role in ("office", "manager")
     return {
         "user_id": OFFICE if office else OWNER,
-        "role": "data_governance_team" if office else "nudee_owner",
+        "role": {"manager": "admin", "office": "data_governance_team", "owner": "nudee_owner"}[role],
         "display_name": "مسؤول المكتب التجريبي" if office else "مالك المتطلب التجريبي",
         "is_active": True,
     }
@@ -64,6 +64,8 @@ class Fixture:
         self.decisions = []
         self.requests = []
         self.unexpected = []
+        self.cycles = []
+        self.cycle_events = []
 
     def install(self, context, role):
         def handle(route):
@@ -91,7 +93,7 @@ class Fixture:
                 result = session(role)["user"]
             elif path == "/rest/v1/profiles":
                 result = profile(role)
-            elif path == "/rest/v1/rpc/nudee_question_overview" and role == "office":
+            elif path == "/rest/v1/rpc/nudee_question_overview" and role in ("office", "manager"):
                 result = []
                 questions = {(r["domain_name"], r["standard_code"]) for r in self.requirements}
                 for domain, code in sorted(questions):
@@ -107,7 +109,7 @@ class Fixture:
                             missing += 1
                     state = "no_target" if not target else "baseline" if not rank else "blocked" if missing else "confirmed" if d["confirmed"] else "ready"
                     result.append(dict(standard_code=code, domain_name=domain, target_level=target, question_state=state, missing_count=missing))
-            elif path in ("/rest/v1/rpc/nudee_preparation_manifest", "/rest/v1/rpc/nudee_export_manifest") and role == "office":
+            elif path in ("/rest/v1/rpc/nudee_preparation_manifest", "/rest/v1/rpc/nudee_export_manifest") and role in ("office", "manager"):
                 result = []
                 for req in self.requirements:
                     if req["domain_name"] != payload["p_domain"]:
@@ -132,11 +134,11 @@ class Fixture:
                 self.files.append(dict(source, id=result, assignment_id=target["id"], source_submission_id=source["id"],
                                        source_locator=payload["p_locator"]))
                 target["status"] = "submitted"
-            elif path == "/rest/v1/rpc/nudee_approval_officers" and role == "office":
+            elif path == "/rest/v1/rpc/nudee_approval_officers" and role in ("office", "manager"):
                 result = [profile("office")]
-            elif path == "/rest/v1/rpc/nudee_assignees" and role == "office":
+            elif path == "/rest/v1/rpc/nudee_assignees" and role in ("office", "manager"):
                 result = [profile("owner")]
-            elif path == "/rest/v1/nudee_final_review" and role == "office":
+            elif path == "/rest/v1/nudee_final_review" and role in ("office", "manager"):
                 result = {"progress": 0.125}
             elif path.startswith("/storage/v1/object/nudee-evidence/") and request.method == "GET":
                 key = path.split("/nudee-evidence/", 1)[1]
@@ -177,14 +179,15 @@ class Fixture:
                 self.record(assignment["id"], assignment["status"], payload["p_notes"], payload.get("p_submission_id"))
                 result = assignment["id"]
             elif request.method == "GET" and path.startswith("/rest/v1/"):
-                assigned = [r for r in self.assignments if role == "office" or r["assignee_id"] == OWNER]
+                assigned = [r for r in self.assignments if role in ("office", "manager") or r["assignee_id"] == OWNER]
                 ids = {r["requirement_id"] for r in assigned}
                 tables = {
                     "nudee_improvements": [],
-                    "nudee_cycles": [],
+                    "nudee_cycles": self.cycles,
+                    "nudee_cycle_events": self.cycle_events,
                     "nudee_evidence_mapping": [],
                     "nudee_specifications": [{"code": "DG.1.1", "page": 20}] if role == "office" else [],
-                    "nudee_requirements": [r for r in self.requirements if role == "office" or r["id"] in ids],
+                    "nudee_requirements": [r for r in self.requirements if role in ("office","manager") or r["id"] in ids],
                     "nudee_assignments": assigned, "nudee_submissions": self.files,
                     "nudee_question_decisions": self.decisions if role == "office" else [],
                 }
