@@ -536,9 +536,9 @@ html:has(.catalog-drawer[open]) { overflow: hidden; }
   .catalog-empty-state { padding: 14px; }
 }
 
-.catalog-dcc-entry{display:flex;align-items:center;gap:14px;padding:12px 15px;margin-block-start:16px;background:#f2f4fb;border:1px solid #e0e5f3;border-inline-start:3px solid #6165aa;border-radius:12px;color:#232952}
-.catalog-dcc-symbol{display:grid;place-items:center;width:42px;height:42px;border-radius:11px;background:#e2e7fa;color:#373d83;flex:none}
-.catalog-dcc-copy{min-width:0;flex:1}.catalog-dcc-copy h2{font-size:14px;font-weight:750;line-height:1.6;margin:0}.catalog-dcc-copy p{font-size:12px;line-height:1.75;color:#535c79;margin:2px 0 0}
-.catalog-dcc-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px}.catalog-dcc-history{color:#373d83;font-size:12px;text-decoration:underline;text-underline-offset:3px}
-.catalog-dcc-cta{display:inline-flex;align-items:center;gap:8px;min-height:42px;padding:7px 13px;border-radius:8px;background:#333875;color:#fff;font-weight:700;font-size:13px;text-decoration:none}.catalog-dcc-cta:hover{background:#292e61;color:#fff}.catalog-dcc-entry a:focus-visible{outline:3px solid #6165aa;outline-offset:3px}
-@media(max-width:620px){.catalog-dcc-entry{flex-wrap:wrap;gap:10px}.catalog-dcc-actions{width:100%;justify-content:flex-end}}
+.catalog-assessment-entry{display:flex;align-items:center;gap:14px;padding:12px 15px;margin-block-start:16px;background:#f2f4fb;border:1px solid #e0e5f3;border-inline-start:3px solid #6165aa;border-radius:12px;color:#232952}
+.catalog-assessment-symbol{display:grid;place-items:center;width:42px;height:42px;border-radius:11px;background:#e2e7fa;color:#373d83;flex:none}
+.catalog-assessment-copy{min-width:0;flex:1}.catalog-assessment-copy h2{font-size:14px;font-weight:750;line-height:1.6;margin:0}.catalog-assessment-copy p{font-size:12px;line-height:1.75;color:#535c79;margin:2px 0 0}
+.catalog-assessment-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px}.catalog-assessment-history{color:#373d83;font-size:12px;text-decoration:underline;text-underline-offset:3px}
+.catalog-assessment-cta{display:inline-flex;align-items:center;gap:8px;min-height:42px;padding:7px 13px;border-radius:8px;background:#333875;color:#fff;font-weight:700;font-size:13px;text-decoration:none}.catalog-assessment-cta:hover{background:#292e61;color:#fff}.catalog-assessment-entry a:focus-visible{outline:3px solid #6165aa;outline-offset:3px}
+@media(max-width:620px){.catalog-assessment-entry{flex-wrap:wrap;gap:10px}.catalog-assessment-actions{width:100%;justify-content:flex-end}}

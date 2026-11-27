@@ -12,7 +12,8 @@ import { controlAssignmentRoles, type AppliedControlOwner } from "@/lib/control-
 import { getEccCatalogLabel } from "@/lib/ecc-catalog-labels";
 import { supabase } from "@/lib/supabase";
 import CatalogAssignment from "./catalog-assignment";
-import DccAssessmentEntry from "@/components/DccAssessmentEntry";
+import FrameworkAssessmentEntry from "@/components/FrameworkAssessmentEntry";
+import { compactAssessmentFramework } from "@/lib/assessment-navigation";
 import "./catalog.css";
 
 type Control = {
@@ -148,6 +149,7 @@ function ControlsContent() {
 
   const selectedFramework = frameworks.find(item => item.code === requestedFramework) ?? frameworks.find(item => item.code === "ECC") ?? frameworks[0];
   const framework = selectedFramework?.code ?? "";
+  const assessmentFramework = compactAssessmentFramework(framework);
   const csccVersionLabel = framework === "CSCC" && selectedFramework?.version
     ? `CSCC-${selectedFramework.version.replace("-", ":")}` : null;
   const scoped = useMemo(() => controls.filter(c => c.framework_id === selectedFramework?.id &&
@@ -294,7 +296,7 @@ function ControlsContent() {
         </div>
       </section>
 
-      {framework === "DCC" && <DccAssessmentEntry key={selectedFramework.id} frameworkId={selectedFramework.id}/>}
+      {assessmentFramework && <FrameworkAssessmentEntry key={selectedFramework.id} frameworkId={selectedFramework.id} framework={assessmentFramework}/>}
 
       <section className="catalog-results" aria-label="نتائج الضوابط">
         <div className="catalog-results-bar">

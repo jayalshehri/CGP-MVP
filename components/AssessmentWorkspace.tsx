@@ -7,8 +7,8 @@ import {AssessmentCycle,AssessmentItem,AssessmentFinding,Person,assessmentLabels
 import {EvidenceRecord,csvDownload,todayRiyadh} from '@/lib/grc';
 import {WorkflowHeading,WorkflowMetric} from '@/components/WorkflowUI';
 import AssessmentItemEditor from '@/components/AssessmentItemEditor';
-import {DccAssessmentCycle,DccAssessmentIndex} from '@/components/DccAssessmentLayout';
-import {dccCycleHref} from '@/lib/dcc-assessment-navigation';
+import {AssessmentFlowCycle,AssessmentFlowIndex} from '@/components/AssessmentFlow';
+import {assessmentCycleHref,compactAssessmentFramework} from '@/lib/assessment-navigation';
 import './assessment-workspace.css';
 
 type Framework={id:number;code:string;version:string};
@@ -16,7 +16,7 @@ type System={id:number;name:string};
 type LinkRow={item_id:number;evidence_id:number};
 const actions:Record<string,[string,string][]>= {draft:[['start','بدء التقييم']],in_progress:[['collect','جمع الأدلة'],['submit','إرسال للمراجعة']],evidence_collection:[['submit','إرسال للمراجعة']],under_review:[['return','إعادة للاستكمال'],['complete','إكمال المراجعة']],completed:[['return','إعادة للمراجعة والاستكمال'],['approve','اعتماد النسخة']],approved:[['close','إغلاق الدورة'],['reassess','إنشاء إعادة تقييم']],closed:[['reassess','إنشاء إعادة تقييم']]};
 export default function AssessmentWorkspace({frameworkCode,requestedCycle}:{frameworkCode:string;requestedCycle?:number}){
- const dcc=frameworkCode==='DCC';
+ const assessmentFramework=compactAssessmentFramework(frameworkCode);
  const router=useRouter();
  const [framework,setFramework]=useState<Framework|null>(null),[actor,setActor]=useState(''),[role,setRole]=useState('');
  const [cycles,setCycles]=useState<AssessmentCycle[]>([]),[selected,setSelected]=useState<number|null>(null),[items,setItems]=useState<AssessmentItem[]>([]),[people,setPeople]=useState<Person[]>([]),[systems,setSystems]=useState<System[]>([]);
@@ -34,8 +34,8 @@ export default function AssessmentWorkspace({frameworkCode,requestedCycle}:{fram
   const isTeam=['admin','cybersecurity_team'].includes(profile.role);
   const [p,s,pr]=await Promise.all([isTeam?supabase.from('profiles').select('user_id,display_name,role').eq('is_active',true):Promise.resolve({data:[],error:null}),frameworkCode==='CSCC'&&isTeam?supabase.from('cscc_systems').select('id,name'):Promise.resolve({data:[],error:null}),supabase.from('cybersecurity_projects').select('id,name_ar').order('id')]);
   if(p.error||s.error||pr.error)throw p.error||s.error||pr.error;
-  if(active){setActor(user.id);setRole(profile.role);setFramework(f.data);setCycles(c.data as AssessmentCycle[]);setSelected(prev=>dcc ? ((c.data??[]).find(x=>x.id===requestedCycle)?.id??null) : ((c.data??[]).some(x=>x.id===prev)?prev:(c.data??[]).find(x=>x.id===Number(new URLSearchParams(window.location.search).get('cycle')))?.id??c.data?.[0]?.id??null));setPeople(p.data??[]);setSystems(s.data??[]);setProjects(pr.data??[]);setError('');}
- }catch(e){if(active)setError(e instanceof Error?e.message:'تعذر تحميل التقييم. سجّل الدخول أو أعد المحاولة.');}finally{if(active)setLoading(false);}})();return()=>{active=false;};},[frameworkCode,refresh,dcc,requestedCycle]);
+  if(active){setActor(user.id);setRole(profile.role);setFramework(f.data);setCycles(c.data as AssessmentCycle[]);setSelected(prev=>assessmentFramework ? ((c.data??[]).find(x=>x.id===requestedCycle)?.id??null) : ((c.data??[]).some(x=>x.id===prev)?prev:(c.data??[]).find(x=>x.id===Number(new URLSearchParams(window.location.search).get('cycle')))?.id??c.data?.[0]?.id??null));setPeople(p.data??[]);setSystems(s.data??[]);setProjects(pr.data??[]);setError('');}
+ }catch(e){if(active)setError(e instanceof Error?e.message:'تعذر تحميل التقييم. سجّل الدخول أو أعد المحاولة.');}finally{if(active)setLoading(false);}})();return()=>{active=false;};},[frameworkCode,refresh,assessmentFramework,requestedCycle]);
  useEffect(()=>{let active=true;const token=++epoch.current;if(!selected)return;void(async()=>{try{
   const [i,e]=await Promise.all([supabase.from('assessment_items').select('*').eq('cycle_id',selected).order('id'),supabase.rpc('grc_evidence_register')]);if(i.error||e.error)throw i.error||e.error;
   const ids=(i.data??[]).map(x=>x.id);const [l,f]=ids.length?await Promise.all([supabase.from('assessment_item_evidence').select('item_id,evidence_id').in('item_id',ids),supabase.from('assessment_findings').select('*').in('item_id',ids)]):[{data:[],error:null},{data:[],error:null}];if(l.error||f.error)throw l.error||f.error;
@@ -43,7 +43,7 @@ export default function AssessmentWorkspace({frameworkCode,requestedCycle}:{fram
  }catch(e){if(active&&epoch.current===token)setError(e instanceof Error?e.message:'تعذر تحميل المتطلبات');}finally{if(active&&epoch.current===token)setLoading(false);}})();return()=>{active=false;};},[selected,refresh]);
  const command=async(action:string,data:Record<string,unknown>={})=>{if(busy)return false;setBusy(true);setError('');setMessage('');try{
   const r=await supabase.rpc('cgp_assessment_command',{p_action:action,p_cycle:selected,p_data:{cycle_revision:cycle?.revision,...data}});if(r.error)throw r.error;
-  if(dcc&&['create','reassess'].includes(action)){setLoading(true);router.push(dccCycleHref(r.data.id));return true;}
+  if(assessmentFramework&&['create','reassess'].includes(action)){setLoading(true);router.push(assessmentCycleHref(assessmentFramework,r.data.id));return true;}
   setLoading(true);if(['create','reassess'].includes(action)){setSelected(r.data.id);setOpen(null);setPage(0);}setRefresh(v=>v+1);setMessage('تم حفظ الإجراء وتسجيله في سجل التدقيق.');return true;
  }catch(e){setError(assessmentCommandErrorMessage(e));return false;}finally{setBusy(false);}};
  const metrics=assessmentMetrics(items,!!cycle&&['approved','closed'].includes(cycle.status));
@@ -51,15 +51,15 @@ export default function AssessmentWorkspace({frameworkCode,requestedCycle}:{fram
  const domains=[...new Set(items.map(i=>i.domain_ar))];
  const visible=items.filter(i=>(!domain||i.domain_ar===domain)&&(!search||`${i.control_code} ${i.title_ar} ${i.description_ar??''}`.toLowerCase().includes(search.toLowerCase()))&&(!status||(status==='unassessed'?!i.compliance_status:status==='scoring'?i.is_scoring:status==='changes_requested'?i.review_status===status:status==='gap'?openGaps.some(f=>f.item_id===i.id):status==='overdue'?overdue.some(f=>f.item_id===i.id):i.compliance_status===status)));
  const exportRows=()=>csvDownload(`${frameworkCode}-assessment-${selected}.csv`,[['الإطار','الإصدار','النطاق','الدورة','حالة الدورة','الرمز','المتطلب','داخل الحساب','النتيجة','قرار المراجعة','المبرر','المعالجة','الموعد'],...items.map(i=>[frameworkCode,cycle?.framework_version??'',cycle?.scope_name??'',selected??'',cycleLabels[cycle?.status??'']??'',i.control_code,i.description_ar||i.title_ar,i.is_scoring?'نعم':'للسياق فقط',assessmentLabels[i.compliance_status??'']??'لم يقيم',reviewLabels[i.review_status],i.notes??'',i.corrective_action??'',i.expected_compliance_date??''])]);
- if(dcc){
+ if(assessmentFramework){
   const canCreate=team&&!!framework;
   const retry=()=>{setError('');setLoading(true);setRefresh(v=>v+1);};
   const create=<form className="ae-form-grid" onSubmit={e=>{e.preventDefault();if(newScope.trim())void command('create',{framework_id:framework?.id,scope_name:newScope.trim(),system_id:null,due_date:due||null});}}>
     <label>نطاق التقييم<input required value={newScope} onChange={e=>setNewScope(e.target.value)} placeholder="مثال: الجهة — التقييم السنوي"/></label>
     <label>تاريخ الاستحقاق (اختياري)<input type="date" value={due} onChange={e=>setDue(e.target.value)}/></label>
-    <button type="submit" className="dcc-primary" disabled={busy||loading||!newScope.trim()}>إنشاء مسودة</button>
+    <button type="submit" className="assessment-flow-primary" disabled={busy||loading||!newScope.trim()}>إنشاء مسودة</button>
   </form>;
-  if(!cycle||!loadedKey.startsWith(`${cycle.id}:`))return <DccAssessmentIndex cycles={cycles} loading={loading||!!cycle&&!error}
+  if(!cycle||!loadedKey.startsWith(`${cycle.id}:`))return <AssessmentFlowIndex framework={assessmentFramework} cycles={cycles} loading={loading||!!cycle&&!error}
     couldCreate={canCreate} create={create} unavailable={requestedCycle!==undefined&&!cycle} error={error} retry={retry} version={framework?.version}/>;
   const entry=items.find(i=>i.id===open);
   const finding=entry?findings.find(f=>f.item_id===entry.id):undefined;
@@ -67,7 +67,7 @@ export default function AssessmentWorkspace({frameworkCode,requestedCycle}:{fram
     evidence={[...new Map(evidence.filter(e=>e.control_id===entry.control_id).map(e=>[e.id,e])).values()]}
     evidenceIds={links.filter(l=>l.item_id===entry.id).map(l=>l.evidence_id)} finding={finding} actor={actor} role={role} busy={busy||loading} command={command}/>:null;
   const setup=team&&cycle.status==='draft'?<CycleSetup key={`${cycle.id}-${cycle.revision}`} cycle={cycle} items={items} people={people} busy={busy||loading} command={command} initiallyOpen/>:null;
-  const executive=<div className="dcc-executive" style={{padding:'0 18px 14px'}}>
+  const executive=<div className="assessment-flow-executive" style={{padding:'0 18px 14px'}}>
     <p className="ae-muted">{metrics.missing} بندًا يحتاج استكمال البيانات · {overdue.length} معالجة متأخرة</p>
     {domains.map(d=>{const m=assessmentMetrics(items.filter(i=>i.domain_ar===d),['approved','closed'].includes(cycle.status));
       return <button className="ae-domain" key={d} onClick={()=>{setDomain(d);setStatus('');setSearch('');setPage(0);setMode('operational');}}>
@@ -75,7 +75,7 @@ export default function AssessmentWorkspace({frameworkCode,requestedCycle}:{fram
       </button>;
     })}
   </div>;
-  return <DccAssessmentCycle cycle={cycle} people={people} actor={actor} role={role} team={team} busy={busy||loading}
+  return <AssessmentFlowCycle framework={assessmentFramework} cycle={cycle} people={people} actor={actor} role={role} team={team} busy={busy||loading}
     metrics={metrics} gapCount={openGaps.length} overdueCount={overdue.length} domains={domains} search={search} setSearch={setSearch}
     domain={domain} setDomain={setDomain} status={status} setStatus={setStatus} visible={visible}
     page={Math.min(page,Math.max(0,Math.ceil(visible.length/12)-1))} setPage={setPage} openItem={entry} open={setOpen}

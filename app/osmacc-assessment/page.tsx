@@ -1,2 +1,3 @@
-import AssessmentWorkspace from "@/components/AssessmentWorkspace";
-export default function Page() { return <AssessmentWorkspace frameworkCode="OSMACC"/>; }
+import { assessmentIndexPage } from '@/components/AssessmentRoutes';
+
+export default assessmentIndexPage('OSMACC');
