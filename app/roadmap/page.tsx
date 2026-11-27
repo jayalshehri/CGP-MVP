@@ -232,10 +232,10 @@ function ProjectRegisterContent() {
   return (
     <main className="roadmap-page" dir="rtl">
       <section className="roadmap-shell">
-        <nav className="roadmap-view-tabs" aria-label="إدارة محفظة الأمن السيبراني">
-          <Link className="active" href="/roadmap">سجل المشاريع السيبرانية</Link>
-          <Link href="/roadmap/analysis">تحليل المحفظة السيبرانية</Link>
-          <Link href="/roadmap/dashboard">خارطة طريق المشاريع</Link>
+        <nav className="roadmap-view-tabs" aria-label="أقسام المشاريع السيبرانية">
+          <Link className="active" aria-current="page" href="/roadmap">السجل</Link>
+          <Link href="/roadmap/dashboard">خارطة الطريق</Link>
+          <Link href="/roadmap/analysis">تحليل المحفظة</Link>
         </nav>
 
         <header className="roadmap-hero project-register-hero">
