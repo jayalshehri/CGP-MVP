@@ -7,7 +7,17 @@ export type AuditEvent = {
   actor_name: string | null; actor_id: string | null; occurred_at: string;
   previous_data: Record<string, unknown> | null; new_data: Record<string, unknown> | null;
 };
-export type AuditControl = { id: number; control_code: string; title_ar: string };
+export type AuditFramework = { code: string; name_ar: string };
+type Related<T> = T | T[] | null;
+export type AuditControl = { id: number; control_code: string; title_ar: string; frameworks: Related<AuditFramework> };
+export type AuditRow = AuditEvent & { controls: Related<AuditControl> };
+
+export const firstAuditRelation = <T>(value: Related<T> | undefined): T | null =>
+  Array.isArray(value) ? value[0] ?? null : value ?? null;
+
+export function qualifiedAuditCode(code: string, framework?: AuditFramework | null) {
+  return framework?.code && code ? `${framework.code} · ${code}` : code;
+}
 export const entities:Record<string,string>={assessment_cycles:"دورة تقييم إطار",assessment_items:"نتيجة تقييم",assessment_item_evidence:"أدلة التقييم",assessment_findings:"فجوة ومعالجة",control_framework_links:"مواءمة الضوابط",controls:'الضابط',evidence:'الدليل',evidence_reviews:'قرار الدليل',evidence_control_links:'ربط دليل',evidence_control_link_reviews:'قرار دليل مشترك',control_review_cycles:'دورة المراجعة',evidence_requests:'طلب دليل',control_assessments:'تقييم الضابط',cybersecurity_projects:'مشروع سيبراني',cybersecurity_requirements:'متطلب سيبراني',cybersecurity_project_requirements:'ربط مشروع بمتطلب',portfolio_import_batches:"دفعة استيراد",portfolio_import_projects:"مشروع مستورد",portfolio_mapping_reviews:"مراجعة ربط",cybersecurity_requirement_controls:'ربط متطلب بضابط'};
 export const actions:Record<string,string>={insert:'إنشاء',update:'تعديل',delete:'حذف',start:'بدء التقييم',collect:'جمع الأدلة',submit:'إرسال للمراجعة',return:'إعادة للاستكمال',complete:'إكمال المراجعة',approve:'اعتماد',close:'إغلاق'};
 export const fields:Record<string,string>={control_code:'رمز الضابط',evidence_name:'اسم الدليل',file_name:'اسم الملف',completed_at:'وقت الإغلاق',frequency:'التكرار',cycle_id:'رقم الدورة',request_id:'رقم الطلب',actor_id:'المستخدم',status:'الحالة',implementation_status:'حالة التطبيق',verification_status:'حالة التحقق',evidence_status:'حالة الدليل',control_owner_id:'معرف المالك',control_owner:'مالك الضابط',due_date:'موعد الاستحقاق',next_audit_date:'المراجعة القادمة',last_audit_date:'آخر مراجعة',review_notes:'سبب القرار',notes:'الملاحظات',result:'نتيجة التقييم',rationale:'مبرر التقييم',is_current:'الإصدار الحالي',reviewer_id:'المراجع',assigned_reviewer:'المراجع المكلف',valid_until:'الصلاحية',requirement:'المطلوب',evidence_ids:'الأدلة الداعمة',project_code:'رمز المشروع',requirement_code:'رمز المتطلب',name_ar:'الاسم',title_ar:'العنوان',initiative_type:'نوع العمل',coverage_type:'نوع التغطية',mapping_confidence:'جودة الربط',mapping_status:'حالة الربط',superseded_at:'تاريخ الاستبدال',superseded_reason:'سبب الاستبدال',supersedes_mapping_id:'الربط السابق',project_id:'المشروع',requirement_id:'المتطلب',control_id:'الضابط',planned_year:'السنة',planned_quarter:'الربع',priority:'الأولوية',executive_owner:'المالك التنفيذي',progress_percent:'نسبة الإنجاز',portfolio_priority:'الأولوية (P1/P2/P3)',execution_year:'سنة التنفيذ',work_type:'نوع العمل (المحفظة)',executive_owner_code:'المالك التنفيذي (الجهة)',executive_owner_other:'المالك التنفيذي (أخرى)',duration_value:'مدة المشروع',duration_unit:'وحدة المدة',archived_at:'تاريخ الأرشفة',archived_by:'من نفّذ الأرشفة',archive_reason:'سبب الأرشفة'};
@@ -43,14 +53,19 @@ export function fieldValue(row: AuditEvent, ...keys: string[]) {
   return '';
 }
 
-export function eventReference(row: AuditEvent, control?: AuditControl) {
+export function eventReference(row: AuditEvent, control?: AuditControl | null) {
   const kind = row.entity_type;
   const savedCode = fieldValue(row, 'control_code', 'project_code', 'requirement_code');
   const savedTitle = fieldValue(row, 'name_ar', 'title_ar', 'evidence_name', 'file_name', 'title', 'name');
   const code = savedCode || (kind === 'controls' ? control?.control_code : '') || `#${row.entity_id}`;
-  const title = savedTitle || (kind === 'controls' ? control?.title_ar : '') || '';
-  const context = kind !== 'controls' && row.control_id ? control?.control_code ?? `#${row.control_id}` : '';
-  return { code, title, context };
+  const rawTitle = savedTitle || (kind === 'controls' ? control?.title_ar : '') || '';
+  const framework = firstAuditRelation(control?.frameworks);
+  const controlCode = kind === 'controls' ? code : row.control_id ? control?.control_code || `#${row.control_id}` : '';
+  const suffix = kind === 'controls' ? ` - ${code}` : '';
+  const title = suffix && rawTitle.endsWith(suffix) ? rawTitle.slice(0, -suffix.length) : rawTitle;
+  const displayCode = kind === 'controls' ? qualifiedAuditCode(code, framework) : code;
+  const context = kind !== 'controls' ? qualifiedAuditCode(controlCode, framework) : '';
+  return { code, displayCode, title, context, controlCode, framework };
 }
 
 export function eventLink(row: AuditEvent, full: boolean) {
