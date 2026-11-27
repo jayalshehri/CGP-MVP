@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import DailyOperationsTabs from "@/components/DailyOperationsTabs";
+import dailyStyles from "@/components/DailyOperationsTabs.module.css";
 import StatusBadge from "@/components/StatusBadge";
 import { WorkflowHeading, WorkflowMetric } from "@/components/WorkflowUI";
 import { requireProfile, type UserRole } from "@/lib/auth";
@@ -81,7 +82,7 @@ export default function TasksPage() {
   if (loading) return <main className="workflow-page" dir="rtl" role="status">جاري تحميل التكليفات…</main>;
   const overdue = count("overdue"), evidence = count("evidence");
   return (
-    <main className="workflow-page" dir="rtl">
+    <main className={`workflow-page ${dailyStyles.dailyPage}`} dir="rtl">
       <WorkflowHeading title={team ? "المتابعة اليومية" : role === "control_owner" ? "مهامي" : "التكليفات"} description={team ? "تابع التكليفات والتنبيهات التي تتطلب إجراءً." : "تابع حالة الضوابط واستحقاقاتها والأدلة المطلوبة."} action={<Link className="workflow-button" href="/controls">سجل الضوابط ←</Link>} />
       {team && <DailyOperationsTabs current="tasks" />}
       {error ? <p className="cgp-shell-error" role="alert">{error} <button className="workflow-button" onClick={() => window.location.reload()}>إعادة المحاولة</button></p> : <>
