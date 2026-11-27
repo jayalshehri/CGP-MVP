@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import DailyOperationsTabs from "@/components/DailyOperationsTabs";
-import { WorkflowHeading, WorkflowMetric } from "@/components/WorkflowUI";
+import dailyStyles from "@/components/DailyOperationsTabs.module.css";
+import { WorkflowHeading } from "@/components/WorkflowUI";
 import { requireProfile } from "@/lib/auth";
 import { frameworkOf } from "@/lib/compliance";
 import { controlHeading } from "@/lib/control-presentation";
@@ -90,16 +91,12 @@ export default function AlertsPage() {
   if (loading) return <main className="workflow-page" dir="rtl" role="status">جاري تحميل التنبيهات…</main>;
   const active = groups.find(group => group.key === selected) ?? groups.find(group => group.items.length > 0) ?? groups[0];
   const uniqueItems = new Set(groups.flatMap(group => group.items.map(item => item.key))).size;
-  const criticalCount = groups.find(group => group.key === "critical")?.items.length ?? 0;
   return (
-    <main className="workflow-page" dir="rtl">
+    <main className={`workflow-page ${dailyStyles.dailyPage}`} dir="rtl">
       <WorkflowHeading title="المتابعة اليومية" description="تابع التكليفات والتنبيهات التي تتطلب إجراءً." />
       <DailyOperationsTabs current="alerts" />
       {error ? <p className="cgp-shell-error" role="alert">{error}</p> : <>
-        <div className="workflow-metrics">
-          <WorkflowMetric label="سجلات تحتاج متابعة" value={uniqueItems} />
-          <WorkflowMetric label="مخاطر حرجة مفتوحة" value={criticalCount} tone={criticalCount ? "danger" : "neutral"} />
-        </div>
+        <p className={dailyStyles.alertSummary}><strong>{uniqueItems}</strong> سجلات تحتاج متابعة، دون تكرار.</p>
         <section className="alert-groups" aria-label="أنواع التنبيهات">
           {groups.map(group => (
             <button type="button" key={group.key} onClick={() => setSelected(group.key)} aria-pressed={group.key === active.key} className={`alert-group-card ${group.items.length ? group.tone : ""} ${group.key === active.key ? "selected" : ""}`}>
