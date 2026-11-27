@@ -20,7 +20,6 @@ const navigation = [
   { href: "/data-governance/nudee", label: "مركز الأدلة", group: "", data: true },
   { href: "/data-governance/users", label: "إدارة المستخدمين", group: "", data: true, admin: true },
   { href: "/shared-controls", label: "الكتالوج الموحد", group: "الامتثال", team: true, data: true },
-  { href: "/assessments", label: "تقييم CSCC", group: "قياس الالتزام", auditor: true },
   { href: "/mappings", label: "خريطة المواءمة", group: "قياس الالتزام", team: true },
   { href: "/third-parties", label: "مخاطر الأطراف الخارجية", group: "العمليات", team: true },
   { href: "/assets", label: "سجل الأصول التقنية", group: "العمليات", team: true },
