@@ -2,13 +2,16 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { readStrategyRows } from "@/lib/strategy-read";
 import type { Assignment, Requirement } from "../nudee-dashboard/NudeeReport";
 import shared from "../nudee-dashboard/nudee-dashboard.module.css";
 import styles from "./indicator.module.css";
+
+import QuestionOverview from "./QuestionOverview";
+import SourceReference from "../nudee/SourceReference";
 
 const QuestionPreparation = dynamic(() => import("./QuestionPreparation"));
 const NudeeReport = dynamic(() => import("../nudee-dashboard/NudeeReport"), {
@@ -24,6 +27,13 @@ type Counts = { total: number; approved: number; submitted: number; returned: nu
 
 function Readiness({ records, assignments }: Data) {
   const [prepareOpened,setPrepareOpened] = useState(false);
+  const preparation=useRef<HTMLDetailsElement>(null);
+  const [selection,setSelection]=useState<{domain:string;code:string;serial:number}|null>(null);
+  const [revision,setRevision]=useState(0);
+  function openQuestion(domain:string,code:string){
+    setSelection(previous=>({domain,code,serial:(previous?.serial||0)+1}));setPrepareOpened(true);
+    if(preparation.current){preparation.current.open=true;preparation.current.scrollIntoView({block:"start"});preparation.current.querySelector("summary")?.focus({preventScroll:true});}
+  }
   const [reportOpened, setReportOpened] = useState(false);
   const { total, domains } = useMemo(() => {
     const statuses = new Map(assignments.map(a => [a.requirement_id, a.status]));
@@ -60,9 +70,11 @@ function Readiness({ records, assignments }: Data) {
         <h2>معادة للتعديل</h2><strong>{number.format(total.returned)}</strong><span>عرض الأدلة المعادة ←</span>
       </Link>
     </section>
-    <details className={shared.report} onToggle={e=>{ if(e.currentTarget.open) setPrepareOpened(true); }}>
+    <SourceReference/>
+    <QuestionOverview records={records} revision={revision} onPrepare={openQuestion}/>
+    <details ref={preparation} className={shared.report} onToggle={e=>{ if(e.currentTarget.open) setPrepareOpened(true); }}>
       <summary>جاهزية الأسئلة وحزمة المجال</summary>
-      {prepareOpened && <QuestionPreparation records={records}/>}
+      {prepareOpened && <QuestionPreparation key={selection?.serial||0} records={records} initialDomain={selection?.domain} initialCode={selection?.code} onChange={()=>setRevision(n=>n+1)}/>}
     </details>
     <details className={shared.report} onToggle={e => { if (e.currentTarget.open) setReportOpened(true); }}>
       <summary>تقرير نُضيء التفصيلي</summary>

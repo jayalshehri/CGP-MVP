@@ -9,8 +9,10 @@ import { readStrategyRows } from "@/lib/strategy-read";
 import AccessibleDialog from "@/components/AccessibleDialog";
 import "../data-governance.css";
 import "./register.css";
+import EvidenceGroups from "./EvidenceGroups";
+import SourceReference from "./SourceReference";
+import { governanceDomain, localLevels, type EvidenceRequirement as Requirement } from "./reference";
 
-type Requirement={id:number;source_row:number;domain_name:string;standard_code:string;requirement_title:string;maturity_level:string;evidence_name:string;evidence_description:string|null;source_compliance:string|null};
 type Assignment={id:number;requirement_id:number;assignee_id:string|null;status:string;updated_at:string;due_date:string|null;review_notes:string|null};
 type User={user_id:string;display_name:string|null;role:string};
 function isLate(a: Assignment | undefined, today: string) {
@@ -42,6 +44,7 @@ export default function NudeeRegister(){
  const [reason,setReason]=useState("");
  const [sourceId,setSourceId]=useState("");
  const [locator,setLocator]=useState("");
+ const [uploadLocator,setUploadLocator]=useState("");
  const evidenceId=query.get("evidence");
  const [note,setNote]=useState("");
  const [file,setFile]=useState<File|null>(null);
@@ -54,7 +57,12 @@ export default function NudeeRegister(){
  const [bulkDue,setBulkDue]=useState("");
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
- const domain=role==="office" ? query.get("domain")||"" : "";
+ const question=role==="office" ? query.get("question") : null;
+ const gapTarget=question ? query.get("missing") : null;
+ const hasPilot=requirements.some(r=>r.domain_name===governanceDomain && /^DG\.MQ\./.test(r.standard_code));
+ const defaultPilot=requestedView==="all" && !evidenceId && query.get("layout")!=="list" && hasPilot;
+ const domain=role==="office" ? query.get("domain") || (defaultPilot ? governanceDomain : "") : "";
+ const grouped=role==="office" && !evidenceId && query.get("layout")!=="list" && !!domain && (domain===governanceDomain || !!question) && (hasPilot || !!question);
  const [ownerFilter,setOwnerFilter]=useState("");
  const [versionId,setVersionId]=useState<number|null>(null);
  const [completedReview,setCompletedReview]=useState<number|null>(null);
@@ -71,13 +79,13 @@ export default function NudeeRegister(){
 
   if(office){
    const [{data:r,error:re},{data:u,error:ue}]=await Promise.all([
-    supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance").order("source_row").limit(1000),
+    supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance,specification_code,responsible_department,planned_end").order("source_row").limit(1000),
     supabase.rpc("nudee_assignees")
    ]);
    if(re)throw re;if(ue)throw ue;
    setRequirements((r??[]) as Requirement[]);setUsers((u??[]) as User[]);setRole("office");
   }else{
-   const {data:r,error:re}=await supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance").order("source_row").limit(1000);
+   const {data:r,error:re}=await supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance,specification_code,responsible_department,planned_end").order("source_row").limit(1000);
    if(re)throw re;
    setRequirements((r??[]) as Requirement[]);
    setRole("assignee");
@@ -109,11 +117,16 @@ export default function NudeeRegister(){
    const a=byRequirement.get(r.id);
    if(evidenceId && String(r.id)!==evidenceId)return false;
    if(domain && r.domain_name!==domain)return false;
+   if(question && r.standard_code!==question)return false;
+   if(gapTarget){
+    const rank=localLevels.indexOf(r.maturity_level);
+    if(rank<0 || rank>localLevels.indexOf(gapTarget) || (a?.status==="approved" && submittedIds.has(a.id)))return false;
+   }
    if(ownerFilter && a?.assignee_id!==ownerFilter)return false;
    if(view==="overdue"){
     if(!isLate(a,today))return false;
    }else if(view!=="all"&&(a?.status||"unassigned")!==view)return false;
-   return [r.standard_code,r.evidence_name,r.domain_name,r.requirement_title].join(" ").toLocaleLowerCase("ar").includes(search);
+   return [r.standard_code,r.evidence_name,r.domain_name,r.requirement_title,r.specification_code,r.responsible_department].join(" ").toLocaleLowerCase("ar").includes(search);
   }).sort((left,right)=>{
    const a=byRequirement.get(left.id), b=byRequirement.get(right.id);
    if(view==="submitted")return (a?.updated_at||"").localeCompare(b?.updated_at||"") || left.source_row-right.source_row;
@@ -123,16 +136,18 @@ export default function NudeeRegister(){
    }
    return left.source_row-right.source_row;
   });
- },[scoped,byRequirement,view,filter,today,role,domain,ownerFilter,evidenceId]);
+ },[scoped,byRequirement,view,filter,today,role,domain,ownerFilter,evidenceId,question,gapTarget,submittedIds]);
  const pages=Math.max(1,Math.ceil(visible.length/pageSize));
  const currentPage=Math.min(page,pages);
  const pageRows=visible.slice((currentPage-1)*pageSize,currentPage*pageSize);
  const current=scoped.find(r=>r.id===selected);
  const assignment=current?byRequirement.get(current.id):undefined;
  function canAssign(a:Assignment|undefined){return !a||(a.status==="assigned"&&!submittedIds.has(a.id));}
- function changeScope(viewValue:string,domainValue:string){
+ function changeScope(viewValue:string,domainValue:string,layout=domainValue===governanceDomain?"group":"list"){
   const url=new URL(window.location.href);
   url.searchParams.delete("evidence");
+  url.searchParams.delete("question");url.searchParams.delete("missing");
+  url.searchParams.set("layout",layout);
   if(viewValue==="all")url.searchParams.delete("view");else url.searchParams.set("view",viewValue);
   if(domainValue)url.searchParams.set("domain",domainValue);else url.searchParams.delete("domain");
   window.history.replaceState(null,"",url);
@@ -141,7 +156,7 @@ export default function NudeeRegister(){
  function openRequirement(r:Requirement){
   const a=byRequirement.get(r.id);
   setSelected(r.id);setVersionId(null);setCompletedReview(null);setFile(null);setError("");setNotice("");
-  setAssignee(a?.assignee_id||"");setDue(a?.due_date||"");setNote("");setReason("");setSourceId("");setLocator("");
+  setAssignee(a?.assignee_id||"");setDue(a?.due_date||"");setNote("");setReason("");setSourceId("");setLocator("");setUploadLocator("");
  }
  function closeRequirement(){setSelected(null);setFile(null);setVersionId(null);}
  const files=useMemo(()=>assignment?submissions.filter(s=>s.assignment_id===assignment.id).sort((a,b)=>b.id-a.id):[],[assignment,submissions]);
@@ -222,7 +237,10 @@ export default function NudeeRegister(){
    const {error:ue}=await supabase.storage.from("nudee-evidence").upload(path,file,{upsert:false,contentType:file.type});
    if(ue)throw ue;
    uploadedPath=path;
-   const {error:se}=await supabase.rpc("nudee_submit_evidence",{p_assignment_id:assignment.id,p_storage_path:path,p_file_name:file.name});
+   const args={p_assignment_id:assignment.id,p_storage_path:path,p_file_name:file.name};
+   const {error:se}=uploadLocator.trim()
+    ? await supabase.rpc("nudee_submit_with_locator",{...args,p_locator:uploadLocator.trim()})
+    : await supabase.rpc("nudee_submit_evidence",args);
    if(se){
     // PostgreSQL errors below abort the transaction. Never infer rollback from
     // a transport error or an ambiguous PostgREST/gateway failure.
@@ -266,16 +284,22 @@ export default function NudeeRegister(){
  const canUpload=assignment&&assignment.assignee_id===currentUserId&&["assigned","changes_requested"].includes(assignment.status);
  return <div className="dg-page nr-page" dir="rtl">
   <header className="nr-heading">
-   <h1>{role==="assignee"?"مهامي":"المتطلبات والأدلة"}</h1>
-   {role&&<p>{role==="assignee"?"تابع تكليفاتك وارفع أدلتك لمراجعة مكتب البيانات.":"ابحث عن متطلب لعرض دليله، أو حدد المتطلبات التي تريد إسنادها."}</p>}
+   <h1>{role==="assignee"?"مهامي":"مركز الأدلة"}</h1>
+   {role&&<p>{role==="assignee"?"تابع تكليفاتك وارفع أدلتك لمراجعة مكتب البيانات.":"تابع أدلة القياس من الإسناد وحتى الاعتماد."}</p>}
   </header>
+  {role==="office"&&<SourceReference/>}
   {!current&&feedback}
   {loading&&<p role="status">جارٍ تحميل المتطلبات والأدلة…</p>}
   {role&&<section className="nr-register" aria-label={role==="office"?"سجل المتطلبات":"تكليفاتي"}>
    {evidenceId&&<button type="button" className="nr-secondary" onClick={()=>changeScope("all","")}>عرض سجل المتطلبات كاملًا</button>}
+   {role==="office"&&hasPilot&&<div className="nr-layout-switch">
+    <button type="button" className="nr-secondary" aria-pressed={grouped} onClick={()=>changeScope("all",governanceDomain,"group")}>أسئلة حوكمة البيانات</button>
+    <button type="button" className="nr-secondary" aria-pressed={!grouped} onClick={()=>changeScope("all","","list")}>السجل الكامل والإسناد الجماعي</button>
+   </div>}
+   {question&&<p className="nr-scope-note"><bdi>{question}</bdi> · {gapTarget?"الأدلة الناقصة حتى "+gapTarget:"أدلة السؤال"}</p>}
    <div className="nr-tools">
     <label htmlFor="nudee-filter">بحث في المتطلبات
-     <input id="nudee-filter" type="search" value={filter} onChange={e=>{setFilter(e.target.value);setPage(1);setBulkIds([]);}} placeholder="اسم الدليل أو المعيار أو المجال" />
+     <input id="nudee-filter" type="search" value={filter} onChange={e=>{setFilter(e.target.value);setPage(1);setBulkIds([]);}} placeholder="اسم الدليل أو السؤال أو رمز المواصفة" />
     </label>
     <label htmlFor="nudee-view">حالة المتطلب
      <select id="nudee-view" value={view} onChange={e=>changeScope(e.target.value,domain)}>
@@ -288,7 +312,7 @@ export default function NudeeRegister(){
      <label>مالك المتطلب<select value={ownerFilter} onChange={e=>{setOwnerFilter(e.target.value);setPage(1);setBulkIds([]);}}>
       <option value="">كل المالكين</option>{userOptions}</select></label>
     </>}
-    <p role="status" className="nr-count">{visible.length} من {scoped.length} متطلب</p>
+    <p role="status" className="nr-count">{visible.length} من {scoped.length} دليل</p>
    </div>
    {role==="office"&&bulkIds.length>0&&<section aria-label="الإسناد الجماعي" className="nr-bulk">
     <strong>المحدد للإسناد ({bulkIds.length})</strong>
@@ -304,7 +328,7 @@ export default function NudeeRegister(){
    {!visible.length?<div className="nr-empty">
     <p>{scoped.length?"لا توجد متطلبات تطابق خيارات البحث والتصفية.":role==="assignee"?"لا توجد متطلبات مسندة إلى حسابك حاليًا.":"لا توجد متطلبات في السجل حاليًا."}</p>
     {scoped.length>0&&<button type="button" className="nr-secondary" onClick={()=>{setFilter("");setOwnerFilter("");changeScope("all","");}}>عرض كل المتطلبات</button>}
-   </div>:<table className="nr-table" aria-label={role==="office"?"سجل متطلبات نُضيء":"المتطلبات المسندة إليّ"}>
+   </div>:grouped?<EvidenceGroups key={domain+"|"+filter+"|"+(question||"")} rows={visible} assignments={byRequirement} labels={statusLabels} expand={!!filter.trim()||!!question} onOpen={openRequirement}/>:<table className="nr-table" aria-label={role==="office"?"سجل متطلبات نُضيء":"المتطلبات المسندة إليّ"}>
     <thead><tr>{role==="office"&&<th scope="col" className="nr-select-col"><span className="nr-sr">تحديد للإسناد</span></th>}
      <th scope="col">الدليل والمعيار</th><th scope="col" className="nr-status-col">الحالة</th>{role==="office"&&<th scope="col" className="nr-owner-col">المكلّف</th>}<th scope="col" className="nr-due-col">الاستحقاق</th>
     </tr></thead>
@@ -327,7 +351,7 @@ export default function NudeeRegister(){
      </tr>;
     })}</tbody>
    </table>}
-   {pages>1&&<div className="cgp-pagination" aria-label="تصفح نتائج المتطلبات">
+   {!grouped&&pages>1&&<div className="cgp-pagination" aria-label="تصفح نتائج المتطلبات">
     <button type="button" disabled={currentPage===1} onClick={()=>setPage(currentPage-1)}>السابق</button>
     <span aria-live="polite">الصفحة {currentPage} من {pages}</span>
     <button type="button" disabled={currentPage===pages} onClick={()=>setPage(currentPage+1)}>التالي</button>
@@ -348,7 +372,14 @@ export default function NudeeRegister(){
      <li>راجع حداثة النسخة ووجود الاعتماد إذا اشترطه وصف الدليل.</li>
     </ul></details>
    </section>
+   {current.domain_name===governanceDomain&&<button type="button" className="nr-secondary" onClick={async()=>{
+    try { const {downloadTemplate}=await import("./evidence-template");downloadTemplate(current); }
+    catch {setError("تعذر تنزيل النموذج. أعد المحاولة.");}
+   }}>تنزيل نموذج إعداد داخلي (Word)</button>}
    <dl className="nr-facts">
+    <div><dt>الإدارة المسؤولة</dt><dd>{current.responsible_department||"غير محددة"}</dd></div>
+    <div><dt>موعد الخطة</dt><dd>{current.planned_end?<time dir="ltr">{current.planned_end}</time>:"غير محدد"}</dd></div>
+    <div><dt>رمز المواصفة</dt><dd><bdi>{current.specification_code||"غير مدون"}</bdi></dd></div>
     <div><dt>المستوى</dt><dd>{current.maturity_level}</dd></div>
     <div><dt>حالة التكليف</dt><dd>{statusLabels[assignment?.status||"unassigned"]}</dd></div>
     {role==="office"&&assignment?.assignee_id&&<div><dt>المكلّف</dt><dd>{names.get(assignment.assignee_id)||"مكلّف مسجّل"}</dd></div>}
@@ -365,6 +396,8 @@ export default function NudeeRegister(){
     <label htmlFor="nudee-file">ملف الدليل<input key={selected} id="nudee-file" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" aria-describedby="nr-file-formats"
      disabled={busy||needsRefresh} onChange={e=>setFile(e.target.files?.[0]||null)} /></label>
     <small id="nr-file-formats">PDF أو DOCX أو PNG أو JPEG، بحد أقصى 20 ميجابايت.</small>
+    <label htmlFor="nr-upload-locator">موضع الإثبات في الملف <small>(الصفحة أو البند)</small>
+     <input id="nr-upload-locator" value={uploadLocator} maxLength={300} disabled={busy||needsRefresh} onChange={e=>setUploadLocator(e.target.value)} placeholder="مثال: صفحة ٤، بند اعتماد السياسة"/></label>
     <button className="nr-primary" disabled={busy||needsRefresh||!file} onClick={upload}>رفع وإرسال للمراجعة</button>
    </section>}
    {canUpload&&reusable.length>0&&<details className="nr-detail-section"><summary>استخدام دليل معتمد من تكليفاتي</summary>

@@ -16,7 +16,7 @@ const navigation = [
   { href: "/controls", label: "الضوابط", group: "الامتثال", auditor: true },
   { href: "/data-governance/nudee-dashboard", label: "الرئيسية", group: "", data: true },
   { href: "/data-governance/nudee-indicator", label: "مؤشر نُضيء", group: "", data: true },
-  { href: "/data-governance/nudee", label: "المتطلبات والأدلة", group: "", data: true },
+  { href: "/data-governance/nudee", label: "مركز الأدلة", group: "", data: true },
   { href: "/data-governance/users", label: "إدارة المستخدمين", group: "", data: true, admin: true },
   { href: "/shared-controls", label: "الكتالوج الموحد", group: "الامتثال", team: true, data: true },
   { href: "/assessments", label: "تقييم CSCC", group: "قياس الالتزام", auditor: true },

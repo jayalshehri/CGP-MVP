@@ -7,7 +7,7 @@ import { formatRiyadhDateTime } from "@/lib/dates";
 import { supabase } from "@/lib/supabase";
 
 export type Submission = { id: number; assignment_id: number; file_name: string; storage_path: string; submitted_at: string; source_submission_id?: number | null; source_locator?: string | null };
-type Decision = { id: number; submission_id: number | null; action: string; notes: string | null; created_at: string };
+type Decision = { id: number; submission_id: number | null; action: string; reviewer_name: string | null; notes: string | null; created_at: string };
 
 export default function EvidenceVersions({ files, selected, onSelect, status }: {
   files: Submission[]; selected: Submission; onSelect: (id: number) => void; status: string;
@@ -20,7 +20,7 @@ export default function EvidenceVersions({ files, selected, onSelect, status }: 
     let active = true;
     async function load() {
       const result = await readStrategyRows<Decision>((from, to) =>
-        supabase.from("nudee_audit").select("id,submission_id,action,notes,created_at", { count: "exact" })
+        supabase.from("nudee_audit").select("id,submission_id,action,reviewer_name,notes,created_at", { count: "exact" })
           .eq("assignment_id", assignmentId).in("action", ["approved", "changes_requested"])
           .order("id", { ascending: false }).range(from, to), row => row.id);
       if (active) { setDecisions(result.data); setFailed(result.error); }
@@ -39,14 +39,15 @@ export default function EvidenceVersions({ files, selected, onSelect, status }: 
         <bdi dir="auto">{file.file_name}</bdi>
         <time dateTime={file.submitted_at}>{formatRiyadhDateTime(file.submitted_at)}</time>
       </button>)}</div>
-    {selected.source_submission_id && <p>مرجع النسخة #{selected.source_submission_id} · موضع الإثبات: {selected.source_locator}</p>}
+    {selected.source_submission_id && <p>مرجع النسخة #{selected.source_submission_id}</p>}
+    {selected.source_locator && <p><strong>موضع الإثبات</strong> · {selected.source_locator}</p>}
     <ReviewFilePreview key={selected.id} bucket="nudee-evidence" path={selected.storage_path} name={selected.file_name}/>
     {failed && <p role="alert">تعذر تحميل سجل القرارات. <button type="button" className="nr-secondary" onClick={() => setAttempt(n => n + 1)}>إعادة المحاولة</button></p>}
     {decisions.length > 0 && <details className="nr-decisions"><summary>سجل قرارات المكتب ({decisions.length})</summary><ol>
       {decisions.map(d => {
         const index = files.findIndex(file => file.id === d.submission_id);
         return <li key={d.id}><strong>{d.action === "approved" ? "اعتماد الدليل" : "إعادة للتعديل"}{index >= 0 && ` · النسخة ${files.length - index}`}</strong>
-          <time dateTime={d.created_at}>{formatRiyadhDateTime(d.created_at)}</time>{d.notes && <p>{d.notes}</p>}
+          <span>المراجع · {d.reviewer_name || "الاسم غير مسجل"}</span><time dateTime={d.created_at}>{formatRiyadhDateTime(d.created_at)}</time>{d.notes && <p>{d.notes}</p>}
         </li>;
       })}</ol></details>}
   </section>;
