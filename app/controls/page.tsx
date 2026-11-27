@@ -32,7 +32,7 @@ type Control = {
   control_owner: string | null;
   control_owner_id: string | null;
 };
-type Framework = { id: number; code: string; name_ar: string; version: string };
+type Framework = { id: number; code: string; name_ar: string; version: string; source_url: string | null };
 type EvidencePreview = {
   id: number;
   control_id: number;
@@ -127,7 +127,7 @@ function ControlsContent() {
         let query = supabase.from("controls").select("id,framework_id,control_code,title_ar,description_ar,official_text_ar,hierarchy_level,parent_control_id,applicability,domain_ar,implementation_status,evidence_status,verification_status,due_date,control_owner,control_owner_id").order("id");
         if (profile.role === "control_owner") query = query.eq("control_owner_id", user.id);
         const [{ data, error }, { data: frameworkData, error: frameworkError }] = await Promise.all([
-          query, supabase.from("frameworks").select("id,code,name_ar,version").eq("is_active", true).order("id"),
+          query, supabase.from("frameworks").select("id,code,name_ar,version,source_url").eq("is_active", true).order("id"),
         ]);
         if (error || frameworkError) throw error || frameworkError;
         if (active) { setControls((data ?? []) as Control[]); setFrameworks((frameworkData ?? []) as Framework[]); }
@@ -147,6 +147,8 @@ function ControlsContent() {
 
   const selectedFramework = frameworks.find(item => item.code === requestedFramework) ?? frameworks.find(item => item.code === "ECC") ?? frameworks[0];
   const framework = selectedFramework?.code ?? "";
+  const csccVersionLabel = framework === "CSCC" && selectedFramework?.version
+    ? `CSCC-${selectedFramework.version.replace("-", ":")}` : null;
   const scoped = useMemo(() => controls.filter(c => c.framework_id === selectedFramework?.id &&
     (framework !== "CCC" || cloudScope === "all" || c.control_code.includes(cloudScope === "provider" ? "-P-" : "-T-"))),
     [controls, selectedFramework, framework, cloudScope]);
@@ -284,7 +286,9 @@ function ControlsContent() {
           </details>
         </div>
         <div className="catalog-scope-note">
-          <span>{selectedFramework.name_ar}{selectedFramework.version && <> · إصدار <bdi>{selectedFramework.version}</bdi></>}</span>
+          <span>{selectedFramework.name_ar}{selectedFramework.version && <> · إصدار <bdi dir="ltr">{csccVersionLabel ?? selectedFramework.version}</bdi></>}
+            {csccVersionLabel && selectedFramework.source_url && <> · <a className="catalog-source-link" href={selectedFramework.source_url} target="_blank" rel="noreferrer">وثيقة الهيئة ↗</a></>}
+          </span>
           <span><strong>{primaryCount}</strong> ضابط أساسي <span aria-hidden="true">·</span> <strong>{scoped.length - primaryCount}</strong> ضابط فرعي</span>
         </div>
       </section>
