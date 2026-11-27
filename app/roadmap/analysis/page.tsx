@@ -3,19 +3,19 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { portfolioFiltersFrom, portfolioHref, projectHref, registerState } from "@/lib/strategy-navigation";
-import { matchesPortfolioFilters, type PortfolioFilterProject } from "@/lib/project-portfolio";
+import { matchesPortfolioFilters, priorityLabels, type PortfolioFilterProject } from "@/lib/project-portfolio";
 import { PortfolioFilters, PortfolioTabs } from "../portfolio-workspace";
 import { useRouter, useSearchParams } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { readStrategyRows, unavailable, type ReadStatus } from "@/lib/strategy-read";
-import { ReadNotice, ReadSection } from "../read-state";
-import { PlanningInformationSummary } from "../planning-information";
+import { ReadNotice } from "../read-state";
 import { planningReadiness, planningReadinessItems } from "../portfolio-metrics";
-import { dimensionText, durationBreakdown, matchesScope, portfolioBreakdown, portfolioScopePhrases, scopedRequirementCounts, type PortfolioDimension, type PortfolioFields } from "@/lib/portfolio-analytics";
+import { dimensionText, durationBreakdown, matchesScope, portfolioBreakdown, scopedRequirementCounts, type PortfolioDimension, type PortfolioFields } from "@/lib/portfolio-analytics";
 import { projectCount } from "@/lib/arabic-count";
 import { readCanonicalEdges, type CanonicalEdges } from "@/lib/strategy-portfolio-read";
 import "../roadmap.css";
+import styles from "./portfolio-analysis.module.css";
 
 type Project = PortfolioFields & PortfolioFilterProject & {
   id: number;
@@ -26,7 +26,14 @@ type Project = PortfolioFields & PortfolioFilterProject & {
   recommended_technologies: string | null;
   progress_percent: number;
 };
-const dimensions: PortfolioDimension[] = ["priority", "execution_year", "work_type", "executive_owner", "status"];
+const dimensions = ["executive_owner", "status", "work_type", "priority"] as const satisfies readonly PortfolioDimension[];
+type BreakdownDimension = typeof dimensions[number];
+const missingLabels = { priority: "الأولوية", owner: "الجهة المالكة", duration: "مدة المشروع", outcome: "النتيجة المستهدفة" };
+const dimensionLabel = { ...dimensionText, priority: "سنة التنفيذ والأولوية" };
+const filterKey = { executive_owner: "owner", status: "status", work_type: "work_type", priority: "priority" };
+const ownerNames: Record<string, string> = { it: "تقنية المعلومات", cybersecurity: "الأمن السيبراني", dmo: "مكتب إدارة البيانات", other: "أخرى" };
+const absentLabels = { executive_owner: "بلا جهة مالكة", status: "بلا حالة مسجّلة", work_type: "بلا نوع عمل", priority: "بلا أولوية" };
+const previewSize = 3;
 type ControlLink = { project_id: number; control_id: number };
 type Treatment = { project_id: number; priority: "high" | "medium" | "low" };
 
@@ -45,6 +52,8 @@ function PortfolioAnalysisContent() {
   const [canonical, setCanonical] = useState<CanonicalEdges | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [chartBy, setChartBy] = useState<BreakdownDimension>("executive_owner");
+  const [showAll, setShowAll] = useState(false);
   const [reads, setReads] = useState<{ projects: ReadStatus; links: ReadStatus; treatments: ReadStatus }>({ projects: "UNAVAILABLE", links: "UNAVAILABLE", treatments: "UNAVAILABLE" });
   const projectsReady = reads.projects === "COMPLETE";
   const linksReady = projectsReady && reads.links === "COMPLETE";
@@ -98,118 +107,135 @@ function PortfolioAnalysisContent() {
   const durations = useMemo(() => durationBreakdown(scoped), [scoped]);
   const analysis = useMemo(() => {
     const mapped = new Map<number, number>();
-    links.forEach((link) => mapped.set(link.project_id, (mapped.get(link.project_id) ?? 0) + 1));
-    const scopedIds = new Set(scoped.map((project) => project.id));
-    const rows = (planningReady ? scoped : []).map((project) => {
-      const linked = mapped.get(project.id) ?? 0;
-      return {
-        project,
-        linked,
-        readiness: planningReadiness(project, linked),
-        missing: planningReadinessItems(project, linked).filter((item) => !item.complete),
-      };
-    });
-    const readiness = rows.length
-      ? Math.round(rows.reduce((total, row) => total + row.readiness, 0) / rows.length)
-      : 0;
-    const incomplete = rows.filter((row) => row.readiness < 100).sort((a, b) => a.readiness - b.readiness);
+    links.forEach(link => mapped.set(link.project_id, (mapped.get(link.project_id) ?? 0) + 1));
+    const scopedIds = new Set(scoped.map(project => project.id));
+    const rows = projectsReady ? scoped.map(project => ({
+      project,
+      missing: planningReadinessItems(project, 0)
+        .flatMap(item => item.key === "controlLink" || item.complete ? [] : [missingLabels[item.key]]),
+    })) : [];
+    const readiness = planningReady ? scoped.map(project => planningReadiness(project, mapped.get(project.id) ?? 0)) : [];
     return {
-      rows,
-      readiness,
-      incomplete,
-      complete: rows.filter((row) => row.readiness === 100).length,
-      linkedControls: new Set(links.filter((link) => scopedIds.has(link.project_id)).map((link) => link.control_id)).size,
-      highTreatments: treatments.filter((item) => item.priority === "high" && scopedIds.has(item.project_id)).length,
-      p1: scoped.filter((project) => project.portfolio_priority === "P1").length,
-      breakdowns: dimensions.map((dimension) => ({ dimension, ...portfolioBreakdown(scoped, dimension) })),
+      incomplete: rows.filter(row => row.missing.length).sort((a, b) => b.missing.length - a.missing.length || a.project.id - b.project.id),
+      readiness: readiness.length ? Math.round(readiness.reduce((sum, value) => sum + value, 0) / readiness.length) : null,
+      fullyRecorded: readiness.filter(value => value === 100).length,
+      withoutDirectLinks: scoped.filter(project => !mapped.has(project.id)).length,
+      linkedControls: new Set(links.filter(link => scopedIds.has(link.project_id)).map(link => link.control_id)).size,
+      highTreatments: treatments.filter(item => item.priority === "high" && scopedIds.has(item.project_id)).length,
     };
-  }, [scoped, links, treatments, planningReady]);
+  }, [scoped, links, treatments, projectsReady, planningReady]);
+  const distribution = useMemo(() => portfolioBreakdown(scoped, chartBy), [scoped, chartBy]);
+  const series = distribution.rows.filter(row => row.count > 0).map(row => ({
+    ...row,
+    label: chartBy === "executive_owner" ? ownerNames[row.value] ?? row.label
+      : chartBy === "priority" ? priorityLabels[row.value as keyof typeof priorityLabels] ?? row.label : row.label,
+  }));
+  if (distribution.unset > 0) series.push({ value: "unset", label: absentLabels[chartBy], count: distribution.unset });
+
+  function registerSlice(value: string) {
+    const context = new URLSearchParams(params.toString());
+    context.set(filterKey[chartBy], value);
+    if (chartBy === "priority") context.delete("execution_year");
+    return portfolioHref("register", context);
+  }
 
   if (loading) {
-    return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading">جاري تحليل محفظة المشاريع…</p></main>;
+    return <main className="roadmap-page" dir="rtl"><p className="roadmap-loading" role="status">جاري تحميل تحليل المحفظة…</p></main>;
   }
 
   return (
-    <main className="roadmap-page portfolio-analysis" dir="rtl">
+    <main className={`roadmap-page ${styles.page}`} dir="rtl">
       <section className="roadmap-shell">
         <PortfolioTabs current="analysis" params={params} />
-
-        <header className="portfolio-hero">
-          <div><span>دعم قرار محفظة الأمن السيبراني · الأولوية وسنة التنفيذ</span><h1>تحليل المحفظة السيبرانية</h1><p>يعرض التحليل ما يمكن احتسابه من بيانات النظام، ويصرّح بالبيانات الناقصة بدل إنتاج درجات تقديرية.</p></div>
-          <Link className="roadmap-primary" href={portfolioHref("register", params)}>استكمال بيانات المشاريع ←</Link>
+        <header className={styles.heading}>
+          <h1>تحليل المحفظة</h1>
+          <p>اعرف ما يحتاج استكمالًا، وكيف تتوزع المشاريع المعروضة.</p>
         </header>
         {error && <p className="roadmap-alert" role="alert">{error}</p>}
-        <ReadNotice statuses={[reads.projects, reads.links, reads.treatments, modern ? "COMPLETE" : "UNAVAILABLE"]} />
+        {!error && <ReadNotice statuses={[reads.projects]} />}
+        <PortfolioFilters current="analysis" params={params} count={projectsReady ? scoped.length : null} total={scopeCount} compact />
 
-        <PortfolioFilters current="analysis" params={params} count={projectsReady ? scoped.length : null} total={scopeCount} />
-
-        <section className="portfolio-kpis" aria-label="مؤشرات تحليل المحفظة">
-          <Kpi label="اكتمال عناصر التخطيط الخمسة الحالية" value={planningReady ? `${analysis.readiness}%` : unavailable} detail="متوسط غير مرجّح لاكتمال العناصر الخمسة" tone="teal" />
-          <Kpi label="مشاريع مكتملة العناصر الخمسة" value={planningReady ? `${analysis.complete}/${scoped.length}` : unavailable} detail="وفق عناصر التخطيط الخمسة الحالية فقط" tone="blue" />
-          <Kpi label="ضوابط ذات ربط مباشر مسجّل" value={linksReady ? analysis.linkedControls : unavailable} detail="من سجل الربط المباشر بين المشروع والضابط" />
-          <Kpi label="ضوابط مميزة عبر المتطلبات" value={modern?.controls ?? unavailable} detail="لمشاريع النطاق والفلاتر المعروضة فقط؛ منفصلة عن الربط المباشر ولا تثبت الامتثال" />
-          <Kpi label="مشاريع الأولوية P1" value={projectsReady ? analysis.p1 : unavailable} detail="السنة الأولى؛ تصنيف معتمد وليس Portfolio Score" tone="amber" />
-        </section>
-
-        <ReadSection available={projectsReady}><section className="portfolio-card" aria-labelledby="portfolio-breakdown-title">
-          <header><div><span>توزيع {portfolioScopePhrases[scope]}</span><h2 id="portfolio-breakdown-title">التحليل حسب الأولوية وسنة التنفيذ ونوع العمل والمالك والحالة</h2></div></header>
-          <div className="portfolio-breakdown">
-            {analysis.breakdowns.map(({ dimension, rows, unset }) => <table key={dimension} aria-label={dimensionText[dimension]}>
-              <thead><tr><th>{dimensionText[dimension]}</th><th>المشاريع</th></tr></thead>
-              <tbody>{rows.map((row) => <tr key={row.value}><td>{row.label}</td><td>{row.count}</td></tr>)}{unset > 0 && <tr><td>غير مصنّف</td><td>{unset}</td></tr>}</tbody>
-            </table>)}
-          </div>
-        </section></ReadSection>
-
-        <ReadSection available={projectsReady}><section className="portfolio-card portfolio-duration" aria-labelledby="portfolio-duration-title">
-          <header><div><span>مدة المشاريع المسجّلة</span><h2 id="portfolio-duration-title">تحليل مدة المشاريع</h2></div><small>بالوحدة المسجّلة لكل مشروع؛ لا تحويل بين الوحدات</small></header>
-          {!durations.groups.length ? <p className="portfolio-empty">{scoped.length ? "لا توجد مدد مسجّلة للمشاريع المعروضة." : "لا توجد مشاريع ضمن النطاق والفلاتر الحالية."}</p> : <div className="portfolio-breakdown">
-            {durations.groups.map((group) => <table key={group.unit} aria-label={`مدة المشاريع بال${group.label}`}>
-              <caption>{group.label}: {projectCount(group.count)} · الأدنى <bdi>{group.min}</bdi> · الوسيط <bdi>{group.median}</bdi> · الأعلى <bdi>{group.max}</bdi></caption>
-              <thead><tr><th>المدة</th><th>المشاريع</th></tr></thead>
-              <tbody>{group.values.map((row) => <tr key={row.value}><td><bdi>{row.label}</bdi></td><td>{row.count}</td></tr>)}</tbody>
-            </table>)}
-          </div>}
-          {durations.unset > 0 && <p className="detail-hint">{projectCount(durations.unset)} بلا مدة مسجّلة (غير مصنّفة).</p>}
-        </section></ReadSection>
-
-        <aside className="portfolio-prioritization-note" aria-labelledby="prioritization-note-title">
-          <header><h2 id="prioritization-note-title">دعم تحديد الأولويات</h2><span>غير متاح حاليًا</span></header>
-          <p>تتوفر حاليًا بيانات الحالة والأولوية والتقدم وبعض روابط الامتثال. يتطلب دعم تحديد الأولويات مستقبلًا بيانات معتمدة إضافية قبل تقديم توصيات أو تصنيف تحليلي للمشاريع.</p>
-        </aside>
-
-        <section className="portfolio-layout">
-          <article className="portfolio-card portfolio-readiness">
-            <header><div><span>تعريف المؤشر</span><h2>عناصر التخطيط المحتسبة</h2></div><small>ليس مؤشر التزام أو صحة محفظة</small></header>
-            <p>تُحسب النسبة بالتساوي من الأولوية، المالك التنفيذي، مدة المشروع، النتيجة المستهدفة، ورابط مباشر مسجّل بضابط. لا يدخل الربط عبر المتطلبات في هذا المؤشر.</p>
-            <p className="detail-hint">هذا وصف للعناصر الخمسة الحالية، وليس حكمًا على ملاءمة نوع العمل. لم تعد تواريخ المشروع عناصر في النسبة؛ سنة التنفيذ مشتقة من الأولوية.</p><Link className="detail-back" href={portfolioHref("register", params)}>فتح سجل المشاريع السيبرانية ←</Link>
-          </article>
-
-          <article className="portfolio-card portfolio-decision">
-            <span>الإجراء التأسيسي التالي</span>
-            <ReadSection available={planningReady}>
-            <h2>{analysis.incomplete.length ? "استكمال عناصر التخطيط الناقصة" : "مراجعة بيانات المشاريع المسجلة"}</h2>
-            <p>{analysis.incomplete.length ? `${projectCount(analysis.incomplete.length)} يفتقد واحدًا أو أكثر من عناصر التخطيط الخمسة الحالية.` : scoped.length ? "اكتملت عناصر التخطيط الخمسة الحالية؛ وهذا لا يمثل تقييمًا للقيمة أو المخاطر." : "لا توجد مشاريع ضمن النطاق المقروء."}</p>
-            </ReadSection>
-            <div><b>{treatmentsReady ? analysis.highTreatments : unavailable}</b><span>معالجات عالية الأولوية مسجلة للمراجعة، ولا تعني تلقائيًا قرار تمويل.</span></div>
-          </article>
-
-          <ReadSection available={planningReady}><article className="portfolio-card portfolio-data-gaps">
-            <header><div><span>اكتمال عناصر التخطيط الخمسة الحالية</span><h2>العناصر غير المسجلة حسب المؤشر الحالي</h2></div><small>{projectCount(analysis.incomplete.length)}</small></header>
-            <p className="detail-hint">للمراجعة بحسب نوع العمل. المشاريع المسجلة بالنموذج السابق تظهر هنا حتى تُستكمل أولويتها ومالكها ومدتها يدويًا.</p>
-            <div className="portfolio-gap-table">
-              <div><span>المشروع</span><span>العناصر الناقصة</span><span>الاكتمال</span></div>
-              {analysis.incomplete.map(({ project, missing, readiness }) => <article key={project.id}><div><b dir="ltr">{project.project_code}</b><strong><Link className="strategy-project-link" href={projectHref(project.id, "analysis", params)}>{project.name_ar}</Link></strong></div><span>{missing.map((item) => item.key === "outcome" ? "النتيجة المستهدفة" : item.label).join(" · ")}</span><em>{readiness}%</em></article>)}
-              {!analysis.incomplete.length && <p className="portfolio-empty">{scoped.length ? "عناصر التخطيط الخمسة الحالية مكتملة لجميع المشاريع المعروضة." : "لا توجد مشاريع ضمن النطاق المقروء."}</p>}
+        {projectsReady && <>
+          <section className={`${styles.panel} ${styles.actions}`} aria-labelledby="portfolio-actions-title">
+            <div className={styles.panelHeader}>
+              <div><h2 id="portfolio-actions-title">مشاريع تحتاج استكمالًا</h2><p>ابدأ بالبيانات الناقصة لكل مشروع.</p></div>
+              <span className={styles.count} data-attention={analysis.incomplete.length > 0}>{projectCount(analysis.incomplete.length)}</span>
             </div>
-          </article></ReadSection>
-        </section>
-        <PlanningInformationSummary projects={scoped} status={reads.projects} />
+            {analysis.incomplete.length > 0 ? <>
+              <ul className={styles.actionList} id="portfolio-action-list">
+                {(showAll ? analysis.incomplete : analysis.incomplete.slice(0, previewSize)).map(({ project, missing }) =>
+                  <li key={project.id}>
+                    <Link href={projectHref(project.id, "analysis", params)} className={styles.actionLink}>
+                      <span><strong>{project.name_ar}</strong><small><bdi>{project.project_code}</bdi>{project.archived_at && " · مؤرشف"}</small></span>
+                      <span className={styles.missing}><span className={styles.srOnly}>حقول ناقصة</span>{missing.map(label => <span key={label}>{label}</span>)}</span>
+                      <span className={styles.open} aria-hidden="true">فتح ←</span>
+                    </Link>
+                  </li>
+                )}
+              </ul>
+              {analysis.incomplete.length > previewSize && <button type="button" className={styles.disclosure} aria-expanded={showAll} aria-controls="portfolio-action-list" onClick={() => setShowAll(previous => !previous)}>
+                {showAll ? "عرض مختصر" : `عرض كل المشاريع التي تحتاج استكمالًا (${analysis.incomplete.length})`}
+              </button>}
+            </> : <p className={styles.empty}>{scoped.length ? "لا توجد حقول تخطيط ناقصة في المشاريع المعروضة." : "لا توجد مشاريع تطابق الفلاتر الحالية."}</p>}
+          </section>
+
+          <section className={styles.panel} aria-labelledby="portfolio-breakdown-title">
+            <div className={styles.panelHeader}>
+              <div><h2 id="portfolio-breakdown-title">توزيع المشاريع</h2><p>اختر فئة لعرض مشاريعها في السجل.</p></div>
+              <label className={styles.dimension}><span>عرض حسب</span><select value={chartBy} onChange={event => {
+                const value = dimensions.find(dimension => dimension === event.target.value);
+                if (value) setChartBy(value);
+              }}>{dimensions.map(dimension => <option key={dimension} value={dimension}>{dimensionLabel[dimension]}</option>)}</select></label>
+            </div>
+            {series.length > 0 ? <ul className={styles.chart} aria-label={`توزيع المشاريع حسب ${dimensionLabel[chartBy]}`}>
+              {series.map(row => {
+                const content = <>
+                  <span className={styles.category}>{row.label}</span>
+                  <span className={styles.track} aria-hidden="true"><span style={{ inlineSize: `${100 * row.count / scoped.length}%` }} /></span>
+                  <strong><bdi>{row.count}</bdi></strong>
+                </>;
+                return <li key={row.value}>
+                  {chartBy === "status" && row.value === "unset" ? <span className={styles.chartRow}>{content}</span>
+                    : <Link className={styles.chartRow} href={registerSlice(row.value)} aria-label={`${row.label}، ${projectCount(row.count)}، عرض في السجل`}>{content}</Link>}
+                </li>;
+              })}
+            </ul> : <p className={styles.empty}>لا توجد نتائج لعرض التوزيع.</p>}
+          </section>
+
+          {scoped.length > 0 && <div className={styles.secondary}>
+            <details>
+              <summary>المدد المسجّلة</summary>
+              {!durations.groups.length ? <p>لا توجد مدد مسجّلة للمشاريع المعروضة.</p> : <>
+                <p>تُعرض المدد بوحداتها المسجّلة، دون تحويل بين الوحدات.</p>
+                <div className={styles.durationGroups}>
+                  {durations.groups.map(group => <table key={group.unit} aria-label={`مدد المشاريع بوحدة ${group.label}`}>
+                    <caption>{group.label} · {projectCount(group.count)}<small>الأدنى <bdi>{group.min}</bdi> · الوسيط <bdi>{group.median}</bdi> · الأعلى <bdi>{group.max}</bdi></small></caption>
+                    <thead><tr><th scope="col">المدة</th><th scope="col">المشاريع</th></tr></thead>
+                    <tbody>{group.values.map(row => <tr key={row.value}><td><bdi>{row.label}</bdi></td><td>{row.count}</td></tr>)}</tbody>
+                  </table>)}
+                </div>
+              </>}
+              {durations.unset > 0 && <p>بلا مدة مسجّلة · {projectCount(durations.unset)}</p>}
+            </details>
+            <details>
+              <summary>الربط بالضوابط والمعالجات</summary>
+              <ReadNotice statuses={[reads.links, reads.treatments, modern ? "COMPLETE" : "UNAVAILABLE"]} />
+              <dl className={styles.metricList}>
+                <div><dt>ضوابط ذات ربط مباشر</dt><dd>{linksReady ? analysis.linkedControls : unavailable}</dd></div>
+                <div><dt>ضوابط عبر المتطلبات</dt><dd>{modern?.controls ?? unavailable}</dd></div>
+                <div><dt>مشاريع بلا ربط مباشر</dt><dd>{linksReady ? analysis.withoutDirectLinks : unavailable}</dd></div>
+                <div><dt>معالجات عالية الأولوية</dt><dd>{treatmentsReady ? analysis.highTreatments : unavailable}</dd></div>
+              </dl>
+              <p>الربط المباشر والربط عبر المتطلبات مساران منفصلان. غياب الربط المباشر لا ينفي وجود ربط عبر المتطلبات، ووجود الربط لا يعني التحقق من تطبيق الضابط.</p>
+              <details className={styles.method}>
+                <summary>كيف يُحسب اكتمال عناصر التخطيط؟</summary>
+                <p>{analysis.readiness === null ? unavailable : <>متوسط الاكتمال <bdi>{analysis.readiness}%</bdi> · اكتملت العناصر الخمسة في <bdi>{analysis.fullyRecorded}/{scoped.length}</bdi> من المشاريع.</>}</p>
+                <p>يشمل المؤشر الأولوية والجهة المالكة والمدة والنتيجة المستهدفة ورابطًا مباشرًا بضابط، بأوزان متساوية. لا يقيس جاهزية التنفيذ أو الالتزام.</p>
+              </details>
+            </details>
+          </div>}
+        </>}
       </section>
     </main>
   );
-}
-
-function Kpi({ label, value, detail, tone = "" }: { label: string; value: string | number; detail: string; tone?: string }) {
-  return <article className={`roadmap-exec-kpi ${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>;
 }

@@ -153,6 +153,26 @@ check(!compactRegister.includes('register-metrics') && compactRegister.includes(
 const ownerRegister = render('app/roadmap/page.tsx', '/roadmap', { role: 'control_owner' });
 check(!ownerRegister.includes('مشروع جديد') && !ownerRegister.includes('aria-label="تعديل '), 'read-only register keeps existing role boundaries');
 
+const analysisPage = 'app/roadmap/analysis/page.tsx';
+const readyProject = { ...project, id: 70, name_ar: 'مشروع مكتمل البيانات', target_outcome: 'نتيجة محددة' };
+const missingProject = { ...readyProject, id: 71, name_ar: 'مشروع يحتاج بيانات', target_outcome: null, executive_owner_code: null, duration_unit: null };
+const gapProjects = Array.from({ length: 5 }, (_, i) => ({ ...missingProject, id: 71 + i, name_ar: `مشروع نقص ${i + 1}` }));
+const actionHtml = render(analysisPage, '/roadmap/analysis?status=planned', { projects: [readyProject, ...gapProjects] });
+const actionsHtml = actionHtml.split('id="portfolio-actions-title"')[1]?.split('</section>')[0] ?? '';
+equal((actionsHtml.match(/href="\/roadmap\/\d+\?tab=overview/g) ?? []).length, 3, 'analysis previews only three projects needing planning data');
+check(actionsHtml.includes('عرض كل المشاريع التي تحتاج استكمالًا (5)') && actionsHtml.includes('الجهة المالكة') && actionsHtml.includes('النتيجة المستهدفة'), 'action list includes exact missing fields and total');
+check(!actionsHtml.includes(readyProject.name_ar) && !actionsHtml.includes('رابط مباشر'), 'missing link alone is not a planning action');
+check(actionHtml.includes('href="/roadmap?owner=unset&amp;status=planned"') && actionHtml.includes('href="/roadmap?owner=it&amp;status=planned"'), 'owner distribution drills down with existing filters');
+check(actionHtml.indexOf('id="portfolio-actions-title"') < actionHtml.indexOf('id="portfolio-breakdown-title"'), 'analysis puts actionable items before distribution');
+const allActions = render(analysisPage, '/roadmap/analysis', { projects: gapProjects, showAll: true, chartBy: 'work_type' });
+check(allActions.includes('عرض مختصر') && allActions.includes('توزيع المشاريع حسب نوع العمل') && allActions.includes('href="/roadmap?work_type=technical_project"'), 'expandable actions and selectable chart');
+const partialLinks = render(analysisPage, '/roadmap/analysis', { projects: [missingProject], reads: { projects: 'COMPLETE', links: 'UNAVAILABLE', treatments: 'COMPLETE' } });
+check(partialLinks.includes(missingProject.name_ar) && !partialLinks.includes('متوسط الاكتمال'), 'missing field actions remain available with link source unreadable');
+const linksOnly = render(analysisPage, '/roadmap/analysis', { projects: [readyProject, { ...readyProject, id: 76 }], links: [{ project_id: 70, control_id: 2 }], canonical: { projectRequirements: [], requirementControls: [] } });
+check(linksOnly.includes('لا توجد حقول تخطيط ناقصة') && linksOnly.includes('متوسط الاكتمال <bdi>90%</bdi>') && linksOnly.includes('مشاريع بلا ربط مباشر</dt><dd>1</dd>'), 'legacy calculation is unchanged and separated from data quality');
+const unavailableAnalysis = render(analysisPage, '/roadmap/analysis', { projects: [missingProject], reads: { projects: 'PARTIAL', links: 'COMPLETE', treatments: 'COMPLETE' } });
+check(!unavailableAnalysis.includes(missingProject.name_ar) && unavailableAnalysis.includes('عدد النتائج غير متاح'), 'unreadable portfolio never shows guessed gaps or counts');
+
 const detail = 'app/roadmap/[id]/page.tsx';
 const detailHTML = render(detail, '/roadmap/37?tab=requirements&from=analysis');
 check(detailHTML.includes('aria-selected="true" tabindex="0">المتطلبات'), 'real detail selected tab rendered');
