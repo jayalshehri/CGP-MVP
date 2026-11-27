@@ -41,7 +41,8 @@
 .detail-tags{display:flex;align-items:center;gap:6px;flex-wrap:wrap;line-height:1.5}
 .detail-tags>*,.detail-tags .catalog-applicability{margin:0}
 .detail-tags .detail-code{margin-inline-end:4px;font-size:14px}
-.detail-redesign .detail-hero h1{font-size:clamp(22px,2.3vw,30px);line-height:1.45;margin:5px 0 8px;overflow-wrap:anywhere}
+/* The workspace imposes its h1 size with !important. This compact size is local to the control title. */
+.detail-redesign .detail-hero #detail-title{font-size:clamp(19px,1.6vw,24px)!important;line-height:1.4;font-weight:750;letter-spacing:normal;margin:5px 0 8px;overflow-wrap:anywhere}
 .detail-meta,.detail-meta>div{display:flex;align-items:baseline;flex-wrap:wrap;gap:3px 7px;margin:0}
 .detail-meta{gap:3px 20px;font-size:13px}
 .detail-meta dt,.detail-empty,.detail-evidence-meta{color:#4b6472}
@@ -88,7 +89,6 @@
 @media(max-width:540px){
  .detail-page.detail-redesign{padding:12px 11px 22px}
  .detail-redesign .detail-hero,.detail-redesign .detail-card{padding:12px}
- .detail-redesign .detail-hero h1{font-size:21px}
  .detail-meta{gap:3px 12px}
  .detail-redesign .detail-tabs button{padding-inline:8px;font-size:12px}
  .detail-actions-menu summary{padding-inline:7px}
