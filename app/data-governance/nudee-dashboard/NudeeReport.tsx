@@ -44,7 +44,7 @@ function evidenceProgress(r:Requirement,assignment?:Assignment){
  return original;
 }
 function percent(n:number,d:number){return d?Math.round(1000*n/d)/10:0;}
-function fmtPct(n:number,d:number){if(!d)return "لا توجد بنود منطبقة";return percent(n,d).toLocaleString("ar-SA",{maximumFractionDigits:1})+"%";}
+function fmtPct(n:number,d:number,evaluated?:number){if(!d)return "لا توجد بنود منطبقة";if(evaluated===0)return "لم تتوفر نتيجة تقييم";return percent(n,d).toLocaleString("ar-SA",{maximumFractionDigits:1})+"%";}
 const shortDate = formatRiyadhDate;
 export default function NudeeReport({records,assignments}:{records:Requirement[];assignments:Assignment[]}){
  const [scope,setScope]=useState<"original"|"live">("original");
@@ -73,8 +73,8 @@ export default function NudeeReport({records,assignments}:{records:Requirement[]
  }).catch(()=>{if(active)setError("تعذر تحميل بيانات التقرير.");})
  .finally(()=>{if(active)setLoading(false);});return()=>{active=false};},[attempt]);
  const mapped=useMemo(()=>new Map(scopedAssignments.map(a=>[a.requirement_id,a])),[scopedAssignments]);
- const domains=useMemo(()=>Array.from(new Set(records.map(r=>r.domain_name))).sort((a,b)=>a.localeCompare(b,"ar")),[records]);
- const reviews=useMemo(()=>Array.from(new Set(records.map(r=>effectiveReview(r,mapped.get(r.id))))).sort((a,b)=>a.localeCompare(b,"ar")),[records,mapped]);
+ const domains=useMemo(()=>Array.from(new Set(scoped.map(r=>r.domain_name))).sort((a,b)=>a.localeCompare(b,"ar")),[scoped]);
+ const reviews=useMemo(()=>Array.from(new Set(scoped.map(r=>effectiveReview(r,mapped.get(r.id))))).sort((a,b)=>a.localeCompare(b,"ar")),[scoped,mapped]);
  const rows=useMemo(()=>scoped.filter(r=>
   (filter.domain===ALL||r.domain_name===filter.domain)&&
   (filter.level===ALL||r.maturity_level===filter.level)&&
@@ -106,7 +106,7 @@ export default function NudeeReport({records,assignments}:{records:Requirement[]
    const partial=list.filter(r=>complianceStatus(r.source_compliance)==="جزئي").length;
    const residual=n-full-authority-non-na-partial; // Calc!AH30:AH43, includes blanks and nonstandard values.
    return {name,total:n,applicable:n-na,assessed:list.filter(r=>!["لم يُقيَّم","حالة غير معيارية"].includes(complianceStatus(r.source_compliance))).length,reviewed:list.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length,
-    full,authority,partial,non,na,residual,levels:LEVELS.map(level=>{const subset=list.filter(r=>r.maturity_level===level);const denominator=subset.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق").length;return {n:subset.length,rate:denominator?percent(subset.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,denominator):null};})};
+    full,authority,partial,non,na,residual,levels:LEVELS.map(level=>{const subset=list.filter(r=>r.maturity_level===level);const denominator=subset.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق").length;return {n:subset.length,rate:denominator && subset.some(r=>["ممتثل بالكامل","ممتثل للمعالي فقط","غير ممتثل","جزئي"].includes(complianceStatus(r.source_compliance)))?percent(subset.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,denominator):null};})};
   }); // Preserve original Excel domain ordering from source_row; chart series use this same order.
  },[rows,mapped]);
  // Reproduce the eight-week *weighted* Calc!D60:E67 trend, not a count of due evidence.
@@ -178,13 +178,13 @@ export default function NudeeReport({records,assignments}:{records:Requirement[]
    <section className={styles.metrics} aria-label="مؤشرات الامتثال">
     {[
      ["إجمالي الأدلة",stats.total,"يتضمن جميع الأدلة في التصفية"],
-     ["ممتثل بالكامل",stats.full,fmtPct(stats.full,stats.applicable)+" من الأدلة المنطبقة"],
-     ["الفئة الداخلية الإضافية في الملف",stats.authority,fmtPct(stats.authority,stats.applicable)+" من الأدلة المنطبقة"],
+     ["ممتثل بالكامل",stats.full,fmtPct(stats.full,stats.applicable,stats.assessed-stats.na)+" من الأدلة المنطبقة"],
+     ["الفئة الداخلية الإضافية في الملف",stats.authority,fmtPct(stats.authority,stats.applicable,stats.assessed-stats.na)+" من الأدلة المنطبقة"],
      ["تنفيذ جزئي",stats.partial,"يُعرض عدد البنود دون افتراض وزن للدرجة"],
-     ["غير ممتثل",stats.non,fmtPct(stats.non,stats.applicable)+" من الأدلة المنطبقة"],
+     ["غير ممتثل",stats.non,fmtPct(stats.non,stats.applicable,stats.assessed-stats.na)+" من الأدلة المنطبقة"],
      ["غير منطبق",stats.na,"مستبعد من مقام الامتثال"],
      ["غير مقيّم",stats.unassessed,fmtPct(stats.assessed,stats.total)+" تم تقييمها"],
-     ["الامتثال الكامل وفق المصدر",fmtPct(stats.full,stats.applicable),"مصنفة ممتثلة من الأدلة المنطبقة"],
+     ["الامتثال الكامل وفق المصدر",fmtPct(stats.full,stats.applicable,stats.assessed-stats.na),"مصنفة ممتثلة من الأدلة المنطبقة"],
      ["إنجاز مراجعة الأدلة",fmtPct(stats.reviewed,stats.total),stats.reviewed+" من "+stats.total+" مكتمل"],
      ["متأخر وفق الخطة المستوردة",stats.overdue,"تاريخ القياس في الخطة: 5 نوفمبر 2026"]
     ].map(([label,value,detail])=><article className={styles.metric} key={label}><span>{label}</span><strong>{typeof value==="number"?value.toLocaleString("ar-SA"):value}</strong><small>{detail}</small></article>)}
@@ -192,18 +192,18 @@ export default function NudeeReport({records,assignments}:{records:Requirement[]
    {!original&&<section className={styles.workflow}><div><span>دورة التكليف في CGP</span><p>التكليف والاعتماد يقيسان جاهزية الأدلة داخل المكتب.</p></div><div className={styles.flowNumbers}><span>المسندة <b>{stats.assigned}</b></span><span>بانتظار التحقق <b>{stats.submitted}</b></span><span>المعتمدة <b>{stats.approved}</b></span></div></section>}
    {stats.unknown>0&&<p role="note" className={styles.warning}>تنبيه جودة بيانات: عدد السجلات ذات التصنيف غير المعياري في العرض الحالي: {stats.unknown}. يحتاج تصنيف «ممتثل لمتطلبات الهيئة» إلى تأكيد مكتب البيانات قبل اعتماد نسبة امتثال الجهة. تحتسب معادلة المصدر حالة «ممتثل للمعالي فقط».</p>}
    <div className={styles.twoCols}>
-    <section className={styles.panel}><h2>تصنيف الأدلة في ملف المتابعة</h2><p>نسبة الأدلة المصنفة ممتثلة بالكامل: {fmtPct(stats.full,stats.applicable)} · الفئتان المكتملتان وفق معادلة الملف: {fmtPct(stats.full+stats.authority,stats.applicable)}</p>
+    <section className={styles.panel}><h2>تصنيف الأدلة في ملف المتابعة</h2><p>نسبة الأدلة المصنفة ممتثلة بالكامل: {fmtPct(stats.full,stats.applicable,stats.assessed-stats.na)} · الفئتان المكتملتان وفق معادلة الملف: {fmtPct(stats.full+stats.authority,stats.applicable,stats.assessed-stats.na)}</p>
      {[["ممتثل بالكامل",stats.full],["ممتثل للمعالي فقط (صيغة Excel)",stats.authority],["جزئي",stats.partial],["غير ممتثل",stats.non],["غير منطبق",stats.na],["لم يُقيّم",stats.unassessed],["حالة غير معيارية",stats.unknown]].map(([label,n])=><div className={styles.barItem} key={label}><div><span>{label}</span><b>{n}</b></div><div className={styles.track}><div style={{width:(stats.total?100*Number(n)/stats.total:0)+"%"}}/></div></div>)}
     </section>
     <section className={styles.panel}><h2>الأدلة حسب مستوى النضج</h2><p>توزيع الأدلة ونتائج المراجعة للمستويات المعروضة.</p>
     {LEVELS.map(level=>{const subset=rows.filter(r=>r.maturity_level===level),done=subset.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length;return <div className={styles.levelRow} key={level}><span>{level}</span><strong>{subset.length}</strong><div className={styles.track}><div style={{width:(rows.length?100*subset.length/rows.length:0)+"%"}}/></div><small>مكتمل {done} · {fmtPct(done,subset.length)}</small></div>})}
     </section>
    </div>
-   <section className={styles.panel}><div className={styles.sectionHeader}><div><h2>مصفوفة الامتثال حسب المجال</h2><p>المجالات الأربعة عشر، النضج، عدد الأدلة المنطبقة والمقيّمة والمكتملة.</p></div><span className={styles.meta}>{domainMatrix.length} مجال</span></div><div className={styles.tableScroll}><table><thead><tr><th>المجال</th>{LEVELS.map((level,i)=><th key={level}>المستوى {i+1}</th>)}<th>ممتثل بالكامل في الملف</th><th>الفئتان في الملف</th><th>الأدلة</th><th>المنطبقة</th><th>المقيّمة</th><th>المراجعة المكتملة</th></tr></thead><tbody>{domainMatrix.map(d=><tr key={d.name}><th scope="row">{d.name}</th>{d.levels.map((l,i)=><td key={i} title={l.n+" دليل"}>{l.rate===null?"—":l.rate.toLocaleString("ar-SA")+"%"}</td>)}<td>{fmtPct(d.full,d.applicable)}</td><td>{fmtPct(d.full+d.authority,d.applicable)}</td><td>{d.total}</td><td>{d.applicable}</td><td>{d.assessed}</td><td>{d.reviewed}</td></tr>)}<tr className={styles.totalRow}><th scope="row">الإجمالي</th>{LEVELS.map(level=>{const a=rows.filter(r=>r.maturity_level===level);const valid=a.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق");return <td key={level}>{valid.length?fmtPct(valid.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,valid.length):"—"}</td>})}<td>{fmtPct(stats.full,stats.applicable)}</td><td>{fmtPct(stats.full+stats.authority,stats.applicable)}</td><td>{stats.total}</td><td>{stats.applicable}</td><td>{stats.assessed}</td><td>{stats.reviewed}</td></tr></tbody></table></div></section>
+   <section className={styles.panel}><div className={styles.sectionHeader}><div><h2>مصفوفة الامتثال حسب المجال</h2><p>المجالات الأربعة عشر، النضج، عدد الأدلة المنطبقة والمقيّمة والمكتملة.</p></div><span className={styles.meta}>{domainMatrix.length} مجال</span></div><div className={styles.tableScroll}><table><thead><tr><th>المجال</th>{LEVELS.map((level,i)=><th key={level}>المستوى {i+1}</th>)}<th>ممتثل بالكامل في الملف</th><th>الفئتان في الملف</th><th>الأدلة</th><th>المنطبقة</th><th>المقيّمة</th><th>المراجعة المكتملة</th></tr></thead><tbody>{domainMatrix.map(d=><tr key={d.name}><th scope="row">{d.name}</th>{d.levels.map((l,i)=><td key={i} title={l.n+" دليل"}>{l.rate===null?"—":l.rate.toLocaleString("ar-SA")+"%"}</td>)}<td>{fmtPct(d.full,d.applicable,d.assessed-d.na)}</td><td>{fmtPct(d.full+d.authority,d.applicable,d.assessed-d.na)}</td><td>{d.total}</td><td>{d.applicable}</td><td>{d.assessed}</td><td>{d.reviewed}</td></tr>)}<tr className={styles.totalRow}><th scope="row">الإجمالي</th>{LEVELS.map(level=>{const a=rows.filter(r=>r.maturity_level===level);const valid=a.filter(r=>complianceStatus(r.source_compliance)!=="لا ينطبق");return <td key={level}>{valid.length?fmtPct(valid.filter(r=>complianceStatus(r.source_compliance)==="ممتثل بالكامل").length,valid.length,valid.filter(r=>!["لم يُقيَّم","حالة غير معيارية"].includes(complianceStatus(r.source_compliance))).length):"—"}</td>})}<td>{fmtPct(stats.full,stats.applicable,stats.assessed-stats.na)}</td><td>{fmtPct(stats.full+stats.authority,stats.applicable,stats.assessed-stats.na)}</td><td>{stats.total}</td><td>{stats.applicable}</td><td>{stats.assessed}</td><td>{stats.reviewed}</td></tr></tbody></table></div></section>
    <section className={styles.panel} aria-label="رسوم الامتثال حسب مستوى النضج">
     <div className={styles.sectionHeader}><div><h2>تصنيف الأدلة حسب المجال والمستوى</h2><p>مصدر المستويات الثلاثة الأولى: Calc!H30:H43 وQ30:Q43 وZ30:Z43. النسب من الأدلة المنطبقة.</p></div><span className={styles.meta}>3 مستويات</span></div>
     <div className={styles.domainVisuals}>{LEVELS.map((level,index)=><div className={styles.domainVisual} key={level}><h3>{level}</h3>
-     {domainMatrix.map(d=><div key={d.name} className={styles.domainLine}><span title={d.name}>{d.name}</span>{d.levels[index].rate===null?<span>لا توجد بيانات منطبقة</span>:<div className={styles.track} role="meter" aria-label={d.name+" - "+level} aria-valuemin={0} aria-valuemax={100} aria-valuenow={d.levels[index].rate}><div style={{width:(d.levels[index].rate??0)+"%"}}/></div>}<strong>{d.levels[index].rate===null?"—":d.levels[index].rate.toLocaleString("ar-SA")+"%"}</strong></div>)}
+     {domainMatrix.map(d=><div key={d.name} className={styles.domainLine}><span title={d.name}>{d.name}</span>{d.levels[index].rate===null?<span>لا توجد نتيجة محسوبة</span>:<div className={styles.track} role="meter" aria-label={d.name+" - "+level} aria-valuemin={0} aria-valuemax={100} aria-valuenow={d.levels[index].rate}><div style={{width:(d.levels[index].rate??0)+"%"}}/></div>}<strong>{d.levels[index].rate===null?"—":d.levels[index].rate.toLocaleString("ar-SA")+"%"}</strong></div>)}
     </div>)}</div>
    </section>
    <section className={styles.panel} aria-label="توزيع الامتثال حسب المجال">

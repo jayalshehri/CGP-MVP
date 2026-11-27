@@ -29,6 +29,7 @@ export default function AssessmentFile(){
  const [entries,setEntries]=useState<Entry[]>([]),[actions,setActions]=useState<Improvement[]>([]);
  const [code,setCode]=useState(""),[subject,setSubject]=useState("maturity"),[requirement,setRequirement]=useState(0);
  const [mappingFilter,setMappingFilter]=useState("unresolved"),[search,setSearch]=useState("");
+ const [snapshot,setSnapshot]=useState<{id:number;data:{catalog:Mapping[];questions:{question_state:string}[];as_of:string;plan_stages:{maturity_level:string;total:number;progress_sum:number}[];final_review:number}}|null>(null);
  const [revision,setRevision]=useState(0),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [unavailable,setUnavailable]=useState(false);
  const [error,setError]=useState(""),[notice,setNotice]=useState("");
@@ -76,7 +77,7 @@ export default function AssessmentFile(){
  return <div className={styles.assessment}>
  {notice&&<p role="status">{notice}</p>}{error&&<p role="alert">{error} <button onClick={()=>{setError("");setLoading(true);setRevision(r=>r+1);}}>إعادة التحميل</button></p>}
  {loading?<p role="status">جارٍ تحميل ملف التقييم…</p>:unavailable?null:<fieldset disabled={busy}>
- <label>دورة التقييم<select value={cycle} onChange={e=>{setCycle(Number(e.target.value));setLoading(true);setError("");}}>{!cycles.length&&<option value={0}>لا توجد دورة مسجلة</option>}{cycles.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}</select></label>
+ <label>دورة التقييم<select value={cycle} onChange={e=>{setCycle(Number(e.target.value));setSnapshot(null);setLoading(true);setError("");}}>{!cycles.length&&<option value={0}>لا توجد دورة مسجلة</option>}{cycles.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}</select></label>
  {cycles.find(c=>c.id===cycle)&&<p>مرجع الدورة · {cycles.find(c=>c.id===cycle)?.methodology}</p>}
  <details><summary>تسجيل دورة تقييم</summary><form onSubmit={e=>record(e,"cycle",f=>({subject:input(f,"title")}))}><label>اسم الدورة<input name="title" maxLength={160} required/></label><label>إصدار المنهجية ومرجع تعليمات الدورة<input name="reference" maxLength={1600} required/></label><button>إنشاء الدورة</button></form></details>
  <details><summary>تصنيف الأدلة وربطها بالمواصفات · {format(maps.filter(r=>r.mapping_state==="unresolved").length)} تحتاج مراجعة</summary>
@@ -103,6 +104,10 @@ export default function AssessmentFile(){
  <ul>{actions.map(a=><li key={a.id}><strong>{a.description}</strong> · {owners.find(o=>o.user_id===a.owner_id)?.display_name??"مالك مسجّل"} · {formatRiyadhDate(a.due_date)} · {a.closed_at?"مغلق":a.due_date<riyadhIsoDate()?"متأخر":"مفتوح"}<br/><Link href={evidenceUrl+a.requirement_id}>{actionName(a.requirement_id)}</Link>
  {a.closed_at?<p>نسخة الإغلاق {a.closure_ref} · {a.decision_ref}</p>:<form onSubmit={e=>record(e,"close",()=>({action_id:a.id}))}><label>قرار الإغلاق ومرجع الاعتماد وفق صلاحيات الجهة<input name="reference" maxLength={1600} required/></label><button>إغلاق بالدليل المعتمد</button></form>}</li>)}</ul></details>
  <details><summary>لقطات الدورة المؤرخة</summary><form onSubmit={e=>record(e,"snapshot",()=>({}))}><label>وصف اللقطة أو مرجع عرض اللجنة<input required name="reference" maxLength={1600}/></label><button>تثبيت لقطة للتقرير</button></form>
- {entries.filter(e=>e.kind==="snapshot").map(e=><p key={e.id}>{formatRiyadhDateTime(e.created_at)} · {e.reference} <button type="button" onClick={async()=>{const r=await supabase.from("nudee_cycle_events").select("payload").eq("id",e.id).single();if(r.error){setError("تعذر تنزيل اللقطة.");return;}download(r.data.payload,"ndi-cycle-"+cycle+"-snapshot-"+e.id+".json");}}>تنزيل اللقطة</button></p>)}</details></>}
+ {entries.filter(e=>e.kind==="snapshot").map(e=><p key={e.id}>{formatRiyadhDateTime(e.created_at)} · {e.reference} <button type="button" onClick={async()=>{const r=await supabase.from("nudee_cycle_events").select("payload").eq("id",e.id).single();if(r.error){setError("تعذر تنزيل اللقطة.");return;}setSnapshot({id:e.id,data:r.data.payload});}}>عرض اللقطة</button></p>)}
+ {snapshot&&entries.some(e=>e.id===snapshot.id&&e.kind==="snapshot")&&<section aria-label="ملخص اللقطة"><h3>ملخص اللقطة · {formatRiyadhDateTime(snapshot.data.as_of)}</h3>
+ <p>الأدلة ذات النسخ المعتمدة {format(snapshot.data.catalog.filter(r=>r.approved_version).length)} من {format(snapshot.data.catalog.length)} · الأسئلة المؤكدة داخليًا {format(snapshot.data.questions.filter(q=>q.question_state==="confirmed").length)} من {format(snapshot.data.questions.length)}</p>
+ <p>التقدم المرجّح لخطة الملف · {(25*(snapshot.data.plan_stages.reduce((sum,stage)=>sum+(stage.total?stage.progress_sum/stage.total:0),0)+Number(snapshot.data.final_review))).toLocaleString("ar-SA",{maximumFractionDigits:1})}٪</p>
+ <button type="button" onClick={()=>download(snapshot.data,"ndi-cycle-"+cycle+"-snapshot-"+snapshot.id+".json")}>تنزيل تفاصيل اللقطة</button></section>}</details></>}
  </fieldset>}</div>;
 }
