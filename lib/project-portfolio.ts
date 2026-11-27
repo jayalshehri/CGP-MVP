@@ -118,7 +118,12 @@ export const defaultPortfolioFilters: PortfolioFilters = {
   status: "all", durationUnit: "all", durationMin: "", durationMax: "",
   mappingCompleteness: "all",
 };
-export function matchesPortfolioFilters(project: PortfolioProject, filters: PortfolioFilters) {
+export type PortfolioFilterProject = Pick<PortfolioProject,
+  "project_code" | "name_ar" | "archived_at" | "portfolio_priority" | "execution_year" | "work_type" |
+  "executive_owner_code" | "status" | "duration_unit" | "duration_value" | "mapping_completeness"
+>;
+
+export function matchesPortfolioFilters(project: PortfolioFilterProject, filters: PortfolioFilters) {
   const match = (value: string | number | null, filter: string) => filter === "all" || (filter === "unset" ? value === null : String(value) === filter);
   return `${project.project_code} ${project.name_ar}`.toLocaleLowerCase("ar").includes(filters.query.trim().toLocaleLowerCase("ar"))
     && (filters.archive === "all" || (filters.archive === "archived") === Boolean(project.archived_at))
