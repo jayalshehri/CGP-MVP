@@ -171,6 +171,10 @@ export function DccAssessmentCycle(props: LayoutProps) {
   const quick = (value: string) => { setStatus(status === value ? '' : value); setMode('operational'); setPage(0); };
   const reviewerNames = [['المقيّم', cycle.assessor_id], ['المراجع', cycle.reviewer_id], ['المعتمد', cycle.approver_id]] as const;
   const formattedTitle = (item: AssessmentItem) => item.title_ar.replace(/\s+[-–]\s+[\d-]+\s*$/, '').trim();
+  const statusChip = (item: AssessmentItem) => <span className="dcc-chip" data-tone={item.compliance_status === 'implemented' ? 'ok' : item.compliance_status === 'partially_implemented' ? 'pending' : item.compliance_status === 'not_implemented' ? 'alert' : 'neutral'}>{assessmentLabels[item.compliance_status ?? ''] ?? 'لم يُقيّم'}</span>;
+  const openButton = (item: AssessmentItem) => <button className="dcc-row-open" type="button" aria-haspopup="dialog" aria-label={`فتح البند ${item.control_code}`} onClick={() => open(item.id)}>فتح <span aria-hidden="true">←</span></button>;
+  const rowTitle = (item: AssessmentItem) => <><div className="dcc-row-title"><bdi className="dcc-control-code" dir="ltr">{item.control_code}</bdi><strong>{formattedTitle(item)}</strong></div>
+    <p>{item.description_ar || item.title_ar}</p>{!item.is_scoring && <small>للسياق · خارج الحساب الحالي</small>}</>;
   return <main className="workflow-page ae-page dcc-workspace" dir="rtl">
     <Breadcrumbs showCycles/>
     <DccHero title={cycle.scope_name} tag={`DCC-${cycle.framework_version.replace('-', ':')}`} cycle={cycle}
@@ -215,14 +219,19 @@ export function DccAssessmentCycle(props: LayoutProps) {
         {visible.length ? <div className="dcc-table">
           <table><thead><tr><th scope="col">البند</th><th scope="col">التطبيق</th><th scope="col">المراجعة</th><th scope="col">الأدلة</th><th scope="col"><span className="dcc-sr">التفاصيل</span></th></tr></thead>
             <tbody>{visible.map((item, index) => <tr key={item.id} className={index < page * 12 || index >= (page + 1) * 12 ? 'dcc-print-row' : undefined}>
-              <td><div className="dcc-row-title"><bdi className="dcc-control-code" dir="ltr">{item.control_code}</bdi><strong>{formattedTitle(item)}</strong></div>
-                <p>{item.description_ar || item.title_ar}</p>{!item.is_scoring && <small>للسياق · خارج الحساب الحالي</small>}</td>
-              <td data-label="التطبيق"><span className="dcc-chip" data-tone={item.compliance_status === 'implemented' ? 'ok' : item.compliance_status === 'partially_implemented' ? 'pending' : item.compliance_status === 'not_implemented' ? 'alert' : 'neutral'}>{assessmentLabels[item.compliance_status ?? ''] ?? 'لم يُقيّم'}</span></td>
-              <td data-label="المراجعة">{reviewLabels[item.review_status] ?? '—'}</td><td data-label="الأدلة">{evidenceCount(item.id)}</td>
-              <td className="ae-no-print"><button className="dcc-row-open" type="button" aria-haspopup="dialog" aria-label={`فتح البند ${item.control_code}`} onClick={() => open(item.id)}>فتح <span aria-hidden="true">←</span></button></td>
+              <td>{rowTitle(item)}</td><td>{statusChip(item)}</td>
+              <td>{reviewLabels[item.review_status] ?? '—'}</td><td>{evidenceCount(item.id)}</td>
+              <td className="ae-no-print">{openButton(item)}</td>
             </tr>)}</tbody>
           </table>
-        </div> : <p className="dcc-empty" role="status">لا توجد بنود مطابقة للتصفية.</p>}
+          </div> : <p className="dcc-empty" role="status">لا توجد بنود مطابقة للتصفية.</p>}
+        {visible.length > 0 && <ul className="dcc-item-cards ae-no-print" aria-label="بنود التقييم">
+          {visible.slice(page * 12, (page + 1) * 12).map(item => <li key={item.id}>
+            {rowTitle(item)}
+            <div className="dcc-item-status">{statusChip(item)}<span>{reviewLabels[item.review_status] ?? '—'}</span></div>
+            <div className="dcc-item-footer"><span>{evidenceCount(item.id)} دليل مرتبط</span>{openButton(item)}</div>
+          </li>)}
+        </ul>}
         <div className="dcc-paging ae-no-print"><span role="status">عرض {visible.length ? page * 12 + 1 : 0}–{Math.min(visible.length, (page + 1) * 12)} من {visible.length}</span><button type="button" disabled={page === 0} onClick={() => setPage(page - 1)}>السابق</button><button type="button" disabled={(page + 1) * 12 >= visible.length} onClick={() => setPage(page + 1)}>التالي</button></div>
       </>}
     </section>
