@@ -56,7 +56,7 @@ export default function GrcAttention({ controlId, compact = false, variant = "de
 
   if (variant === "summary") return <section className="evidence-requests" aria-label="طلبات الأدلة">
     <div className="evidence-requests-line">
-      {loading ? <span role="status">جاري التحقق من طلبات الأدلة…</span>
+      {loading ? <span role="status">جارٍ تحميل طلبات الأدلة…</span>
       : error ? <span role="alert">تعذر تحميل ملخص الطلبات.</span>
       : requests.length ? <details>
         <summary>طلبات الأدلة المفتوحة <strong>{requests.length}</strong>{atLimit && <small>ضمن أول 100 طلب</small>}</summary>
@@ -71,7 +71,7 @@ export default function GrcAttention({ controlId, compact = false, variant = "de
   return <section className="workflow-card">
     <h2>طلبات الأدلة والمراجعات المطلوبة</h2>
     <p>تنبيهات داخل المنصة محسوبة من المواعيد الحالية ضمن صلاحياتك. يعرض أول 100 طلب حسب الموعد.</p>
-    {overdueCycles && <p className="grc-warning">توجد دورات مراجعة متأخرة. <Link href="/audit-schedule">فتح جدول المراجعات</Link></p>}
+    {overdueCycles && <p className="grc-warning">توجد دورات مراجعة متأخرة. <Link href="/audit-schedule">فتح جدول التدقيق الدوري</Link></p>}
     {!requests.length ? <p>لا توجد طلبات مفتوحة ضمن نطاقك.</p> : requestList}
     {compact && requests.length > 5 && <Link href="/evidence">عرض بقية طلبات الأدلة ←</Link>}
   </section>;

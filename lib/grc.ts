@@ -1,3 +1,5 @@
+import { formatRiyadhDate, riyadhIsoDate } from "./dates";
+
 export type EvidenceRecord = {
  id:number; control_id:number; source_control_id:number; link_id:number|null; evidence_name:string|null;
  file_name:string|null; file_path:string|null; description:string|null; status:string; is_current:boolean;
@@ -7,8 +9,8 @@ export type EvidenceRecord = {
 export type ReviewCycle = {id:number;control_id:number;owner_id:string;reviewer_id:string;due_date:string;status:string;frequency:string;completed_at:string|null;notes:string|null};
 export type EvidenceRequest = {id:number;control_id:number;cycle_id:number;requirement:string;due_date:string;status:string;reviewer_id:string;requested_from:string};
 export const frequencyLabels:Record<string,string>={monthly:'شهري',quarterly:'ربع سنوي',semiannual:'نصف سنوي',annual:'سنوي',custom:'مخصص'};
-export const requestLabels:Record<string,string>={open:'بانتظار التقديم',submitted:'بانتظار المراجعة',changes_requested:'يحتاج استكمالًا',accepted:'مقبول',rejected:'مرفوض',cancelled:'ملغى'};
-export function todayRiyadh(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Riyadh'}).format(new Date());}
+export const requestLabels:Record<string,string>={open:'بانتظار تقديم الدليل',submitted:'بانتظار مراجعة الدليل',changes_requested:'بانتظار استكمال الدليل',accepted:'مقبول',rejected:'مرفوض',cancelled:'ملغى'};
+export const todayRiyadh = riyadhIsoDate;
 export function isExpired(value:string|null){return !!value&&value<todayRiyadh();}
 
 // Single source of truth for date-proximity scheduling state, shared by the
@@ -33,15 +35,18 @@ export function scheduleState(date:string|null,dueSoonDays=30):ScheduleState{
 // have "دورة مفتوحة" open with evidence already "قيد المراجعة"). Derived
 // only from already-governed data (control_review_cycles + evidence_requests
 // status), never a second stored status.
-export type CycleStage='none'|'awaiting_evidence'|'under_review'|'changes_requested';
-export const cycleStageLabels:Record<CycleStage,string>={none:'—',awaiting_evidence:'دورة مفتوحة · بانتظار الدليل',under_review:'قيد المراجعة',changes_requested:'يحتاج استكمالًا'};
+export type CycleStage='none'|'no_request'|'awaiting_evidence'|'under_review'|'changes_requested'|'assessment'|'cancelled';
+export const cycleStageLabels:Record<CycleStage,string>={none:'لا توجد دورة مفتوحة',no_request:'لا يوجد طلب دليل',awaiting_evidence:'بانتظار تقديم الدليل',under_review:'قيد مراجعة الدليل',changes_requested:'بانتظار استكمال الدليل',assessment:'بانتظار تقييم الضابط وإغلاق الدورة',cancelled:'طلب الدليل ملغى'};
 export function cycleStage(hasOpenCycle:boolean,latestRequestStatus:string|undefined):CycleStage{
  if(!hasOpenCycle)return 'none';
+ if(!latestRequestStatus)return 'no_request';
+ if(latestRequestStatus==='accepted')return 'assessment';
+ if(latestRequestStatus==='cancelled')return 'cancelled';
  if(latestRequestStatus==='submitted')return 'under_review';
  if(latestRequestStatus==='changes_requested'||latestRequestStatus==='rejected')return 'changes_requested';
  return 'awaiting_evidence';
 }
-export function formatGrcDate(value:string|null){return value?new Intl.DateTimeFormat('ar-SA',{dateStyle:'medium',timeZone:'Asia/Riyadh'}).format(new Date(value.length===10?`${value}T12:00:00+03:00`:value)):'—';}
+export const formatGrcDate = formatRiyadhDate;
 export function csvDownload(name:string,rows:(string|number)[][]){
  const quote=(value:string|number)=>{let text=String(value);if(/^[=+@\-]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"';};
  const url=URL.createObjectURL(new Blob(['\ufeff'+rows.map(row=>row.map(quote).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));

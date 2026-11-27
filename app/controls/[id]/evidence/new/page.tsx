@@ -158,7 +158,7 @@ export default function NewEvidencePage() {
 
         <header className="evidence-upload-header">
           <div className="evidence-upload-header-main">
-            <span className="evidence-upload-eyebrow">إضافة دليل امتثال</span>
+            <span className="evidence-upload-eyebrow">أدلة الضابط</span>
             <div className="evidence-upload-title-row">
               <h1>رفع دليل</h1>
               <span className="evidence-upload-code" dir="ltr">
@@ -178,9 +178,9 @@ export default function NewEvidencePage() {
 
         <form aria-busy={uploading} onSubmit={handleSubmit} className="evidence-upload-card">
           <section className="grc-form">
-            <label>نوع الإرسال<select disabled={uploading} value={replaceId} onChange={e=>setReplaceId(e.target.value)}><option value="">مستند جديد مستقل</option>{versions.map(v=><option key={v.id} value={v.id}>إصدار جديد من: {v.file_name} (الإصدار {v.version_number})</option>)}</select></label>
+            <label>نوع الدليل<select disabled={uploading} value={replaceId} onChange={e=>setReplaceId(e.target.value)}><option value="">دليل جديد مستقل</option>{versions.map(v=><option key={v.id} value={v.id}>إصدار جديد من: {v.file_name} (الإصدار {v.version_number})</option>)}</select></label>
             {requestId&&<p>مرتبط بطلب الدليل #{requestId}</p>}
-            <label>صالح حتى — إن كانت للدليل مدة صلاحية<input disabled={uploading} type="date" value={validUntil} onChange={e=>setValidUntil(e.target.value)}/></label>
+            <label>تاريخ انتهاء الصلاحية (اختياري)<input disabled={uploading} type="date" value={validUntil} onChange={e=>setValidUntil(e.target.value)}/></label>
             <label>بداية فترة التغطية<input disabled={uploading} type="date" value={coverageStart} onChange={e=>setCoverageStart(e.target.value)}/></label>
             <label>نهاية فترة التغطية<input disabled={uploading} type="date" min={coverageStart||undefined} value={coverageEnd} onChange={e=>setCoverageEnd(e.target.value)}/></label>
           </section><section className="evidence-upload-section">
@@ -208,7 +208,7 @@ export default function NewEvidencePage() {
               <span className="evidence-upload-step">2</span>
               <div>
                 <h2>إرفاق الملف <em>*</em></h2>
-                <p>PDF أو Word أو Excel أو صورة، بحجم لا يتجاوز 20 MB.</p>
+                <p>الصيغ المقبولة هي PDF أو Word أو Excel أو صورة. الحد الأقصى 20 ميغابايت.</p>
               </div>
             </div>
 
@@ -244,7 +244,7 @@ export default function NewEvidencePage() {
                 <b>{mappedControls.length}</b>
               </summary>
               <div className="evidence-upload-sharing-body">
-                <p>يمكن استخدام الملف نفسه مع ضوابط مرتبطة. كل ضابط مختار يمر بمراجعة مستقلة قبل انعكاس النتيجة عليه.</p>
+                <p>يمكن ربط الملف نفسه بضوابط أخرى. يُراجع الدليل ويُتخذ القرار بشأنه لكل ضابط على حدة.</p>
                 <fieldset disabled={uploading || !ready}>
                   {mappedControls.map((item) => (
                     <label key={item.control_id} className="evidence-upload-sharing-option">
@@ -266,16 +266,16 @@ export default function NewEvidencePage() {
 
           {errorMessage && <div role="alert" className="evidence-upload-alert evidence-upload-alert-error">{errorMessage}</div>}
           {message && <div role="status" className="evidence-upload-alert evidence-upload-alert-success">{message}</div>}
-          {uploading && <p role="status" className="evidence-upload-status">جاري إرسال الملف وتسجيله. انتظر حتى تظهر تفاصيل الضابط.</p>}
+          {uploading && <p role="status" className="evidence-upload-status">جارٍ رفع الملف وتسجيل الدليل…</p>}
 
           <footer className="evidence-upload-actions">
             <div>
               <button type="submit" disabled={uploading || !ready} className="evidence-upload-submit">
-                {uploading ? "جاري الرفع..." : "رفع وإرسال للمراجعة"}
+                {uploading ? "جارٍ الرفع…" : "رفع وإرسال للمراجعة"}
               </button>
               <Link href={`/controls/${controlId}`} className="evidence-upload-cancel">إلغاء</Link>
             </div>
-            <p>الإرسال الجديد يحل محل الدليل الحالي للمراجعة، مع الاحتفاظ بالإرسالات السابقة في السجل.</p>
+            <p>{replaceId ? "يُرسل الإصدار الجديد للمراجعة، ويُحفظ الإصدار السابق في السجل." : "يُضاف الملف إلى سجل الضابط كدليل مستقل ويُرسل للمراجعة."}</p>
           </footer>
         </form>
       </div>

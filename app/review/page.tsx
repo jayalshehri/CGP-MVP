@@ -1,5 +1,6 @@
 "use client";
 
+import { formatRiyadhDate } from "@/lib/dates";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AccessibleDialog from "@/components/AccessibleDialog";
@@ -21,9 +22,9 @@ type ReviewRow = EvidenceRecord & { control: Control; framework: string; label: 
 
 const scopes: ReadonlyArray<{ key: ReviewScope; label: string; empty: string; note: string }> = [
   { key: "pending", label: "بانتظار القرار", empty: "لا توجد أدلة تنتظر قرارًا", note: "تظهر هنا الأدلة الحالية بانتظار المراجعة أو قيدها." },
-  { key: "mine", label: "مسند إليّ", empty: "لا توجد أدلة مسندة إليك للمراجعة", note: "يمكنك الاطلاع على قائمة بانتظار القرار." },
-  { key: "returned", label: "معاد للاستكمال", empty: "لا توجد أدلة حالية معادة للاستكمال", note: "تظهر هنا الأدلة التي تحتاج تحديثًا من مقدم الدليل." },
-  { key: "history", label: "سجل القرارات", empty: "لا توجد قرارات مسجلة", note: "يظهر سجل القرارات بعد معالجة الأدلة." },
+  { key: "mine", label: "مراجعاتي", empty: "لا توجد أدلة مسندة إليك للمراجعة", note: "يمكنك الاطلاع على جميع الأدلة التي لم يصدر قرار بشأنها." },
+  { key: "returned", label: "مطلوب استكمالها", empty: "لا توجد أدلة بانتظار الاستكمال", note: "تظهر هنا الأدلة التي أُعيدت إلى مقدّمها لاستكمالها." },
+  { key: "history", label: "سجل القرارات", empty: "لا توجد قرارات مسجلة", note: "تظهر هنا قرارات القبول والرفض وطلبات الاستكمال السابقة." },
 ];
 
 const titleOf = (row: EvidenceRecord) => row.evidence_name?.trim() || row.file_name?.trim() || `دليل ${row.id}`;
@@ -31,12 +32,7 @@ const normalize = (text: string) => text.trim().toLowerCase()
   .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
   .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06f0))
   .replace(/[‐-―−]/g, "-");
-const formatter = new Intl.DateTimeFormat("ar-SA-u-ca-gregory", { dateStyle: "medium", timeZone: "Asia/Riyadh" });
-function formatDate(value: string | null) {
-  if (!value) return "غير محدد";
-  const date = new Date(value.length === 10 ? `${value}T12:00:00+03:00` : value);
-  return Number.isFinite(date.getTime()) ? formatter.format(date) : "غير محدد";
-}
+const formatDate = (value: string | null) => formatRiyadhDate(value, "غير محدد");
 function reviewerName(row: EvidenceRecord, user: string, names: Record<string, string>, showDecision: boolean) {
   if (showDecision || !awaitingReview(row)) return row.reviewer_display_name || "غير موثق بالاسم";
   if (!row.assigned_reviewer) return "غير مسند";
@@ -155,7 +151,7 @@ export default function ReviewPage() {
     if (lock.current || reviewRestriction(row, user) || (decision === "accepted" && isExpired(row.valid_until))) return;
     const key = evidenceReviewKey(row);
     const reason = notes[key]?.trim();
-    if (!reason) { setActionError("اكتب سبب القرار، بما فيه القبول."); return; }
+    if (!reason) { setActionError("اكتب مبرر القرار قبل الحفظ، بما في ذلك عند قبول الدليل."); return; }
     lock.current = true; setBusy(true); setActionError(""); setMessage("");
     try {
       const result = row.link_id !== null
@@ -167,18 +163,18 @@ export default function ReviewPage() {
         ? { ...item, status: decision, review_notes: reason, reviewer_display_name: myName } : item));
       setNotes(previous => { const next = { ...previous }; delete next[key]; return next; });
       setScope(currentScope); setSelectedKey(null); clearTarget();
-      setMessage("تم حفظ القرار. اعتماد امتثال الضابط يبقى في دورة المراجعة.");
+      setMessage("تم حفظ قرار الدليل. يُسجّل تقييم الضابط بشكل مستقل في دورة المراجعة.");
       await load();
     } catch (cause) { setActionError(errorMessage(cause, "تعذر حفظ القرار.")); }
     finally { lock.current = false; setBusy(false); }
   }
 
-  if (loading) return <main className="workflow-page review-page" dir="rtl" role="status">جاري تحميل مراجعات الأدلة…</main>;
+  if (loading) return <main className="workflow-page review-page" dir="rtl" role="status">جارٍ تحميل مراجعات الأدلة…</main>;
   const empty = scopes.find(item => item.key === currentScope)!;
   return <main className="workflow-page review-page" dir="rtl">
     <header className="review-header">
       <h1>مراجعة الأدلة</h1>
-      <p>راجع الدليل في سياق الضابط. لكل ضابط قرار مستقل، حتى لو كان الملف مشتركًا.</p>
+      <p>اتخذ قرارًا مستقلًا لكل ضابط، حتى لو كان الدليل مشتركًا. قبول الدليل لا يعني أن الضابط مطبّق.</p>
     </header>
     {error && <div className="review-notice review-error" role="alert">{error} <button type="button" className="review-button" onClick={() => void load()}>إعادة المحاولة</button></div>}
     {message && <p className="review-notice" role="status">{message}</p>}
@@ -192,7 +188,7 @@ export default function ReviewPage() {
         <label className="review-search"><span>البحث في المراجعات</span><input type="search" value={search} dir="auto" onChange={e => setSearch(e.target.value)} placeholder="الدليل أو رقم الضابط"/></label>
       </section>
       {target && <div className="review-notice" role="status">{desiredRows.length > 1 ? "هذا الدليل مرتبط بأكثر من ضابط. اختر الصف الخاص بالضابط الذي تريد مراجعته."
-        : !desiredRows.length ? "الدليل المطلوب غير متاح ضمن نطاقك." : "تصفية إلى الدليل المرتبط بالرابط."}
+        : !desiredRows.length ? "الدليل المطلوب غير متاح ضمن نطاقك." : "تعرض القائمة الدليل المحدد في الرابط."}
         <button type="button" className="review-button" onClick={() => changeScope(currentScope)}>عرض القائمة</button>
       </div>}
       {visible.length ? <table className="review-table" aria-label="قائمة مراجعة الأدلة" role="table">
@@ -213,7 +209,7 @@ export default function ReviewPage() {
         <div><h2>{searchQuery ? "لا توجد نتائج مطابقة للبحث" : target ? "لا توجد نتائج لهذا الرابط" : empty.empty}</h2>
           <p>{searchQuery ? "جرّب البحث باسم الدليل أو رقم الضابط." : target ? "افتح القائمة للاطلاع على الأدلة المتاحة لك." : empty.note}</p></div>
         {searchQuery ? <button type="button" className="review-button" onClick={() => setSearch("")}>مسح البحث</button>
-        : currentScope === "mine" && <button type="button" className="review-button" onClick={() => changeScope("pending")}>عرض ما ينتظر قرارًا</button>}
+        : currentScope === "mine" && <button type="button" className="review-button" onClick={() => changeScope("pending")}>عرض الأدلة بانتظار القرار</button>}
       </div>}
     </>}
 
@@ -260,13 +256,13 @@ function ReviewDrawer({ row, versions, reviewer, restriction, busy, error, reaso
           </li>)}</ul>
         </details>}
         {(row.reviewed_at || row.review_notes) && <section className="review-detail review-recorded">
-          <h3>القرار المسجل</h3><p>{formatDate(row.reviewed_at)} · <bdi>{row.reviewer_display_name || "غير موثق بالاسم"}</bdi></p>
+          <h3>قرار المراجعة المسجّل</h3><p>{formatDate(row.reviewed_at)} · <bdi>{row.reviewer_display_name || "غير موثق بالاسم"}</bdi></p>
           {row.review_notes && <p dir="auto">{row.review_notes}</p>}
         </section>}
 
         {error && <p className="review-notice review-error" role="alert">{error}</p>}
         {eligible ? <section className="review-decision" aria-label="اتخاذ قرار على الدليل">
-          <h3>قرار المراجعة</h3>
+          <h3>اتخاذ قرار بشأن الدليل</h3>
           <p>قبول الدليل لا يعتمد امتثال الضابط.</p>
           {row.link_id === null && row.status === "pending_review" &&
             <button type="button" className="review-button" disabled={busy} onClick={onStart}>بدء المراجعة</button>}

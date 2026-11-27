@@ -1,5 +1,6 @@
 "use client";
 
+import { formatRiyadhDate } from "@/lib/dates";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -39,7 +40,7 @@ type EvidenceScope = "current" | "all";
 const quickFilters = [
   { key: "all", label: "الكل", tone: "neutral" },
   { key: "changes_requested", label: "يحتاج استكمالًا", tone: "warning" },
-  { key: "review", label: "للمراجعة", tone: "info" },
+  { key: "review", label: "أدلة للمراجعة", tone: "info" },
   { key: "accepted", label: "مقبول", tone: "success" },
   { key: "rejected", label: "مرفوض", tone: "danger" },
 ] as const;
@@ -59,11 +60,7 @@ const normalizeSearch = (text: string) => text.toLowerCase().trim()
   .replace(/[‐-―−]/g, "-");
 const evidenceTitle = (row: Evidence) => row.evidence_name?.trim() || row.file_name?.trim() || `دليل ${row.id}`;
 const rowKey = (row: Evidence) => `${row.id}-${row.link_id ?? "source"}`;
-const ip = new Intl.DateTimeFormat("ar-SA-u-ca-gregory", { dateStyle: "medium", timeZone: "Asia/Riyadh" });
-function formatEvidenceDate(value: string | null) {
-  const time = parseDate(value);
-  return time ? ip.format(time) : "غير محدد";
-}
+const formatEvidenceDate = (value: string | null) => formatRiyadhDate(value, "غير محدد");
 function parseDate(value: string | null) {
   if (!value) return 0;
   const timestamp = Date.parse(value.length === 10 ? `${value}T12:00:00+03:00` : value);
@@ -141,14 +138,14 @@ export default function EvidencePage() {
   function clearFilters() { setSearch(""); setStatus("all"); setFramework("all"); }
   function showAllStatuses() { setSearch(""); setStatus("all"); }
 
-  if (loading) return <main className="workflow-page evidence-page" dir="rtl" role="status">جاري تحميل سجل الأدلة…</main>;
+  if (loading) return <main className="workflow-page evidence-page" dir="rtl" role="status">جارٍ تحميل سجل الأدلة…</main>;
   if (error) return <main className="workflow-page evidence-page" dir="rtl"><h1>تعذر تحميل الأدلة</h1><p role="alert">{error}</p>
     <button type="button" className="evidence-button" onClick={() => window.location.reload()}>إعادة المحاولة</button></main>;
 
   return <main className="workflow-page evidence-page" dir="rtl">
     <header className="evidence-header">
-      <div><h1>الأدلة</h1><p>اعثر على الدليل، وتابع حالته والضابط المرتبط به.</p></div>
-      <Link className="evidence-button" href="/controls">اختيار ضابط لرفع دليل <span aria-hidden="true">←</span></Link>
+      <div><h1>سجل الأدلة</h1><p>استعرض الأدلة المرفوعة وإصداراتها، وتابع حالة كل دليل والضابط المرتبط به.</p></div>
+      <Link className="evidence-button" href="/controls">رفع دليل لضابط <span aria-hidden="true">←</span></Link>
     </header>
 
     {role !== "nca_external_auditor" && <GrcAttention variant="summary"/>}
@@ -171,7 +168,7 @@ export default function EvidencePage() {
         </select>
       </label>
       <div className="evidence-scope" role="group" aria-label="نطاق الإصدارات">
-        <button type="button" aria-pressed={scope === "current"} onClick={() => setScope("current")}>الحالية</button>
+        <button type="button" aria-pressed={scope === "current"} onClick={() => setScope("current")}>الإصدارات الحالية</button>
         <button type="button" aria-pressed={scope === "all"} onClick={() => setScope("all")}>كل الإصدارات</button>
       </div>
     </section>

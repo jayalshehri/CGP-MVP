@@ -1,4 +1,5 @@
 "use client";
+import { riyadhIsoDate, formatRiyadhDateTime } from "@/lib/dates";
 import AssessmentPortfolio from "@/components/AssessmentPortfolio";
 
 import Link from "next/link";
@@ -41,7 +42,7 @@ export default function ExecutivePage() {
   const frameworks = useMemo(() => [...new Map(controls.map(c => { const f = frameworkOf(c.frameworks); return [f.code, f]; })).values()].sort((a,b)=>a.code.localeCompare(b.code)), [controls]);
   const scopedControls = useMemo(() => controls.filter(c => framework === "all" || frameworkOf(c.frameworks).code === framework), [controls, framework]);
   const summary = useMemo(() => {
-    const today = (updated ?? new Date()).toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+    const today = riyadhIsoDate(updated ?? undefined);
     const domains = new Map<string, { name: string; total: number; done: number; verified: number; overdue: number }>();
     let done = 0, checked = 0, overdue = 0, inProgress = 0;
     for (const c of scopedControls) {
@@ -63,7 +64,7 @@ export default function ExecutivePage() {
       <div><span className="exec-eyebrow">ملخص الإدارة · بيانات حية</span><h1>اللوحة التنفيذية</h1><p>صورة واضحة للتنفيذ والتحقق، والأولويات التي تحتاج قرارًا.</p></div>
       <div className="exec-tools cgp-print-action"><button onClick={refresh} disabled={loading} aria-label="تحديث بيانات اللوحة">↻ <span>{loading ? "جاري التحديث…" : "تحديث"}</span></button><details className="exec-more"><summary aria-label="إجراءات إضافية">•••</summary><button onClick={() => window.print()} disabled={!updated || loading || Boolean(error)}>طباعة الملخص</button></details></div>
     </header>
-    <div className="exec-dateline"><label className="exec-sort">نطاق الإطار<select value={framework} onChange={event=>setFramework(event.target.value)}><option value="all">جميع الأطر</option>{frameworks.map(item=><option key={item.code} value={item.code}>{item.code} — {item.name_ar}</option>)}</select></label><span>{updated ? `آخر تحديث: ${updated.toLocaleString("ar-SA", { timeZone: "Asia/Riyadh", dateStyle: "medium", timeStyle: "short" })}` : "جاري جلب البيانات"}</span></div>
+    <div className="exec-dateline"><label className="exec-sort">نطاق الإطار<select value={framework} onChange={event=>setFramework(event.target.value)}><option value="all">جميع الأطر</option>{frameworks.map(item=><option key={item.code} value={item.code}>{item.code} — {item.name_ar}</option>)}</select></label><span>{updated ? `آخر تحديث: ${formatRiyadhDateTime(updated)}` : "جاري جلب البيانات"}</span></div>
     {error ? <section className="exec-panel exec-empty" role="alert"><h2>تعذر عرض البيانات</h2><p>{error}</p><button onClick={refresh}>إعادة المحاولة</button></section> : loading ? <section className="exec-panel exec-empty" role="status">جاري إعداد الملخص التنفيذي…</section> : summary.total === 0 ? <section className="exec-panel exec-empty"><h2>يبدأ الملخص بإضافة الضوابط</h2><p>ستظهر نسب التنفيذ والتحقق والأولويات عند توفر بيانات ضمن نطاقك.</p><Link href="/controls">فتح الضوابط ←</Link></section> : <>
       <section className="exec-overview" aria-label="المؤشرات الرئيسية"><div className="exec-spotlight"><span className="exec-eyebrow">نسبة التنفيذ</span><div className="exec-score">{compliance}<span>%</span></div><p><strong>{summary.done}</strong> من أصل <strong>{summary.total}</strong> ضابط منطبق ومطبق كليًا</p><Meter value={compliance} label="نسبة التنفيذ"/><div className="exec-spotlight-footer">لا تدخل الضوابط المصنفة «لا ينطبق» في مقام نسبة الالتزام.</div></div><div className="exec-metrics"><Metric label="نسبة التحقق" value={`${verification}%`} note={`${summary.checked} من ${summary.total} ضابط تم التحقق منها`} href={`/controls${framework!=="all"?`?framework=${framework}`:""}`}/><Metric label="ضوابط متأخرة" value={summary.overdue} note={summary.overdue ? "تجاوزت موعدها ولم يكتمل تنفيذها" : "لا توجد متأخرات حاليًا"} href={`/tasks?filter=overdue${framework!=="all"?`&framework=${framework}`:""}`} tone={summary.overdue ? "danger" : "neutral"}/><Metric label="أدلة تنتظر القرار" value={pending} note="الإرسالات الحالية بانتظار المراجعة" href="/review" tone={pending ? "warning" : "neutral"}/></div></section>
       <section className="exec-visual-grid" aria-label="تحليل تنفيذي مرئي">

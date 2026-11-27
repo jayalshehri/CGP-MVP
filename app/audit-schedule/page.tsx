@@ -15,8 +15,8 @@ import './audit-schedule.css';
 type Person = { user_id: string; display_name: string | null };
 type Editor = { row: ScheduleRow; reviewer: string; frequency: string; due: string; requirement: string; reason: string };
 const scopes: { key: ScheduleScope; label: string }[] = [
-  { key: 'setup', label: 'تحتاج تأسيس' }, { key: 'due', label: 'مستحقة أو متأخرة' },
-  { key: 'open', label: 'دورات مفتوحة' }, { key: 'completed', label: 'مكتملة هذا الشهر' },
+  { key: 'setup', label: 'تحتاج إلى جدولة' }, { key: 'due', label: 'دورات مستحقة أو متأخرة' },
+  { key: 'open', label: 'دورات مفتوحة' }, { key: 'completed', label: 'دورات مكتملة هذا الشهر' },
 ];
 const pageSize = 25;
 const listDate = (row: ScheduleRow) => row.cycle?.status === 'completed' ? row.cycle.completed_at : row.cycle?.due_date ?? null;
@@ -185,7 +185,7 @@ function Schedule({ target }: { target: number | null }) {
     if (canManage && !row.cycle) return <button className="schedule-btn primary" onClick={() => openEditor(row)}>إنشاء دورة</button>;
     if (row.request?.status === 'submitted' && canManage) return <button className="schedule-btn primary" onClick={() => setSelected(row)}>مراجعة الدليل</button>;
     if (row.request?.status === 'accepted' && row.cycle?.reviewer_id === identity?.id)
-      return <Link className="schedule-btn primary" href={`/controls/${c.id}#control-review-cycle`}>تقييم وإغلاق</Link>;
+      return <Link className="schedule-btn primary" href={`/controls/${c.id}#control-review-cycle`}>تقييم الضابط وإغلاق الدورة</Link>;
     if (row.request) return <Link className="schedule-btn" href={requestHref(row)}>فتح طلب الدليل</Link>;
     return <Link className="schedule-btn" href={`/controls/${c.id}`}>فتح الضابط</Link>;
   }
@@ -198,10 +198,10 @@ function Schedule({ target }: { target: number | null }) {
         describeStage(row).label, row.cycle?.completed_at ?? '']),
     ]);
   }
-  if (loading) return <main className="workflow-page" role="status">جاري تحميل جدول التدقيق الدوري…</main>;
+  if (loading) return <main className="workflow-page" role="status">جارٍ تحميل جدول التدقيق الدوري…</main>;
 
   return <main className="workflow-page audit-schedule-page" dir="rtl">
-    <WorkflowHeading title="جدول التدقيق الدوري" description="خطّط لمراجعات الضوابط وتابع من عليه الإجراء التالي." />
+    <WorkflowHeading title="جدول التدقيق الدوري" description="جدول مراجعات الضوابط، وتابع مواعيدها والمسؤول عن كل خطوة." />
     {error && <p className="cgp-shell-error" role="alert">{error}</p>}
     {message && <p className="schedule-feedback" role="status">{message}</p>}
     {(!error || controls.length > 0) && <>
@@ -209,12 +209,12 @@ function Schedule({ target }: { target: number | null }) {
         {scopes.map(item => <button key={item.key} type="button" aria-pressed={active === item.key}
           onClick={() => { setScope(item.key); setPage(0); }}>
           <span>{item.label}</span><strong>{counts[item.key]}</strong>
-          <small>{item.key === 'setup' ? `${withoutOwner} بلا مالك · ${counts.setup - withoutOwner} بلا دورة`
+          <small>{item.key === 'setup' ? `${withoutOwner} دون مالك · ${counts.setup - withoutOwner} لم تُجدول`
             : item.key === 'due' ? `${overdue} متأخرة · ${counts.due - overdue} خلال ${period} يومًا`
-            : item.key === 'open' ? 'طلبات الأدلة والتقييمات الجارية' : 'الدورات المغلقة فعليًا'}</small>
+            : item.key === 'open' ? 'طلبات الأدلة والتقييمات الجارية' : 'أُغلقت بعد اعتماد التقييم'}</small>
         </button>)}
       </div>
-      {target && <div className="schedule-context">عرض ضابط محدد من الرابط <Link href="/audit-schedule">عرض كل الضوابط</Link></div>}
+      {target && <div className="schedule-context">عرض الجدول لضابط محدد <Link href="/audit-schedule">عرض كل الضوابط</Link></div>}
       <div className="schedule-toolbar">
         <label>بحث<input type="search" value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} placeholder="رقم الضابط أو اسمه أو المالك" /></label>
         <label>الإطار<select value={framework} onChange={e => { setFramework(e.target.value); setPage(0); }}>
@@ -235,9 +235,9 @@ function Schedule({ target }: { target: number | null }) {
         <div className="schedule-export"><button className="schedule-btn" onClick={exportRows} disabled={!visible.length}>تصدير CSV</button>
           <button className="schedule-btn" onClick={() => window.print()} disabled={!visible.length}>طباعة الصفحة</button></div>
       </div>
-      {active === 'setup' && <div className="schedule-subviews" role="group" aria-label="حالة التأسيس">
-        {([{ key: 'all', label: `الكل (${counts.setup})` }, { key: 'unowned', label: `بلا مالك (${withoutOwner})` },
-          { key: 'unscheduled', label: `له مالك وبلا دورة (${counts.setup - withoutOwner})` }] as const).map(item =>
+      {active === 'setup' && <div className="schedule-subviews" role="group" aria-label="حالة الجاهزية للجدولة">
+        {([{ key: 'all', label: `الكل (${counts.setup})` }, { key: 'unowned', label: `دون مالك (${withoutOwner})` },
+          { key: 'unscheduled', label: `لها مالك ولم تُجدول (${counts.setup - withoutOwner})` }] as const).map(item =>
           <button key={item.key} aria-pressed={setup === item.key} onClick={() => { setSetup(item.key); setPage(0); }}>{item.label}</button>)}
       </div>}
       {active === 'completed' && <div className="schedule-subviews" role="group" aria-label="فترة الإغلاق">
@@ -260,7 +260,7 @@ function Schedule({ target }: { target: number | null }) {
               <td>{nextAction(row)}</td>
             </tr>;
           })}</tbody></table> : <div className="schedule-empty"><b>لا توجد نتائج في هذه القائمة</b><p>{active === 'due'
-            ? 'عدم وجود مستحقات لا يعني أن كل الضوابط جُدولت. راجع قائمة «تحتاج تأسيس» لمعرفة ما لم يبدأ بعد.'
+            ? 'عدم وجود مستحقات لا يعني أن كل الضوابط جُدولت. راجع قائمة «تحتاج إلى جدولة» لمعرفة الضوابط التي لم تُفتح لها دورة.'
             : active === 'completed' ? 'تظهر هنا الدورات بعد اعتماد التقييم وإغلاقها فعليًا.' : 'غيّر الفلاتر أو اختر قائمة أخرى.'}</p></div>}
       </section>
       {!!visible.length && <nav className="schedule-pages" aria-label="صفحات الجدول">
@@ -315,7 +315,7 @@ function Schedule({ target }: { target: number | null }) {
         {editor.row.cycle
           ? <label>سبب التعديل<textarea required value={editor.reason} onChange={e => setEditor({ ...editor, reason: e.target.value })} /></label>
           : <label>الأدلة المطلوبة<textarea required value={editor.requirement} onChange={e => setEditor({ ...editor, requirement: e.target.value })} /></label>}
-        <footer><button className="schedule-btn primary" disabled={busy || !editor.row.control.control_owner_id}>{busy ? 'جاري الحفظ…' : 'حفظ الدورة'}</button></footer>
+        <footer><button className="schedule-btn primary" disabled={busy || !editor.row.control.control_owner_id}>{busy ? 'جارٍ الحفظ…' : 'حفظ الدورة'}</button></footer>
       </form>
     </dialog>}
   </main>;
@@ -326,5 +326,5 @@ function ScheduleRoute() {
   return <Schedule key={target ?? 'all'} target={target} />;
 }
 export default function AuditSchedulePage() {
-  return <Suspense fallback={<main className="workflow-page" role="status">جاري تحميل جدول التدقيق الدوري…</main>}><ScheduleRoute /></Suspense>;
+  return <Suspense fallback={<main className="workflow-page" role="status">جارٍ تحميل جدول التدقيق الدوري…</main>}><ScheduleRoute /></Suspense>;
 }

@@ -1,4 +1,5 @@
 "use client";
+import { riyadhIsoDate } from "@/lib/dates";
 import { FormEvent,useEffect,useMemo,useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { requireProfile,type UserRole } from "@/lib/auth";
@@ -8,7 +9,7 @@ type Asset={id:number;asset_code:string;name_ar:string};
 type Risk={id:number;asset_id:number|null;risk_code:string;risk_scope:string;risk_owner:string;risk_description:string;threat:string;inherent_likelihood:number;inherent_impact:number;inherent_score:number;treatment_type:string;treatment_owner:string;action_due_date:string|null;residual_likelihood:number;residual_impact:number;residual_score:number;next_steps:string;risk_status:"open"|"treatment_in_progress"|"accepted"|"closed"};
 const score=(l:number,i:number)=>l*i;
 const level=(s:number)=>s<=3?"منخفض جدًا":s<=6?"منخفض":s<=10?"متوسط":s<=16?"مرتفع":"حرج";
-const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"});
+const today=()=>riyadhIsoDate();
 const statusLabel=(s:Risk["risk_status"])=>({open:"مفتوح",treatment_in_progress:"قيد المعالجة",accepted:"مقبول",closed:"مغلق"}[s]);
 export default function RisksPage(){
  const [items,setItems]=useState<Risk[]>([]),[assets,setAssets]=useState<Asset[]>([]),[role,setRole]=useState<UserRole>("control_owner"),[loading,setLoading]=useState(true),[open,setOpen]=useState(false),[error,setError]=useState(""),[saving,setSaving]=useState(false);

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatRiyadhDateTime } from "@/lib/dates";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
@@ -61,7 +62,7 @@ export default function FeedbackPage() {
     <div className="workflow-filter workflow-filter-grid"><div><label className="cgp-field-label" htmlFor="result-status">حالة النتيجة</label><select id="result-status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">جميع الحالات</option><option value="new">جديدة</option><option value="reviewing">قيد المراجعة</option><option value="resolved">تمت المعالجة</option></select></div><div><label className="cgp-field-label" htmlFor="result-category">نوع النتيجة</label><select id="result-category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">جميع الأنواع</option><option value="bug">خطأ أو مشكلة</option><option value="suggestion">اقتراح</option><option value="question">استفسار</option></select></div></div>
     {loading ? <div className="workflow-empty">جاري تحميل النتائج…</div> : items.length === 0 ? <div className="workflow-empty">صندوق النتائج فارغ. ستظهر هنا نتائج المختبرين عند إرسالها من زر «ملاحظات الاختبار».</div> : visibleItems.length === 0 ? <div className="workflow-empty">لا توجد نتائج مطابقة للتصفية الحالية.</div> : <div className="cgp-feedback-list">
       {visibleItems.map((item) => <article key={item.id} className="cgp-feedback-card">
-        <div className="cgp-feedback-card-top"><div><span className="cgp-feedback-card-type">{categoryLabels[item.category] ?? item.category}</span><h2>{names[item.created_by] ?? "حساب المستخدم"}</h2></div><time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString("ar-SA", { dateStyle: "medium", timeStyle: "short" })}</time></div>
+        <div className="cgp-feedback-card-top"><div><span className="cgp-feedback-card-type">{categoryLabels[item.category] ?? item.category}</span><h2>{names[item.created_by] ?? "حساب المستخدم"}</h2></div><time dateTime={item.created_at}>{formatRiyadhDateTime(item.created_at)}</time></div>
         <p className="cgp-feedback-card-message">{item.message}</p>
         <div className="cgp-feedback-card-meta"><span>الصفحة: <code dir="ltr">{item.page_path}</code></span>{item.control_id && <span>الضابط: {item.control_id}</span>}<span>الأولوية: {item.priority === "high" ? "عالية" : item.priority === "low" ? "منخفضة" : "عادية"}</span></div>
         <div className="cgp-feedback-card-actions"><label htmlFor={`feedback-status-${item.id}`}>الحالة</label><select id={`feedback-status-${item.id}`} value={item.status} onChange={(event) => updateStatus(item.id, event.target.value)}><option value="new">{statusLabels.new}</option><option value="reviewing">{statusLabels.reviewing}</option><option value="resolved">{statusLabels.resolved}</option></select></div>

@@ -1,4 +1,5 @@
 "use client";
+import { riyadhIsoDate } from "@/lib/dates";
 import AssessmentPortfolio from "@/components/AssessmentPortfolio";
 
 
@@ -46,14 +47,14 @@ export default function ReportsPage(){
   const now=new Date(); const total=scopedControls.length; const done=scopedControls.filter(c=>good(c.implementation_status)).length;
   const verified=scopedControls.filter(c=>isApplicable(c.implementation_status)&&isVerified(c.verification_status)).length;
   const compliant=scopedControls.filter(c=>isImplemented(c.implementation_status)&&isVerified(c.verification_status)).length;
-  const overdue=scopedControls.filter(c=>c.due_date&&c.due_date<now.toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"})&&!good(c.implementation_status)).length;
+  const overdue=scopedControls.filter(c=>c.due_date&&c.due_date<riyadhIsoDate(now)&&!good(c.implementation_status)).length;
   const controlIds=new Set(scopedControls.map(c=>c.id)); const pendingEvidence=evidence.filter(e=>e.is_current&&controlIds.has(e.control_id)&&progress(e.status)).length;
   const notApplicable=scopedControls.filter(c=>c.implementation_status==="not_applicable").length; const applicable=Math.max(total-notApplicable,0);
   return {total,done,verified,overdue,pendingEvidence,notApplicable,compliance:applicable?Math.round(compliant/applicable*100):0};
  },[scopedControls,evidence]);
  const domains=useMemo(()=>{
   const m=new Map<string,DomainRow>(); const now=new Date();
-  scopedControls.forEach(c=>{const name=c.domain_ar||"غير مصنف";const r=m.get(name)||{name,total:0,done:0,verified:0,overdue:0};r.total++;if(good(c.implementation_status))r.done++;if(good(c.verification_status))r.verified++;if(c.due_date&&c.due_date<now.toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"})&&!good(c.implementation_status))r.overdue++;m.set(name,r)});
+  scopedControls.forEach(c=>{const name=c.domain_ar||"غير مصنف";const r=m.get(name)||{name,total:0,done:0,verified:0,overdue:0};r.total++;if(good(c.implementation_status))r.done++;if(good(c.verification_status))r.verified++;if(c.due_date&&c.due_date<riyadhIsoDate(now)&&!good(c.implementation_status))r.overdue++;m.set(name,r)});
   return [...m.values()].sort((a,b)=>b.total-a.total);
  },[scopedControls]);
  const implementationChart=useMemo<ChartItem[]>(()=>[
