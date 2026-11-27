@@ -11,7 +11,7 @@ import AccessibleDialog from "@/components/AccessibleDialog";
 import "../data-governance.css";
 import "./register.css";
 import "./office-workspace.css";
-import { canReview, inView, isOverdue as isLate } from "./queues";
+import { canReview, inView, matchesWorkFilter, isOverdue as isLate } from "./queues";
 import EvidenceGroups from "./EvidenceGroups";
 import SourceReference from "./SourceReference";
 import { frameworkCopy, governanceDomain, localLevels, type EvidenceRequirement as Requirement } from "./reference";
@@ -25,7 +25,7 @@ function ownerPriority(a: Assignment | undefined, today: string) {
  return a?.status === "submitted" ? 3 : 4;
 }
 const statusLabels:Record<string,string>={unassigned:"لم يكلّف",assigned:"بانتظار الرفع",submitted:"بانتظار المراجعة",changes_requested:"أعيد للتعديل",approved:"معتمد"};
-const views:Record<string,string>={all:"كل الحالات",...statusLabels,overdue:"متأخر",action:"تحتاج إجراء مني",review:"بانتظار قراري"};
+const views:Record<string,string>={all:"كل الحالات",...statusLabels,overdue:"متأخر",action:"بانتظار رفع أو تعديل",review:"بانتظار قراري"};
 const pageSize=25;
 export default function NudeeRegister({ embedded = false, renderPreparation }: {
  embedded?: boolean;
@@ -100,8 +100,11 @@ export default function NudeeRegister({ embedded = false, renderPreparation }: {
   try{await load();setNotice("");}catch(e){setError(e instanceof Error?e.message:"تعذر تحميل البيانات. حاول مرة أخرى.");}
   finally{pending.current=false;setBusy(false);setLoading(false);}
  }
- const availableViews=Object.entries(views).filter(([key])=>role==="office"?key!=="action":key!=="unassigned"&&key!=="review");
+ const availableViews=Object.entries(views).filter(([key])=>role==="office"||(key!=="unassigned"&&key!=="review"));
  const view=availableViews.some(([key])=>key===requestedView)?requestedView:"all";
+ const dueFrom=query.get("from") || "";
+ const dueTo=query.get("to") || "";
+ const statusScope=query.get("status") || "";
  const byRequirement=useMemo(()=>new Map(assignments.map(a=>[a.requirement_id,a])),[assignments]);
  const names=useMemo(()=>new Map(users.map(u=>[u.user_id,u.display_name||u.user_id])),[users]);
  const submittedIds=useMemo(()=>new Set(submissions.map(s=>s.assignment_id)),[submissions]);
@@ -120,7 +123,7 @@ export default function NudeeRegister({ embedded = false, renderPreparation }: {
     if(rank<0 || rank>localLevels.indexOf(gapTarget) || (a?.status==="approved" && submittedIds.has(a.id)))return false;
    }
    if(ownerFilter && a?.assignee_id!==ownerFilter)return false;
-   if(!inView(a,view,today,currentUserId))return false;
+   if(!matchesWorkFilter(a,view,today,currentUserId,statusScope,dueFrom,dueTo))return false;
    return [r.standard_code,r.evidence_name,r.domain_name,r.requirement_title,r.specification_code,r.responsible_department].join(" ").toLocaleLowerCase("ar").includes(search);
   }).sort((left,right)=>{
    const a=byRequirement.get(left.id), b=byRequirement.get(right.id);
@@ -131,7 +134,7 @@ export default function NudeeRegister({ embedded = false, renderPreparation }: {
    }
    return left.source_row-right.source_row;
   });
- },[scoped,byRequirement,view,filter,today,role,domain,ownerFilter,evidenceId,question,gapTarget,submittedIds,currentUserId]);
+ },[scoped,byRequirement,view,filter,today,role,domain,ownerFilter,evidenceId,question,gapTarget,submittedIds,currentUserId,statusScope,dueFrom,dueTo]);
  const pages=Math.max(1,Math.ceil(visible.length/pageSize));
  const currentPage=Math.min(page,pages);
  const pageRows=visible.slice((currentPage-1)*pageSize,currentPage*pageSize);
@@ -141,10 +144,12 @@ export default function NudeeRegister({ embedded = false, renderPreparation }: {
  const assignee=draftAssignee ?? assignment?.assignee_id ?? "";
  const due=draftDue ?? assignment?.due_date ?? "";
  function canAssign(a:Assignment|undefined){return !a||(a.status==="assigned"&&!submittedIds.has(a.id));}
- function changeScope(viewValue:string,domainValue:string,layout=domainValue?"group":"list"){
+ function changeScope(viewValue:string,domainValue:string,layout=domainValue?"group":"list",keepDates=false){
   const url=new URL(window.location.href);
   url.searchParams.delete("evidence");url.searchParams.delete("open");
   url.searchParams.delete("question");url.searchParams.delete("missing");
+  if(!keepDates){for(const param of ["status","from","to"])url.searchParams.delete(param);}
+  else if(viewValue!==view)url.searchParams.delete("status");
   url.searchParams.set("layout",layout);
   url.searchParams.set("view",viewValue);
   if(domainValue)url.searchParams.set("domain",domainValue);else url.searchParams.delete("domain");
@@ -312,18 +317,24 @@ export default function NudeeRegister({ embedded = false, renderPreparation }: {
     <button type="button" className="nr-secondary" aria-pressed={grouped} onClick={()=>changeScope("all",domain||governanceDomain,"group")}>عرض أسئلة المجال</button>
     <button type="button" className="nr-secondary" aria-pressed={!grouped} onClick={()=>changeScope("all","","list")}>السجل الكامل والإسناد الجماعي</button>
    </div>}
+   {(dueFrom||dueTo||statusScope)&&<p className="nr-scope-note">
+    {statusScope && <span>{statusLabels[statusScope] || statusScope} </span>}
+    {dueFrom && <span>استحقاق من {formatRiyadhDate(dueFrom)} </span>}
+    {dueTo && <span>إلى {formatRiyadhDate(dueTo)} </span>}
+    <button type="button" className="nr-secondary" onClick={()=>changeScope(view,domain,"list")}>إزالة التصفية الإضافية</button>
+   </p>}
    {question&&<p className="nr-scope-note"><bdi>{question}</bdi> · {gapTarget?"الأدلة الناقصة حتى "+gapTarget:"أدلة السؤال"}</p>}
    <div className="nr-tools">
     <label htmlFor="nudee-filter">بحث في المتطلبات
      <input id="nudee-filter" type="search" value={filter} onChange={e=>{setFilter(e.target.value);setPage(1);setBulkIds([]);}} placeholder="اسم الدليل أو السؤال أو رمز المواصفة" />
     </label>
     <label htmlFor="nudee-view">حالة المتطلب
-     <select id="nudee-view" value={view} onChange={e=>changeScope(e.target.value,domain)}>
-      {availableViews.map(([key,label])=><option key={key} value={key}>{label}</option>)}
+     <select id="nudee-view" value={view} onChange={e=>changeScope(e.target.value,domain,undefined,true)}>
+      {availableViews.map(([key,label])=><option key={key} value={key}>{key==="action"&&role==="assignee"?"تحتاج إجراء مني":label}</option>)}
      </select>
     </label>
     {role==="office"&&<>
-     <label>المجال<select value={domain} onChange={e=>changeScope(view,e.target.value)}>
+     <label>المجال<select value={domain} onChange={e=>changeScope(view,e.target.value,undefined,true)}>
       <option value="">كل المجالات</option>{domains.map(d=><option key={d}>{d}</option>)}</select></label>
      <label>مالك المتطلب<select value={ownerFilter} onChange={e=>{setOwnerFilter(e.target.value);setPage(1);setBulkIds([]);}}>
       <option value="">كل المالكين</option>{userOptions}</select></label>

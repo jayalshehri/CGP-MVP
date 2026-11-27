@@ -61,7 +61,9 @@ def check_layout(browser, revision, size, target):
     new_heading = office.get_by_role("heading", level=1, name="مكتب إدارة البيانات", exact=True)
     old_heading = office.get_by_role("heading", level=1, name="لوحة مؤشر نُضيء", exact=True)
     (new_heading if after else new_heading.or_(old_heading).first).wait_for()
-    if new_heading.count():
+    if after:
+        expect(office.get_by_role("region", name="ملخص أعمال المكتب").get_by_role("link")).to_have_count(3)
+    elif new_heading.count():
         office.get_by_text("آخر نشاط للتكليفات", exact=True).wait_for()
         office.get_by_text("تقديم دليل للمراجعة", exact=True).wait_for()
     else:
@@ -70,7 +72,7 @@ def check_layout(browser, revision, size, target):
 
     if after:
         expect(office.get_by_text("تقرير نُضيء التفصيلي", exact=True)).to_have_count(0)
-        expect(office.locator("dl[aria-label='ملخص متطلبات نُضيء'] dd")).to_have_count(4)
+        expect(office.get_by_role("textbox", name="مساعد المكتب")).to_be_visible()
         assert not any("nudee_final_review" in path for _, _, path in fixture.requests)
         nav_toggle = office.locator(".cgp-mobile-navigation summary")
         if nav_toggle.is_visible():
@@ -141,12 +143,12 @@ def check_layout(browser, revision, size, target):
         expect(tabs.get_by_role("link", name="دورات التقييم")).to_have_attribute("aria-current", "page")
         expect(source).to_be_visible()
         office.goto(APP + HOME)
-        office.get_by_role("link", name=re.compile("متابعة التكليفات المتأخرة")).click()
+        office.get_by_role("region", name="ملخص أعمال المكتب").get_by_role("link", name=re.compile("تكليفات متأخرة")).click()
         expect(office.locator("#nudee-view")).to_have_value("overdue")
         expect(office.locator("tbody tr")).to_have_count(1)
         expect(office.get_by_role("button", name=NAMES[0], exact=True)).to_be_visible()
         office.go_back()
-        office.get_by_role("link", name=re.compile("مراجعة الأدلة المقدّمة")).click()
+        office.get_by_role("region", name="ملخص أعمال المكتب").get_by_role("link", name=re.compile("أدلة بانتظار المراجعة")).click()
         expect(office.locator("#nudee-view")).to_have_value("submitted")
         expect(office.get_by_role("button", name=NAMES[1], exact=True)).to_be_visible()
         expect(office.get_by_role("button", name=NAMES[0], exact=True)).to_have_count(0)
@@ -265,11 +267,52 @@ def manager_landing(browser):
     fixture.cycle_events = [{"id": 15, "cycle_id": 9, "kind": "result", "subject": "maturity",
                              "outcome": "نتيجة تجريبية", "reference": "مرجع تجريبي"}]
     page = login(browser, fixture, "manager", *SIZES["desktop"], revision="after")
-    expect(page).to_have_url(APP + INDICATOR)
+    expect(page).to_have_url(APP + HOME)
+    field = page.get_by_role("textbox", name="مساعد المكتب")
+    field.fill("ما نتيجة النضج الرسمية؟")
+    field.press("Enter")
+    expect(page.get_by_role("link", name="فتح دورات التقييم")).to_be_visible()
+    expect(page.locator("[aria-live=polite]").filter(has_text="نتيجة تجريبية")).to_contain_text("مرجع تجريبي")
+    page.get_by_role("link", name="مؤشر نُضيء", exact=True).click()
     summary = page.get_by_role("region", name="آخر دورة تقييم مسجلة")
     expect(summary).to_contain_text("دورة الاختبار")
     expect(summary).to_contain_text("نتيجة تجريبية")
     expect(summary).to_contain_text("مرجع تجريبي")
+    page.context.close()
+
+
+def office_chat(browser):
+    from datetime import datetime, timezone, timedelta
+    fixture = Fixture()
+    today = datetime.now(timezone(timedelta(hours=3))).date()
+    fixture.assignments[0]["status"] = "changes_requested"
+    fixture.assignments.append(dict(fixture.assignments[0], id=5, requirement_id=3, status="assigned", due_date=today.isoformat()))
+    page = login(browser, fixture, "manager", *SIZES["phone"], revision="after")
+    field = page.get_by_role("textbox", name="مساعد المكتب")
+    field.fill("وش تأخر في حوكمة البيانات؟")
+    field.press("Enter")
+    reply = page.locator("[aria-live=polite]").filter(has_text="أقدم تكليف متأخر")
+    expect(reply).to_contain_text("مالك المتطلب التجريبي")
+    field.fill("وأيّها أُعيد للتعديل؟")
+    field.press("Enter")
+    expect(reply).to_contain_text("أدلة معادة للتعديل")
+    reply.get_by_role("link", name="فتح السجل المصفّى").click()
+    expect(page.locator("#nudee-view")).to_have_value("overdue")
+    expect(page.get_by_role("combobox", name="المجال", exact=True)).to_have_value("حوكمة البيانات")
+    expect(page).to_have_url(re.compile("status=changes_requested"))
+    expect(page.locator("tbody tr")).to_have_count(1)
+    expect(page.get_by_role("button", name=NAMES[0], exact=True)).to_be_visible()
+    page.go_back()
+    page.get_by_role("region", name="ملخص أعمال المكتب").get_by_role("link", name=re.compile("تستحق هذا الأسبوع")).click()
+    expect(page.get_by_role("button", name=NAMES[2], exact=True)).to_be_visible()
+    expect(page.locator("tbody tr")).to_have_count(1)
+    page.go_back()
+    page.get_by_role("button", name="لخّص هذا الأسبوع").click()
+    expect(page.get_by_role("link", name="فتح تكليفات الفترة")).to_be_visible()
+    field.fill("ما نتيجة النضج الرسمية؟")
+    field.press("Enter")
+    expect(page.get_by_text("لم تُسجّل دورة تقييم بعد.", exact=True)).to_be_visible()
+    assert not fixture.unexpected, fixture.unexpected
     page.context.close()
 
 
@@ -390,7 +433,11 @@ def lifecycle(browser, target):
     expect(office.get_by_role("dialog", name=NAMES[1])).to_be_visible()
     expect(office.locator("#nudee-view")).to_have_value("submitted")
     office.goto(APP + HOME)
-    expect(office.locator("dl div").filter(has=office.get_by_text("معتمدة", exact=True)).locator("dd")).to_have_text(re.compile("[2٢]"))
+    field = office.get_by_role("textbox", name="مساعد المكتب")
+    field.fill("كم عدد الأدلة المعتمدة؟")
+    field.press("Enter")
+    expect(office.locator("[aria-live=polite]").filter(has_text="أدلة معتمدة")).to_contain_text("٢")
+    office.get_by_text("سجل النشاط الأخير", exact=True).click()
     expect(office.get_by_text("اعتماد دليل", exact=True)).to_be_visible()
     assert [item["action"] for item in reversed(fixture.audit[:5])] == [
         "assigned", "submitted", "changes_requested", "submitted", "approved"]
@@ -438,6 +485,7 @@ if __name__ == "__main__":
             print(f"PASS {args.revision} desktop/tablet/mobile layout: {size}", flush=True)
         if args.revision == "after":
             manager_landing(browser)
+            office_chat(browser)
             evidence_center(browser, args.output)
             all_maturity_levels(browser)
             preparation(browser)

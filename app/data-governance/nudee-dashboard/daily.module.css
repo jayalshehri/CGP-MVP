@@ -1,0 +1,51 @@
+.root { max-inline-size: 1250px; color: #163f39; }
+.heading { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:4px 20px; margin-block: 4px 20px; }
+.heading h1 { font-size:clamp(1.45rem,2.4vw,1.95rem); margin:0; letter-spacing:normal; }
+.heading small,.list small,.card small,.panel p { color:#48615a; }
+.assistant { background:#fff; border:1px solid #a7c7ba; border-inline-start:4px solid #206754; border-radius:14px; padding:clamp(12px,2vw,22px); }
+.ask { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.ask label { font-weight:750; color:#174e41; }
+.ask label span { color:#267460; margin-inline-end:4px; }
+.ask input { flex:1 1 12rem; min-width:0; font:inherit; color:#193c35; background:#f7faf8; border:1px solid #b9cbc3; border-radius:8px; padding:10px 12px; min-height:44px; }
+.ask input::placeholder { color:#586d65; }
+.root input:focus-visible {outline:3px solid #1b735d; outline-offset:2px}
+.ask button,.prompts button,.reset {font:inherit; cursor:pointer; }
+.ask button { padding:8px 16px; border:0; background:#125848; color:white; border-radius:8px; font-weight:700; min-height:44px; }
+.ask button:disabled {background:#537168; cursor:default;}
+.prompts,.sources { display:flex; flex-wrap:wrap; gap:6px 10px; margin-block-start:10px; }
+.prompts button { border:1px solid #d4e3db; border-radius:18px; color:#205646; background:#f2f7f4; min-height:34px; padding:4px 11px; font-size:.84rem; }
+.prompts button:hover {background:#e4f0e9}
+.exchange {border-block-start:1px solid #d2e2da; padding-block:12px 4px; margin-block-start:10px; overflow-wrap:anywhere}
+.exchange p {line-height:1.85; margin:6px 0}
+.sources a,.footerLink,.reset,.list a {color:#135d4b;text-underline-offset:3px; font-size:.88rem; font-weight:650;}
+.reset {margin-block-start:8px; background:none; border:0; text-decoration:underline; min-height:36px}
+.history summary,.activity summary {cursor:pointer; color:#32584b; padding:10px 0; font-weight:650; }
+.metrics,.grid {display:grid; gap:14px; margin-block:16px;}
+.metrics {grid-template-columns:repeat(3,minmax(0,1fr));}
+.card,.panel {background:white; border:1px solid #d6e3dc; border-radius:12px; min-inline-size:0;}
+.card {display:grid; gap:6px; padding:clamp(14px,2vw,22px); text-decoration:none; color:#193e35; border-block-start:3px solid #407867;}
+.card[data-tone=amber] {border-block-start-color:#a06a27;}
+.card[data-tone=amber] strong {color:#865513}
+.card[data-tone=slate] {border-block-start-color:#647a88}
+.card:hover,.list a:hover,.bars a:hover {background:#f4f8f5}
+.card span {font-weight:650}.card strong {font-size:clamp(1.7rem,3vw,2.5rem);line-height:1.2}
+.grid {grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);align-items:start}
+.panel {padding:clamp(15px,2vw,23px);}
+.panel h2 {font-size:1.08rem;margin:0 0 12px;}
+.list,.bars {margin:0;padding:0;list-style:none;}
+.list li {display:flex;justify-content:space-between;align-items:center;gap:12px;border-block-start:1px solid #e0e9e3;padding:11px 0;}
+.list li div {min-width:0;overflow-wrap:anywhere}
+.list small {display:block;margin-top:3px}
+.list a {padding:6px 3px; flex-shrink:0;}
+.footerLink {display:inline-block;padding-block:8px;}
+.bars li + li {margin-top:6px}
+.bars a {display:block;padding-block:6px;color:#294b3b;text-decoration:none;}
+.bars span {display:flex;justify-content:space-between;gap:8px;font-size:.9rem}
+.bars i {display:block;border-radius:5px;height:7px;background:#e7eee8;margin-block-start:5px;}
+.bars i i {background:#af7938;margin:0;}
+.activity {border-block-start:1px solid #d6e3dc}
+@media(max-width:700px){.grid{grid-template-columns:1fr}.metrics{gap:7px}.card{padding:10px 8px}.card span,.card small{font-size:.8rem}.ask label{flex-basis:100%}.heading{margin-block-end:12px}}
+@media(max-width:380px){.metrics{grid-template-columns:1fr}.card{grid-template-columns:minmax(0,1fr) auto;align-items:center}.card small{grid-column:1/-1}.ask input{flex-basis:8rem}}
+
+.freshness {display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;}
+.freshness button {border:0;background:transparent;padding:4px 2px;min-height:32px;color:#135d4b;font:inherit;font-size:.83rem;text-decoration:underline;cursor:pointer;}

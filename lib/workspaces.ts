@@ -20,7 +20,7 @@ export function roleHomePath(role: UserRole): string {
 export type WorkspaceName = "data" | "cyber";
 
 export function workspaceHome(role: UserRole, workspace: WorkspaceName): string | null {
-  if (workspace === "data" && role === "admin") return "/data-governance/nudee-indicator";
+  if (workspace === "data" && role === "admin") return "/data-governance/nudee-dashboard";
   const home = roleHomePath(role);
   return (workspace === "data") === home.startsWith("/data-governance/") ? home : null;
 }
