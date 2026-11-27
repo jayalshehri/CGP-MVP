@@ -11,7 +11,7 @@ import "../data-governance.css";
 import "./register.css";
 import EvidenceGroups from "./EvidenceGroups";
 import SourceReference from "./SourceReference";
-import { governanceDomain, localLevels, type EvidenceRequirement as Requirement } from "./reference";
+import { frameworkCopy, governanceDomain, localLevels, type EvidenceRequirement as Requirement } from "./reference";
 
 type Assignment={id:number;requirement_id:number;assignee_id:string|null;status:string;updated_at:string;due_date:string|null;review_notes:string|null};
 type User={user_id:string;display_name:string|null;role:string};
@@ -62,7 +62,7 @@ export default function NudeeRegister(){
  const hasPilot=requirements.some(r=>r.domain_name===governanceDomain && /^DG\.MQ\./.test(r.standard_code));
  const defaultPilot=requestedView==="all" && !evidenceId && query.get("layout")!=="list" && hasPilot;
  const domain=role==="office" ? query.get("domain") || (defaultPilot ? governanceDomain : "") : "";
- const grouped=role==="office" && !evidenceId && query.get("layout")!=="list" && !!domain && (domain===governanceDomain || !!question) && (hasPilot || !!question);
+ const grouped=role==="office" && !evidenceId && query.get("layout")!=="list" && !!domain && (requirements.some(r=>r.domain_name===domain && /\.MQ\./.test(r.standard_code)) || !!question);
  const [ownerFilter,setOwnerFilter]=useState("");
  const [versionId,setVersionId]=useState<number|null>(null);
  const [completedReview,setCompletedReview]=useState<number|null>(null);
@@ -79,13 +79,13 @@ export default function NudeeRegister(){
 
   if(office){
    const [{data:r,error:re},{data:u,error:ue}]=await Promise.all([
-    supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance,specification_code,responsible_department,planned_end").order("source_row").limit(1000),
+    supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance,specification_code,responsible_department,planned_end,acceptance_pdf_page").order("source_row").limit(1000),
     supabase.rpc("nudee_assignees")
    ]);
    if(re)throw re;if(ue)throw ue;
    setRequirements((r??[]) as Requirement[]);setUsers((u??[]) as User[]);setRole("office");
   }else{
-   const {data:r,error:re}=await supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance,specification_code,responsible_department,planned_end").order("source_row").limit(1000);
+   const {data:r,error:re}=await supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance,specification_code,responsible_department,planned_end,acceptance_pdf_page").order("source_row").limit(1000);
    if(re)throw re;
    setRequirements((r??[]) as Requirement[]);
    setRole("assignee");
@@ -143,7 +143,7 @@ export default function NudeeRegister(){
  const current=scoped.find(r=>r.id===selected);
  const assignment=current?byRequirement.get(current.id):undefined;
  function canAssign(a:Assignment|undefined){return !a||(a.status==="assigned"&&!submittedIds.has(a.id));}
- function changeScope(viewValue:string,domainValue:string,layout=domainValue===governanceDomain?"group":"list"){
+ function changeScope(viewValue:string,domainValue:string,layout=domainValue?"group":"list"){
   const url=new URL(window.location.href);
   url.searchParams.delete("evidence");
   url.searchParams.delete("question");url.searchParams.delete("missing");
@@ -293,7 +293,7 @@ export default function NudeeRegister(){
   {role&&<section className="nr-register" aria-label={role==="office"?"سجل المتطلبات":"تكليفاتي"}>
    {evidenceId&&<button type="button" className="nr-secondary" onClick={()=>changeScope("all","")}>عرض سجل المتطلبات كاملًا</button>}
    {role==="office"&&hasPilot&&<div className="nr-layout-switch">
-    <button type="button" className="nr-secondary" aria-pressed={grouped} onClick={()=>changeScope("all",governanceDomain,"group")}>أسئلة حوكمة البيانات</button>
+    <button type="button" className="nr-secondary" aria-pressed={grouped} onClick={()=>changeScope("all",domain||governanceDomain,"group")}>عرض أسئلة المجال</button>
     <button type="button" className="nr-secondary" aria-pressed={!grouped} onClick={()=>changeScope("all","","list")}>السجل الكامل والإسناد الجماعي</button>
    </div>}
    {question&&<p className="nr-scope-note"><bdi>{question}</bdi> · {gapTarget?"الأدلة الناقصة حتى "+gapTarget:"أدلة السؤال"}</p>}
@@ -372,7 +372,8 @@ export default function NudeeRegister(){
      <li>راجع حداثة النسخة ووجود الاعتماد إذا اشترطه وصف الدليل.</li>
     </ul></details>
    </section>
-   {current.domain_name===governanceDomain&&<button type="button" className="nr-secondary" onClick={async()=>{
+   {current.acceptance_pdf_page&&<p><a href={frameworkCopy+"#page="+current.acceptance_pdf_page} target="_blank" rel="noreferrer">معايير قبول الدليل في وثيقة سدايا · ص {current.acceptance_pdf_page-1}</a></p>}
+   {(current.domain_name===governanceDomain||/\.MQ\./.test(current.standard_code))&&<button type="button" className="nr-secondary" onClick={async()=>{
     try { const {downloadTemplate}=await import("./evidence-template");downloadTemplate(current); }
     catch {setError("تعذر تنزيل النموذج. أعد المحاولة.");}
    }}>تنزيل نموذج إعداد داخلي (Word)</button>}

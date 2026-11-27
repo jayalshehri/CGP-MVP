@@ -6,7 +6,7 @@ import { labels, type ManifestRow } from "./package";
 import styles from "./indicator.module.css";
 
 export type QuestionRecord = { id: number; standard_code: string; requirement_title: string; domain_name: string; maturity_level: string };
-import { localLevels as levels } from "../nudee/reference";
+import { baselineLevel, localLevels as levels } from "../nudee/reference";
 type Decision = { id: number; target_level: string; confirmed: boolean; evidence_ids: number[] };
 const numbers = new Intl.NumberFormat("ar-SA");
 async function manifest(domain: string, records: QuestionRecord[]) {
@@ -74,9 +74,11 @@ function QuestionReview({domain, code, title, rows, reload}: {domain:string; cod
       }, () => { if(active) {setFailed(true);setMessage("تعذر تحميل قرار المكتب.");setLoading(false);} });
     return () => { active=false; };
   }, [domain,code,version]);
+  const baseline=level===baselineLevel;
   const scope=rows.filter(r => levels.includes(r.maturity_level) && levels.indexOf(r.maturity_level)<=levels.indexOf(level));
   const approved=scope.filter(r => r.status==="approved" && r.submission_id);
-  const complete=scope.length>0 && approved.length===scope.length && rows.every(r=>levels.includes(r.maturity_level));
+  const levelsPresent=levels.slice(0,levels.indexOf(level)+1).every(l=>scope.some(r=>r.maturity_level===l));
+  const complete=scope.length>0 && levelsPresent && approved.length===scope.length && rows.every(r=>levels.includes(r.maturity_level));
   const ids=approved.slice().sort((a,b)=>a.requirement_id-b.requirement_id).map(r=>r.submission_id);
   const confirmed=complete && decision?.target_level===level && decision.confirmed && JSON.stringify(ids)===JSON.stringify(decision.evidence_ids);
   async function save(confirm:boolean) {
@@ -84,7 +86,7 @@ function QuestionReview({domain, code, title, rows, reload}: {domain:string; cod
     try {
       const {error}=await supabase.rpc("nudee_question_decide",{p_domain:domain,p_code:code,p_level:level,p_confirm:confirm,p_previous:decision?.id ?? null});
       if(error) throw error;
-      setMessage(confirm?"سُجلت مراجعة المكتب للسؤال.":"حُفظ المستوى المستهدف.");
+      setMessage(baseline?"سُجل غياب القدرات لهذا السؤال.":confirm?"سُجلت مراجعة المكتب للسؤال.":"حُفظ المستوى المستهدف.");
     } catch { setMessage("تعذر حفظ القرار. تحقق من آخر حالة للأدلة ثم أعد المحاولة."); }
     finally { setBusy(false);setLoading(true);setVersion(n=>n+1);reload(); }
   }
@@ -92,8 +94,10 @@ function QuestionReview({domain, code, title, rows, reload}: {domain:string; cod
     <h3>{title}</h3>
     {loading ? <p role="status">جارٍ تحميل قرار المكتب…</p> : failed ? <button onClick={()=>{setLoading(true);setVersion(n=>n+1);}}>إعادة المحاولة</button> : <>
       <label>المستوى المستهدف<select aria-label="المستوى المستهدف" value={level} disabled={busy} onChange={e=>{setLevel(e.target.value);setMessage("");}}>
-        <option value="">اختر المستوى</option>{levels.filter(l=>rows.some(r=>r.maturity_level===l)).map(l=><option key={l}>{l}</option>)}</select></label>
-      {level && <><p><strong>{numbers.format(approved.length)} من {numbers.format(scope.length)}</strong> أدلة معتمدة للمستوى المحدد والمستويات السابقة.</p>
+        <option value="">اختر المستوى</option><option value={baselineLevel}>{baselineLevel}</option>{levels.filter(l=>rows.some(r=>r.maturity_level===l)).map(l=><option key={l}>{l}</option>)}</select></label>
+      {baseline && <><p>يسجّل المكتب غياب القدرات لهذا السؤال. لا يتطلب هذا المستوى رفع دليل.</p>
+        {decision?.target_level!==baselineLevel&&<button disabled={busy} onClick={()=>save(false)}>تسجيل المستوى صفر</button>}</>}
+      {level && !baseline && <><p><strong>{numbers.format(approved.length)} من {numbers.format(scope.length)}</strong> أدلة معتمدة للمستوى المحدد والمستويات السابقة.</p>
         <div className={styles.buttons}>
           {decision?.target_level!==level && <button disabled={busy} onClick={()=>save(false)}>حفظ المستوى المستهدف</button>}
           {confirmed ? <strong>أكد المكتب جاهزية السؤال داخليًا</strong> : <button disabled={busy||!complete} onClick={()=>save(true)}>تأكيد جاهزية السؤال داخليًا</button>}
