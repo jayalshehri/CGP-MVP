@@ -1,0 +1,14 @@
+{
+  "proof": "AIEO_LIVE_SYNTHETIC_ONLY",
+  "githubRunId": "45881673723",
+  "sourceHash": "486457a1b176c89ba13ee3c2b8e206ae5dac69998b9889c06a0da1bedf1dfde8",
+  "candidateHash": "77a519d8183dd2356ce84778d2f9f6b956cf2127d3e9aba456e75f063ae07046",
+  "developer": "proposed",
+  "qa": "passed",
+  "security": "passed",
+  "reviewer": "draft-pr-eligible",
+  "humanMergeRequired": true,
+  "productionSourceShared": false,
+  "productionCodeChanged": false,
+  "deploymentAuthorized": false
+}
