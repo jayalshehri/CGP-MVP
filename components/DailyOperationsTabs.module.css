@@ -1,0 +1,21 @@
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--cgp-line);
+  margin: 0 0 20px;
+}
+.tabs a {
+  padding: 10px 16px;
+  border-bottom: 3px solid transparent;
+  text-decoration: none;
+  color: var(--cgp-muted);
+  font-weight: 700;
+}
+.tabs a:hover {
+  color: var(--cgp-teal);
+  background: #f1f8f8;
+}
+.tabs a[aria-current="page"] {
+  color: var(--cgp-teal);
+  border-bottom-color: var(--cgp-teal);
+}
