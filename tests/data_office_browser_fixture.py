@@ -93,14 +93,20 @@ class Fixture:
                 result = profile(role)
             elif path == "/rest/v1/rpc/nudee_question_overview" and role == "office":
                 result = []
-                for req in self.requirements:
-                    code = req["standard_code"]
-                    d = next((d for d in self.decisions if d["standard_code"] == code and d["domain_name"] == req["domain_name"]), {})
-                    a = next((a for a in self.assignments if a["requirement_id"] == req["id"]), {})
-                    ready = a.get("status") == "approved" and any(s["assignment_id"] == a["id"] for s in self.files)
-                    state = "no_target" if not d else ("confirmed" if d["confirmed"] else "ready") if ready else "blocked"
-                    result.append(dict(standard_code=code, domain_name=req["domain_name"], target_level=d.get("target_level"),
-                                       question_state=state, missing_count=int(state == "blocked")))
+                questions = {(r["domain_name"], r["standard_code"]) for r in self.requirements}
+                for domain, code in sorted(questions):
+                    d = next((d for d in self.decisions if d["standard_code"] == code and d["domain_name"] == domain), {})
+                    target = d.get("target_level")
+                    rank = int(target.split()[1].rstrip(":")) if target else 0
+                    missing = 0
+                    for req in self.requirements:
+                        if req["domain_name"] != domain or req["standard_code"] != code or int(req["maturity_level"].split()[1].rstrip(":")) > rank:
+                            continue
+                        a = next((a for a in self.assignments if a["requirement_id"] == req["id"]), {})
+                        if a.get("status") != "approved" or not any(f["assignment_id"] == a.get("id") for f in self.files):
+                            missing += 1
+                    state = "no_target" if not target else "baseline" if not rank else "blocked" if missing else "confirmed" if d["confirmed"] else "ready"
+                    result.append(dict(standard_code=code, domain_name=domain, target_level=target, question_state=state, missing_count=missing))
             elif path == "/rest/v1/rpc/nudee_preparation_manifest" and role == "office":
                 result = []
                 for req in self.requirements:

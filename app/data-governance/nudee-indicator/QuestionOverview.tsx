@@ -7,7 +7,7 @@ import type { QuestionRecord } from "./QuestionPreparation";
 import styles from "./indicator.module.css";
 
 type Summary = { domain_name:string; standard_code:string; target_level:string|null; question_state:string; missing_count:number };
-const states: Record<string,string> = {no_target:"بانتظار تحديد المستهدف",blocked:"تحتاج استكمال أدلة",ready:"جاهز لتأكيد المكتب",confirmed:"مؤكد داخليًا",unsupported:"يتطلب مراجعة النطاق"};
+const states: Record<string,string> = {baseline:"غياب القدرات مسجّل",no_target:"بانتظار تحديد المستهدف",blocked:"تحتاج استكمال أدلة",ready:"جاهز لتأكيد المكتب",confirmed:"مؤكد داخليًا",unsupported:"يتطلب مراجعة النطاق"};
 export default function QuestionOverview({records, revision, onPrepare}:{
   records: QuestionRecord[]; revision:number; onPrepare:(domain:string,code:string)=>void;
 }) {

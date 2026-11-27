@@ -196,12 +196,12 @@ def preparation(browser):
     office = login(browser, fixture, "office", *SIZES["desktop"], revision="after")
     office.goto(APP + INDICATOR)
     office.get_by_text("جاهزية الأسئلة وحزمة المجال", exact=True).click()
-    office.get_by_label("المستوى المستهدف").select_option(index=1)
+    office.get_by_label("المستوى المستهدف").select_option("المستوى 1: البناء")
     expect(office.get_by_role("button", name="تأكيد جاهزية السؤال داخليًا")).to_be_disabled()
     office.get_by_role("button", name="حفظ المستوى المستهدف").click()
     expect(office.get_by_text("حُفظ المستوى المستهدف.")).to_be_visible()
     office.get_by_label("السؤال", exact=True).select_option("DG-04")
-    office.get_by_label("المستوى المستهدف").select_option(index=1)
+    office.get_by_label("المستوى المستهدف").select_option("المستوى 1: البناء")
     office.get_by_role("button", name="تأكيد جاهزية السؤال داخليًا").click()
     expect(office.get_by_text("أكد المكتب جاهزية السؤال داخليًا")).to_be_visible()
     with office.expect_download() as download:
@@ -250,12 +250,42 @@ def evidence_center(browser, target):
     board = office.get_by_role("region", name="جاهزية الأسئلة حسب المجال")
     board.locator("li").filter(has_text="DG.MQ.1").get_by_role("button").click()
     expect(office.get_by_label("السؤال", exact=True)).to_have_value("DG.MQ.1")
-    office.get_by_label("المستوى المستهدف").select_option(index=1)
+    office.get_by_label("المستوى المستهدف").select_option("المستوى 1: البناء")
     office.get_by_role("button", name="حفظ المستوى المستهدف").click()
     board.get_by_role("link", name="عرض الأدلة الناقصة (1)").click()
     expect(office.locator(".nr-level-group li")).to_have_count(1)
     expect(office.get_by_text("قسم التخطيط", exact=False)).to_be_visible()
     snap(office, target / "phone-governance-gap.png", True)
+    assert not fixture.unexpected, fixture.unexpected
+    office.context.close()
+
+
+def all_maturity_levels(browser):
+    fixture = Fixture()
+    q = fixture.requirements[0]
+    q["standard_code"] = "DG.MQ.1"
+    levels = ["المستوى 0: غياب القدرات", q["maturity_level"], "المستوى 2: التعريف", "المستوى 3: التفعيل",
+              "المستوى 4: التمكن", "المستوى 5: الريادة"]
+    for rank in range(2, 6):
+        fixture.requirements.append(dict(q, id=20+rank, source_row=20+rank, evidence_name=f"دليل مستوى {rank}",
+                                         maturity_level=levels[rank], acceptance_pdf_page=92))
+    office = login(browser, fixture, "office", *SIZES["phone"], revision="after")
+    office.goto(APP + INDICATOR)
+    board = office.get_by_role("region", name="جاهزية الأسئلة حسب المجال")
+    board.locator("li").filter(has_text="DG.MQ.1").get_by_role("button").click()
+    target = office.get_by_label("المستوى المستهدف")
+    expect(target.locator("option")).to_have_count(7)
+    target.select_option(levels[0])
+    office.get_by_role("button", name="تسجيل المستوى صفر").click()
+    expect(board).to_contain_text("غياب القدرات مسجّل")
+    expect(office.get_by_role("button", name="تأكيد جاهزية السؤال داخليًا")).to_have_count(0)
+    target.select_option(levels[5])
+    office.get_by_role("button", name="حفظ المستوى المستهدف").click()
+    expect(office.get_by_role("button", name="تأكيد جاهزية السؤال داخليًا")).to_be_disabled()
+    board.get_by_role("link", name="عرض الأدلة الناقصة (5)").click()
+    group = office.locator(".nr-level-group").filter(has_text="دليل مستوى 5")
+    group.get_by_role("button", name="إسناد الدليل").click()
+    expect(office.get_by_role("dialog").get_by_role("link", name=re.compile("وثيقة سدايا"))).to_have_attribute("href", re.compile(r"#page=92$"))
     assert not fixture.unexpected, fixture.unexpected
     office.context.close()
 
@@ -359,6 +389,7 @@ if __name__ == "__main__":
             print(f"PASS {args.revision} desktop/tablet/mobile layout: {size}", flush=True)
         if args.revision == "after":
             evidence_center(browser, args.output)
+            all_maturity_levels(browser)
             preparation(browser)
             lifecycle(browser, args.output)
             results["workflow_with_synthetic_backend"] = "passed"

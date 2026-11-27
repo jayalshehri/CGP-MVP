@@ -1,4 +1,5 @@
 "use client";
+import { localLevels as LEVELS } from "../nudee/reference";
 import { formatRiyadhDate, riyadhIsoDate } from "@/lib/dates";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AccessibleDialog from "@/components/AccessibleDialog";
@@ -15,7 +16,8 @@ export type Requirement = {
 export type Assignment = { id:number; requirement_id:number; status:string; updated_at:string; due_date:string|null };
 type Filter = {domain:string;level:string;compliance:string;review:string};
 const ALL="الكل";
-const LEVELS=["المستوى 1: البناء","المستوى 2: التعريف","المستوى 3: التفعيل"];
+// The original office implementation plan budgets three evidence stages plus a manual final review.
+const planLevels=LEVELS.slice(0,3);
 const SOURCE_COMPLIANCE=["ممتثل بالكامل","ممتثل للمعالي فقط","غير ممتثل","لا ينطبق","لم يُقيَّم","حالة غير معيارية"];
 function complianceStatus(value:string|null){
  if(!value?.trim())return "لم يُقيَّم";
@@ -108,7 +110,7 @@ export default function NudeeReport({records,assignments}:{records:Requirement[]
    const start=new Date("2026-11-08T00:00:00Z");start.setUTCDate(start.getUTCDate()+7*i);
    const end=new Date(start);end.setUTCDate(end.getUTCDate()+4);
    const until=end.toISOString().slice(0,10),starts=start.toISOString().slice(0,10);
-   const stageRate=LEVELS.map(level=>{
+   const stageRate=planLevels.map(level=>{
     const list=rows.filter(r=>r.maturity_level===level);
     if(!list.length)return 0;
     if(starts>today)return 0;
@@ -150,7 +152,7 @@ export default function NudeeReport({records,assignments}:{records:Requirement[]
    setFinalReviewNotice(e instanceof Error?e.message:"تعذر تحديث المراجعة الشاملة.");
   }finally{finalReviewPending.current=false;setFinalReviewSaving(false)}
  }
- const stages=LEVELS.map((level,i)=>{const subset=rows.filter(r=>r.maturity_level===level);
+ const stages=planLevels.map((level,i)=>{const subset=rows.filter(r=>r.maturity_level===level);
   const completed=subset.filter(r=>effectiveReview(r,mapped.get(r.id))==="مكتمل").length;
   // Excel timetable uses SUM(source_progress)/COUNT, including partial work (50%, 25%).
   const progress=subset.length?subset.reduce((sum,r)=>sum+evidenceProgress(r,mapped.get(r.id)),0)/subset.length:0;
@@ -228,7 +230,7 @@ export default function NudeeReport({records,assignments}:{records:Requirement[]
       <div className={styles.phaseRemain} style={{width:(25*(1-phase.progress))+"%"}}/>
       <div className={styles.phaseBlank} style={{width:(3-i)*25+"%"}}/>
      </div></div>)}
-    <p className={styles.footnote}>مقابل مخطط Excel للمرحلة الأولى والثانية والثالثة والمراجعة الشاملة، موزعة على أسبوعين لكل مرحلة. المراحل الثلاث الأولى مبنية على تقدم الأدلة، بينما المرحلة الرابعة تُحدّث يدويًا من مكتب البيانات وتُسجّل في سجل تدقيق مستقل، دون تغيير الامتثال الرسمي.</p>
+    <p className={styles.footnote}>مقابل مخطط Excel للمرحلة الأولى والثانية والثالثة والمراجعة الشاملة، موزعة على أسبوعين لكل مرحلة. خطة المكتب الزمنية تغطي مستويات البناء والتعريف والتفعيل. المراحل الثلاث الأولى مبنية على تقدم الأدلة، بينما المرحلة الرابعة تُحدّث يدويًا من مكتب البيانات وتُسجّل في سجل تدقيق مستقل، دون تغيير الامتثال الرسمي.</p>
     <div className={styles.weekly}>{weekly.map(w=><div key={w.week} className={styles.week}><span>الأسبوع {w.week}</span><small>{shortDate(w.until)}</small><div className={styles.track} title={"المخطط: "+w.planned+"%"}><div style={{width:w.planned+"%"}}/></div><div className={styles.track+" "+styles.actual} title={"الفعلي: "+w.actual.toFixed(2)+"%"}><div style={{width:w.actual+"%"}}/></div><small>المخطط {w.planned.toLocaleString("ar-SA")}% · الفعلي {w.actual.toLocaleString("ar-SA",{maximumFractionDigits:2})}%</small></div>)}</div>
     <p className={styles.footnote}>معادلة المخطط مستمدة من Calc!D60:D67 (12.5% كل أسبوع). الفعلي يضم المراحل الأربع بأوزان 25% لكل منها؛ في الأسابيع المكتملة لا تُحسب إلا الأدلة المؤرخة، وتظهر نسبة المراجعة الشاملة المدخلة يدويًا ضمن المرحلة الرابعة. تاريخ القياس المحفوظ بالمصنف الأصلي هو 5 نوفمبر 2026، لذلك قد يختلف الاتجاه الحي عن قيمه المحفوظة.</p>
    </section>
