@@ -57,9 +57,9 @@ export default function ReviewFilePreview({ path, name, bucket = "evidence-files
         setPreview({ kind: "image", url });
         return;
       }
-      const pdf = await import("pdfjs-dist");
+      const pdf = await import("pdfjs-dist/legacy/build/pdf.mjs");
       if (!live.current) return;
-      pdf.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+      pdf.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
       const bytes = await data.arrayBuffer();
       if (!live.current) return;
       // Canvas only: do not mount PDF scripts, links, forms, or annotation controls.
