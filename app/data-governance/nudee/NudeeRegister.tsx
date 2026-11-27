@@ -39,6 +39,10 @@ export default function NudeeRegister(){
  const [selected,setSelected]=useState<number|null>(null);
  const [assignee,setAssignee]=useState("");
  const [due,setDue]=useState("");
+ const [reason,setReason]=useState("");
+ const [sourceId,setSourceId]=useState("");
+ const [locator,setLocator]=useState("");
+ const evidenceId=query.get("evidence");
  const [note,setNote]=useState("");
  const [file,setFile]=useState<File|null>(null);
  const [busy,setBusy]=useState(false);
@@ -62,7 +66,7 @@ export default function NudeeRegister(){
   if(ae)throw ae;
 
   const files=await readStrategyRows<Submission>((from,to)=>supabase.from("nudee_submissions")
-   .select("id,assignment_id,file_name,storage_path,submitted_at",{count:"exact"}).order("id",{ascending:false}).range(from,to),s=>s.id);
+   .select("id,assignment_id,file_name,storage_path,submitted_at,source_submission_id,source_locator",{count:"exact"}).order("id",{ascending:false}).range(from,to),s=>s.id);
   if(files.error)throw new Error("تعذر تحميل نسخ الأدلة.");
 
   if(office){
@@ -103,6 +107,7 @@ export default function NudeeRegister(){
   const search=filter.trim().toLocaleLowerCase("ar");
   return scoped.filter(r=>{
    const a=byRequirement.get(r.id);
+   if(evidenceId && String(r.id)!==evidenceId)return false;
    if(domain && r.domain_name!==domain)return false;
    if(ownerFilter && a?.assignee_id!==ownerFilter)return false;
    if(view==="overdue"){
@@ -118,7 +123,7 @@ export default function NudeeRegister(){
    }
    return left.source_row-right.source_row;
   });
- },[scoped,byRequirement,view,filter,today,role,domain,ownerFilter]);
+ },[scoped,byRequirement,view,filter,today,role,domain,ownerFilter,evidenceId]);
  const pages=Math.max(1,Math.ceil(visible.length/pageSize));
  const currentPage=Math.min(page,pages);
  const pageRows=visible.slice((currentPage-1)*pageSize,currentPage*pageSize);
@@ -127,6 +132,7 @@ export default function NudeeRegister(){
  function canAssign(a:Assignment|undefined){return !a||(a.status==="assigned"&&!submittedIds.has(a.id));}
  function changeScope(viewValue:string,domainValue:string){
   const url=new URL(window.location.href);
+  url.searchParams.delete("evidence");
   if(viewValue==="all")url.searchParams.delete("view");else url.searchParams.set("view",viewValue);
   if(domainValue)url.searchParams.set("domain",domainValue);else url.searchParams.delete("domain");
   window.history.replaceState(null,"",url);
@@ -135,7 +141,7 @@ export default function NudeeRegister(){
  function openRequirement(r:Requirement){
   const a=byRequirement.get(r.id);
   setSelected(r.id);setVersionId(null);setCompletedReview(null);setFile(null);setError("");setNotice("");
-  setAssignee(a?.assignee_id||"");setDue(a?.due_date||"");setNote("");
+  setAssignee(a?.assignee_id||"");setDue(a?.due_date||"");setNote("");setReason("");setSourceId("");setLocator("");
  }
  function closeRequirement(){setSelected(null);setFile(null);setVersionId(null);}
  const files=useMemo(()=>assignment?submissions.filter(s=>s.assignment_id===assignment.id).sort((a,b)=>b.id-a.id):[],[assignment,submissions]);
@@ -170,15 +176,33 @@ export default function NudeeRegister(){
    await requireProfile(["admin","data_governance_team"]);
    if(assignment.status!=="submitted")throw new Error("يجب استلام الدليل قبل مراجعته");
    if(decision==="changes_requested"&&!note.trim())throw new Error("أدخل سبب الإعادة");
-   const {error:e}=await supabase.rpc("nudee_review_version",{p_assignment_id:assignment.id,p_submission_id:latest.id,p_decision:decision,p_notes:note||null});
+   const reviewNote=decision==="changes_requested"&&reason ? reason+" — "+note.trim() : note;
+   const {error:e}=await supabase.rpc("nudee_review_version",{p_assignment_id:assignment.id,p_submission_id:latest.id,p_decision:decision,p_notes:reviewNote||null});
    if(e){
     if(e.code==="40001"){setNeedsRefresh(true);throw new Error("تغيّرت النسخة أو حالة المراجعة. حدّث البيانات للاطلاع على آخر نسخة.");}
     throw e;
    }
    setCompletedReview(assignment.id);
-   setAssignments(rows=>rows.map(row=>row.id===assignment.id?{...row,status:decision,review_notes:note||null}:row));
+   setAssignments(rows=>rows.map(row=>row.id===assignment.id?{...row,status:decision,review_notes:reviewNote||null}:row));
    await refreshAfterMutation(decision==="approved"?"تم اعتماد الدليل":"أعيد الدليل للمكلّف");
   }catch(e){setError(e instanceof Error?e.message:"فشلت المراجعة");}finally{pending.current=false;setBusy(false)}
+ }
+ const reusable=useMemo(()=>{
+  const approved=new Set(assignments.filter(a=>a.status==="approved"&&a.assignee_id===currentUserId&&a.id!==assignment?.id).map(a=>a.id));
+  const latest=new Map<number,Submission>();
+  for(const s of submissions)if(approved.has(s.assignment_id)&&s.id>(latest.get(s.assignment_id)?.id??0))latest.set(s.assignment_id,s);
+  return Array.from(latest.values()).filter(s=>!s.source_submission_id);
+ },[assignments,assignment,currentUserId,submissions]);
+ async function reuse(){
+  if(!assignment||pending.current||needsRefresh||!locator.trim()||!reusable.some(s=>String(s.id)===sourceId))return;
+  pending.current=true;setBusy(true);setError("");setNotice("");
+  try{
+   await requireProfile(["nudee_owner"]);
+   const {error:e}=await supabase.rpc("nudee_reuse_evidence",{p_assignment:assignment.id,p_source:Number(sourceId),p_locator:locator.trim()});
+   if(e)throw e;
+   setSourceId("");setLocator("");await refreshAfterMutation("أُرسل الدليل السابق لمراجعة هذا المتطلب.");
+  }catch{setError("تعذر تأكيد الإرسال. حدّث البيانات للتحقق من حالة المتطلب.");setNeedsRefresh(true);}
+  finally{pending.current=false;setBusy(false);}
  }
  async function upload(){
   if(!assignment||!file||assignment.assignee_id!==currentUserId||pending.current||needsRefresh)return;
@@ -212,7 +236,7 @@ export default function NudeeRegister(){
    if(uploadedPath&&!submissionConfirmed){
     // A timed-out RPC may have committed; verify before removing its file.
     const {data:submitted,error:checkError}=await supabase.from("nudee_submissions")
-     .select("id").eq("storage_path",uploadedPath).maybeSingle();
+     .select("id").eq("storage_path",uploadedPath).eq("assignment_id",assignment.id).maybeSingle();
     if(!checkError&&submitted){
      setFile(null);await refreshAfterMutation("تم استلام الدليل رغم تعذر تأكيد الاستجابة الأولى.");
      setBusy(false);return;
@@ -248,6 +272,7 @@ export default function NudeeRegister(){
   {!current&&feedback}
   {loading&&<p role="status">جارٍ تحميل المتطلبات والأدلة…</p>}
   {role&&<section className="nr-register" aria-label={role==="office"?"سجل المتطلبات":"تكليفاتي"}>
+   {evidenceId&&<button type="button" className="nr-secondary" onClick={()=>changeScope("all","")}>عرض سجل المتطلبات كاملًا</button>}
    <div className="nr-tools">
     <label htmlFor="nudee-filter">بحث في المتطلبات
      <input id="nudee-filter" type="search" value={filter} onChange={e=>{setFilter(e.target.value);setPage(1);setBulkIds([]);}} placeholder="اسم الدليل أو المعيار أو المجال" />
@@ -314,7 +339,15 @@ export default function NudeeRegister(){
     <button autoFocus type="button" className="nr-secondary" disabled={busy} onClick={closeRequirement}>إغلاق</button>
    </header>
    {feedback}
-   <p>{current.requirement_title}</p>{current.evidence_description&&<p>{current.evidence_description}</p>}
+   <p>{current.requirement_title}</p>
+   <section className="nr-detail-section"><h3>ما المطلوب في الدليل؟</h3>
+    {current.evidence_description ? <p style={{whiteSpace:"pre-line"}}>{current.evidence_description}</p> : <p>لم يرد وصف تفصيلي لهذا الدليل في ملف المتابعة.</p>}
+    <details><summary>قائمة التحقق قبل الإرسال</summary><ul>
+     <li>تأكد أن الملف يفتح وأن الصفحات المطلوبة واضحة ومكتملة.</li>
+     <li>حدد الصفحة أو البند الذي يثبت تنفيذ المتطلب.</li>
+     <li>راجع حداثة النسخة ووجود الاعتماد إذا اشترطه وصف الدليل.</li>
+    </ul></details>
+   </section>
    <dl className="nr-facts">
     <div><dt>المستوى</dt><dd>{current.maturity_level}</dd></div>
     <div><dt>حالة التكليف</dt><dd>{statusLabels[assignment?.status||"unassigned"]}</dd></div>
@@ -334,9 +367,19 @@ export default function NudeeRegister(){
     <small id="nr-file-formats">PDF أو DOCX أو PNG أو JPEG، بحد أقصى 20 ميجابايت.</small>
     <button className="nr-primary" disabled={busy||needsRefresh||!file} onClick={upload}>رفع وإرسال للمراجعة</button>
    </section>}
+   {canUpload&&reusable.length>0&&<details className="nr-detail-section"><summary>استخدام دليل معتمد من تكليفاتي</summary>
+    <label>الدليل السابق<select value={sourceId} onChange={e=>setSourceId(e.target.value)} disabled={busy||needsRefresh}>
+     <option value="">اختر النسخة المعتمدة</option>{reusable.map(s=><option key={s.id} value={s.id}>{s.file_name} · #{s.id}</option>)}</select></label>
+    <label>الصفحة أو البند<input value={locator} maxLength={300} onChange={e=>setLocator(e.target.value)} disabled={busy||needsRefresh}/></label>
+    <button className="nr-primary" disabled={busy||needsRefresh||!sourceId||!locator.trim()} onClick={reuse}>إرسال النسخة لمراجعة المتطلب</button>
+   </details>}
    {displayed&&assignment&&<EvidenceVersions key={assignment.id} files={files} selected={displayed} onSelect={setVersionId} status={assignment.status}/>}
    {role==="office"&&assignment?.status==="submitted"&&assignment.assignee_id!==currentUserId&&<section className="nr-detail-section"><h3>قرار المراجعة</h3>
     {latestSelected?<small>يُسجّل القرار على النسخة {files.length}.</small>:<p className="nr-return">اختر أحدث نسخة من الدليل لتسجيل القرار.</p>}
+    <label>تصنيف سبب الإعادة<select value={reason} onChange={e=>setReason(e.target.value)}>
+     <option value="">اكتب السبب في الملاحظات أو اختر تصنيفًا</option>
+     {["الدليل غير مكتمل","موضع الإثبات غير واضح","النسخة تحتاج إلى تحديث","الاعتماد المطلوب غير مرفق","الدليل لا يغطي المتطلب"].map(r=><option key={r}>{r}</option>)}
+    </select></label>
     <label htmlFor="nr-review-note">ملاحظات المراجعة <small>(مطلوبة عند الإعادة)</small>
      <textarea id="nr-review-note" value={note} onChange={e=>setNote(e.target.value)} rows={3}/></label>
     <div className="nr-actions">

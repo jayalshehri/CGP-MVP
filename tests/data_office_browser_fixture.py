@@ -61,6 +61,7 @@ class Fixture:
                        "storage_path": "2/fixture/quality.pdf", "submitted_at": STAMP}]
         self.audit = [{"id": 1, "assignment_id": 2, "action": "submitted", "created_at": STAMP}]
         self.objects = {}
+        self.decisions = []
         self.requests = []
         self.unexpected = []
 
@@ -90,6 +91,31 @@ class Fixture:
                 result = session(role)["user"]
             elif path == "/rest/v1/profiles":
                 result = profile(role)
+            elif path == "/rest/v1/rpc/nudee_preparation_manifest" and role == "office":
+                result = []
+                for req in self.requirements:
+                    if req["domain_name"] != payload["p_domain"]:
+                        continue
+                    assignment = next((a for a in self.assignments if a["requirement_id"] == req["id"]), {})
+                    status = assignment.get("status", "unassigned")
+                    files = [s for s in self.files if s["assignment_id"] == assignment.get("id") and status == "approved"]
+                    latest = max(files, key=lambda s: s["id"], default={})
+                    result.append(dict(req, requirement_id=req["id"], specification_code=None, status=status,
+                                       submission_id=latest.get("id"), storage_path=latest.get("storage_path"),
+                                       file_name=latest.get("file_name"), source_locator=latest.get("source_locator")))
+            elif path == "/rest/v1/rpc/nudee_question_decide" and role == "office":
+                approved = [s["id"] for s in self.files if s["assignment_id"] == 4]
+                result = len(self.decisions) + 1
+                self.decisions.insert(0, dict(id=result, domain_name=payload["p_domain"], standard_code=payload["p_code"],
+                                      target_level=payload["p_level"], confirmed=payload["p_confirm"],
+                                      evidence_ids=approved if payload["p_confirm"] else []))
+            elif path == "/rest/v1/rpc/nudee_reuse_evidence" and role == "owner":
+                source = next(s for s in self.files if s["id"] == payload["p_source"])
+                target = next(a for a in self.assignments if a["id"] == payload["p_assignment"])
+                result = len(self.files) + 1
+                self.files.append(dict(source, id=result, assignment_id=target["id"], source_submission_id=source["id"],
+                                       source_locator=payload["p_locator"]))
+                target["status"] = "submitted"
             elif path == "/rest/v1/rpc/nudee_assignees" and role == "office":
                 result = [profile("owner")]
             elif path == "/rest/v1/nudee_final_review" and role == "office":
@@ -138,6 +164,7 @@ class Fixture:
                 tables = {
                     "nudee_requirements": [r for r in self.requirements if role == "office" or r["id"] in ids],
                     "nudee_assignments": assigned, "nudee_submissions": self.files,
+                    "nudee_question_decisions": self.decisions if role == "office" else [],
                 }
                 tables["nudee_audit"] = [a for a in self.audit if any(r["id"] == a["assignment_id"] for r in assigned)]
                 table = path.rsplit("/", 1)[1]

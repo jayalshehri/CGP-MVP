@@ -10,17 +10,20 @@ import type { Assignment, Requirement } from "../nudee-dashboard/NudeeReport";
 import shared from "../nudee-dashboard/nudee-dashboard.module.css";
 import styles from "./indicator.module.css";
 
+const QuestionPreparation = dynamic(() => import("./QuestionPreparation"));
 const NudeeReport = dynamic(() => import("../nudee-dashboard/NudeeReport"), {
   loading: () => <p role="status">جارٍ تحميل التقرير…</p>,
 });
-const requirementColumns = "id,source_row,domain_name,standard_code,maturity_level,source_compliance,source_review_status,source_progress,schedule_indicator,planned_start,planned_end,actual_end,evidence_name,review_phase";
+const requirementColumns = "id,source_row,requirement_title,domain_name,standard_code,maturity_level,source_compliance,source_review_status,source_progress,schedule_indicator,planned_start,planned_end,actual_end,evidence_name,review_phase";
 const register = "/data-governance/nudee";
 const number = new Intl.NumberFormat("ar-SA");
 const percentage = new Intl.NumberFormat("ar-SA", { style: "percent", maximumFractionDigits: 1 });
-type Data = { records: Requirement[]; assignments: Assignment[] };
+type IndicatorRecord = Requirement & { requirement_title: string };
+type Data = { records: IndicatorRecord[]; assignments: Assignment[] };
 type Counts = { total: number; approved: number; submitted: number; returned: number };
 
 function Readiness({ records, assignments }: Data) {
+  const [prepareOpened,setPrepareOpened] = useState(false);
   const [reportOpened, setReportOpened] = useState(false);
   const { total, domains } = useMemo(() => {
     const statuses = new Map(assignments.map(a => [a.requirement_id, a.status]));
@@ -57,6 +60,10 @@ function Readiness({ records, assignments }: Data) {
         <h2>معادة للتعديل</h2><strong>{number.format(total.returned)}</strong><span>عرض الأدلة المعادة ←</span>
       </Link>
     </section>
+    <details className={shared.report} onToggle={e=>{ if(e.currentTarget.open) setPrepareOpened(true); }}>
+      <summary>جاهزية الأسئلة وحزمة المجال</summary>
+      {prepareOpened && <QuestionPreparation records={records}/>}
+    </details>
     <details className={shared.report} onToggle={e => { if (e.currentTarget.open) setReportOpened(true); }}>
       <summary>تقرير نُضيء التفصيلي</summary>
       {reportOpened && <div className={shared.reportBody}><NudeeReport records={records} assignments={assignments} /></div>}
@@ -86,7 +93,7 @@ export default function IndicatorDashboard() {
       await requireProfile(["admin", "data_governance_team"]);
       if (!active) return;
       const [records, assignments] = await Promise.all([
-        readStrategyRows<Requirement>((from,to) => supabase.from("nudee_requirements")
+        readStrategyRows<IndicatorRecord>((from,to) => supabase.from("nudee_requirements")
           .select(requirementColumns, { count: "exact" }).order("source_row").order("id").range(from,to), row => row.id),
         readStrategyRows<Assignment>((from,to) => supabase.from("nudee_assignments")
           .select("id,requirement_id,status,updated_at,due_date", { count: "exact" }).order("id").range(from,to), row => row.id),

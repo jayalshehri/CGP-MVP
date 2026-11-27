@@ -6,7 +6,7 @@ import { readStrategyRows } from "@/lib/strategy-read";
 import { formatRiyadhDateTime } from "@/lib/dates";
 import { supabase } from "@/lib/supabase";
 
-export type Submission = { id: number; assignment_id: number; file_name: string; storage_path: string; submitted_at: string };
+export type Submission = { id: number; assignment_id: number; file_name: string; storage_path: string; submitted_at: string; source_submission_id?: number | null; source_locator?: string | null };
 type Decision = { id: number; submission_id: number | null; action: string; notes: string | null; created_at: string };
 
 export default function EvidenceVersions({ files, selected, onSelect, status }: {
@@ -39,6 +39,7 @@ export default function EvidenceVersions({ files, selected, onSelect, status }: 
         <bdi dir="auto">{file.file_name}</bdi>
         <time dateTime={file.submitted_at}>{formatRiyadhDateTime(file.submitted_at)}</time>
       </button>)}</div>
+    {selected.source_submission_id && <p>مرجع النسخة #{selected.source_submission_id} · موضع الإثبات: {selected.source_locator}</p>}
     <ReviewFilePreview key={selected.id} bucket="nudee-evidence" path={selected.storage_path} name={selected.file_name}/>
     {failed && <p role="alert">تعذر تحميل سجل القرارات. <button type="button" className="nr-secondary" onClick={() => setAttempt(n => n + 1)}>إعادة المحاولة</button></p>}
     {decisions.length > 0 && <details className="nr-decisions"><summary>سجل قرارات المكتب ({decisions.length})</summary><ol>
