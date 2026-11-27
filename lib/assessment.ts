@@ -19,3 +19,32 @@ export function assessmentMetrics(items:AssessmentItem[],approved:boolean){
   missing:rows.filter(i=>!i.compliance_status||!i.notes?.trim()||(['not_implemented','partially_implemented'].includes(i.compliance_status)&&(!i.owner_id||!i.expected_compliance_date||!i.corrective_action?.trim()))).length};
 }
 export function displayPercent(n:number|null){return n===null?'—':`${Math.round(n)}%`;}
+
+export type AssessmentRole = 'assessor_id' | 'reviewer_id' | 'approver_id';
+export type AssessmentRoleAssignments = Record<AssessmentRole, string>;
+
+const assessorReviewerConflict = 'اختر مراجعًا مختلفًا عن المقيّم.';
+const assessorApproverConflict = 'اختر معتمدًا مختلفًا عن المقيّم.';
+
+export function assessmentRoleConflict(roles: AssessmentRoleAssignments) {
+ if (!roles.assessor_id) return null;
+ if (roles.assessor_id === roles.reviewer_id) return assessorReviewerConflict;
+ if (roles.assessor_id === roles.approver_id) return assessorApproverConflict;
+ return null;
+}
+
+export function assessmentRoleOptionConflicts(role: AssessmentRole, userId: string, assigned: AssessmentRoleAssignments) {
+ if (!userId) return false;
+ return role === 'assessor_id'
+  ? userId === assigned.reviewer_id || userId === assigned.approver_id
+  : userId === assigned.assessor_id;
+}
+
+export function assessmentCommandErrorMessage(error: unknown) {
+ const message = error && typeof error === 'object' && 'message' in error
+  ? String(error.message)
+  : 'تعذر تنفيذ الإجراء';
+ if (/["']assessment_cycles_check["']/.test(message)) return assessorReviewerConflict;
+ if (/["']assessment_cycles_check1["']/.test(message)) return assessorApproverConflict;
+ return message;
+}
