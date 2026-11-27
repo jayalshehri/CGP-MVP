@@ -19,3 +19,22 @@
   color: var(--cgp-teal);
   border-bottom-color: var(--cgp-teal);
 }
+
+.dailyPage:global(.workflow-page):not(:global(.cgp-report-page)) > :global(.workflow-heading) {
+  margin-bottom: 12px;
+  padding: 15px 20px;
+}
+.dailyPage:global(.workflow-page):not(:global(.cgp-report-page)) > :global(.workflow-heading) h1 {
+  font-size: clamp(22px, 2vw, 28px);
+}
+.dailyPage > :global(.workflow-heading) > div > span { display: none; }
+.dailyPage:global(.workflow-page):not(:global(.cgp-report-page)) :global(.workflow-metric) {
+  padding: 12px 16px;
+  min-height: 78px;
+}
+.dailyPage:global(.workflow-page):not(:global(.cgp-report-page)) :global(.workflow-metric) strong {
+  font-size: 23px;
+  margin-top: 4px;
+}
+.alertSummary { color: var(--cgp-muted); margin: 0; font-size: 14px; }
+.alertSummary strong { color: var(--cgp-ink); margin-inline-end: 3px; }
