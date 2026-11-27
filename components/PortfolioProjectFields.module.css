@@ -1,0 +1,8 @@
+.duration { margin: 0; padding: 8px 11px 10px; min-width: 0; border: 1px solid #dce8ea; border-radius: 10px; }
+.duration legend { padding-inline: 4px; color: #435e6e; font-size: 13px; font-weight: 800; }
+.pair, .optionalBody { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 12px; }
+.optional { padding: 7px 11px; border: 1px solid #dce8ea; border-radius: 10px; }
+.optional summary { padding-block: 4px; color: #116860; cursor: pointer; font-size: 13px; font-weight: 800; }
+.optionalBody { padding-block: 7px 3px; }
+.note { color: #506473; font-size: 12px; margin: 0; }
+@media (max-width: 450px) { .optionalBody { grid-template-columns: 1fr; } }
