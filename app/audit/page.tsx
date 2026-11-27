@@ -1,5 +1,6 @@
 'use client';
 
+import { formatRiyadhDateTime } from "@/lib/dates";
 import GrcAuditTrail from '@/components/GrcAuditTrail';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -12,7 +13,6 @@ import './audit.css';
 type LegacyRiskEvent = { id: number; risk_id: number; event_type: string; previous_status: string | null; new_status: string | null; created_at: string };
 const labels: Record<string, string> = { created: 'إنشاء خطر', updated: 'تحديث الخطر', status_changed: 'تغيير الحالة' };
 const status: Record<string, string> = { open: 'مفتوح', treatment_in_progress: 'قيد المعالجة', accepted: 'مقبول', closed: 'مغلق' };
-const time = new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Riyadh' });
 
 function AuditContent() {
   const controlId = positiveId(useSearchParams().get('control'));
@@ -42,18 +42,18 @@ function AuditContent() {
     return () => { current = false; };
   }, [authorized, riskOpen]);
   return <main className="workflow-page audit-trail-page" dir="rtl">
-    <WorkflowHeading title="سجل التدقيق" description="تتبّع من غيّر ماذا ومتى، وافتح تفاصيل الحدث للمقارنة قبل وبعد." />
-    {loading && <p role="status">جاري تحميل سجل التدقيق…</p>}
+    <WorkflowHeading title="سجل التدقيق" description="راجع التغييرات المسجّلة في المنصة، ومن أجراها ومتى. افتح الحدث لمقارنة القيم قبل التغيير وبعده." />
+    {loading && <p role="status">جارٍ تحميل سجل التدقيق…</p>}
     {error && <p className="cgp-shell-error" role="alert">{error}</p>}
     {authorized && <>
       <GrcAuditTrail full reliableRead key={controlId ?? 'all'} controlId={controlId ?? undefined} />
       {!controlId && <details className="audit-legacy" onToggle={e => setRiskOpen(e.currentTarget.open)}>
         <summary>أحداث المخاطر السابقة</summary>
-        <p>سجل منفصل عن أحداث الحوكمة الحالية. يعرض أحدث 50 حدثًا متاحًا.</p>
-        {riskError ? <p role="alert">{riskError}</p> : !items ? <p role="status">جاري تحميل أحداث المخاطر…</p>
+        <p>أحداث من سجل المخاطر السابق. تُعرض هنا أحدث 50 نتيجة متاحة.</p>
+        {riskError ? <p role="alert">{riskError}</p> : !items ? <p role="status">جارٍ تحميل أحداث المخاطر…</p>
           : !items.length ? <p>لا توجد أحداث مخاطر سابقة متاحة.</p>
           : <div className="audit-legacy-table"><table className="workflow-table"><thead><tr><th scope="col">الوقت</th><th scope="col">الخطر</th><th scope="col">الحدث</th><th scope="col">التغيير</th></tr></thead>
-            <tbody>{items.map(row => <tr key={row.id}><td><time dateTime={row.created_at}>{time.format(new Date(row.created_at))}</time></td>
+            <tbody>{items.map(row => <tr key={row.id}><td><time dateTime={row.created_at}>{formatRiyadhDateTime(row.created_at)}</time></td>
               <td dir="ltr">RISK-{row.risk_id}</td><td>{labels[row.event_type] ?? row.event_type}</td>
               <td>{row.previous_status ? `${status[row.previous_status] ?? row.previous_status} ← ` : ''}{status[row.new_status ?? ''] ?? row.new_status ?? '—'}</td></tr>)}</tbody>
           </table></div>}
@@ -62,5 +62,5 @@ function AuditContent() {
   </main>;
 }
 export default function AuditPage() {
-  return <Suspense fallback={<main className="workflow-page" role="status">جاري تحميل سجل التدقيق…</main>}><AuditContent /></Suspense>;
+  return <Suspense fallback={<main className="workflow-page" role="status">جارٍ تحميل سجل التدقيق…</main>}><AuditContent /></Suspense>;
 }

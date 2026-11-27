@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import ReviewFilePreview from "@/app/review/file-preview";
 import { readStrategyRows } from "@/lib/strategy-read";
+import { formatRiyadhDateTime } from "@/lib/dates";
 import { supabase } from "@/lib/supabase";
 
 export type Submission = { id: number; assignment_id: number; file_name: string; storage_path: string; submitted_at: string };
 type Decision = { id: number; submission_id: number | null; action: string; notes: string | null; created_at: string };
-const stamp = new Intl.DateTimeFormat("ar-SA-u-ca-gregory", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Riyadh" });
 
 export default function EvidenceVersions({ files, selected, onSelect, status }: {
   files: Submission[]; selected: Submission; onSelect: (id: number) => void; status: string;
@@ -37,7 +37,7 @@ export default function EvidenceVersions({ files, selected, onSelect, status }: 
       <button type="button" key={file.id} aria-pressed={selected.id === file.id} className="nr-version" onClick={() => onSelect(file.id)}>
         <strong>النسخة {files.length - i}{i === 0 && " · الأحدث"}</strong>
         <bdi dir="auto">{file.file_name}</bdi>
-        <time dateTime={file.submitted_at}>{stamp.format(new Date(file.submitted_at))}</time>
+        <time dateTime={file.submitted_at}>{formatRiyadhDateTime(file.submitted_at)}</time>
       </button>)}</div>
     <ReviewFilePreview key={selected.id} bucket="nudee-evidence" path={selected.storage_path} name={selected.file_name}/>
     {failed && <p role="alert">تعذر تحميل سجل القرارات. <button type="button" className="nr-secondary" onClick={() => setAttempt(n => n + 1)}>إعادة المحاولة</button></p>}
@@ -45,7 +45,7 @@ export default function EvidenceVersions({ files, selected, onSelect, status }: 
       {decisions.map(d => {
         const index = files.findIndex(file => file.id === d.submission_id);
         return <li key={d.id}><strong>{d.action === "approved" ? "اعتماد الدليل" : "إعادة للتعديل"}{index >= 0 && ` · النسخة ${files.length - index}`}</strong>
-          <time dateTime={d.created_at}>{stamp.format(new Date(d.created_at))}</time>{d.notes && <p>{d.notes}</p>}
+          <time dateTime={d.created_at}>{formatRiyadhDateTime(d.created_at)}</time>{d.notes && <p>{d.notes}</p>}
         </li>;
       })}</ol></details>}
   </section>;

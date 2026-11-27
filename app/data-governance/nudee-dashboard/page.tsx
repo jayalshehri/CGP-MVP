@@ -1,5 +1,6 @@
 "use client";
 
+import { formatRiyadhDateTime, riyadhIsoDate } from "@/lib/dates";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -13,9 +14,6 @@ const NudeeReport = dynamic(() => import("./NudeeReport"), {
   loading: () => <p role="status">جارٍ تحميل التقرير…</p>,
 });
 const number = new Intl.NumberFormat("ar-SA");
-const dateTime = new Intl.DateTimeFormat("ar-SA-u-ca-gregory", {
-  dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Riyadh",
-});
 const auditLabels: Record<string, string> = {
   assigned: "إسناد متطلب", submitted: "تقديم دليل للمراجعة",
   changes_requested: "طلب تعديل الدليل", approved: "اعتماد دليل",
@@ -53,14 +51,14 @@ function RecentActivity({ names }: { names: Map<number, string> }) {
       : <ol className={styles.auditList}>{events.map(event =>
         <li key={event.id}><strong>{auditLabels[event.action] ?? "تحديث التكليف"}</strong>
           <span>{names.get(event.assignment_id) || `التكليف رقم ${number.format(event.assignment_id)}`}</span>
-          <time dateTime={event.created_at}>{dateTime.format(new Date(event.created_at))}</time>
+          <time dateTime={event.created_at}>{formatRiyadhDateTime(event.created_at)}</time>
         </li>)}</ol>}
   </section>;
 }
 
 function OfficeSummary({ records, assignments }: OfficeData) {
   const [reportStarted, setReportStarted] = useState(false);
-  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Riyadh" });
+  const today = riyadhIsoDate();
   const summary = useMemo(() => {
     const byRequirement = new Map(assignments.map(a => [a.requirement_id, a]));
     const names = new Map<number, string>();
@@ -80,7 +78,7 @@ function OfficeSummary({ records, assignments }: OfficeData) {
         if (a.due_date && a.due_date < today) overdue++;
       }
     }
-    const sentDay = earliest && new Date(earliest).toLocaleDateString("sv-SE", { timeZone: "Asia/Riyadh" });
+    const sentDay = earliest && riyadhIsoDate(new Date(earliest));
     const waitingDays = sentDay ? Math.max(0, Math.round((Date.parse(today) - Date.parse(sentDay)) / 86400000)) : null;
     return { waitingDays, inProgress, submitted, approved, unassigned, overdue, names };
   }, [records, assignments, today]);

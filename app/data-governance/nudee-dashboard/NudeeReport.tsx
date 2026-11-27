@@ -1,4 +1,5 @@
 "use client";
+import { formatRiyadhDate, riyadhIsoDate } from "@/lib/dates";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AccessibleDialog from "@/components/AccessibleDialog";
 import { requireProfile } from "@/lib/auth";
@@ -18,7 +19,6 @@ type Filter = {domain:string;level:string;compliance:string;review:string};
 const ALL="الكل";
 const LEVELS=["المستوى 1: البناء","المستوى 2: التعريف","المستوى 3: التفعيل"];
 const SOURCE_COMPLIANCE=["ممتثل بالكامل","ممتثل للمعالي فقط","غير ممتثل","لا ينطبق","لم يُقيَّم","حالة غير معيارية"];
-const dateFormat=new Intl.DateTimeFormat("ar-SA-u-ca-gregory",{year:"numeric",month:"short",day:"numeric"});
 function complianceStatus(value:string|null){
  if(!value?.trim())return "لم يُقيَّم";
  // Mirror the actual Calc!B10 Excel COUNTIFS criterion, not the dashboard heading.
@@ -44,7 +44,7 @@ function evidenceProgress(r:Requirement,assignment?:Assignment){
 }
 function percent(n:number,d:number){return d?Math.round(1000*n/d)/10:0;}
 function fmtPct(n:number,d:number){return percent(n,d).toLocaleString("ar-SA",{maximumFractionDigits:1})+"%";}
-function shortDate(date:string|null){return date?dateFormat.format(new Date(date+"T12:00:00Z")):"—";}
+const shortDate = formatRiyadhDate;
 export default function NudeeReport({assignments}:{assignments:Assignment[]}){
  const [records,setRecords]=useState<Requirement[]>([]);
  const [filter,setFilter]=useState<Filter>({domain:ALL,level:ALL,compliance:ALL,review:ALL});
@@ -111,7 +111,7 @@ export default function NudeeReport({assignments}:{assignments:Assignment[]}){
  // Reproduce the eight-week *weighted* Calc!D60:E67 trend, not a count of due evidence.
  // The workbook snapshot uses AsOfDate=2026-11-05; this live view uses the Riyadh date.
  const weekly=useMemo(()=>{
-  const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Riyadh"});
+  const today=riyadhIsoDate();
   return Array.from({length:8},(_,i)=>{
    const start=new Date("2026-11-08T00:00:00Z");start.setUTCDate(start.getUTCDate()+7*i);
    const end=new Date(start);end.setUTCDate(end.getUTCDate()+4);

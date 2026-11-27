@@ -1,5 +1,6 @@
 "use client";
 
+import { riyadhIsoDate, formatRiyadhDate } from "@/lib/dates";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -59,7 +60,6 @@ const shortLabel = (control: Control, framework: string) =>
   (framework === "ECC" ? getEccCatalogLabel(control.control_code) : undefined)
   || control.official_text_ar || control.description_ar || cleanTitle(control.title_ar) || "ضابط بدون عنوان";
 
-const riyadhDate = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" });
 function pendingDueDate(control: Control) {
   if (control.implementation_status === "not_applicable"
       || (good(control.implementation_status) && ["verified", "approved"].includes(control.verification_status))) return null;
@@ -81,7 +81,7 @@ function byPriority(a: Control, b: Control) {
 }
 
 export default function ControlsPage() {
-  return <Suspense fallback={<main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>}><ControlsContent/></Suspense>;
+  return <Suspense fallback={<main className="workflow-page" dir="rtl" role="status">جارٍ تحميل الضوابط…</main>}><ControlsContent/></Suspense>;
 }
 
 function ControlsContent() {
@@ -157,7 +157,7 @@ function ControlsContent() {
     ? [[control.control_owner_id, control.control_owner || "مالك الضابط"] as const] : [])).entries()]
     .sort((a, b) => a[1].localeCompare(b[1], "ar"));
   const ownerFilter = params.get("owner") || "";
-  const today = riyadhDate.format(new Date());
+  const today = riyadhIsoDate();
   const nextWeek = new Date(Date.parse(`${today}T00:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
   const isOverdue = (control: Control) => dueAttention(control, today, nextWeek) === "متأخر";
   // Counters describe the selected scope, not the subset after search/filtering.
@@ -212,19 +212,19 @@ function ControlsContent() {
     : singleQuickFilter && assignment === "all" && evidenceFilter && !overdueFilter ? "evidence"
     : singleQuickFilter && assignment === "unassigned" && !evidenceFilter && !overdueFilter ? "owner" : "filters";
 
-  if (loading) return <main className="workflow-page" dir="rtl" role="status">جاري تحميل الضوابط…</main>;
+  if (loading) return <main className="workflow-page" dir="rtl" role="status">جارٍ تحميل الضوابط…</main>;
   if (error) return <main className="workflow-page" dir="rtl"><h1>تعذر تحميل الضوابط</h1><p className="catalog-error">{error.message}</p><Link href="/cybersecurity">العودة إلى لوحة المتابعة</Link></main>;
 
   return <main className="workflow-page catalog-page" dir="rtl">
     <header className="catalog-header">
       <div>
         <h1>الضوابط</h1>
-        <p>تابع حالة التنفيذ والأدلة حسب الإطار والمجال.</p>
+        <p>استعرض الضوابط حسب الإطار والمجال، وتابع حالة تطبيقها وأدلتها.</p>
       </div>
       <div className="catalog-header-actions">
         <div className="catalog-views" role="group" aria-label="طريقة العرض">
           <button type="button" aria-pressed={view === "followup"} onClick={() => updateParams({ view: null })}>المتابعة</button>
-          <button type="button" aria-pressed={view === "structure"} onClick={() => updateParams({ view: "structure" })}>عرض الهيكل</button>
+          <button type="button" aria-pressed={view === "structure"} onClick={() => updateParams({ view: "structure" })}>هيكل الضوابط</button>
         </div>
         {canManage && <details className="catalog-menu">
           <summary>الإجراءات</summary>
@@ -263,14 +263,14 @@ function ControlsContent() {
           <details className="catalog-menu catalog-filter">
             <summary>التصفية{(status !== "all" || assignment !== "all" || ownerFilter) && <span className="catalog-filter-dot" aria-label="تصفية نشطة"/>}</summary>
             <div className="catalog-menu-panel catalog-filter-panel">
-              <label className="catalog-field"><span>حالة التنفيذ</span>
+              <label className="catalog-field"><span>حالة التطبيق</span>
                 <select value={status} onChange={e => updateParams({ status: e.target.value === "all" ? null : e.target.value })}>
                   <option value="all">كل الحالات</option><option value="implemented">مطبق كليًا</option><option value="in_progress">مطبق جزئيًا</option><option value="not_started">غير مطبق</option><option value="not_applicable">لا ينطبق</option>
                 </select>
               </label>
-              <label className="catalog-field"><span>الإسناد</span>
+              <label className="catalog-field"><span>تعيين المالك</span>
                 <select value={assignment} onChange={e => updateParams({ assignment: e.target.value === "all" ? null : e.target.value, owner: null })}>
-                  <option value="all">الكل</option><option value="assigned">معيّن</option><option value="unassigned">غير معيّن</option>
+                  <option value="all">الكل</option><option value="assigned">له مالك</option><option value="unassigned">دون مالك</option>
                 </select>
               </label>
               <label className="catalog-field"><span>المالك الحالي</span>
@@ -285,7 +285,7 @@ function ControlsContent() {
         </div>
         <div className="catalog-scope-note">
           <span>{selectedFramework.name_ar}{selectedFramework.version && <> · إصدار <bdi>{selectedFramework.version}</bdi></>}</span>
-          <span><strong>{primaryCount}</strong> ضابط أساسي <span aria-hidden="true">·</span> <strong>{scoped.length - primaryCount}</strong> بند فرعي</span>
+          <span><strong>{primaryCount}</strong> ضابط أساسي <span aria-hidden="true">·</span> <strong>{scoped.length - primaryCount}</strong> ضابط فرعي</span>
         </div>
       </section>
 
@@ -299,7 +299,7 @@ function ControlsContent() {
               يحتاج دليلًا <span className={`catalog-quick-count ${quickCounts.evidence ? "is-attention" : ""}`}>{quickCounts.evidence}</span>
             </button>
             <button type="button" aria-pressed={assignment === "unassigned" && !ownerFilter} onClick={() => updateParams({ assignment: assignment === "unassigned" && !ownerFilter ? null : "unassigned", owner: null })}>
-              بلا مالك <span className="catalog-quick-count">{quickCounts.unassigned}</span>
+              دون مالك <span className="catalog-quick-count">{quickCounts.unassigned}</span>
             </button>
             <button type="button" aria-pressed={overdueFilter} onClick={() => updateParams({ due: overdueFilter ? null : "overdue" })}>
               متأخر <span className={`catalog-quick-count ${quickCounts.overdue ? "is-overdue" : ""}`}>{quickCounts.overdue}</span>
@@ -508,8 +508,8 @@ function ControlDrawer({ control, framework, position, total, onPrevious, onNext
       <div className="catalog-drawer-body" ref={bodyRef}>
         <dl className="catalog-drawer-facts">
           <div><dt>المالك</dt><dd><bdi>{control.control_owner || "غير معيّن"}</bdi></dd></div>
-          <div><dt>تاريخ الاستحقاق</dt><dd>{control.due_date ? <bdi dir="ltr">{control.due_date}</bdi> : "غير محدد"}</dd></div>
-          <div><dt>حالة التنفيذ</dt><dd><StatusBadge status={control.implementation_status}/></dd></div>
+          <div><dt>تاريخ الاستحقاق</dt><dd>{control.due_date ? <bdi dir="ltr">{formatRiyadhDate(control.due_date)}</bdi> : "غير محدد"}</dd></div>
+          <div><dt>حالة التطبيق</dt><dd><StatusBadge status={control.implementation_status}/></dd></div>
           <div><dt>حالة الدليل</dt><dd><StatusBadge status={control.evidence_status}/></dd></div>
         </dl>
         <section aria-labelledby="catalog-requirement-title">
@@ -519,7 +519,7 @@ function ControlDrawer({ control, framework, position, total, onPrevious, onNext
         <section aria-labelledby="catalog-evidence-title" aria-busy={evidence === null && !failed}>
           <h3 id="catalog-evidence-title">الأدلة المرفوعة الحالية</h3>
           {failed ? <p role="status">تعذر تحميل ملخص الأدلة. افتح صفحة الضابط للمحاولة مرة أخرى.</p>
-          : evidence === null ? <p role="status">جاري تحميل الأدلة…</p>
+          : evidence === null ? <p role="status">جارٍ تحميل الأدلة…</p>
           : !evidence.length ? <p>لا توجد أدلة حالية معروضة ضمن صلاحياتك.</p>
           : <><ul className="catalog-evidence-list">{evidence.slice(0, 3).map(item => <li key={`${item.id}-${item.link_id ?? "source"}`}>
             <span dir="auto">{item.evidence_name || item.file_name || "دليل بدون اسم"}</span>

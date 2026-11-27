@@ -1,4 +1,5 @@
 "use client";
+import { riyadhIsoDate } from "@/lib/dates";
 import AssessmentPortfolio from '@/components/AssessmentPortfolio';
 import { useEffect,useMemo,useState } from "react";
 import { useRouter } from "next/navigation";
@@ -11,7 +12,7 @@ type Control={id:number;control_code:string;title_ar:string;control_owner:string
 type Risk={id:number;risk_code:string;risk_description:string;residual_score:number;action_due_date:string|null;treatment_owner:string;};
 type Alert={type:"danger"|"warning"|"info";detail:string;href:string};
 type AlertGroup={key:string;type:"danger"|"warning"|"info";title:string;count:number;description:string;href:string;items:Alert[]};
-const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"});
+const today=()=>riyadhIsoDate();
 const hasEvidence=(value:string)=>["uploaded","pending_review","under_review","accepted","approved","verified"].includes((value||"").toLowerCase());
 
 export default function AlertsPage(){

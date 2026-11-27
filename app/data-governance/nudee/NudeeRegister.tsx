@@ -1,4 +1,5 @@
 "use client";
+import { riyadhIsoDate } from "@/lib/dates";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -96,7 +97,7 @@ export default function NudeeRegister(){
  const names=useMemo(()=>new Map(users.map(u=>[u.user_id,u.display_name||u.user_id])),[users]);
  const submittedIds=useMemo(()=>new Set(submissions.map(s=>s.assignment_id)),[submissions]);
  const scoped=useMemo(()=>role==="office"?requirements:requirements.filter(r=>byRequirement.get(r.id)?.assignee_id===currentUserId),[role,requirements,byRequirement,currentUserId]);
- const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Riyadh"});
+ const today=riyadhIsoDate();
  const domains=useMemo(()=>Array.from(new Set(scoped.map(r=>r.domain_name))).sort((a,b)=>a.localeCompare(b,"ar")),[scoped]);
  const visible=useMemo(()=>{
   const search=filter.trim().toLocaleLowerCase("ar");

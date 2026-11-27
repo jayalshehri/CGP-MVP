@@ -32,7 +32,7 @@ const navigation = [
   { href: "/roadmap/analysis", label: "تحليل المحفظة السيبرانية", group: "العمليات", subgroup: "إدارة خارطة الطريق", team: true },
   { href: "/roadmap", label: "سجل المشاريع السيبرانية", group: "العمليات", subgroup: "إدارة خارطة الطريق", team: true },
   { href: "/alerts", label: "مركز التنبيهات", group: "العمليات", team: true },
-  { href: "/evidence", label: "الأدلة", group: "الامتثال", auditor: true },
+  { href: "/evidence", label: "سجل الأدلة", group: "الامتثال", auditor: true },
   { href: "/review", label: "مراجعة الأدلة", group: "الامتثال", team: true },
   { href: "/audit", label: "سجل التدقيق", group: "الامتثال", team: true },
   { href: "/audit-schedule", label: "جدول التدقيق الدوري", group: "الامتثال", auditor: true },

@@ -4,6 +4,7 @@
  * No network or database writes occur. Storage retention tests exercise only
  * client decisions under simulated outcomes; database guards need separate QA.
  */
+import * as dates from '../lib/dates.ts';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -104,6 +105,7 @@ function createPage({ role = 'data_governance_team', initialStatus, empty = fals
       if (name === '@/components/AccessibleDialog') return { default: 'dialog' };
       if (name === '@/lib/auth') return { requireProfile: async () => ({ user: { id: role === 'nudee_owner' ? 'qa-owner' : 'qa-office' }, profile: { role } }) };
       if (name === '@/lib/supabase') return { supabase };
+      if (name === '@/lib/dates') return dates;
       if (name.endsWith('.css')) return {};
       throw new Error(`Unexpected dependency: ${name}`);
     }, crypto: { randomUUID }, console, Date, Intl, URL, window: { location, history },
