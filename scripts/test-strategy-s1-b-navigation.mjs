@@ -204,6 +204,18 @@ const control = { requirement_id: 12, control_id: 41, coverage_type: 'partial', 
 const filteredHTML = render(detail, '/roadmap/37?tab=controls&framework=DCC&coverage=partial&verification=verified', { projectRequirements: [req], requirementControls: [control] });
 for (const value of ['DCC', 'partial', 'verified']) check(filteredHTML.includes(`value="${value}" selected=""`), `actual filter ${value} reconstructs on refresh`);
 const detailReads = { requirements: 'COMPLETE', controls: 'COMPLETE', legacy: 'COMPLETE', treatments: 'COMPLETE' };
+const requirementAction = 'إضافة متطلب أو ربط موجود';
+const requiredFixture = { reads: detailReads, projectRequirements: [req] };
+const requirementView = (overrides = {}) => render(detail, '/roadmap/37?tab=requirements', { ...requiredFixture, ...overrides });
+check(requirementView().includes(requirementAction) && requirementView().includes('R12'), 'admin adds or attaches a requirement without replacing existing rows');
+check(requirementView({ role: 'cybersecurity_team' }).includes(requirementAction), 'cybersecurity team can open editor');
+check(!requirementView({ role: 'control_owner', requirementEditorOpen: true }).includes(requirementAction), 'owner cannot open editor');
+check(!requirementView({ project: { ...project, archived_at: '2026-01-01' }, requirementEditorOpen: true }).includes(requirementAction), 'archived project remains read only for requirements');
+const catalog = [{ id: 12, requirement_code: 'REQ-ALREADY', title_ar: 'مرتبط' }, { id: 13, requirement_code: 'REQ-AVAILABLE', title_ar: 'متاح' }];
+const existingEditor = requirementView({ requirementEditorOpen: true, requirements: catalog });
+check(!existingEditor.includes('REQ-ALREADY') && existingEditor.includes('REQ-AVAILABLE') && existingEditor.includes('يرث المشروع ضوابط المتطلب كما هي'), 'existing mode excludes existing links and explains shared mappings');
+const newEditor = requirementView({ requirementEditorOpen: true, mode: 'new', frameworks: [{ id: 2, code: 'CSCC', version: '2-2026' }], frameworkId: '2', controls: [{ id: 61, control_code: '2-1-1', title_ar: 'ضابط تجريبي' }] });
+check(newEditor.includes('متطلب خاص بالمشروع') && newEditor.includes('CSCC-2:2026') && newEditor.includes('بحث عن ضابط') && newEditor.includes('لا يثبت تطبيق الضوابط'), 'project-local mode exposes official framework version, control search, and planning boundary');
 const sourceProject = { ...project, import_staging_id: 'fixture', mapping_reference_count: 8, mapping_exact_count: 0, mapping_source_error_count: 0 };
 const overview = render(detail, '/roadmap/37?tab=overview', { project: sourceProject, reads: detailReads });
 check(!overview.includes('project-kpi-row') && !overview.includes('مراجع مرتبطة') && overview.indexOf('role="tablist"') < overview.indexOf('role="tabpanel"'), 'overview leads with tabs, without empty cards or import diagnostics');
