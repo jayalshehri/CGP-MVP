@@ -27,6 +27,8 @@
 .verb { display:inline-block; border-radius:6px; padding:2px 6px; background:#e7f5f2; color:#0b695e; font-size:.73rem; font-weight:750; }
 .events .expanded > td { padding:0; background:#f8fbfb; }
 .details { padding:8px 10px; font-size:.77rem; }
+.frameworkDetail { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 8px; margin:0 0 8px; color:var(--muted); overflow-wrap:anywhere; }
+.frameworkDetail bdi { color:var(--teal); font-weight:750; }
 .detailBar { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px; margin-block-end:5px; }
 .diff :is(th,td) { padding:6px; border-block-start:1px solid #e4ecee; text-align:start; vertical-align:top; font-weight:400; font-size:.75rem; overflow-wrap:anywhere; white-space:pre-wrap; }
 .diff tbody th { font-weight:750; }
