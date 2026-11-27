@@ -20,7 +20,6 @@ const navigation = [
   { href: "/data-governance/users", label: "إدارة المستخدمين", group: "", data: true, admin: true },
   { href: "/shared-controls", label: "الكتالوج الموحد", group: "الامتثال", team: true, data: true },
   { href: "/assessments", label: "تقييم CSCC", group: "قياس الالتزام", auditor: true },
-  { href: "/dcc-assessment", label: "تقييم DCC", group: "قياس الالتزام", auditor: true },
   { href: "/tcc-assessment", label: "تقييم TCC", group: "قياس الالتزام", auditor: true },
   { href: "/osmacc-assessment", label: "تقييم OSMACC", group: "قياس الالتزام", auditor: true },
   { href: "/mappings", label: "خريطة المواءمة", group: "قياس الالتزام", team: true },
@@ -139,8 +138,9 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
   const permittedItems = account ? navigation.filter(item => account.role === "nudee_owner" ? item.href === "/data-governance/nudee" : account.role === "data_governance_team" ? Boolean(item.data) && !item.admin : account.role === "nca_external_auditor" ? Boolean(item.auditor) : (!item.admin || account.role === "admin") && (!item.team || account.role === "admin" || account.role === "cybersecurity_team") && (!item.data || account.role === "admin")) : [];
   const items = permittedItems.filter(item => workspace === "shared" ? item.href === "/shared-controls" : workspace === "data" ? Boolean(item.data) && item.href !== "/shared-controls" : !item.data && item.href !== "/shared-controls");
   // Pick the most specific route, so a parent cannot hide the active child.
+  const isDccEvaluation = pathname === "/dcc-assessment" || pathname.startsWith("/dcc-assessment/");
   const currentItem = navigation
-    .filter(item => pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/")))
+    .filter(item => (isDccEvaluation && item.href === "/controls") || pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/")))
     .sort((a, b) => b.href.length - a.href.length)[0];
   // The executive summary is not a navigation item; without this it inherits the
   // "/roadmap" prefix match and is mislabelled as the project register.
@@ -149,7 +149,8 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
     if (item.href === "/tasks" && account?.role === "control_owner") return "مهامي";
     return item.label;
   }
-  const current = pathname === "/roadmap/executive" ? "ملخص محفظة المشاريع السيبرانية"
+  const current = isDccEvaluation ? "تقييم ضوابط الأمن السيبراني للبيانات"
+    : pathname === "/roadmap/executive" ? "ملخص محفظة المشاريع السيبرانية"
     : currentItem ? navigationLabel(currentItem) : pathname === passwordHref ? "تغيير كلمة المرور" : "لوحة المتابعة";
   const controlId = /^\/controls\/(\d+)/.exec(pathname)?.[1];
   const isProjectDetail = /^\/roadmap\/[^/]+$/.test(pathname) && !["/roadmap/analysis", "/roadmap/dashboard", "/roadmap/executive"].includes(pathname);
