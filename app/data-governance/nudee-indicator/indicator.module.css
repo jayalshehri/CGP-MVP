@@ -105,3 +105,34 @@
 
 .cycleLine {display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;padding:12px 16px;border-inline-start:3px solid #9c895b;background:#f6f5ef;color:#324a3c;overflow-wrap:anywhere}
 .cycleLine span,.cycleLine button{font-size:.88rem}.cycleLine button{border:0;background:transparent;color:#075e4b;text-decoration:underline;cursor:pointer;min-height:38px}
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-block-end: 1px solid #c8dbd5;
+  margin-block: 16px;
+}
+.tabs a {
+  display: grid;
+  place-items: center;
+  padding: 10px 4px;
+  min-block-size: 46px;
+  text-align: center;
+  font-weight: 650;
+  color: #4a6158;
+  text-decoration: none;
+  border-block-end: 3px solid transparent;
+}
+.tabs a:hover { background: #f0f6f3; }
+.tabs a[aria-current] { color: #095747; background: #ecf5f0; border-color: currentColor; }
+.cycleFile { padding: clamp(14px, 3vw, 24px); background: #fff; border: 1px solid #d1dfd8; border-radius: 14px; }
+.cycleFile h2 { margin: 0 0 12px; font-size: 1.12rem; color: #204637; }
+.domainList li { padding: 10px 14px; }
+.domainList li a { display: inline-flex; align-items: center; height: auto; min-height: 28px; padding: 2px; font-size: .83rem; text-decoration: underline; text-underline-offset: 3px; }
+.domainList .domainName { display: block; font-size: 1rem; font-weight: 700; }
+.domainCounts { display: flex; flex-wrap: wrap; column-gap: 10px; }
+@media (max-width: 500px) {
+  .tabs a { font-size: .87rem; }
+  .domainList { grid-template-columns: 1fr; }
+  .domainList li:nth-child(even) { border-inline-start: none; }
+}

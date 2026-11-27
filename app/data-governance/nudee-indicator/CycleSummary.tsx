@@ -6,7 +6,7 @@ import styles from "./indicator.module.css";
 
 type Summary = { title: string; result: { outcome: string; reference: string } | null };
 
-export default function CycleSummary({ revision }: { revision: number }) {
+export default function CycleSummary() {
   const [state, setState] = useState<Summary | "loading" | "empty" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -23,7 +23,7 @@ export default function CycleSummary({ revision }: { revision: number }) {
     }
     void load().catch(() => { if (active) setState("error"); });
     return () => { active = false; };
-  }, [revision, attempt]);
+  }, [attempt]);
   return <section className={styles.cycleLine} aria-label="آخر دورة تقييم مسجلة">
     <strong>آخر دورة تقييم مسجلة</strong>
     {state === "loading" ? <span role="status">جارٍ تحميل الدورة…</span>

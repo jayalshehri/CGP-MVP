@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import IndicatorDashboard from "./IndicatorDashboard";
 import styles from "../nudee-dashboard/nudee-dashboard.module.css";
 
@@ -8,8 +9,8 @@ export const metadata = { title: "مؤشر نُضيء | مكتب إدارة ال
 export default function IndicatorPage() {
   return <main className={styles.root} dir="rtl">
     <header className="office-hero">
-      <div><h1>مؤشر نُضيء</h1><p>تابع المجالات التي تحتاج تدخلك، وراجع نتائج الدورة من ملف التقييم.</p></div>
+      <div><h1>مؤشر نُضيء</h1><p>تابع جاهزية الأدلة ونتائج دورات التقييم.</p></div>
     </header>
-    <IndicatorDashboard />
+    <Suspense fallback={<p role="status">جارٍ تحميل مؤشر نُضيء…</p>}><IndicatorDashboard /></Suspense>
   </main>;
 }
