@@ -1,0 +1,21 @@
+.head { padding: 13px 16px; margin-block: 10px 9px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 11px; align-items: center; margin-top: 5px; color: #506473; font-size: 12px; }
+.code { color: #116860; font-weight: 800; }
+.tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; max-width: 100%; margin-block: 2px 13px; }
+.tabs button[role="tab"] { flex: 0 0 auto; font-size: 13px; padding: 8px 12px; white-space: nowrap; }
+.panel { display: grid; gap: 11px; min-width: 0; }
+.panel :global(.detail-card) > h2 { margin-top: 0; }
+.facts { grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr)); gap: 9px 14px; }
+.muted { font-size: 12px; color: #506473; margin-block: 6px 2px; }
+.empty, .disclosure { background: #fff; border: 1px solid #dce8ea; border-radius: 12px; padding: 13px 15px; }
+.empty { margin: 0; color: #506473; font-size: 13px; }
+.disclosure { margin-block: 6px; }
+.disclosure summary { color: #116860; font-weight: 800; cursor: pointer; font-size: 13px; overflow-wrap: anywhere; }
+.summary { display: flex; flex-wrap: wrap; gap: 10px 21px; }
+.summary dt { font-size: 12px; color: #506473; }
+.summary dd { margin: 2px 0 0; font-size: 13px; font-weight: 800; }
+@media (max-width: 520px) {
+  .tabs { flex-wrap: wrap; }
+  .tabs button[role="tab"] { font-size: 12px; padding-inline: 9px; }
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
