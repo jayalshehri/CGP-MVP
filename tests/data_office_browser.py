@@ -64,8 +64,16 @@ def check_layout(browser, revision, size, target):
     if after:
         expect(office.get_by_role("region", name="ملخص أعمال المكتب").get_by_role("link")).to_have_count(3)
     elif new_heading.count():
-        office.get_by_text("آخر نشاط للتكليفات", exact=True).wait_for()
+        recent = office.get_by_text("آخر نشاط للتكليفات", exact=True)
+        recent.wait_for(state="attached")
+        disclosure = recent.locator("xpath=ancestor::details[1]")
+        was_closed = disclosure.count() and disclosure.get_attribute("open") is None
+        if was_closed:
+            disclosure.locator("summary").first.click()
+        recent.wait_for()
         office.get_by_text("تقديم دليل للمراجعة", exact=True).wait_for()
+        if was_closed:
+            disclosure.locator("summary").first.click()
     else:
         office.get_by_role("heading", name="مصفوفة الامتثال حسب المجال").wait_for()
     snap(office, target / f"{size}-office-home.png", after)
