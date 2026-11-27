@@ -176,7 +176,30 @@ check(!/planned_quarter|focus_quarter|Q1|Q4/.test(dashboardSource), 'no quarter 
 check(dashboardSource.includes('if (loading || error || !focusId) return') && dashboardSource.includes('cancelAnimationFrame(frame)'), 'post-render restoration is gated and cancelled on cleanup');
 check(!dashboardSource.includes('querySelector') && !dashboardSource.includes('block: "center"'), 'no URL selectors or stretched-cell centering');
 const focusedRoadmap = render('app/roadmap/dashboard/page.tsx', '/roadmap/dashboard?focus_year=1');
-check(focusedRoadmap.includes('id="roadmap-year-1-heading" class="quarterly-context-heading"><bdi>السنة الأولى · P1</bdi>'), 'exact execution-year heading rendered above cards');
+check(focusedRoadmap.includes('id="roadmap-year-1-heading"><bdi>السنة الأولى</bdi>'), 'exact execution year keeps its own heading and focus');
+check(focusedRoadmap.includes('aria-pressed="true" aria-controls="roadmap-year-1"'), 'return focus selects the matching mobile year');
+check(focusedRoadmap.includes('class="compactFilters"') && focusedRoadmap.includes('طباعة / حفظ PDF') && focusedRoadmap.includes('تصدير CSV') && focusedRoadmap.includes('العرض التنفيذي العام'), 'compact shared filters and grouped reports');
+check(focusedRoadmap.indexOf('توزيع المشاريع حسب سنة التنفيذ') < focusedRoadmap.indexOf('ملخص المشاريع المعروضة'), 'annual board appears before the summary');
+check(!focusedRoadmap.includes('At Risk') && !focusedRoadmap.includes('مشاريع بلا أولوية'), 'no empty risk or missing-priority panels');
+
+const unscheduled = { ...project, id: 50, project_code: 'NO-PRIORITY', name_ar: 'مشروع دون أولوية', portfolio_priority: null, execution_year: null };
+const firstYearProjects = Array.from({ length: 9 }, (_, id) => ({ ...project, id: 100 + id, project_code: `PLAN-${id}`, name_ar: `مشروع السنة الأولى ${id + 1}` }));
+const secondYearProject = { ...firstYearProjects[0], id: 199, portfolio_priority: 'P2', execution_year: 2, name_ar: 'مشروع السنة الثانية' };
+const planProjects = [...firstYearProjects, secondYearProject, unscheduled];
+const activePlan = render('app/roadmap/dashboard/page.tsx', '/roadmap/dashboard?owner=it', { projects: planProjects });
+equal((activePlan.match(/data-preview-hidden="true"/g) ?? []).length, 3, 'six initially visible projects in a full lane');
+check(activePlan.includes('عرض المزيد (3)') && activePlan.includes('aria-expanded="false" aria-controls="roadmap-year-1-projects"'), 'remaining projects have an operable disclosure');
+check(activePlan.includes('data-status="planned">مخطط') && !activePlan.includes('title="PLAN-0 — مشروع السنة الأولى 1"><bdi'), 'status uses a text label without repeating priority');
+check(activePlan.includes('href="/roadmap?priority=unset&amp;owner=it"') && activePlan.includes('مشاريع بلا أولوية'), 'unprioritized projects stay accessible in the filtered register');
+check(activePlan.includes('/roadmap/100?tab=overview&amp;from=roadmap&amp;owner=it&amp;focus_year=1'), 'card preserves filters and exact originating year');
+const expandedPlan = render('app/roadmap/dashboard/page.tsx', '/roadmap/dashboard?owner=it', { projects: planProjects, expanded: { 1: true } });
+check(!expandedPlan.includes('data-preview-hidden="true"') && expandedPlan.includes('عرض أقل'), 'expanded lane shows every project');
+const phasePlan = render('app/roadmap/dashboard/page.tsx', '/roadmap/dashboard?priority=P2', { projects: planProjects });
+check(phasePlan.includes('aria-pressed="true" aria-controls="roadmap-year-2"') && !phasePlan.includes('مشاريع بلا أولوية'), 'filtered plan selects the populated mobile year and hides unrelated exceptions');
+const chosenYear = render('app/roadmap/dashboard/page.tsx', '/roadmap/dashboard?owner=it', { projects: planProjects, mobileSelection: { year: 2, context: 'owner=it' } });
+check(chosenYear.includes('aria-pressed="true" aria-controls="roadmap-year-2"') && chosenYear.includes('عرض المزيد (3)'), 'year selector changes presentation, not the portfolio filters');
+const printCss = source('app/roadmap/dashboard/annual-roadmap.module.css').split('@media print')[1];
+check(printCss.includes('item[data-preview-hidden] { display: block') && printCss.includes('.yearPicker, .more, .summary { display: none'), 'print includes all projects without screen controls');
 equal((focusedRoadmap.match(/data-reading-focus="true"/g) || []).length, 1, 'exactly one focused year');
 for (const query of ['', '?focus_year=2027&focus_quarter=Q1', '?focus_year=5']) {
   check(!render('app/roadmap/dashboard/page.tsx', '/roadmap/dashboard' + query).includes('data-reading-focus'), 'direct or invalid context never substitutes another year');

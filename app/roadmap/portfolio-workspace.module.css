@@ -97,3 +97,29 @@
     white-space: nowrap;
   }
 }
+
+.compactFilters {
+  margin-block: 11px 12px;
+  padding: 0 13px;
+  border: 1px solid #dce8ea;
+  border-radius: 11px;
+  background: #fff;
+}
+.filterDisclosure > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 9px;
+  padding-block: 9px;
+  color: #116860;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  list-style: none;
+}
+.filterDisclosure > summary::-webkit-details-marker { display: none; }
+.filterDisclosure > summary::before { content: "‹"; line-height: 1; font-size: 18px; }
+.filterDisclosure[open] > summary::before { transform: rotate(-90deg); }
+.compactCount { margin-inline-start: auto; font-size: 12px; color: #435e6e; font-weight: 700; }
+.filterFields { padding-block: 10px 8px; border-top: 1px solid #e7eeef; }
+.compactFilters .chips { padding: 7px 0; border-top: 1px solid #e7eeef; }
