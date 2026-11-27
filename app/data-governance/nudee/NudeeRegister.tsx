@@ -50,7 +50,7 @@ export default function NudeeRegister(){
  const [bulkDue,setBulkDue]=useState("");
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
- const [domain,setDomain]=useState("");
+ const domain=role==="office" ? query.get("domain")||"" : "";
  const [ownerFilter,setOwnerFilter]=useState("");
  const [versionId,setVersionId]=useState<number|null>(null);
  const [completedReview,setCompletedReview]=useState<number|null>(null);
@@ -125,9 +125,10 @@ export default function NudeeRegister(){
  const current=scoped.find(r=>r.id===selected);
  const assignment=current?byRequirement.get(current.id):undefined;
  function canAssign(a:Assignment|undefined){return !a||(a.status==="assigned"&&!submittedIds.has(a.id));}
- function changeView(value:string){
+ function changeScope(viewValue:string,domainValue:string){
   const url=new URL(window.location.href);
-  if(value==="all")url.searchParams.delete("view");else url.searchParams.set("view",value);
+  if(viewValue==="all")url.searchParams.delete("view");else url.searchParams.set("view",viewValue);
+  if(domainValue)url.searchParams.set("domain",domainValue);else url.searchParams.delete("domain");
   window.history.replaceState(null,"",url);
   setPage(1);setBulkIds([]);
  }
@@ -252,12 +253,12 @@ export default function NudeeRegister(){
      <input id="nudee-filter" type="search" value={filter} onChange={e=>{setFilter(e.target.value);setPage(1);setBulkIds([]);}} placeholder="اسم الدليل أو المعيار أو المجال" />
     </label>
     <label htmlFor="nudee-view">حالة المتطلب
-     <select id="nudee-view" value={view} onChange={e=>changeView(e.target.value)}>
+     <select id="nudee-view" value={view} onChange={e=>changeScope(e.target.value,domain)}>
       {Object.entries(views).filter(([key])=>role==="office"||key!=="unassigned").map(([key,label])=><option key={key} value={key}>{label}</option>)}
      </select>
     </label>
     {role==="office"&&<>
-     <label>المجال<select value={domain} onChange={e=>{setDomain(e.target.value);setPage(1);setBulkIds([]);}}>
+     <label>المجال<select value={domain} onChange={e=>changeScope(view,e.target.value)}>
       <option value="">كل المجالات</option>{domains.map(d=><option key={d}>{d}</option>)}</select></label>
      <label>مالك المتطلب<select value={ownerFilter} onChange={e=>{setOwnerFilter(e.target.value);setPage(1);setBulkIds([]);}}>
       <option value="">كل المالكين</option>{userOptions}</select></label>
@@ -277,7 +278,7 @@ export default function NudeeRegister(){
    </section>}
    {!visible.length?<div className="nr-empty">
     <p>{scoped.length?"لا توجد متطلبات تطابق خيارات البحث والتصفية.":role==="assignee"?"لا توجد متطلبات مسندة إلى حسابك حاليًا.":"لا توجد متطلبات في السجل حاليًا."}</p>
-    {scoped.length>0&&<button type="button" className="nr-secondary" onClick={()=>{setFilter("");setDomain("");setOwnerFilter("");changeView("all");}}>عرض كل المتطلبات</button>}
+    {scoped.length>0&&<button type="button" className="nr-secondary" onClick={()=>{setFilter("");setOwnerFilter("");changeScope("all","");}}>عرض كل المتطلبات</button>}
    </div>:<table className="nr-table" aria-label={role==="office"?"سجل متطلبات نُضيء":"المتطلبات المسندة إليّ"}>
     <thead><tr>{role==="office"&&<th scope="col" className="nr-select-col"><span className="nr-sr">تحديد للإسناد</span></th>}
      <th scope="col">الدليل والمعيار</th><th scope="col" className="nr-status-col">الحالة</th>{role==="office"&&<th scope="col" className="nr-owner-col">المكلّف</th>}<th scope="col" className="nr-due-col">الاستحقاق</th>
