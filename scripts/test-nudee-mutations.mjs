@@ -31,7 +31,9 @@ function createPage({ role = 'data_governance_team', initialStatus, empty = fals
   const db = {
     nudee_requirements: empty ? [] : [requirement(1), requirement(2)],
     nudee_assignments: empty || !initialStatus ? [] : [assignment(1, initialStatus), assignment(2, initialStatus)],
-    nudee_submissions: [],
+    nudee_submissions: initialStatus === 'submitted' ? [1,2].map(id => ({
+      id, assignment_id: id + 100, file_name: 'test.pdf', storage_path: id + '/test.pdf', submitted_at: '2026-01-04T08:00:00Z'
+    })) : [],
   };
   const react = {
     useState(initial) {
@@ -51,7 +53,7 @@ function createPage({ role = 'data_governance_team', initialStatus, empty = fals
         ? { data: transport.confirmSubmission ? { id: 500 } : null, error: transport.failConfirmation ? { message: 'confirmation offline' } : null }
         : transport.failRead ? { data: null, error: { message: 'reload offline' } } : { data: db[table], error: null };
       const query = {
-        select() { return query; }, order() { return query; }, limit() { return query; }, eq() { return query; },
+        select() { return query; }, range() { return query; }, order() { return query; }, limit() { return query; }, eq() { return query; },
         maybeSingle() { single = true; return query; },
         then(resolve, reject) { return Promise.resolve().then(result).then(resolve, reject); },
       };
@@ -71,7 +73,7 @@ function createPage({ role = 'data_governance_team', initialStatus, empty = fals
         }
         return { data: ids.length, error: null };
       }
-      if (name === 'nudee_review_evidence') {
+      if (name === 'nudee_review_version') {
         db.nudee_assignments = db.nudee_assignments.map(row => row.id === args.p_assignment_id ? { ...row, status: args.p_decision, review_notes: args.p_notes } : row);
       }
       return { data: null, error: null };
@@ -98,6 +100,8 @@ function createPage({ role = 'data_governance_team', initialStatus, empty = fals
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'fragment' };
       if (name === 'next/navigation') return { useSearchParams: () => new URL(location.href).searchParams };
+      if (name === './EvidenceVersions') return { default: 'versions' };
+      if (name === '@/lib/strategy-read') return { readStrategyRows: fetch => fetch(0, 499) };
       if (name === '@/components/AccessibleDialog') return { default: 'dialog' };
       if (name === '@/lib/auth') return { requireProfile: async () => ({ user: { id: role === 'nudee_owner' ? 'qa-owner' : 'qa-office' }, profile: { role } }) };
       if (name === '@/lib/supabase') return { supabase };
@@ -177,6 +181,7 @@ for (const [buttonLabel, decision, success] of [
     await assertCommittedRefreshState(page, success);
     assert.equal(page.calls.rpc.length, 1);
     assert.equal(page.calls.rpc[0].args.p_decision, decision);
+    assert.equal(page.calls.rpc[0].args.p_submission_id, 1);
     assert.equal(page.calls.rpc[0].args.p_notes, 'QA REVIEW NOTE');
     assert.equal(page.nodes(n => n.type === 'button' && text(n) === buttonLabel).length, 0, 'completed decision leaves current review panel');
     page.click('إغلاق'); page.render(); page.selectRequirement(2); page.change(n => n.type === 'textarea', 'NEXT NOTE');

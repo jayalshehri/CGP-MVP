@@ -62,25 +62,31 @@ function OfficeSummary({ records, assignments }: OfficeData) {
   const summary = useMemo(() => {
     const byRequirement = new Map(assignments.map(a => [a.requirement_id, a]));
     const names = new Map<number, string>();
+    let earliest: string | null = null;
     let inProgress = 0, submitted = 0, approved = 0, unassigned = 0, overdue = 0;
     for (const r of records) {
       const a = byRequirement.get(r.id);
       if (!a) { unassigned++; continue; }
       names.set(a.id, r.evidence_name);
-      if (a.status === "submitted") submitted++;
+      if (a.status === "submitted") {
+        submitted++;
+        if (a.updated_at && (!earliest || a.updated_at < earliest)) earliest = a.updated_at;
+      }
       if (a.status === "approved") approved++;
       if (a.status === "assigned" || a.status === "changes_requested") {
         inProgress++;
         if (a.due_date && a.due_date < today) overdue++;
       }
     }
-    return { inProgress, submitted, approved, unassigned, overdue, names };
+    const sentDay = earliest && riyadhIsoDate(new Date(earliest));
+    const waitingDays = sentDay ? Math.max(0, Math.round((Date.parse(today) - Date.parse(sentDay)) / 86400000)) : null;
+    return { waitingDays, inProgress, submitted, approved, unassigned, overdue, names };
   }, [records, assignments, today]);
 
   const actions = [
     { view: "unassigned", title: "إسناد المتطلبات", count: summary.unassigned },
     { view: "submitted", title: "مراجعة الأدلة المقدّمة", count: summary.submitted },
-    { view: "overdue", title: "متابعة التكليفات المتأخرة", count: summary.overdue },
+    { view: "overdue", title: "متابعة التكليفات المتأخرة اليوم", count: summary.overdue },
   ];
   return <>
     <dl className={styles.homeMetrics} aria-label="ملخص متطلبات نُضيء">
@@ -97,7 +103,8 @@ function OfficeSummary({ records, assignments }: OfficeData) {
         <h2 id="actions-title">إجراءات المكتب</h2>
         <ul className={styles.actionList}>{actions.map(action => <li key={action.view}>
           <Link href={`/data-governance/nudee?view=${action.view}`}>
-            <span>{action.title}</span><strong>{number.format(action.count)}</strong><span aria-hidden="true">←</span>
+            <span>{action.title}{action.view === "submitted" && summary.waitingDays !== null &&
+              <small className={styles.waitTime}>{summary.waitingDays === 0 ? "أقدم دليل وصل اليوم" : `مدة انتظار أقدم دليل بالأيام: ${number.format(summary.waitingDays)}`}</small>}</span><strong>{number.format(action.count)}</strong><span aria-hidden="true">←</span>
           </Link>
         </li>)}</ul>
       </section>
@@ -126,7 +133,7 @@ export default function NudeeDashboard() {
           readStrategyRows<HomeRequirement>((from, to) => supabase.from("nudee_requirements")
             .select("id,evidence_name", { count: "exact" }).order("id").range(from, to), r => r.id),
           readStrategyRows<Assignment>((from, to) => supabase.from("nudee_assignments")
-            .select("id,requirement_id,status,due_date", { count: "exact" }).order("id").range(from, to), a => a.id),
+            .select("id,requirement_id,status,updated_at,due_date", { count: "exact" }).order("id").range(from, to), a => a.id),
         ]);
         if (requirements.error || assignments.error) throw new Error("تعذر تحميل متطلبات المكتب وتكليفاته.");
         if (active) setData({ records: requirements.data, assignments: assignments.data });

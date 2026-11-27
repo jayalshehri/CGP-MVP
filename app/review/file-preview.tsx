@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
-import EvidenceDownload from "@/components/EvidenceDownload";
+import EvidenceDownload, { type EvidenceBucket } from "@/components/EvidenceDownload";
 import { supabase } from "@/lib/supabase";
 
 const maxInlineSize = 20 * 1024 * 1024;
@@ -19,7 +19,7 @@ function detectPreviewMime(bytes: Uint8Array) {
   return null;
 }
 
-export default function ReviewFilePreview({ path, name }: { path: string | null; name: string | null }) {
+export default function ReviewFilePreview({ path, name, bucket = "evidence-files" }: { path: string | null; name: string | null; bucket?: EvidenceBucket }) {
   const [preview, setPreview] = useState<Preview>({ kind: "idle" });
   const live = useRef(false);
   const blobUrl = useRef<string | null>(null);
@@ -44,7 +44,7 @@ export default function ReviewFilePreview({ path, name }: { path: string | null;
     busy.current = true;
     setPreview({ kind: "loading" });
     try {
-      const { data, error } = await supabase.storage.from("evidence-files").download(path);
+      const { data, error } = await supabase.storage.from(bucket).download(path);
       if (!live.current) return;
       if (error || !data) throw new Error("تعذر جلب الملف للمعاينة.");
       if (data.size > maxInlineSize) throw new Error("حجم الملف يتجاوز حد المعاينة المضمنة. استخدم الفتح أو التنزيل.");
@@ -57,9 +57,9 @@ export default function ReviewFilePreview({ path, name }: { path: string | null;
         setPreview({ kind: "image", url });
         return;
       }
-      const pdf = await import("pdfjs-dist");
+      const pdf = await import("pdfjs-dist/legacy/build/pdf.mjs");
       if (!live.current) return;
-      pdf.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+      pdf.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
       const bytes = await data.arrayBuffer();
       if (!live.current) return;
       // Canvas only: do not mount PDF scripts, links, forms, or annotation controls.
@@ -78,7 +78,7 @@ export default function ReviewFilePreview({ path, name }: { path: string | null;
   return <section className="review-preview" aria-label="معاينة ملف الدليل">
     <div className="review-preview-header">
       <div><h3>معاينة الملف</h3>{name && <p><bdi dir="auto">{name}</bdi></p>}</div>
-      <EvidenceDownload path={path} name={name}/>
+      <EvidenceDownload path={path} name={name} bucket={bucket}/>
     </div>
     {preview.kind === "pdf" ? <PdfPages document={preview.document}/>
     : preview.kind === "image" ? <div className="review-preview-image">
@@ -90,7 +90,7 @@ export default function ReviewFilePreview({ path, name }: { path: string | null;
     </div>
     : <div className="review-preview-placeholder">
       {!path ? <p>لا يوجد ملف مرفق.</p>
-      : !supported ? <p>هذا النوع لا يدعم العرض هنا. استخدم خيار المعاينة أو التنزيل المتاح.</p>
+      : !supported ? <p>يمكن تنزيل هذا النوع من الملفات لفتحه.</p>
       : preview.kind === "loading" ? <p role="status">جاري تحميل المعاينة…</p>
       : <>
         <p {...(preview.kind === "error" ? { role: "alert" } : {})}>{preview.kind === "error" ? preview.message : "اعرض الملف هنا دون مغادرة المراجعة."}</p>

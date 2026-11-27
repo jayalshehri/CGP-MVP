@@ -4,14 +4,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { requireProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
+import EvidenceVersions, { type Submission } from "./EvidenceVersions";
+import { readStrategyRows } from "@/lib/strategy-read";
 import AccessibleDialog from "@/components/AccessibleDialog";
 import "../data-governance.css";
 import "./register.css";
 
 type Requirement={id:number;source_row:number;domain_name:string;standard_code:string;requirement_title:string;maturity_level:string;evidence_name:string;evidence_description:string|null;source_compliance:string|null};
-type Assignment={id:number;requirement_id:number;assignee_id:string|null;status:string;due_date:string|null;review_notes:string|null};
+type Assignment={id:number;requirement_id:number;assignee_id:string|null;status:string;updated_at:string;due_date:string|null;review_notes:string|null};
 type User={user_id:string;display_name:string|null;role:string};
-type Submission={id:number;assignment_id:number;file_name:string;storage_path:string;submitted_at:string};
+function isLate(a: Assignment | undefined, today: string) {
+ return !!a?.due_date && a.due_date < today && ["assigned", "changes_requested"].includes(a.status);
+}
+function ownerPriority(a: Assignment | undefined, today: string) {
+ if (a?.status === "changes_requested") return 0;
+ if (isLate(a, today)) return 1;
+ if (a?.status === "assigned") return 2;
+ return a?.status === "submitted" ? 3 : 4;
+}
 const statusLabels:Record<string,string>={unassigned:"لم يكلّف",assigned:"بانتظار الرفع",submitted:"بانتظار المراجعة",changes_requested:"أعيد للتعديل",approved:"معتمد"};
 const views:Record<string,string>={all:"كل الحالات",...statusLabels,overdue:"متأخر"};
 const pageSize=25;
@@ -40,16 +50,20 @@ export default function NudeeRegister(){
  const [bulkDue,setBulkDue]=useState("");
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
- const [evidenceLink,setEvidenceLink]=useState<string|null>(null);
+ const [domain,setDomain]=useState("");
+ const [ownerFilter,setOwnerFilter]=useState("");
+ const [versionId,setVersionId]=useState<number|null>(null);
+ const [completedReview,setCompletedReview]=useState<number|null>(null);
  const load=useCallback(async()=>{
   const {user,profile}=await requireProfile(["admin","data_governance_team","nudee_owner"]);
   setCurrentUserId(user.id);
   const office=profile.role==="admin"||profile.role==="data_governance_team";
-  const {data:a,error:ae}=await supabase.from("nudee_assignments").select("id,requirement_id,assignee_id,status,due_date,review_notes").order("id");
+  const {data:a,error:ae}=await supabase.from("nudee_assignments").select("id,requirement_id,assignee_id,status,updated_at,due_date,review_notes").order("id");
   if(ae)throw ae;
 
-  const {data:files,error:fe}=await supabase.from("nudee_submissions").select("id,assignment_id,file_name,storage_path,submitted_at").order("submitted_at",{ascending:false});
-  if(fe)throw fe;
+  const files=await readStrategyRows<Submission>((from,to)=>supabase.from("nudee_submissions")
+   .select("id,assignment_id,file_name,storage_path,submitted_at",{count:"exact"}).order("id",{ascending:false}).range(from,to),s=>s.id);
+  if(files.error)throw new Error("تعذر تحميل نسخ الأدلة.");
 
   if(office){
    const [{data:r,error:re},{data:u,error:ue}]=await Promise.all([
@@ -65,7 +79,7 @@ export default function NudeeRegister(){
    setRole("assignee");
   }
   setAssignments((a??[]) as Assignment[]);
-  setSubmissions((files??[]) as Submission[]);
+  setSubmissions(files.data);
   setNeedsRefresh(false);
  },[setAssignments,setCurrentUserId,setNeedsRefresh,setRequirements,setRole,setSubmissions,setUsers]);
  useEffect(()=>{let active=true;void Promise.resolve().then(()=>load()).catch(e=>{if(active)setError(e.message||"تعذر تحميل المؤشر");}).finally(()=>{if(active)setLoading(false);});return()=>{active=false};},[load]);
@@ -84,16 +98,27 @@ export default function NudeeRegister(){
  const submittedIds=useMemo(()=>new Set(submissions.map(s=>s.assignment_id)),[submissions]);
  const scoped=useMemo(()=>role==="office"?requirements:requirements.filter(r=>byRequirement.get(r.id)?.assignee_id===currentUserId),[role,requirements,byRequirement,currentUserId]);
  const today=riyadhIsoDate();
+ const domains=useMemo(()=>Array.from(new Set(scoped.map(r=>r.domain_name))).sort((a,b)=>a.localeCompare(b,"ar")),[scoped]);
  const visible=useMemo(()=>{
   const search=filter.trim().toLocaleLowerCase("ar");
   return scoped.filter(r=>{
    const a=byRequirement.get(r.id);
+   if(domain && r.domain_name!==domain)return false;
+   if(ownerFilter && a?.assignee_id!==ownerFilter)return false;
    if(view==="overdue"){
-    if(!a?.due_date||a.due_date>=today||!["assigned","changes_requested"].includes(a.status))return false;
+    if(!isLate(a,today))return false;
    }else if(view!=="all"&&(a?.status||"unassigned")!==view)return false;
    return [r.standard_code,r.evidence_name,r.domain_name,r.requirement_title].join(" ").toLocaleLowerCase("ar").includes(search);
+  }).sort((left,right)=>{
+   const a=byRequirement.get(left.id), b=byRequirement.get(right.id);
+   if(view==="submitted")return (a?.updated_at||"").localeCompare(b?.updated_at||"") || left.source_row-right.source_row;
+   if(role==="assignee" || view==="overdue"){
+    const rank=role==="assignee"?ownerPriority(a,today)-ownerPriority(b,today):0;
+    return rank || (a?.due_date||"9999").localeCompare(b?.due_date||"9999") || left.source_row-right.source_row;
+   }
+   return left.source_row-right.source_row;
   });
- },[scoped,byRequirement,view,filter,today]);
+ },[scoped,byRequirement,view,filter,today,role,domain,ownerFilter]);
  const pages=Math.max(1,Math.ceil(visible.length/pageSize));
  const currentPage=Math.min(page,pages);
  const pageRows=visible.slice((currentPage-1)*pageSize,currentPage*pageSize);
@@ -108,26 +133,18 @@ export default function NudeeRegister(){
  }
  function openRequirement(r:Requirement){
   const a=byRequirement.get(r.id);
-  setSelected(r.id);setFile(null);setEvidenceLink(null);setError("");
-  setAssignee(a?.assignee_id||"");setDue(a?.due_date||"");setNote(a?.review_notes||"");
+  setSelected(r.id);setVersionId(null);setCompletedReview(null);setFile(null);setError("");setNotice("");
+  setAssignee(a?.assignee_id||"");setDue(a?.due_date||"");setNote("");
  }
- function closeRequirement(){setSelected(null);setFile(null);setEvidenceLink(null);}
- async function openEvidence(path:string){
-  // Open a blank tab synchronously from the user gesture: browsers block popups after await.
-  const preview=window.open("about:blank","_blank");
-  if(preview)preview.opener=null;
-  setEvidenceLink(null);setError("");
-  try{
-   const {data,error:e}=await supabase.storage.from("nudee-evidence").createSignedUrl(path,60);
-   if(e||!data?.signedUrl)throw e||new Error("تعذر إنشاء رابط الدليل المؤقت");
-   if(preview)preview.location.replace(data.signedUrl);
-   else setEvidenceLink(data.signedUrl);
-  }catch(e){
-   // A network exception must not leave an empty tab open indefinitely.
-   preview?.close();
-   setError(e instanceof Error?e.message:"تعذر فتح الدليل. تحقق من الاتصال ثم حاول مرة أخرى.");
-  }
- }
+ function closeRequirement(){setSelected(null);setFile(null);setVersionId(null);}
+ const files=useMemo(()=>assignment?submissions.filter(s=>s.assignment_id===assignment.id).sort((a,b)=>b.id-a.id):[],[assignment,submissions]);
+ const latest=files[0];
+ const displayed=files.find(s=>s.id===versionId)||latest;
+ const latestSelected=!!latest && latest.id===displayed?.id;
+ const nextReview=visible.find(r=>{
+  const other=byRequirement.get(r.id);
+  return r.id!==selected && other?.status==="submitted" && other.assignee_id!==currentUserId;
+ });
  async function assign(){
   if(role!=="office"||!current||!canAssign(assignment)||!assignee||pending.current||needsRefresh)return;pending.current=true;setBusy(true);setError("");setNotice("");
   try{
@@ -147,13 +164,17 @@ export default function NudeeRegister(){
   }catch(e){setError(e instanceof Error?e.message:"فشل الإسناد الجماعي");}finally{pending.current=false;setBusy(false)}
  }
  async function review(decision:"approved"|"changes_requested"){
-  if(role!=="office"||!assignment||assignment.assignee_id===currentUserId||pending.current||needsRefresh)return;pending.current=true;setBusy(true);setError("");setNotice("");
+  if(role!=="office"||!assignment||!latestSelected||assignment.assignee_id===currentUserId||pending.current||needsRefresh)return;pending.current=true;setBusy(true);setError("");setNotice("");
   try{
    await requireProfile(["admin","data_governance_team"]);
    if(assignment.status!=="submitted")throw new Error("يجب استلام الدليل قبل مراجعته");
    if(decision==="changes_requested"&&!note.trim())throw new Error("أدخل سبب الإعادة");
-   const {error:e}=await supabase.rpc("nudee_review_evidence",{p_assignment_id:assignment.id,p_decision:decision,p_notes:note||null});
-   if(e)throw e;
+   const {error:e}=await supabase.rpc("nudee_review_version",{p_assignment_id:assignment.id,p_submission_id:latest.id,p_decision:decision,p_notes:note||null});
+   if(e){
+    if(e.code==="40001"){setNeedsRefresh(true);throw new Error("تغيّرت النسخة أو حالة المراجعة. حدّث البيانات للاطلاع على آخر نسخة.");}
+    throw e;
+   }
+   setCompletedReview(assignment.id);
    setAssignments(rows=>rows.map(row=>row.id===assignment.id?{...row,status:decision,review_notes:note||null}:row));
    await refreshAfterMutation(decision==="approved"?"تم اعتماد الدليل":"أعيد الدليل للمكلّف");
   }catch(e){setError(e instanceof Error?e.message:"فشلت المراجعة");}finally{pending.current=false;setBusy(false)}
@@ -216,7 +237,7 @@ export default function NudeeRegister(){
   {(error||needsRefresh)&&<button type="button" className="nr-secondary" disabled={busy} onClick={retryLoad}>إعادة تحميل البيانات</button>}
  </>;
  const userOptions=users.map(u=><option key={u.user_id} value={u.user_id}>{u.display_name||u.user_id}</option>);
- const files=assignment?submissions.filter(s=>s.assignment_id===assignment.id):[];
+
  const canUpload=assignment&&assignment.assignee_id===currentUserId&&["assigned","changes_requested"].includes(assignment.status);
  return <div className="dg-page nr-page" dir="rtl">
   <header className="nr-heading">
@@ -235,6 +256,12 @@ export default function NudeeRegister(){
       {Object.entries(views).filter(([key])=>role==="office"||key!=="unassigned").map(([key,label])=><option key={key} value={key}>{label}</option>)}
      </select>
     </label>
+    {role==="office"&&<>
+     <label>المجال<select value={domain} onChange={e=>{setDomain(e.target.value);setPage(1);setBulkIds([]);}}>
+      <option value="">كل المجالات</option>{domains.map(d=><option key={d}>{d}</option>)}</select></label>
+     <label>مالك المتطلب<select value={ownerFilter} onChange={e=>{setOwnerFilter(e.target.value);setPage(1);setBulkIds([]);}}>
+      <option value="">كل المالكين</option>{userOptions}</select></label>
+    </>}
     <p role="status" className="nr-count">{visible.length} من {scoped.length} متطلب</p>
    </div>
    {role==="office"&&bulkIds.length>0&&<section aria-label="الإسناد الجماعي" className="nr-bulk">
@@ -249,8 +276,8 @@ export default function NudeeRegister(){
     <button type="button" className="nr-secondary" disabled={busy} onClick={()=>setBulkIds([])}>إلغاء التحديد</button>
    </section>}
    {!visible.length?<div className="nr-empty">
-    <p>{scoped.length?"لا توجد نتائج مطابقة للبحث والحالة.":role==="assignee"?"لا توجد متطلبات مسندة إلى حسابك حاليًا.":"لا توجد متطلبات في السجل حاليًا."}</p>
-    {scoped.length>0&&<button type="button" className="nr-secondary" onClick={()=>{setFilter("");changeView("all");}}>عرض كل المتطلبات</button>}
+    <p>{scoped.length?"لا توجد متطلبات تطابق خيارات البحث والتصفية.":role==="assignee"?"لا توجد متطلبات مسندة إلى حسابك حاليًا.":"لا توجد متطلبات في السجل حاليًا."}</p>
+    {scoped.length>0&&<button type="button" className="nr-secondary" onClick={()=>{setFilter("");setDomain("");setOwnerFilter("");changeView("all");}}>عرض كل المتطلبات</button>}
    </div>:<table className="nr-table" aria-label={role==="office"?"سجل متطلبات نُضيء":"المتطلبات المسندة إليّ"}>
     <thead><tr>{role==="office"&&<th scope="col" className="nr-select-col"><span className="nr-sr">تحديد للإسناد</span></th>}
      <th scope="col">الدليل والمعيار</th><th scope="col" className="nr-status-col">الحالة</th>{role==="office"&&<th scope="col" className="nr-owner-col">المكلّف</th>}<th scope="col" className="nr-due-col">الاستحقاق</th>
@@ -263,8 +290,12 @@ export default function NudeeRegister(){
       {role==="office"&&<td className="nr-select-col"><input type="checkbox" aria-label={"تحديد الدليل "+r.evidence_name} checked={checked}
        disabled={!canAssign(a)||busy||(!checked&&bulkIds.length>=100)} onChange={e=>setBulkIds(ids=>e.target.checked?[...ids,r.id]:ids.filter(id=>id!==r.id))} /></td>}
       <td className="nr-evidence-col"><button type="button" className="nr-open" aria-haspopup="dialog" disabled={busy} onClick={()=>openRequirement(r)}>{r.evidence_name}</button>
-       <small><bdi>{r.standard_code||"—"}</bdi> · {r.domain_name}</small></td>
-      <td className="nr-status-col"><span className="nr-status" data-status={status}>{statusLabels[status]||status}</span></td>
+       <small><bdi>{r.standard_code||"—"}</bdi> · {r.domain_name}</small>
+       {a && <span className="nr-mobile-meta">{role==="office"&&<span>{names.get(a.assignee_id||"")||"مكلّف مسجّل"} · </span>}{a.due_date?<><span>الاستحقاق </span><time dir="ltr" dateTime={a.due_date}>{a.due_date}</time></>:"دون موعد محدد"}</span>}
+       {role==="assignee"&&status==="changes_requested"&&<><span className="nr-row-note">{a?.review_notes}</span>
+        <button type="button" className="nr-revise" onClick={()=>openRequirement(r)}>رفع نسخة معدّلة</button></>}
+       </td>
+      <td className="nr-status-col"><span className="nr-status" data-status={status}>{statusLabels[status]||status}</span>{isLate(a,today)&&<small className="nr-late">متأخر عن الاستحقاق</small>}</td>
       {role==="office"&&<td className="nr-owner-col">{a?.assignee_id?(names.get(a.assignee_id)||"مكلّف مسجّل"):"—"}</td>}
       <td className="nr-due-col">{a?.due_date?<time dateTime={a.due_date} dir="ltr">{a.due_date}</time>:"—"}</td>
      </tr>;
@@ -276,7 +307,7 @@ export default function NudeeRegister(){
     <button type="button" disabled={currentPage===pages} onClick={()=>setPage(currentPage+1)}>التالي</button>
    </div>}
   </section>}
-  {current&&<AccessibleDialog labelledBy="nr-detail-title" backdropClassName="nr-overlay" className="nr-panel" busy={busy} onClose={closeRequirement}>
+  {current&&<AccessibleDialog key={current.id} labelledBy="nr-detail-title" backdropClassName="nr-overlay" className="nr-panel" busy={busy} onClose={closeRequirement}>
    <header className="nr-detail-heading">
     <div><small><bdi>{current.standard_code}</bdi> · {current.domain_name}</small><h2 id="nr-detail-title">{current.evidence_name}</h2></div>
     <button autoFocus type="button" className="nr-secondary" disabled={busy} onClick={closeRequirement}>إغلاق</button>
@@ -302,18 +333,18 @@ export default function NudeeRegister(){
     <small id="nr-file-formats">PDF أو DOCX أو PNG أو JPEG، بحد أقصى 20 ميجابايت.</small>
     <button className="nr-primary" disabled={busy||needsRefresh||!file} onClick={upload}>رفع وإرسال للمراجعة</button>
    </section>}
-   {files.length>0&&<section className="nr-detail-section"><h3>الأدلة المرفوعة</h3>
-    {files.map(x=><button key={x.id} type="button" className="nr-secondary" onClick={()=>openEvidence(x.storage_path)}>عرض الدليل: <bdi>{x.file_name}</bdi></button>)}
-    {evidenceLink&&<p role="status"><a href={evidenceLink} target="_blank" rel="noopener noreferrer">فتح الدليل (رابط مؤقت)</a></p>}
-   </section>}
+   {displayed&&assignment&&<EvidenceVersions key={assignment.id} files={files} selected={displayed} onSelect={setVersionId} status={assignment.status}/>}
    {role==="office"&&assignment?.status==="submitted"&&assignment.assignee_id!==currentUserId&&<section className="nr-detail-section"><h3>قرار المراجعة</h3>
+    {latestSelected?<small>يُسجّل القرار على النسخة {files.length}.</small>:<p className="nr-return">اختر أحدث نسخة من الدليل لتسجيل القرار.</p>}
     <label htmlFor="nr-review-note">ملاحظات المراجعة <small>(مطلوبة عند الإعادة)</small>
      <textarea id="nr-review-note" value={note} onChange={e=>setNote(e.target.value)} rows={3}/></label>
     <div className="nr-actions">
-     <button className="nr-primary" disabled={busy||needsRefresh} onClick={()=>review("approved")}>اعتماد الدليل</button>
-     <button className="nr-secondary" disabled={busy||needsRefresh||!note.trim()} onClick={()=>review("changes_requested")}>إعادة للتعديل</button>
+     <button className="nr-primary" disabled={busy||needsRefresh||!latestSelected} onClick={()=>review("approved")}>اعتماد الدليل</button>
+     <button className="nr-secondary" disabled={busy||needsRefresh||!latestSelected||!note.trim()} onClick={()=>review("changes_requested")}>إعادة للتعديل</button>
     </div>
    </section>}
+   {assignment&&completedReview===assignment.id&&nextReview&&<button type="button" className="nr-primary nr-next" disabled={busy||needsRefresh}
+    onClick={()=>{setPage(Math.floor(visible.indexOf(nextReview)/pageSize)+1);openRequirement(nextReview);}}>مراجعة الدليل التالي ←</button>}
    {role==="office"&&assignment?.status==="submitted"&&assignment.assignee_id===currentUserId&&<p role="note">يجب أن يراجع الدليل عضو آخر من مكتب البيانات.</p>}
   </AccessibleDialog>}
  </div>;

@@ -60,3 +60,35 @@ dialog.nr-overlay[open] { display: grid; justify-items: end; align-items: stretc
   .nr-table th.nr-status-col { width: 29%; }
   .nr-panel { padding: 16px; }
 }
+
+.nr-tools select { max-width: 19rem; width: 100%; }
+.nr-evidence-col .nr-mobile-meta { display: none; }
+.nr-late, .nr-row-note { display: block; margin-block-start: 4px; }
+.nr-table .nr-late { color: #963e26; }
+.nr-row-note { color: #654918; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nr-revise { border: 0; background: transparent; color: #115e59; padding: 6px 0; text-decoration: underline; }
+.nr-panel { inline-size: min(100%, 700px); }
+.nr-versions { justify-items: stretch; }
+.nr-return { margin: 0; padding: 10px 14px; color: #684812; background: #fff5df; border-inline-start: 3px solid #b8812f; }
+.nr-version-list { display: flex; flex-wrap: wrap; gap: 8px; max-height: 13rem; overflow-y: auto; padding: 4px; }
+.nr-version { display: grid; text-align: start; gap: 3px; min-width: 0; max-width: 100%; padding: 8px 13px; background: #fff; color: #32484a; border: 1px solid #b9c9c7; border-radius: 8px; }
+.nr-version[aria-pressed=true] { border: 2px solid #17695e; padding: 7px 12px; background: #eaf7f3; }
+.nr-version time, .nr-decisions time { font-size: .79rem; color: #43585d; }
+.nr-versions .review-preview { padding: 14px; border-radius: 10px; border: 1px solid #d2dfdc; background: #f5f9f8; }
+.nr-versions .review-preview-header { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 10px; }
+.nr-versions .review-preview-header p { margin: 2px 0; font-size: .85rem; }
+.nr-versions .review-button { border-radius: 6px; padding: 8px 12px; background: white; border: 1px solid #738d88; }
+.nr-versions .review-preview-pages { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 0; }
+.nr-versions :is(canvas,img) { max-inline-size: 100%; block-size: auto; }
+.nr-decisions summary { cursor: pointer; font-weight: 650; }
+.nr-decisions ol { padding-inline-start: 24px; }
+.nr-decisions li { padding: 5px 0; }
+.nr-decisions time { display: block; }
+.nr-decisions p { margin: 3px 0; white-space: pre-line; }
+.nr-next { margin-block-start: 14px; }
+@media (max-width: 700px) {
+  .nr-tools label { flex: 1 1 40%; }
+  .nr-tools select { max-width: 100%; }
+  .nr-count { flex-basis: 100%; padding: 0; }
+  .nr-evidence-col .nr-mobile-meta { display: block; font-size: .76rem; color: #43585d; margin-block-start: 4px; }
+}
