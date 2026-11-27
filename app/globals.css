@@ -367,3 +367,31 @@ body { font-feature-settings:"kern" 1,"liga" 1; }
   [data-workspace="data"] .cgp-topbar-context { display: none; }
   [data-workspace="data"] .cgp-account b { display: block; max-inline-size: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+
+/* Keep a consistent heading hierarchy within the Operations navigation. */
+.cgp-route[data-cgp-section="operations"] h1 {
+  font-size: clamp(21px, 1.9vw, 26px) !important;
+  line-height: 1.38;
+  letter-spacing: normal;
+  overflow-wrap: anywhere;
+}
+.cgp-route[data-cgp-section="operations"] h2 {
+  font-size: clamp(16px, 1.4vw, 19px) !important;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.cgp-route[data-cgp-section="operations"] .project-detail-head h1 {
+  font-size: clamp(19px, 1.7vw, 23px) !important;
+}
+.cgp-route[data-cgp-section="operations"] .project-register-dialog > header {
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+}
+.cgp-route[data-cgp-section="operations"] .project-register-dialog > header h2 { margin: 0; }
+.cgp-route[data-cgp-section="operations"] .project-register-dialog > header p {
+  margin: 3px 0 0;
+  color: #506473;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
