@@ -1,0 +1,5 @@
+.workflow-page.audit-trail-page > .workflow-heading { margin-block-end:14px; padding:16px 20px; }
+.audit-legacy { border:1px solid #dde8eb; border-radius:10px; background:#fff; margin-block-start:12px; padding:10px 12px; }
+.audit-legacy summary { color:#17364a; cursor:pointer; font-size:.85rem; font-weight:750; }
+.audit-legacy p { color:#536979; font-size:.77rem; margin-block:4px; }
+.audit-legacy-table { overflow:auto; }

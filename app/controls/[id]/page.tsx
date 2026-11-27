@@ -9,6 +9,7 @@ import GrcAuditTrail from "@/components/GrcAuditTrail";
 import ControlReviewPanel from "@/components/ControlReviewPanel";
 import { controlPlan } from "@/lib/control-plan";
 import { evidenceReviewHref } from "@/lib/evidence-review";
+import { positiveId } from "@/lib/audit-schedule";
 import { catalogBackHref, catalogDetailHref } from "@/lib/control-catalog-return";
 import { eccImplementationGuideUrl, eccOfficialControlsUrl, getEccOfficialTitle, getEccStrategyExample } from "@/lib/ecc-strategy-example";
 import Link from "next/link";
@@ -50,7 +51,10 @@ export default function ControlDetailsPage() {
 
 function ControlDetailsContent() {
  const {id}=useParams<{id:string}>(); const router=useRouter();
- const fromCatalog=useSearchParams().get("from")==="catalog";
+ const params=useSearchParams();
+ const fromCatalog=params.get("from")==="catalog";
+ const auditRequestId=positiveId(params.get("auditRequest"));
+ const auditCycleId=positiveId(params.get("auditCycle"));
  const [viewer,setViewer]=useState("");
  const [control,setControl]=useState<Control|null>(null),[evidence,setEvidence]=useState<Evidence[]>([]);
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[role,setRole]=useState<UserRole|null>(null);
@@ -149,7 +153,7 @@ function ControlDetailsContent() {
   <div className="detail-tabs" role="tablist" aria-label="تفاصيل الضابط">{tabs.map((label,index)=><button key={label} id={`detail-tab-${index}`} role="tab" aria-selected={tab===index} aria-controls={`detail-panel-${index}`} tabIndex={tab===index?0:-1} onClick={()=>setTab(index)} onKeyDown={event=>{let next=index;if(event.key==='ArrowLeft')next=(index+1)%tabs.length;else if(event.key==='ArrowRight')next=(index+tabs.length-1)%tabs.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;event.preventDefault();setTab(next);document.getElementById(`detail-tab-${next}`)?.focus();}}>{label}</button>)}</div>
   <section id={`detail-panel-${tab}`} role="tabpanel" aria-labelledby={`detail-tab-${tab}`} className="detail-columns">
    <div className="detail-content">
-   {tab===0&&<><ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload}/>
+   {tab===0&&<><ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload} targetRequestId={auditRequestId} targetCycleId={auditCycleId}/>
    <section className="detail-card requirements-projects-card">
     <h2>المتطلبات والمشاريع المرتبطة</h2>
     <p className="detail-hint">العلاقات عبر المتطلبات للقراءة فقط ضمن صلاحياتك. قد يرتبط المتطلب بأكثر من مشروع، وتبقى تغطية المواءمة وجودتها خاصة بكل متطلب وضابط.</p>
@@ -179,7 +183,7 @@ function ControlDetailsContent() {
    {tab===2&&<section className="detail-card"><h2>الضوابط المرتبطة</h2><p className="detail-hint">هذه علاقات مواءمة راجعها واعتمدها الفريق؛ نوع العلاقة وحدود تغطيتها موثقان في خريطة المواءمة. يمكن رفع الدليل مرة واحدة ثم اختياره للضوابط المرتبطة؛ ويظل قرار القبول مستقلًا لكل ضابط.</p>{!canReview?<p>تظهر المواءمات التفصيلية لمدير الامتثال والمراجعة ومدير النظام.</p>:!mappedControls.length?<p>لا توجد علاقات مواءمة معتمدة لهذا الضابط.</p>:<div className="detail-timeline">{mappedControls.map(item=>{const matchedReflections=reflections.filter(result=>result.source_framework===item.framework_code&&result.source_control_code===item.control_code);return <article key={item.control_id}><strong><span dir="ltr">{item.framework_code} · {item.control_code}</span> — {item.control_title}</strong><small>{matchedReflections.length?matchedReflections.map(result=>`${result.assessment_scope}: ${assessmentStatusText[result.compliance_status]||'لم يُقيّم'}`).join(' | '):'لا توجد نتيجة معتمدة ضمن علاقة موثقة'}</small><p>{item.source_note||'راجع مصدر العلاقة وحدودها في خريطة المواءمة.'}</p><Link className="detail-back" href={`/controls/${item.control_id}`}>فتح الضابط المرتبط ←</Link></article>})}</div>}{canReview&&<p style={{marginTop:18}}><Link className="detail-button" href="/mappings">فتح خريطة المواءمة ←</Link></p>}</section>}
    {tab===3&&<section className="detail-card"><h2>سجل الأدلة والملاحظات</h2>{!timeline.length&&<p>لا توجد أنشطة مسجلة بعد.</p>}<ol className="detail-timeline">{timeline.map(item=><li key={item.key}><strong>{item.title}</strong><small>{date(item.time)}</small>{item.body&&<p>{item.body}</p>}</li>)}</ol></section>}
    </div>
-   <aside>{tab===3&&<GrcAuditTrail controlId={control.id}/>} {tab===0&&!archived&&<section className="detail-card"><h2>التدقيق الدوري</h2><p className="detail-hint">تتم جدولة ومتابعة جميع التدقيقات من صفحة موحدة حسب سياسة الجهة.</p><p><strong>الموعد القادم:</strong> {control.next_audit_date||"غير مجدول"}</p><Link className="detail-button" href="/audit-schedule">فتح جدول التدقيق الدوري ←</Link></section>}</aside>
+   <aside>{tab===3&&<GrcAuditTrail controlId={control.id} globalLink={role==="admin"||role==="cybersecurity_team"}/>} {tab===0&&!archived&&<section className="detail-card"><h2>التدقيق الدوري</h2><p className="detail-hint">تتم جدولة ومتابعة جميع التدقيقات من صفحة موحدة حسب سياسة الجهة.</p><p><strong>الموعد القادم:</strong> {control.next_audit_date||"غير مجدول"}</p><Link className="detail-button" href={`/audit-schedule?control=${control.id}`}>فتح جدول التدقيق الدوري ←</Link></section>}</aside>
   </section>
  </main>;
 }
