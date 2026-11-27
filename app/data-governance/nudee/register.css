@@ -109,3 +109,6 @@ dialog.nr-overlay[open] { display: grid; justify-items: end; align-items: stretc
 .nr-level-group li { padding: .7rem; border-inline-start: 3px solid #c8ded4; margin-block: .45rem; background: #f6f9f7; }
 .nr-level-group li > div {display: flex; align-items: baseline; flex-wrap: wrap; gap: .65rem;}
 .nr-level-group p,.nr-scope-note { font-size: .87rem; color: #475f57; }
+
+.nr-next {display:flex;gap:8px 16px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#edf6f1;color:#24473b;border-radius:8px;padding:7px 12px;font-size:.88rem}
+.nr-next a {display:inline-flex;align-items:center;min-height:42px;font-weight:700;color:#075e4b}

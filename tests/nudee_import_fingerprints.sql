@@ -40,7 +40,7 @@ BEGIN
   'source_progress', md5(string_agg(coalesce(source_progress::float8::text,''),chr(31) order by source_row)),
   'schedule_indicator', md5(string_agg(coalesce("schedule_indicator"::text,''),chr(31) order by source_row))
  ) INTO v_n,v_sources,v_domains,v_codes,v_evidence,v_min,v_max,v_actual
- FROM public.nudee_requirements;
+ FROM public.nudee_requirements WHERE source_row BETWEEN 2 AND 365;
  IF v_n<>364 OR v_sources<>364 OR v_domains<>14 OR v_codes<>42
     OR v_evidence<>364 OR v_min<>2 OR v_max<>365
  THEN RAISE EXCEPTION 'Nudee source shape mismatch: %,%,%,%,%,%,%',

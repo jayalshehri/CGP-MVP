@@ -107,7 +107,7 @@ class Fixture:
                             missing += 1
                     state = "no_target" if not target else "baseline" if not rank else "blocked" if missing else "confirmed" if d["confirmed"] else "ready"
                     result.append(dict(standard_code=code, domain_name=domain, target_level=target, question_state=state, missing_count=missing))
-            elif path == "/rest/v1/rpc/nudee_preparation_manifest" and role == "office":
+            elif path in ("/rest/v1/rpc/nudee_preparation_manifest", "/rest/v1/rpc/nudee_export_manifest") and role == "office":
                 result = []
                 for req in self.requirements:
                     if req["domain_name"] != payload["p_domain"]:
@@ -132,6 +132,8 @@ class Fixture:
                 self.files.append(dict(source, id=result, assignment_id=target["id"], source_submission_id=source["id"],
                                        source_locator=payload["p_locator"]))
                 target["status"] = "submitted"
+            elif path == "/rest/v1/rpc/nudee_approval_officers" and role == "office":
+                result = [profile("office")]
             elif path == "/rest/v1/rpc/nudee_assignees" and role == "office":
                 result = [profile("owner")]
             elif path == "/rest/v1/nudee_final_review" and role == "office":
@@ -178,6 +180,10 @@ class Fixture:
                 assigned = [r for r in self.assignments if role == "office" or r["assignee_id"] == OWNER]
                 ids = {r["requirement_id"] for r in assigned}
                 tables = {
+                    "nudee_improvements": [],
+                    "nudee_cycles": [],
+                    "nudee_evidence_mapping": [],
+                    "nudee_specifications": [{"code": "DG.1.1", "page": 20}] if role == "office" else [],
                     "nudee_requirements": [r for r in self.requirements if role == "office" or r["id"] in ids],
                     "nudee_assignments": assigned, "nudee_submissions": self.files,
                     "nudee_question_decisions": self.decisions if role == "office" else [],

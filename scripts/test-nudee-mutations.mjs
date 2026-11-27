@@ -63,7 +63,7 @@ function createPage({ role = 'data_governance_team', initialStatus, empty = fals
       if (name === 'nudee_assignees') return { data: [{ user_id: 'qa-owner', display_name: 'مالك اختبار', role: 'nudee_owner' }], error: null };
       calls.rpc.push({ name, args });
       await tick();
-      if (name === 'nudee_submit_evidence' && transport.submitError) return { data: null, error: transport.submitError };
+      if (name === 'nudee_submit_with_locator' && transport.submitError) return { data: null, error: transport.submitError };
       if (name === 'nudee_assign' || name === 'nudee_assign_many') {
         const ids = name === 'nudee_assign' ? [args.p_requirement_id] : args.p_requirement_ids;
         for (const id of ids) {
@@ -101,7 +101,7 @@ function createPage({ role = 'data_governance_team', initialStatus, empty = fals
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'fragment' };
       if (name === 'next/navigation') return { useSearchParams: () => new URL(location.href).searchParams };
       if (name === './reference') return { governanceDomain: 'حوكمة البيانات', localLevels: ['المستوى 1: البناء','المستوى 2: التعريف','المستوى 3: التفعيل'] };
-      if (name === './SourceReference' || name === './EvidenceGroups') return { default: 'section' };
+      if (name === './SourceReference' || name === './EvidenceGroups' || name === './MyImprovements') return { default: 'section' };
       if (name === './EvidenceVersions') return { default: 'versions' };
       if (name === '@/lib/strategy-read') return { readStrategyRows: fetch => fetch(0, 499) };
       if (name === '@/components/AccessibleDialog') return { default: 'dialog' };
@@ -247,7 +247,7 @@ test('dashboard views, combined search and the status reset use the same registe
 });
 
 test('ambiguous upload response preserves binary and selected file; does not infer rollback from absent submission', async () => {
-  const page = createPage({ role: 'nudee_owner', initialStatus: 'assigned' }); await page.init(); page.selectRequirement(1); page.chooseFile();
+  const page = createPage({ role: 'nudee_owner', initialStatus: 'assigned' }); await page.init(); page.selectRequirement(1); page.chooseFile(); page.change(n => n.props?.id === 'nr-upload-locator', 'صفحة ١');
   page.transport.submitError = { code: 'PGRST_TIMEOUT', message: 'uncertain response' };
   await page.click('رفع وإرسال للمراجعة'); page.render();
   assert.equal(page.calls.upload.length, 1); assert.equal(page.calls.remove.length, 0);
@@ -256,7 +256,7 @@ test('ambiguous upload response preserves binary and selected file; does not inf
 });
 
 test('explicit upload submission rejection permits cleanup only after an absent-submission confirmation', async () => {
-  const page = createPage({ role: 'nudee_owner', initialStatus: 'assigned' }); await page.init(); page.selectRequirement(1); page.chooseFile();
+  const page = createPage({ role: 'nudee_owner', initialStatus: 'assigned' }); await page.init(); page.selectRequirement(1); page.chooseFile(); page.change(n => n.props?.id === 'nr-upload-locator', 'صفحة ١');
   page.transport.submitError = { code: '42501', message: 'explicit database rejection' };
   await page.click('رفع وإرسال للمراجعة'); page.render();
   assert.equal(page.calls.remove.length, 1);
@@ -265,7 +265,7 @@ test('explicit upload submission rejection permits cleanup only after an absent-
 });
 
 test('failed submission confirmation preserves uploaded binary even after explicit rejection', async () => {
-  const page = createPage({ role: 'nudee_owner', initialStatus: 'assigned' }); await page.init(); page.selectRequirement(1); page.chooseFile();
+  const page = createPage({ role: 'nudee_owner', initialStatus: 'assigned' }); await page.init(); page.selectRequirement(1); page.chooseFile(); page.change(n => n.props?.id === 'nr-upload-locator', 'صفحة ١');
   page.transport.submitError = { code: '42501', message: 'explicit rejection' };
   page.transport.failConfirmation = true;
   await page.click('رفع وإرسال للمراجعة'); page.render();

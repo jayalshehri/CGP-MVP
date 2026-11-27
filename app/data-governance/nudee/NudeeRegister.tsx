@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 import EvidenceVersions, { type Submission } from "./EvidenceVersions";
 import { readStrategyRows } from "@/lib/strategy-read";
+import MyImprovements from "./MyImprovements";
 import AccessibleDialog from "@/components/AccessibleDialog";
 import "../data-governance.css";
 import "./register.css";
@@ -70,27 +71,18 @@ export default function NudeeRegister(){
   const {user,profile}=await requireProfile(["admin","data_governance_team","nudee_owner"]);
   setCurrentUserId(user.id);
   const office=profile.role==="admin"||profile.role==="data_governance_team";
-  const {data:a,error:ae}=await supabase.from("nudee_assignments").select("id,requirement_id,assignee_id,status,updated_at,due_date,review_notes").order("id");
-  if(ae)throw ae;
-
-  const files=await readStrategyRows<Submission>((from,to)=>supabase.from("nudee_submissions")
-   .select("id,assignment_id,file_name,storage_path,submitted_at,source_submission_id,source_locator",{count:"exact"}).order("id",{ascending:false}).range(from,to),s=>s.id);
-  if(files.error)throw new Error("تعذر تحميل نسخ الأدلة.");
-
-  if(office){
-   const [{data:r,error:re},{data:u,error:ue}]=await Promise.all([
-    supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance,specification_code,responsible_department,planned_end,acceptance_pdf_page").order("source_row").limit(1000),
-    supabase.rpc("nudee_assignees")
-   ]);
-   if(re)throw re;if(ue)throw ue;
-   setRequirements((r??[]) as Requirement[]);setUsers((u??[]) as User[]);setRole("office");
-  }else{
-   const {data:r,error:re}=await supabase.from("nudee_requirements").select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance,specification_code,responsible_department,planned_end,acceptance_pdf_page").order("source_row").limit(1000);
-   if(re)throw re;
-   setRequirements((r??[]) as Requirement[]);
-   setRole("assignee");
-  }
-  setAssignments((a??[]) as Assignment[]);
+  const [tasks,files,requirements,directory]=await Promise.all([
+   readStrategyRows<Assignment>((from,to)=>supabase.from("nudee_assignments")
+    .select("id,requirement_id,assignee_id,status,updated_at,due_date,review_notes",{count:"exact"}).order("id").range(from,to),row=>row.id),
+   readStrategyRows<Submission>((from,to)=>supabase.from("nudee_submissions")
+    .select("id,assignment_id,file_name,storage_path,submitted_at,source_submission_id,source_locator",{count:"exact"}).order("id",{ascending:false}).range(from,to),row=>row.id),
+   readStrategyRows<Requirement>((from,to)=>supabase.from("nudee_requirements")
+    .select("id,source_row,domain_name,standard_code,requirement_title,maturity_level,evidence_name,evidence_description,source_compliance,specification_code,responsible_department,planned_end,acceptance_pdf_page",{count:"exact"}).order("source_row").order("id").range(from,to),row=>row.id),
+   office?supabase.rpc("nudee_assignees"):Promise.resolve({data:[],error:null})
+  ]);
+  if(tasks.error||files.error||requirements.error||directory.error)throw new Error("تعذر تحميل السجل كاملًا. أعد المحاولة.");
+  setRole(office?"office":"assignee");setUsers(directory.data??[]);
+  setRequirements(requirements.data);setAssignments(tasks.data);
   setSubmissions(files.data);
   setNeedsRefresh(false);
  },[setAssignments,setCurrentUserId,setNeedsRefresh,setRequirements,setRole,setSubmissions,setUsers]);
@@ -220,7 +212,7 @@ export default function NudeeRegister(){
   finally{pending.current=false;setBusy(false);}
  }
  async function upload(){
-  if(!assignment||!file||assignment.assignee_id!==currentUserId||pending.current||needsRefresh)return;
+  if(!assignment||!file||!uploadLocator.trim()||assignment.assignee_id!==currentUserId||pending.current||needsRefresh)return;
   pending.current=true;setBusy(true);setError("");setNotice("");
   let uploadedPath:string|null=null;
   let submissionConfirmed=false;
@@ -238,9 +230,7 @@ export default function NudeeRegister(){
    if(ue)throw ue;
    uploadedPath=path;
    const args={p_assignment_id:assignment.id,p_storage_path:path,p_file_name:file.name};
-   const {error:se}=uploadLocator.trim()
-    ? await supabase.rpc("nudee_submit_with_locator",{...args,p_locator:uploadLocator.trim()})
-    : await supabase.rpc("nudee_submit_evidence",args);
+   const {error:se}=await supabase.rpc("nudee_submit_with_locator",{...args,p_locator:uploadLocator.trim()});
    if(se){
     // PostgreSQL errors below abort the transaction. Never infer rollback from
     // a transport error or an ambiguous PostgREST/gateway failure.
@@ -287,6 +277,7 @@ export default function NudeeRegister(){
    <h1>{role==="assignee"?"مهامي":"مركز الأدلة"}</h1>
    {role&&<p>{role==="assignee"?"تابع تكليفاتك وارفع أدلتك لمراجعة مكتب البيانات.":"تابع أدلة القياس من الإسناد وحتى الاعتماد."}</p>}
   </header>
+  {role==="assignee"&&currentUserId&&<MyImprovements userId={currentUserId}/>}
   {role==="office"&&<SourceReference/>}
   {!current&&feedback}
   {loading&&<p role="status">جارٍ تحميل المتطلبات والأدلة…</p>}
@@ -362,6 +353,10 @@ export default function NudeeRegister(){
     <div><small><bdi>{current.standard_code}</bdi> · {current.domain_name}</small><h2 id="nr-detail-title">{current.evidence_name}</h2></div>
     <button autoFocus type="button" className="nr-secondary" disabled={busy} onClick={closeRequirement}>إغلاق</button>
    </header>
+   <div className="nr-next"><span>{statusLabels[assignment?.status??"unassigned"]||"لم يُسند"} · {assignment?.assignee_id?names.get(assignment.assignee_id)||(role==="assignee"?"مكلّف لك":"مكلّف مسجّل"):"بانتظار الإسناد"}{assignment?.due_date&&" · "+assignment.due_date}</span>
+   {canUpload&&<a href="#nr-submit">انتقل إلى إرسال الدليل ↓</a>}
+   {role==="office"&&canAssign(assignment)&&<a href="#nr-assign">انتقل إلى الإسناد ↓</a>}
+   {role==="office"&&assignment?.status==="submitted"&&assignment.assignee_id!==currentUserId&&<a href="#nr-review">انتقل إلى قرار المراجعة ↓</a>}</div>
    {feedback}
    <p>{current.requirement_title}</p>
    <section className="nr-detail-section"><h3>ما المطلوب في الدليل؟</h3>
@@ -387,19 +382,19 @@ export default function NudeeRegister(){
     {assignment?.due_date&&<div><dt>الاستحقاق</dt><dd><time dir="ltr">{assignment.due_date}</time></dd></div>}
    </dl>
    {assignment?.review_notes&&<p className="nr-message"><strong>ملاحظات المكتب</strong><br/>{assignment.review_notes}</p>}
-   {role==="office"&&canAssign(assignment)&&<section className="nr-detail-section"><h3>إسناد المتطلب</h3>
+   {role==="office"&&canAssign(assignment)&&<section id="nr-assign" tabIndex={-1} className="nr-detail-section"><h3>إسناد المتطلب</h3>
     <label htmlFor="nudee-assignee">المسؤول عن رفع الدليل
      <select id="nudee-assignee" value={assignee} onChange={e=>setAssignee(e.target.value)}><option value="">اختر المستخدم</option>{userOptions}</select></label>
     <label htmlFor="nudee-due">تاريخ الاستحقاق<input id="nudee-due" type="date" value={due} onChange={e=>setDue(e.target.value)} /></label>
     <button className="nr-primary" disabled={busy||needsRefresh||!assignee} onClick={assign}>حفظ التكليف</button>
    </section>}
-   {canUpload&&<section className="nr-detail-section"><h3>إرسال الدليل</h3>
+   {canUpload&&<section id="nr-submit" tabIndex={-1} className="nr-detail-section"><h3>إرسال الدليل</h3>
     <label htmlFor="nudee-file">ملف الدليل<input key={selected} id="nudee-file" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" aria-describedby="nr-file-formats"
      disabled={busy||needsRefresh} onChange={e=>setFile(e.target.files?.[0]||null)} /></label>
     <small id="nr-file-formats">PDF أو DOCX أو PNG أو JPEG، بحد أقصى 20 ميجابايت.</small>
     <label htmlFor="nr-upload-locator">موضع الإثبات في الملف <small>(الصفحة أو البند)</small>
-     <input id="nr-upload-locator" value={uploadLocator} maxLength={300} disabled={busy||needsRefresh} onChange={e=>setUploadLocator(e.target.value)} placeholder="مثال: صفحة ٤، بند اعتماد السياسة"/></label>
-    <button className="nr-primary" disabled={busy||needsRefresh||!file} onClick={upload}>رفع وإرسال للمراجعة</button>
+     <input id="nr-upload-locator" required value={uploadLocator} maxLength={300} disabled={busy||needsRefresh} onChange={e=>setUploadLocator(e.target.value)} placeholder="مثال: صفحة ٤، بند اعتماد السياسة"/></label>
+    <button className="nr-primary" disabled={busy||needsRefresh||!file||!uploadLocator.trim()} onClick={upload}>رفع وإرسال للمراجعة</button>
    </section>}
    {canUpload&&reusable.length>0&&<details className="nr-detail-section"><summary>استخدام دليل معتمد من تكليفاتي</summary>
     <label>الدليل السابق<select value={sourceId} onChange={e=>setSourceId(e.target.value)} disabled={busy||needsRefresh}>
@@ -408,7 +403,7 @@ export default function NudeeRegister(){
     <button className="nr-primary" disabled={busy||needsRefresh||!sourceId||!locator.trim()} onClick={reuse}>إرسال النسخة لمراجعة المتطلب</button>
    </details>}
    {displayed&&assignment&&<EvidenceVersions key={assignment.id} files={files} selected={displayed} onSelect={setVersionId} status={assignment.status}/>}
-   {role==="office"&&assignment?.status==="submitted"&&assignment.assignee_id!==currentUserId&&<section className="nr-detail-section"><h3>قرار المراجعة</h3>
+   {role==="office"&&assignment?.status==="submitted"&&assignment.assignee_id!==currentUserId&&<section id="nr-review" tabIndex={-1} className="nr-detail-section"><h3>قرار المراجعة</h3>
     {latestSelected?<small>يُسجّل القرار على النسخة {files.length}.</small>:<p className="nr-return">اختر أحدث نسخة من الدليل لتسجيل القرار.</p>}
     <label>تصنيف سبب الإعادة<select value={reason} onChange={e=>setReason(e.target.value)}>
      <option value="">اكتب السبب في الملاحظات أو اختر تصنيفًا</option>

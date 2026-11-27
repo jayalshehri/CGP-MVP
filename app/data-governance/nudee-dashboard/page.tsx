@@ -84,6 +84,7 @@ function OfficeSummary({ records, assignments }: OfficeData) {
     { view: "overdue", title: "متابعة التكليفات المتأخرة اليوم", count: summary.overdue },
   ];
   return <>
+    {typeof window!=="undefined" && new URLSearchParams(window.location.search).has("section") && <p className={styles.empty} role="status">هذا الرابط يعود إلى خدمة سابقة. استخدم إجراءات المكتب أدناه، أو افتح <Link href="/data-governance/nudee">مركز الأدلة</Link>.</p>}
     <dl className={styles.homeMetrics} aria-label="ملخص متطلبات نُضيء">
       {[
         { label: "الأدلة المطلوبة", value: records.length },
