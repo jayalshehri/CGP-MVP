@@ -84,3 +84,16 @@
   .filters { padding-inline: 10px; }
   .search { grid-column: 1 / -1; }
 }
+
+.registerTable th[scope="row"] { background: #fff !important; }
+.registerTable th[scope="row"] a { color: #116860; }
+@media (max-width: 660px) {
+  .registerHeader { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .registerHeader p { display: none; }
+  .registerHeader :global(.roadmap-primary) {
+    padding: 7px 10px;
+    min-height: 40px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+}
