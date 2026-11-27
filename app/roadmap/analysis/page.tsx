@@ -124,10 +124,10 @@ export default function PortfolioAnalysisPage() {
   return (
     <main className="roadmap-page portfolio-analysis" dir="rtl">
       <section className="roadmap-shell">
-        <nav className="roadmap-view-tabs" aria-label="إدارة محفظة الأمن السيبراني">
-          <Link href="/roadmap">سجل المشاريع السيبرانية</Link>
-          <Link className="active" href="/roadmap/analysis">تحليل المحفظة السيبرانية</Link>
-          <Link href="/roadmap/dashboard">خارطة طريق المشاريع</Link>
+        <nav className="roadmap-view-tabs" aria-label="أقسام المشاريع السيبرانية">
+          <Link href="/roadmap">السجل</Link>
+          <Link href="/roadmap/dashboard">خارطة الطريق</Link>
+          <Link className="active" aria-current="page" href="/roadmap/analysis">تحليل المحفظة</Link>
         </nav>
 
         <header className="portfolio-hero">
