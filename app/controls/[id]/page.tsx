@@ -3,13 +3,13 @@ import { formatRiyadhDate, formatRiyadhDateTime } from "@/lib/dates";
 import { Suspense, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { requireProfile, type UserRole } from "@/lib/auth";
-import StatusBadge, { statusText } from "@/components/StatusBadge";
+import StatusBadge from "@/components/StatusBadge";
 import EvidenceDownload from "@/components/EvidenceDownload";
 import ControlAssessmentHistory from "@/components/ControlAssessmentHistory";
 import GrcAuditTrail from "@/components/GrcAuditTrail";
 import ControlReviewPanel from "@/components/ControlReviewPanel";
 import ControlStateStrip from "@/components/ControlStateStrip";
-import { controlHeading, controlFrameworkLabel, controlFollowUp, followUpText } from "@/lib/control-presentation";
+import { controlHeading, controlFrameworkLabel, controlFollowUp, followUpText, crosswalkTypeLabels } from "@/lib/control-presentation";
 import { controlPlan } from "@/lib/control-plan";
 import { evidenceReviewHref } from "@/lib/evidence-review";
 import { positiveId } from "@/lib/audit-schedule";
@@ -17,7 +17,7 @@ import { catalogBackHref, catalogDetailHref } from "@/lib/control-catalog-return
 import { eccImplementationGuideUrl, eccOfficialControlsUrl, getEccStrategyExample } from "@/lib/ecc-strategy-example";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { frequencyLabels, scheduleState, scheduleStateLabels, cycleStage, cycleStageLabels } from "@/lib/grc";
+import { frequencyLabels, cycleStage, cycleStageLabels } from "@/lib/grc";
 import "./detail.css";
 
 type Control = { id:number; control_code:string; title_ar:string; description_ar:string|null; official_text_ar:string|null; hierarchy_level:string; parent_control_id:number|null; applicability:string|null; source_page:string|null; domain_ar:string; implementation_status:string; evidence_status:string; verification_status:string; due_date:string|null; last_review_date:string|null; control_owner:string|null; evidence_owner:string|null; audit_frequency:string; next_audit_date:string|null; frameworks:{code:string,name_ar:string,version:string,is_active:boolean,source_url:string|null}|null; };
@@ -39,6 +39,11 @@ const assessmentStatusText:Record<string,string>={implemented:'مطبق كليً
 const coverageText:Record<string,string>={full:'كاملة',partial:'جزئية',supporting:'داعمة'};
 const mappingConfidenceText:Record<string,string>={confirmed:'مؤكد',probable:'محتمل'};
 const single=<T,>(value:T|T[]|null):T|null=>Array.isArray(value)?value[0]??null:value;
+function groupBy<T, K>(values: T[], key: (item:T)=>K) {
+ const groups=new Map<K,T[]>();
+ for(const item of values){const value=key(item);const group=groups.get(value);if(group)group.push(item);else groups.set(value,[item]);}
+ return groups;
+}
 export default function ControlDetailsPage() {
  return <Suspense fallback={<main className="detail-page" role="status">جارٍ تحميل الضابط…</main>}><ControlDetailsRoute/></Suspense>;
 }
@@ -75,6 +80,8 @@ function ControlDetailsContent() {
  const [reviewerName,setReviewerName]=useState<string|null>(null);
  const [parentControl,setParentControl]=useState<HierarchyPeer|null>(null);
  const [childControls,setChildControls]=useState<HierarchyPeer[]>([]);
+ const [mappingRead,setMappingRead]=useState<'loading'|'ready'|'error'>('loading');
+ const [activityVersion,setActivityVersion]=useState(0);
  useEffect(()=>{let active=true;(async()=>{try{
   const {user,profile}=await requireProfile();if(!active)return;setRole(profile.role);setViewer(user.id);
   const controlId=Number(id);if(!Number.isSafeInteger(controlId)||controlId<=0)throw new Error('رقم الضابط غير صحيح.');
@@ -117,7 +124,17 @@ function ControlDetailsContent() {
  const archived=control?.frameworks?.is_active===false;
  const canReview=!archived&&(role==='admin'||role==='cybersecurity_team');
  const canUpload=!archived&&(canReview||role==='control_owner');
- useEffect(()=>{let active=true;if(!control||!canReview)return()=>{active=false;};void Promise.all([supabase.rpc('ecc_assessment_reflections',{p_ecc_control_id:control.id}),supabase.rpc('grc_control_mappings',{p_control_id:control.id})]).then(([reflectionResult,mappingResult])=>{if(active){setReflections((reflectionResult.data??[]) as AssessmentReflection[]);setMappedControls((mappingResult.data??[]) as MappedControl[]);}});return()=>{active=false;};},[control,canReview]);
+ useEffect(()=>{
+  let active=true;
+  if(!control||!canReview)return;
+  void Promise.all([supabase.rpc('ecc_assessment_reflections',{p_ecc_control_id:control.id}),supabase.rpc('grc_control_mappings',{p_control_id:control.id})]).then(([reflectionResult,mappingResult])=>{
+   if(!active)return;
+   setReflections((reflectionResult.data??[]) as AssessmentReflection[]);
+   setMappedControls((mappingResult.data??[]) as MappedControl[]);
+   setMappingRead(mappingResult.error ? 'error' : 'ready');
+  }).catch(()=>{if(active)setMappingRead('error');});
+  return()=>{active=false;};
+ },[control,canReview]);
  const backToControls=fromCatalog?catalogBackHref(viewer):"/controls";
  const relatedControlHref=(controlId:number)=>fromCatalog?catalogDetailHref(controlId):`/controls/${controlId}`;
  if(loading)return <main className="detail-page" role="status">جارٍ تحميل الضابط…</main>;
@@ -143,7 +160,11 @@ function ControlDetailsContent() {
  const needsReview=currentEvidence.find(e=>['pending_review','under_review'].includes(e.status??''));
  const action=controlFollowUp({archived,implementation:control.implementation_status,evidence:control.evidence_status,verification:control.verification_status});
  const stage=cycleStage(!!openCycleId,latestRequestStatus);
- const deadline=scheduleState(control.next_audit_date);
+ const mappingGroups=groupBy(
+  [...mappedControls].sort((a,b)=>a.framework_code.localeCompare(b.framework_code)||a.control_code.localeCompare(b.control_code,'en',{numeric:true})),
+  item=>item.framework_code,
+ );
+ const projectsByRequirement=groupBy(projectLinks.filter(p=>single(p.cybersecurity_projects)),item=>item.requirement_id);
  const scheduleHref=`/audit-schedule?control=${control.id}`;
  const evidenceHref=`/controls/${control.id}/evidence/new`;
  const periodicLabel=frequencyLabels[control.audit_frequency]??control.audit_frequency??'غير محدد';
@@ -153,7 +174,7 @@ function ControlDetailsContent() {
   const identity=`${e.id}-${e.link_id??'source'}`;
   return [
    ...(e.uploaded_at?[{key:`upload-${identity}`,time:e.uploaded_at,title:`رفع دليل · ${name}`,by:e.uploader_name,body:e.description}]:[]),
-   ...(e.reviewed_at?[{key:`review-${identity}`,time:e.reviewed_at,title:`مراجعة الدليل · ${name} · ${statusText(e.status||'')}`,by:e.reviewer_display_name,body:e.review_notes}]:[])
+   ...(e.reviewed_at?[{key:`review-${identity}`,time:e.reviewed_at,title:`مراجعة الدليل · ${name}`,by:e.reviewer_display_name,body:e.review_notes}]:[])
   ];
  }).sort((a,b)=>Date.parse(b.time)-Date.parse(a.time));
 
@@ -227,7 +248,7 @@ function ControlDetailsContent() {
     }}>{label}{index===1&&currentEvidence.length>0&&<bdi className="detail-tab-count">{currentEvidence.length}</bdi>}</button>)}
   </div>
   {tabs.map((label,index)=>index!==tab&&<section key={label} id={`detail-panel-${index}`} role="tabpanel" aria-labelledby={`detail-tab-${index}`} hidden/>)}
-  <section id={`detail-panel-${tab}`} role="tabpanel" aria-labelledby={`detail-tab-${tab}`} className={`detail-columns${tab===0||tab===3?' detail-with-aside':''}`}>
+  <section id={`detail-panel-${tab}`} role="tabpanel" aria-labelledby={`detail-tab-${tab}`} className={`detail-columns${tab===0?' detail-with-aside':''}`}>
    <div className="detail-content">
     {tab===0&&<>
      <section className="detail-card detail-official-card">
@@ -258,44 +279,54 @@ function ControlDetailsContent() {
        <bdi dir="ltr">{k.control_code}</bdi><span>{controlHeading(frameworkKey,k.control_code,k.title_ar)}</span><StatusBadge status={k.implementation_status}/>
       </Link></li>)}</ul>}
      </section>}
-     <section className="detail-card"><div className="detail-row-heading"><h2>المواءمات مع الأطر</h2>{canReview&&<Link className="detail-secondary" href="/mappings">خريطة المواءمة</Link>}</div>
-      {!canReview?<p className="detail-empty">تعرض المواءمات التفصيلية لفريق الامتثال ومدير النظام.</p>:!mappedControls.length?<p className="detail-empty">لا توجد مواءمات معتمدة لهذا الضابط.</p>:<div className="detail-mapping-list">{mappedControls.map(item=>{
-       const matched=reflections.filter(result=>result.source_framework===item.framework_code&&result.source_control_code===item.control_code);
-       return <article key={item.control_id}><Link className="detail-inline-link" href={relatedControlHref(item.control_id)}><bdi dir="ltr">{item.framework_code} · {item.control_code}</bdi> {item.control_title}</Link>
-        {matched.length>0&&<p className="detail-hint">{matched.map(result=>`${result.assessment_scope} · ${assessmentStatusText[result.compliance_status]||'لم يُقيّم'}`).join(' | ')}</p>}
-        {item.source_note&&<details className="detail-disclosure"><summary>ملاحظة المواءمة</summary><p>{item.source_note}</p></details>}
-       </article>;
-      })}</div>}
+     <section className="detail-card">
+      <div className="detail-row-heading"><h2>المواءمات مع الأطر {canReview&&mappingRead==='ready'&&mappedControls.length>0&&<bdi className="detail-tab-count">{mappedControls.length}</bdi>}</h2>
+       {canReview&&<Link className="detail-secondary" href={`/mappings?control=${control.id}`}>خريطة المواءمة</Link>}</div>
+      {!canReview?<p className="detail-empty">تعرض المواءمات التفصيلية لفريق الامتثال ومدير النظام.</p>
+       :mappingRead==='loading'?<p role="status" className="detail-empty">جارٍ تحميل المواءمات…</p>
+       :mappingRead==='error'?<p role="alert" className="detail-empty">تعذّر تحميل المواءمات. أعد تحميل الصفحة للمحاولة.</p>
+       :!mappedControls.length?<p className="detail-empty">لا توجد مواءمات معتمدة لهذا الضابط.</p>
+       :<>
+        <p className="detail-hint">المواءمة توضح العلاقة بين المتطلبات. لا تنقل نتيجة الالتزام أو اعتماد الدليل.</p>
+        {[...mappingGroups].map(([framework,items])=><section className="detail-mapping-group" key={framework} aria-label={`مواءمات ${framework}`}>
+         <h3><bdi dir="ltr">{framework}</bdi> <bdi className="detail-tab-count">{items.length}</bdi></h3>
+         <ul className="detail-relationship-list">{items.map((item,index)=>{
+          const matched=reflections.filter(result=>result.source_framework===item.framework_code&&result.source_control_code===item.control_code);
+          return <li key={`${item.control_id}:${index}`} className="detail-relation-row">
+           <div className="detail-rel-line"><Link className="detail-inline-link" href={relatedControlHref(item.control_id)}><bdi dir="ltr">{item.control_code}</bdi> · {controlHeading(item.framework_code,item.control_code,item.control_title)}</Link>
+            <span className="detail-relation-kind">{crosswalkTypeLabels[item.relationship_type]??'نوع العلاقة غير موضح'}</span></div>
+           {(item.source_note||matched.length>0)&&<details className="detail-disclosure"><summary>تفاصيل المواءمة</summary>
+            {item.source_note&&<p>{item.source_note}</p>}
+            {matched.length>0&&<ul className="detail-relation-outcomes">{matched.map((result,i)=><li key={i}>{result.assessment_scope||'نطاق غير مسمى'} · {assessmentStatusText[result.compliance_status]||'لم يُقيّم'}</li>)}</ul>}
+           </details>}
+          </li>;
+         })}</ul>
+        </section>)}
+       </>}
      </section>
-     <section className="detail-card requirements-projects-card"><h2>المتطلبات والمشاريع المرتبطة</h2>
+     <section className="detail-card"><h2>المتطلبات والمشاريع المرتبطة {requirementLinks.length>0&&<bdi className="detail-tab-count">{requirementLinks.length}</bdi>}</h2>
       {!requirementLinks.length?<p className="detail-empty">لا توجد متطلبات مرتبطة ضمن صلاحياتك.</p>:
-      <div className="req-proj-table-wrap"><table className="req-proj-table"><thead><tr><th scope="col">المتطلب</th><th scope="col">التغطية</th><th scope="col">جودة الربط</th><th scope="col">المشروع</th></tr></thead><tbody>
-      {requirementLinks.flatMap(link=>{
-       const requirement=single(link.cybersecurity_requirements);
-       const visibleProjects=projectLinks.filter(p=>p.requirement_id===link.requirement_id&&single(p.cybersecurity_projects));
-       return (visibleProjects.length?visibleProjects:[null]).map(projectLink=>{
-        const project=projectLink?single(projectLink.cybersecurity_projects):null;
-        return <tr key={`${link.requirement_id}:${projectLink?.project_id??'none'}`}>
-         <td>{requirement?<><bdi dir="ltr">{requirement.requirement_code}</bdi> · {requirement.title_ar}</>:'—'}</td>
-         <td><span className={`coverage-pill ${link.coverage_type}`}>{coverageText[link.coverage_type]}</span></td>
-         <td><span className={`mapping-pill ${link.mapping_confidence}`}>{mappingConfidenceText[link.mapping_confidence]}</span></td>
-         <td>{project&&projectLink?<Link href={`/roadmap/${projectLink.project_id}`}><bdi dir="ltr">{project.project_code}</bdi> · {project.name_ar}</Link>:'—'}</td>
-        </tr>;
-       });
-      })}
-      </tbody></table></div>}
+       <ul className="detail-relationship-list">{requirementLinks.map(link=>{
+        const requirement=single(link.cybersecurity_requirements);
+        const projects=projectsByRequirement.get(link.requirement_id)??[];
+        return <li className="detail-relation-row" key={link.requirement_id}>
+         <div className="detail-rel-line"><strong>{requirement?<><bdi dir="ltr">{requirement.requirement_code}</bdi> · {requirement.title_ar}</>:'متطلب غير ظاهر ضمن صلاحياتك'}</strong>
+          <div className="detail-relation-badges"><span className={`coverage-pill ${link.coverage_type}`}>تغطية {coverageText[link.coverage_type]}</span>
+           <span className={`mapping-pill ${link.mapping_confidence}`}>ربط {mappingConfidenceText[link.mapping_confidence]}</span></div></div>
+         {projects.length>0?<div className="detail-project-links"><span className="detail-hint">المشاريع</span>
+          {projects.map(item=>{const project=single(item.cybersecurity_projects);return project&&<Link key={item.project_id} href={`/roadmap/${item.project_id}`}><bdi dir="ltr">{project.project_code}</bdi> · {project.name_ar}</Link>;})}
+         </div>:<p className="detail-hint">لا يوجد مشروع ظاهر ضمن صلاحياتك.</p>}
+        </li>;
+       })}</ul>}
      </section>
     </>}
 
     {tab===3&&<>
-     <ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload} targetRequestId={auditRequestId} targetCycleId={auditCycleId}/>
-     <section className="detail-card"><h2>نشاط الأدلة</h2>
-      {timeline.length?<ol className="detail-timeline">{timeline.map(item=><li key={item.key}>
-       <strong>{item.title}</strong><small>{formatRiyadhDateTime(item.time)}{item.by&&<> · <bdi>{item.by}</bdi></>}</small>
-       {item.body&&<details className="detail-disclosure"><summary>عرض الملاحظة</summary><p>{item.body}</p></details>}
-       <button type="button" className="detail-text-button" onClick={()=>goToTab(1)}>عرض الأدلة</button>
-      </li>)}</ol>:<p className="detail-empty">لا يوجد نشاط أدلة معروض.</p>}
-     </section>
+     <ControlReviewPanel controlId={control.id} canManage={canReview} canSubmit={canUpload} readOnly={archived}
+      targetRequestId={auditRequestId} targetCycleId={auditCycleId} reviewerName={reviewerName}
+      nextReview={control.next_audit_date} lastReview={control.last_review_date} frequency={control.audit_frequency} onEvidence={()=>goToTab(1)} onCycleChange={()=>setActivityVersion(value=>value+1)}/>
+     <GrcAuditTrail key={`${control.id}:${activityVersion}`} compact reliableRead controlId={control.id} legacyEntries={timeline}
+      globalLink={role==="admin"||role==="cybersecurity_team"}/>
     </>}
    </div>
 
@@ -311,18 +342,6 @@ function ControlDetailsContent() {
       <p className="detail-hint">إصدار {latestEvidence.version_number}{latestEvidence.uploaded_at&&<> · {formatRiyadhDate(latestEvidence.uploaded_at)}</>}</p>
       <button type="button" className="detail-text-button" onClick={()=>goToTab(1)}>عرض الأدلة</button></>:<p className="detail-empty">لا يوجد دليل حالي معروض.</p>}
     </section>
-   </aside>}
-   {tab===3&&<aside className="detail-aside">
-    {!archived&&<section className="detail-card"><h2>جدول المراجعة</h2>
-     <dl className="detail-review-facts">
-      <div><dt>التكرار</dt><dd>{periodicLabel}</dd></div><div><dt>آخر مراجعة</dt><dd>{formatRiyadhDate(control.last_review_date,'غير مسجلة')}</dd></div>
-      <div><dt>المراجعة القادمة</dt><dd>{formatRiyadhDate(control.next_audit_date,'غير مجدولة')}{control.next_audit_date&&<> · {scheduleStateLabels[deadline]}</>}</dd></div>
-      <div><dt>الدورة الحالية</dt><dd>{cycleStageLabels[stage]}{openCycleDue&&<> · حتى {formatRiyadhDate(openCycleDue)}</>}</dd></div>
-      {reviewerName&&<div><dt>المراجع المكلّف</dt><dd><bdi>{reviewerName}</bdi></dd></div>}
-     </dl>
-     {canReview&&<Link className="detail-secondary" href={scheduleHref}>فتح جدول التدقيق</Link>}
-    </section>}
-    <GrcAuditTrail controlId={control.id} globalLink={role==="admin"||role==="cybersecurity_team"}/>
    </aside>}
   </section>
  </main>;
