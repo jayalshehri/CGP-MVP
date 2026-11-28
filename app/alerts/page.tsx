@@ -19,7 +19,7 @@ type Control = {
   due_date: string | null; evidence_status: string; implementation_status: string; frameworks: unknown;
 };
 type Risk = {
-  id: number; risk_code: string; risk_description: string; residual_score: number;
+  id: number; risk_code: string; risk_description: string; residual_score: number | null; risk_method: string;
   action_due_date: string | null; treatment_owner: string; risk_status: string;
 };
 type Notice = { key: string; title: string; detail: string; href: string };
@@ -58,7 +58,7 @@ export default function AlertsPage() {
       try {
         const [c, r] = await Promise.all([
           supabase.from("controls").select("id,control_code,title_ar,control_owner_id,due_date,evidence_status,implementation_status,frameworks!inner(code,is_active)").eq("frameworks.is_active", true),
-          supabase.from("cyber_risks").select("id,risk_code,risk_description,residual_score,action_due_date,treatment_owner,risk_status"),
+          supabase.from("cyber_risks").select("id,risk_code,risk_description,residual_score,risk_method,action_due_date,treatment_owner,risk_status"),
         ]);
         if (c.error) throw c.error;
         if (r.error) throw r.error;
@@ -77,10 +77,10 @@ export default function AlertsPage() {
   const groups = useMemo<Group[]>(() => {
     const sorted = [...controls].sort((a, b) => compareOperationalDueDates(a.due_date, b.due_date) || a.id - b.id);
     const notices = (filter: TaskFilter) => sorted.filter(control => matchesTaskFilter(control, filter, now)).map(control => controlNotice(control, filter === "unassigned"));
-    const critical = risks.filter(isCriticalOperationalRisk).sort((a, b) => b.residual_score - a.residual_score || a.id - b.id);
+    const critical = risks.filter(isCriticalOperationalRisk).sort((a, b) => (b.residual_score ?? 0) - (a.residual_score ?? 0) || a.id - b.id);
     const overdue = risks.filter(risk => isRiskTreatmentOverdue(risk, now)).sort((a, b) => compareOperationalDueDates(a.action_due_date, b.action_due_date) || a.id - b.id);
     return [
-      { key: "critical", tone: "danger", title: "مخاطر حرجة مفتوحة", description: "مخاطر بدرجة متبقية 17 فأعلى وما زالت قيد المتابعة.", href: "/risks?filter=critical", items: critical.map(risk => riskNotice(risk, `الدرجة المتبقية ${risk.residual_score}/25`)) },
+      { key: "critical", tone: "danger", title: "مخاطر حرجة مفتوحة", description: "مخاطر متبقية عند أعلى مستوى في منهجية التقييم المسجلة وما زالت قيد المتابعة.", href: "/risks?filter=critical", items: critical.map(risk => riskNotice(risk, `الدرجة المتبقية ${risk.residual_score}/25`)) },
       { key: "overdue", tone: "danger", title: "تكليفات متأخرة", description: "ضوابط تجاوزت موعد الاستحقاق ولم يكتمل تنفيذها.", href: "/tasks?filter=overdue", items: notices("overdue") },
       { key: "risk-actions", tone: "danger", title: "معالجات مخاطر متأخرة", description: "إجراءات معالجة مفتوحة تجاوزت موعدها.", href: "/risks?filter=overdue", items: overdue.map(risk => riskNotice(risk, `${risk.treatment_owner} · استحقاق ${risk.action_due_date}`)) },
       { key: "unassigned", tone: "warning", title: "ضوابط بلا مالك", description: "ضوابط لم تُسند إلى حساب مالك في المنصة.", href: "/tasks?filter=unassigned", items: notices("unassigned") },

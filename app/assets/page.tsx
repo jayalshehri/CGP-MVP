@@ -1,40 +1,103 @@
 "use client";
 
+import Link from "next/link";
+import { useState } from "react";
 import { riyadhIsoDate } from "@/lib/dates";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { requireProfile } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
-import { WorkflowHeading, WorkflowMetric } from "@/components/WorkflowUI";
-import "./assets.css";
+import { Area, Badge, DateCell, Drawer, Editor, Entry, Facts, Group, Input, RegisterScreen, Select, errorMessage, nullable, optionsFrom, opts, str, ui, useRegister, type RecordRow } from "@/components/registers/RegisterUI";
 
-type Asset = { id:number; asset_code:string; name_ar:string; description:string|null; asset_type:string; business_owner:string; technical_owner:string|null; environment:string; data_classification:string; criticality:string; status:string; location:string|null; last_review_date:string|null; next_review_date:string|null; updated_at:string };
-const typeLabels:Record<string,string>={application:"تطبيق",server:"خادم",database:"قاعدة بيانات",network:"شبكة",cloud_service:"خدمة سحابية",endpoint:"جهاز طرفي",ot_system:"نظام تشغيلي",social_account:"حساب تواصل اجتماعي",other:"أصل آخر"};
-const envLabels:Record<string,string>={production:"إنتاج",staging:"تهيئة",testing:"اختبار",development:"تطوير",other:"أخرى"};
-const classLabels:Record<string,string>={public:"عام",internal:"داخلي",confidential:"سري",restricted:"سري للغاية"};
-const statusLabels:Record<string,string>={active:"نشط",maintenance:"تحت الصيانة",retired:"متقاعد",planned:"مخطط"};
-const criticalityLabels:Record<string,string>={low:"منخفض",medium:"متوسط",high:"عالٍ",critical:"حرج"};
-const dateToday=()=>riyadhIsoDate();
-const defaultForm={asset_code:"",name_ar:"",description:"",asset_type:"application",business_owner:"",technical_owner:"",environment:"production",data_classification:"internal",criticality:"medium",status:"active",location:"",last_review_date:"",next_review_date:""};
+type Asset = RecordRow & {
+  asset_code: string; name_ar: string; asset_type: string; business_owner: string; technical_owner: string | null;
+  description: string | null; criticality: string | null; data_classification: string | null; status: string; environment: string;
+  location: string | null; last_review_date: string | null; next_review_date: string | null;
+  business_service: string | null; technical_identifier: string | null; make_model: string | null;
+  dependencies: string | null; regulatory_scope: string | null;
+};
+const types = {application:"تطبيق",server:"خادم",database:"قاعدة بيانات",network:"شبكة",cloud_service:"خدمة سحابية",endpoint:"جهاز طرفي",ot_system:"نظام تشغيلي",social_account:"حساب تواصل اجتماعي",other:"أصل آخر"};
+const environments = {production:"إنتاج",staging:"تهيئة",testing:"اختبار",development:"تطوير",other:"أخرى"};
+const classifications = {public:"عام",internal:"داخلي",confidential:"سري",restricted:"سري للغاية"};
+const strengths = {critical:"حرج",high:"عالٍ",medium:"متوسط",low:"منخفض"};
+const states = {active:"نشط",maintenance:"تحت الصيانة",retired:"متقاعد",planned:"مخطط"};
+const label = (labels: Record<string,string>, code: string | null) => code ? labels[code] ?? code : "غير محدد";
+const assetTone = (value: string | null) => value==="critical"?"danger":value==="high"?"warn":"neutral";
+const physical = new Set(["server","network","endpoint","ot_system"]);
+const rank: Record<string,number> = { critical:4, high:3, medium:2, low:1 };
 
-export default function AssetsPage(){
- const router=useRouter(); const [assets,setAssets]=useState<Asset[]>([]); const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [message,setMessage]=useState(""); const [saving,setSaving]=useState(false); const [showForm,setShowForm]=useState(false); const [editing,setEditing]=useState<Asset|null>(null); const [selected,setSelected]=useState<Asset|null>(null); const [search,setSearch]=useState(""); const [criticality,setCriticality]=useState("all"); const [form,setForm]=useState(defaultForm);
- async function load(){const {data,error}=await supabase.from("assets").select("*").order("criticality",{ascending:false}).order("name_ar");if(error)throw error;setAssets((data??[]) as Asset[])}
- useEffect(()=>{let live=true;(async()=>{try{await requireProfile(["admin","cybersecurity_team"]);if(!live)return;await load()}catch(e){if(!live)return;const text=e instanceof Error?e.message:"";if(text.includes("تسجيل الدخول"))router.replace("/login");else if(text.includes("الصلاحية"))router.replace("/");else setError("تعذر تحميل سجل الأصول. تحقق من الاتصال ثم أعد المحاولة.")}finally{if(live)setLoading(false)}})();return()=>{live=false}},[router]);
- const visible=useMemo(()=>assets.filter(asset=>{const q=search.trim().toLowerCase();return (!q||[asset.asset_code,asset.name_ar,asset.business_owner,asset.technical_owner,asset.location].filter(Boolean).join(" ").toLowerCase().includes(q))&&(criticality==="all"||asset.criticality===criticality)}),[assets,search,criticality]);
- const due=assets.filter(a=>a.next_review_date&&a.next_review_date<dateToday()&&a.status==="active").length;
- function openCreate(){setEditing(null);setForm(defaultForm);setShowForm(true)}
- function openEdit(asset:Asset){setEditing(asset);setForm({asset_code:asset.asset_code,name_ar:asset.name_ar,description:asset.description||"",asset_type:asset.asset_type,business_owner:asset.business_owner,technical_owner:asset.technical_owner||"",environment:asset.environment,data_classification:asset.data_classification,criticality:asset.criticality,status:asset.status,location:asset.location||"",last_review_date:asset.last_review_date||"",next_review_date:asset.next_review_date||""});setShowForm(true)}
- async function submit(event:FormEvent){event.preventDefault();setSaving(true);setError("");setMessage("");try{await requireProfile(["admin","cybersecurity_team"]);const payload={...form,description:form.description||null,technical_owner:form.technical_owner||null,location:form.location||null,last_review_date:form.last_review_date||null,next_review_date:form.next_review_date||null,updated_at:new Date().toISOString()};const result=editing?await supabase.from("assets").update(payload).eq("id",editing.id):await supabase.from("assets").insert(payload);if(result.error)throw result.error;await load();setShowForm(false);setEditing(null);setMessage(editing?"تم تحديث الأصل.":"تمت إضافة الأصل إلى السجل.")}catch(e){setError(e instanceof Error?e.message:"تعذر حفظ الأصل.")}finally{setSaving(false)}}
- if(loading)return <main className="workflow-page assets-page" dir="rtl" role="status">جاري تحميل سجل الأصول…</main>;
- return <main className="workflow-page assets-page" dir="rtl">
-  <WorkflowHeading title="سجل الأصول التقنية" description="قائمة جرد منظمة للأصول المعلوماتية والتقنية لدعم متطلبات إدارة الأصول والأمن السيبراني." action={<button className="workflow-button workflow-primary" onClick={openCreate}>+ إضافة أصل</button>}/>
-  {error&&<p className="cgp-shell-error" role="alert">{error}</p>}{message&&<p className="workflow-success" role="status">{message}</p>}
-  <div className="workflow-metrics"><WorkflowMetric label="إجمالي الأصول" value={assets.length}/><WorkflowMetric label="أصول حرجة" value={assets.filter(a=>a.criticality==="critical").length} tone="danger"/><WorkflowMetric label="في بيئة الإنتاج" value={assets.filter(a=>a.environment==="production").length}/><WorkflowMetric label="مراجعات مستحقة" value={due} tone={due?"warning":"neutral"}/></div>
-  <section className="assets-guidance"><div><b>متطلب إدارة الأصول</b><p>احتفظ بقائمة محدثة، حدّد ملاك الأصول، وصنّف الحساسية والأهمية. راجع الأصول الحساسة دوريًا.</p></div><span>ECC · CSCC · CCC</span></section>
-  {showForm&&<form className="asset-form" onSubmit={submit}><header><h2>{editing?"تحديث الأصل":"إضافة أصل جديد"}</h2><button type="button" onClick={()=>setShowForm(false)} aria-label="إغلاق النموذج">×</button></header><div className="asset-fields"><label>رمز الأصل<input required dir="ltr" value={form.asset_code} onChange={e=>setForm({...form,asset_code:e.target.value})} placeholder="AST-001"/></label><label>اسم الأصل<input required value={form.name_ar} onChange={e=>setForm({...form,name_ar:e.target.value})} placeholder="نظام الموارد البشرية"/></label><label>نوع الأصل<select value={form.asset_type} onChange={e=>setForm({...form,asset_type:e.target.value})}>{Object.entries(typeLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label>مالك العمل<input required value={form.business_owner} onChange={e=>setForm({...form,business_owner:e.target.value})} placeholder="إدارة الموارد البشرية"/></label><label>المالك الفني<input value={form.technical_owner} onChange={e=>setForm({...form,technical_owner:e.target.value})} placeholder="فريق التطبيقات"/></label><label>البيئة<select value={form.environment} onChange={e=>setForm({...form,environment:e.target.value})}>{Object.entries(envLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label>تصنيف البيانات<select value={form.data_classification} onChange={e=>setForm({...form,data_classification:e.target.value})}>{Object.entries(classLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label>الأهمية<select value={form.criticality} onChange={e=>setForm({...form,criticality:e.target.value})}>{Object.entries(criticalityLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label>الحالة<select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}>{Object.entries(statusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label>الموقع / نطاق الاستضافة<input value={form.location} onChange={e=>setForm({...form,location:e.target.value})} placeholder="مركز البيانات أو مزود سحابي"/></label><label>آخر مراجعة<input type="date" value={form.last_review_date} onChange={e=>setForm({...form,last_review_date:e.target.value})}/></label><label>المراجعة القادمة<input type="date" value={form.next_review_date} onChange={e=>setForm({...form,next_review_date:e.target.value})}/></label><label className="wide">وصف الأصل<textarea rows={3} value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="وظيفة الأصل والبيانات أو الخدمات التي يدعمها."/></label></div><footer><button disabled={saving} className="workflow-button workflow-primary">{saving?"جاري الحفظ…":"حفظ الأصل"}</button><button type="button" className="workflow-button" onClick={()=>setShowForm(false)}>إلغاء</button></footer></form>}
-  <div className="workflow-filter workflow-filter-grid"><label>البحث<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="الاسم أو الرمز أو المالك أو الموقع"/></label><label>الأهمية<select value={criticality} onChange={e=>setCriticality(e.target.value)}><option value="all">جميع المستويات</option>{Object.entries(criticalityLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label></div>
-  <section className="assets-table-wrap"><table className="assets-table"><thead><tr><th>الأصل</th><th>النوع والبيئة</th><th>الملاك</th><th>التصنيف</th><th>الأهمية</th><th>المراجعة</th><th></th></tr></thead><tbody>{visible.map(asset=><tr key={asset.id} onClick={()=>setSelected(asset)}><td><b dir="ltr">{asset.asset_code}</b><strong>{asset.name_ar}</strong><small>{asset.location||"الموقع غير محدد"}</small></td><td>{typeLabels[asset.asset_type]}<small>{envLabels[asset.environment]}</small></td><td>{asset.business_owner}<small>{asset.technical_owner||"المالك الفني غير محدد"}</small></td><td><span className={"asset-class "+asset.data_classification}>{classLabels[asset.data_classification]}</span></td><td><span className={"asset-criticality "+asset.criticality}>{criticalityLabels[asset.criticality]}</span></td><td className={asset.next_review_date&&asset.next_review_date<dateToday()?"review-due":""}>{asset.next_review_date||"غير مجدولة"}</td><td><button type="button" className="asset-edit" onClick={event=>{event.stopPropagation();openEdit(asset)}}>تعديل</button></td></tr>)}</tbody></table>{!visible.length&&<p className="workflow-empty">لا توجد أصول مطابقة. أضف الأصل الأول لبدء سجل الجرد.</p>}</section>
-  {selected&&<section className="asset-detail"><button type="button" onClick={()=>setSelected(null)} aria-label="إغلاق تفاصيل الأصل">×</button><span className="exec-eyebrow">تفاصيل الأصل</span><h2>{selected.name_ar} <b dir="ltr">{selected.asset_code}</b></h2><p>{selected.description||"لم يضف وصف لهذا الأصل بعد."}</p><div><span><b>مالك العمل</b>{selected.business_owner}</span><span><b>المالك الفني</b>{selected.technical_owner||"غير محدد"}</span><span><b>الحالة</b>{statusLabels[selected.status]}</span><span><b>آخر مراجعة</b>{selected.last_review_date||"غير محددة"}</span></div></section>}
- </main>
+export default function AssetsPage() {
+  const register = useRegister<Asset>("assets");
+  const [detail, setDetail] = useState<Asset | null>(null);
+  const [editing, setEditing] = useState<Asset | null | undefined>();
+  const [type, setType] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [notice, setNotice] = useState("");
+  const today = riyadhIsoDate();
+  const due = (a: Asset) => a.status !== "retired" && !!a.next_review_date && a.next_review_date < today;
+  const missing = (a: Asset) => a.status !== "retired" && (!a.criticality || !a.data_classification || !a.next_review_date
+    || (physical.has(a.asset_type) && (!a.technical_identifier || !a.make_model || !a.location)));
+  const rows = [...register.rows].sort((a,b) => Number(due(b)) - Number(due(a)) || (rank[b.criticality ?? ""] ?? 0) - (rank[a.criticality ?? ""] ?? 0) || a.name_ar.localeCompare(b.name_ar,"ar"));
+  const begin = (a: Asset | null) => { setType(a?.asset_type ?? ""); setFormError(""); setNotice(""); setEditing(a); };
+  const close = () => { setEditing(undefined); setDetail(null); };
+  async function save(data: FormData) {
+    setBusy(true); setFormError("");
+    try {
+      const row = await register.save({
+        name_ar: str(data,"name_ar"), asset_type: str(data,"asset_type"), business_owner: str(data,"business_owner"),
+        criticality: nullable(data,"criticality"), data_classification: nullable(data,"data_classification"),
+        environment: str(data,"environment"), status: str(data,"status"),
+        ...Object.fromEntries(["technical_owner","description","location","last_review_date","next_review_date","business_service","technical_identifier","make_model","dependencies","regulatory_scope"].map(k=>[k,nullable(data,k)])),
+      }, editing ?? undefined);
+      setEditing(undefined); setDetail(row); setNotice("تم حفظ الأصل.");
+    } catch (e) { setFormError(errorMessage(e)); }
+    finally { setBusy(false); }
+  }
+  return <RegisterScreen title="سجل الأصول" description="جرد الأصول وملاكها وأولويات المراجعة." rows={rows} loading={register.loading} error={register.error} reload={register.reload} notice={notice}
+    add={register.manage ? {label:"إضافة أصل",run:()=>begin(null)} : undefined}
+    quick={[{key:"critical",label:"أصول حرجة",match:a=>a.criticality==="critical"&&a.status!=="retired"},{key:"overdue",label:"مراجعة متأخرة",match:due},{key:"missing",label:"بيانات ناقصة",match:missing}]}
+    filters={[{label:"النوع",options:opts(types),value:a=>a.asset_type},{label:"مالك العمل",options:optionsFrom(rows,a=>a.business_owner),value:a=>a.business_owner},{label:"الأهمية",options:[...opts(strengths),["unknown","غير مقيّمة"]],value:a=>a.criticality??"unknown"},{label:"الحالة",options:opts(states),value:a=>a.status},{label:"البيئة",options:opts(environments),value:a=>a.environment}]}
+    searchHint="الاسم أو الرمز أو المالك" searchText={a=>[a.name_ar,a.asset_code,a.business_owner,a.technical_owner,a.technical_identifier].join(" ")}
+    columns={[
+      {label:"الأصل",view:a=><Entry title={a.name_ar} code={a.asset_code} open={()=>setDetail(a)}/>},
+      {label:"النوع",mobile:false,view:a=>label(types,a.asset_type)},
+      {label:"مالك العمل",view:a=>a.business_owner},
+      {label:"الأهمية",view:a=><Badge value={a.criticality ? label(strengths,a.criticality) : "غير مقيّمة"} tone={assetTone(a.criticality)}/>},
+      {label:"الحالة",view:a=><Badge value={label(states,a.status)} tone={a.status==="active"?"good":"neutral"}/>},
+      {label:"المراجعة القادمة",view:a=><DateCell value={a.next_review_date} late={due(a)}/>},
+    ]}>
+    {editing!==undefined && <Drawer title={editing?"تعديل الأصل":"إضافة أصل"} subtitle={editing?.asset_code} busy={busy} close={close}>
+      <Editor submit={save} busy={busy} close={close} error={formError} label="حفظ الأصل">
+        <div className={ui.fields}>
+          <Input label="اسم الأصل" name="name_ar" value={editing?.name_ar} required maxLength={200}/>
+          <label>نوع الأصل<select name="asset_type" required value={type} onChange={e=>setType(e.target.value)}><option value="">اختر النوع</option>{opts(types).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
+          <Input label="مالك العمل" name="business_owner" value={editing?.business_owner} required maxLength={200}/>
+          <Select label="الأهمية" name="criticality" options={opts(strengths)} value={editing?.criticality} empty="غير مقيّمة"/>
+        </div>
+        <Group label="الجرد والتصنيف">
+          <Select label="تصنيف البيانات" name="data_classification" options={opts(classifications)} value={editing?.data_classification} empty="غير محدد"/>
+          <Select label="البيئة" name="environment" options={opts(environments)} value={editing?.environment ?? "production"}/>
+          <Select label="الحالة" name="status" options={opts(states)} value={editing?.status ?? "active"}/>
+          <Input label="المالك الفني" name="technical_owner" value={editing?.technical_owner}/>
+          <Input label="الموقع أو الاستضافة" name="location" value={editing?.location}/>
+          <Input label="الخدمة أو العملية المدعومة" name="business_service" value={editing?.business_service}/>
+          <Input label={physical.has(type)?"رقم الجهاز أو المعرّف الفني":"معرّف الأصل في الجرد الفني"} name="technical_identifier" value={editing?.technical_identifier}/>
+          <div style={{display:physical.has(type)||editing?.make_model?undefined:"none"}}><Input label="المصنّع والطراز" name="make_model" value={editing?.make_model}/></div>
+          <Area label="التبعيات" name="dependencies" value={editing?.dependencies}/>
+          <Area label="النطاق التنظيمي المنطبق (مثل الأنظمة الحساسة)" name="regulatory_scope" value={editing?.regulatory_scope}/>
+          <Area label="وصف الأصل والغرض منه" name="description" value={editing?.description}/>
+        </Group>
+        <Group label="مواعيد المراجعة">
+          <Input label="آخر مراجعة" name="last_review_date" value={editing?.last_review_date} type="date"/>
+          <Input label="المراجعة القادمة" name="next_review_date" value={editing?.next_review_date} type="date"/>
+        </Group>
+      </Editor>
+    </Drawer>}
+    {detail && editing===undefined && <Drawer title={detail.name_ar} subtitle={detail.asset_code} close={close}>
+      <Facts entries={[["النوع",label(types,detail.asset_type)],["مالك العمل",detail.business_owner],["الأهمية",detail.criticality?label(strengths,detail.criticality):"غير مقيّمة"],["الحالة",label(states,detail.status)],["المراجعة القادمة",<DateCell key="review" value={detail.next_review_date} late={due(detail)}/>]]}/>
+      {detail.description && <p>{detail.description}</p>}
+      <Group label="تفاصيل الجرد">
+        <div className={ui.wide}><Facts entries={[["المالك الفني",detail.technical_owner],["البيئة",label(environments,detail.environment)],["تصنيف البيانات",label(classifications,detail.data_classification)],["الموقع",detail.location],["الخدمة المدعومة",detail.business_service],["المعرّف الفني",detail.technical_identifier],["المصنّع والطراز",detail.make_model],["التبعيات",detail.dependencies],["النطاق التنظيمي",detail.regulatory_scope],["آخر مراجعة",<DateCell key="last" value={detail.last_review_date}/>]]}/></div>
+      </Group>
+      <section><h3>السجلات المرتبطة</h3><div className={ui.actions}><Link className={ui.secondary} href={`/risks?asset=${detail.id}`}>مخاطر الأصل</Link><Link className={ui.secondary} href={`/vulnerabilities?asset=${detail.id}`}>ثغرات الأصل</Link></div></section>
+      {register.manage && <div><button className={ui.primary} onClick={()=>begin(detail)}>تعديل الأصل</button></div>}
+    </Drawer>}
+  </RegisterScreen>;
 }
