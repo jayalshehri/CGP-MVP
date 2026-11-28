@@ -8,7 +8,7 @@ export type Scope = { kind?:string; access?:string; data?:boolean; service_impac
   subcontractors?:boolean; remote_soc?:boolean; data_class?:string; system_reference?:string; hosting_location?:string; subcontractor_details?:string };
 export type CheckValue = {status:"met"|"open";reference:string};
 export type CheckKey = "confidentiality"|"secure_deletion"|"incident_response"|"policy"|"risk_controls"|"local_soc"|"vetting"|"national_provider"|"cloud_review"|"sensitive_hosting";
-type Check = {key:CheckKey;title:string;reference:string};
+export type Check = {key:CheckKey;title:string;reference:string};
 const check = (key:CheckKey,title:string,reference:string):Check=>({key,title,reference});
 export const scopeFlags = ["data","service_impact","sensitive","cloud","subcontractors","remote_soc"] as const;
 

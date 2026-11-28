@@ -11,3 +11,14 @@
 .history article { padding:8px; border-block-start:1px solid #dbe5e9; }
 .history h3 { margin:0; }
 .data { display:grid; gap:7px; grid-column:1/-1; }
+.itemSummary { cursor:pointer; display:flex; justify-content:space-between; align-items:start; gap:8px; font-size:13px; font-weight:650; overflow-wrap:anywhere; }
+.itemSummary small { display:block; color:#486270; font-weight:500; margin-block-start:2px; }
+.itemSummary > span:last-child { flex:none; white-space:normal; text-align:start; }
+.check > summary { cursor:pointer; }
+.evidenceText { display:grid; gap:2px; margin-block:8px; overflow-wrap:anywhere; font-size:13px; }
+.evidenceText p { margin:0; }
+.itemForm { margin-block-start:10px; display:grid; gap:5px; }
+.itemForm button { justify-self:start; }
+.inlineButtons { display:flex; flex-wrap:wrap; gap:6px; }
+.priorEvidence { margin-block:5px; padding-inline-start:18px; overflow-wrap:anywhere; }
+@media(max-width:480px) { .itemSummary { flex-wrap:wrap; } }
