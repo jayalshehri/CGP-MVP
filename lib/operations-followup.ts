@@ -9,7 +9,8 @@ type Control = {
 
 type Risk = {
   risk_status: string;
-  residual_score: number;
+  residual_score: number | null;
+  risk_method?: string;
   action_due_date: string | null;
 };
 
@@ -56,5 +57,5 @@ export function isRiskTreatmentOverdue(risk: Risk, today: string) {
 }
 
 export function isCriticalOperationalRisk(risk: Risk) {
-  return riskNeedsAction(risk) && risk.residual_score >= 17;
+  return riskNeedsAction(risk) && risk.residual_score !== null && risk.residual_score >= (risk.risk_method === "nfcrm_1_2025" ? 20 : 17);
 }
