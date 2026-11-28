@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { requireProfile, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import FeedbackWidget from "@/components/FeedbackWidget";
 import { projectReturn } from "@/lib/strategy-navigation";
 import { compactAssessmentForPath } from "@/lib/assessment-navigation";
 import { roleHomePath, workspaceHome } from "@/lib/workspaces";
@@ -32,7 +31,6 @@ const navigation = [
   { href: "/audit", label: "سجل التدقيق", group: "الامتثال", team: true },
   { href: "/audit-schedule", label: "جدول التدقيق الدوري", group: "الامتثال", auditor: true },
   { href: "/users", label: "إدارة المستخدمين", group: "الإدارة", admin: true },
-  { href: "/feedback", label: "نتائج الاختبارات", group: "الإدارة", admin: true },
 ];
 const roleLabels: Record<UserRole, string> = { admin: "مدير النظام", cybersecurity_team: "مدير الامتثال والمراجعة", data_governance_team: "فريق إدارة البيانات", control_owner: "مالك الضابط", nca_external_auditor: "مراجع خارجي — NCA", nudee_owner: "مالك متطلب نُضيء" };
 type SearchResult = { id:number; control_code:string; title_ar:string };
@@ -59,7 +57,6 @@ function NavIcon({ href }: { href: string }) {
     "/assessments": "M4 19V5 M4 19h16 M8 16v-4 M12 16V8 M16 16v-7 M20 16V5",
     "/mappings": "M5 5h6v6H5z M13 13h6v6h-6z M11 8h2 M12 8v5 M12 13h1",
     "/users": "M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M2 21v-2a6 6 0 0 1 12 0v2 M16 4a4 4 0 0 1 0 8 M17 15a5 5 0 0 1 5 5v1",
-    "/feedback": "M20 11.5a8 8 0 0 1-8 8 8.8 8.8 0 0 1-3.4-.7L4 20l1.2-3.7A8 8 0 1 1 20 11.5z M8 11.5h.01 M12 11.5h.01 M16 11.5h.01",
     "/data-governance": "M4 5h16v14H4z M8 9h8 M8 13h5 M16 3v4 M8 3v4",
     "/data-governance/requests": "M5 4h14v17H5z M8 8h8 M8 12h8 M8 16h5",
     "/data-governance/assets": "M4 7h16v13H4z M7 7V4h10v3 M8 12h8 M8 16h5",
@@ -250,7 +247,6 @@ function Workspace({ children, pathname }: { children: React.ReactNode; pathname
         {workspace !== "data" && (isProjectDetail ? <Suspense fallback={<nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href={homeHref}>الرئيسية</Link><span aria-hidden="true">/</span><span aria-current="page">تفاصيل المشروع</span></nav>}><ProjectBreadcrumb /></Suspense> : <nav className="cgp-breadcrumb" aria-label="مسار الصفحة"><Link href={homeHref}>الرئيسية</Link>{pathname !== "/" && <><span aria-hidden="true">/</span>{controlId ? <><Link href="/controls">الضوابط</Link><span aria-hidden="true">/</span>{leaf !== "تفاصيل الضابط" && <><Link href={`/controls/${controlId}`}>تفاصيل الضابط</Link><span aria-hidden="true">/</span></>}</> : null}<span aria-current="page">{leaf}</span></>}</nav>)}
         {error && <p role="alert" className="cgp-shell-error">{error}</p>}
         <div id="cgp-content" tabIndex={-1} className="cgp-route" data-cgp-section={activeGroup === "العمليات" ? "operations" : undefined}>{children}</div>
-        <FeedbackWidget pagePath={pathname} visible={Boolean(account) && !nudeeOnly} />
       </div>
     </div>
   </div>;
